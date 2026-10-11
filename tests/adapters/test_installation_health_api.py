@@ -57,9 +57,12 @@ def test_an_administrator_reads_installation_health_without_any_user_named(
         "users",
         "disabled_users",
         "checked_at",
+        "hints",
     }
     # Without a master key there is no scheduler; nobody has a rule, so both Users read setup.
     assert (body["status"], body["incidents"], body["users"]) == ("setup", [], {"setup": 2})
+    # Nobody failed, so there is no pattern to suggest.
+    assert body["hints"] == []
     assert "member@example.test" not in by_session.text
     assert issued["scopes"] == sorted(BOTH)
     assert by_token.json()["users"] == {"setup": 2}

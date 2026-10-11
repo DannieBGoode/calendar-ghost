@@ -130,6 +130,7 @@ function incident(overrides: Partial<Incident>): Incident {
     resolution: null,
     account_id: accountA.id,
     message: null,
+    cause: null,
     ...overrides,
   }
 }

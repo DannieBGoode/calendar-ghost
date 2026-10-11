@@ -3,11 +3,12 @@ from __future__ import annotations
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from types import TracebackType
 from typing import Literal, Protocol, Self
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId, UserState
@@ -369,6 +370,9 @@ class RuleRunOutcome:
     checked_mappings: int = 0
     drift: int = 0
     failure_kind: str | None = None
+    failure_cause: Cause | None = None
+    """Why a failed run failed (ADR 0031); None for a success. A failure recorded without one
+    reads as unknown."""
     # When the most recent successful run of this kind completed. The repository keeps it across
     # later failures, so a failed run never erases evidence that calendars were once current.
     last_succeeded_at: datetime | None = None
@@ -557,6 +561,22 @@ class ResourceUse:
     """Each provider's calls since the day asked for, by provider."""
 
 
+@dataclass(frozen=True, slots=True)
+class CauseSighting:
+    """One User's failure with its Cause, as Installation Hints read it (ADR 0031). It says who
+    and why, never which rule, calendar, or account."""
+
+    user: UserId
+    cause: Cause
+    at: datetime
+    """When the failure was last recorded."""
+    open: bool
+    """Whether it is an Incident still open, which a stopped rule keeps open while it waits."""
+    authorized_for: timedelta | None = None
+    """For a lapsed account's open Incident, how long after the account was last authorized it
+    lapsed; None otherwise."""
+
+
 class InstallationUnitOfWork(Protocol):
     """What reaches across Users. Only the scheduler, migrations, and the Operator Overview
     receive it, so crossing Users is visible in a type (ADR 0029)."""
@@ -589,6 +609,11 @@ class InstallationUnitOfWork(Protocol):
         """Discard every User's provider call counts of days before `before`."""
         ...
 
+    def failure_causes(self, since: datetime) -> Sequence[CauseSighting]:
+        """Every User's failures with a recorded Cause: failed runs completed from `since` on,
+        and provider-failure Incidents still open or updated from `since` on."""
+        ...
+
     def status_records(self, users: Collection[UserId]) -> Mapping[UserId, StatusRecords]:
         """What each of `users`' Installation Status is computed from, read in the same number
         of queries however many rules they have. A User with no records has empty ones."""
@@ -615,6 +640,9 @@ class SchedulerProgress:
     """When the last pass that raised nothing completed."""
     last_pass_rule_ids: frozenset[str] = frozenset()
     """The rules that pass listed, so a rule resumed since then is not yet expected to have run."""
+    next_pass_at: datetime | None = None
+    """When the next pass begins, so a User waiting on the provider is told when it is tried
+    again; None while a pass runs."""
 
 
 class SchedulerHeartbeat(Protocol):
@@ -793,6 +821,9 @@ class IncidentSummary:
     """The Connected Account whose failure opened or last refreshed it, when that was recorded."""
     message: IncidentMessage | None = None
     """The summary as a code and parameters, when it was recorded (ADR 0026)."""
+    cause: Cause | None = None
+    """Why the provider failure behind it happened (ADR 0031); unknown when that was not recorded,
+    and None for an Incident no provider failure opened, such as events still blocked."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -809,6 +840,8 @@ class IncidentReport:
     """The Connected Account whose failure opened or last refreshed the Incident, if known."""
     message: IncidentMessage | None = None
     """The summary as a code and parameters; the English `summary` stays for email and logs."""
+    cause: Cause | None = None
+    """Why the provider failure behind it happened, when one did (ADR 0031)."""
 
 
 class IncidentResolution(StrEnum):

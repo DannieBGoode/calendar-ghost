@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.ports import (
@@ -180,3 +181,12 @@ def test_a_passing_check_clears_a_refusal_of_a_request_begun_before_it() -> None
 
     assert lapses.restored(WORK, accepted_at=check_began) == 1
     assert unit_of_work.state.lapsed == {}
+
+
+def test_a_lapse_records_why_the_provider_refused() -> None:
+    _, incidents, lapses = _installation()
+
+    lapses.lapsed(WORK, replace(EXPIRED, cause=Cause.OAUTH_CLIENT_INVALID), attempted_at=NOW)
+
+    (incident,) = incidents.opened
+    assert incident.cause is Cause.OAUTH_CLIENT_INVALID

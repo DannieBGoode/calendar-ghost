@@ -224,7 +224,7 @@ A persistent operational condition requiring attention, such as expired authoriz
 _Avoid_: Error message, failure log
 
 **Incident Notification**:
-A deduplicated notice sent when an incident opens or resolves. It goes to the User who owns the incident's rule or Connected Account, never to another User; the Web UI always retains the incident, and the User receives email too when the installation can send it, unless they turn it off. Incidents about the installation itself, such as a stalled scheduler, go to the Installation Administrators' SMTP recipient or generic JSON webhook.
+A deduplicated notice sent when an incident opens or resolves. It goes to the User who owns the incident's rule or Connected Account, never to another User; the Web UI always retains the incident, and the User receives email too when the installation can send it, unless they turn it off. When the installation has a public address, the email links to the User's one next step for its Cause in the Web UI; the link names no calendar, account, or event. Incidents about the installation itself, such as a stalled scheduler, go to the Installation Administrators' SMTP recipient or generic JSON webhook.
 _Avoid_: Error alert, retry notification
 
 **Installation Status**:
@@ -232,8 +232,40 @@ The server's one verdict on the installation's health as it affects one User (st
 _Avoid_: Health check, status page
 
 **Installation Health**:
-The one verdict on the whole installation that Installation Administrators and their monitors read: installation incidents plus how many Users are in each Installation Status verdict. It names no rule, calendar, or User.
+The one verdict on the whole installation that Installation Administrators and their monitors read: installation incidents, how many Users are in each Installation Status verdict, and any Installation Hints. It names no rule, calendar, or User.
 _Avoid_: Global status, admin status
+
+**Cause**:
+Why a provider call failed, as one of a closed set read from the provider's own reason code, never
+from its message text. Each Cause has one owner, the Installation Administrator or the User, and an
+Installation Administrator never contacts a User through Calendar Ghost about a problem: what a User
+can fix, they fix from their own Overview, rule, or Settings. The administrator's Causes are those
+only the installation's Google Cloud project can fix: the Calendar API is turned off
+(`api_disabled`), the project's daily quota is used up (`quota_exceeded`), or Google no longer
+accepts the installation's OAuth client (`oauth_client_invalid`). The User is told only that Google
+Calendar is temporarily unavailable, never the Cause or who fixes it, so nobody is sent to the
+administrator, who learns it on People. Every other Cause is the User's, with one next step from actions
+that already exist: Google no longer accepts the account's grant (`access_revoked`), so they
+reauthorize the account; the account may not change the calendar (`calendar_forbidden`) or the
+calendar is gone (`calendar_not_found`), so they choose another calendar or remove the rule;
+Google is limiting requests (`rate_limited`) or failed for now (`temporary`), which fixes itself, so
+they are told when it was last tried and when it is tried again; and anything else is `unknown`,
+whose problem keeps its usual next step, said honestly as trying again. A failure no provider answer
+explains, such as one inside Calendar Ghost or one its adapter concludes itself, has no Cause. A Cause says who fixes a
+failure; whether a rule retries, stops, or lapses its account still follows the failure itself
+(ADR 0031). Incidents and run outcomes record it, and Installation Status shows it on each problem.
+_Avoid_: Error reason, root cause, error message
+
+**Installation Hint**:
+A likely cause Installation Health suggests to Installation Administrators, never from one User's
+content: an administrator's Cause any User met within a day, since only the administrator can fix
+it; and, as patterns across Users, Google refusing two or more Users' grants about 7 days after they authorized, which an OAuth app
+in Testing mode does; or two or more Users failing within a day for a reason Calendar Ghost does not
+recognize (`unknown`), which the service logs name by Google's reason code. Each names its Cause, how
+many Users show it, and the troubleshooting section that explains the fix. It names no User, rule,
+calendar, or account. Hints are what People flags; a User's own problems are not flagged, and the
+administrator finds them, with what the User does, on that User's page.
+_Avoid_: Diagnosis, alert, recommendation
 
 ## Access
 
@@ -246,7 +278,7 @@ A User who holds the role that operates the installation. The first User holds i
 _Avoid_: Owner, superuser, admin user
 
 **Operator Overview**:
-The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, and Resource Use. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content, and every User can see exactly what it shows about them, in Settings.
+The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, and Resource Use. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content. What it shows and never shows is documented, so every User can know it; Settings does not repeat it to them (ADR 0030, amended).
 _Avoid_: Admin dashboard, user management, support view
 
 **Resource Use**:
@@ -366,7 +398,9 @@ diagnostics keep the glossary terms above.
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
 | Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the User's step when one exists, otherwise that Calendar Ghost checks again daily |
 | Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
-| Operator Overview | "People", with a "Sync" status per person and "Installation health" above them; to each User, "What your administrator can see" in Settings |
+| Operator Overview | "People", with a "Sync" status per person and "Installation health" above them |
+| Cause | "Likely cause:" and the cause in plain words, such as "the Google Calendar API is turned off for this installation". To the User, an administrator's Cause says only "Temporarily unavailable", naming neither the cause nor the administrator, with Check access to try again when the account lapsed; their own Cause offers its one step ("Reauthorize account", or "Open the rule" to choose another calendar or remove it), or says it fixes itself with when it was last and will next be tried. To an administrator, a User's Cause says "{name} can fix this from their dashboard" ("{name} can try again from their dashboard" when `unknown`) and offers no action |
+| Installation Hint, on People | the pattern in one sentence with how many people it affects, then "How to fix", linking to its troubleshooting section |
 | Installation Status verdict, on People | "Not running" (stalled), "Stopped", "Needs a look" (review), "Waiting for Google", "Paused", "Not set up" (setup), "Healthy" |
 | User Deletion | "Delete your account" for oneself, naming what is deleted (sign-in, rules, Google connections, tokens, Activity, and the events their rules wrote when chosen) and that their Google accounts and own events stay; on People, "Delete" and "Delete {email} permanently?", naming the same and that the events their rules wrote are deleted. "Account deletion" stays out of domain and documentation language |
 

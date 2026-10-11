@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest"
 
 import { testI18n } from "../i18n/testing"
 import type { ResourceUse, ServerProblem } from "./api"
-import { calendarName, callsMeaning, nextStep, problemText, resourceFacts, verdictTone, VERDICTS } from "./operator-overview"
+import {
+  AS_ADMINISTRATOR,
+  calendarName,
+  callsMeaning,
+  nextStep,
+  problemText,
+  resourceFacts,
+  verdictTone,
+  VERDICTS,
+} from "./operator-overview"
 
 const i18n = testI18n()
 
@@ -12,6 +21,8 @@ const problem = (kind: ServerProblem["kind"], summary: string): ServerProblem =>
   summary,
   since: null,
   message: null,
+  cause: null,
+  last_tried_at: null,
 })
 
 describe("verdictTone", () => {
@@ -92,12 +103,6 @@ describe("calendarName", () => {
     expect(calendarName(i18n, older)).toBe("Calendar 2")
   })
 
-  it("adds the person's own name for a number, for their eyes only", () => {
-    const names = new Map([[2, "Family"]])
-    expect(calendarName(i18n, { calendar: "Calendar 2", provider: "google", number: 2 }, names)).toBe(
-      "Calendar 2 (Family)",
-    )
-  })
 })
 
 describe("callsMeaning", () => {
@@ -123,17 +128,68 @@ describe("nextStep", () => {
   const robin = { name: "robin@example.test" }
 
   it("says who acts on each problem, and how", () => {
-    expect(nextStep(i18n, lapsed, robin)).toBe(
-      "robin@example.test reauthorizes their Google account in their Settings, under Connections.",
-    )
-    expect(nextStep(i18n, lapsed, "self")).toBe("Reauthorize your Google account in Settings, under Connections.")
+    // Another person fixes their own problems; the administrator is offered nothing to do. On their
+    // own page, the administrator reads the step as theirs.
+    expect(nextStep(i18n, lapsed, robin)).toBe("robin@example.test can fix this from their dashboard.")
+    expect(nextStep(i18n, lapsed, AS_ADMINISTRATOR)).toBe("Reauthorize your Google account in Settings, under Connections.")
     expect(nextStep(i18n, problem("stopped", "Stopped syncing"), robin)).toBe(
-      "robin@example.test previews the rule again on their Rules page to restart it.",
+      "robin@example.test can fix this from their dashboard.",
     )
-    expect(nextStep(i18n, problem("blocked", "2 events"), "self")).toBe("Activity explains what happened and what to do.")
+    expect(nextStep(i18n, problem("blocked", "2 events"), robin)).toBe("robin@example.test can fix this from their dashboard.")
+    expect(nextStep(i18n, problem("overdue", "late"), robin)).toBe("robin@example.test can fix this from their dashboard.")
+    expect(nextStep(i18n, problem("blocked", "2 events"), AS_ADMINISTRATOR)).toBe("Activity explains what happened and what to do.")
     expect(nextStep(i18n, problem("waiting", "busy"), robin)).toBe("Nothing to do: Calendar Ghost retries by itself.")
     expect(nextStep(i18n, problem("stalled", "stopped running"), robin)).toBe(
       "Restart Calendar Ghost on the computer it runs on. Nobody's rules synchronize until it runs again.",
     )
+  })
+})
+
+describe("nextStep by Cause", () => {
+  const robin = { name: "robin@example.test" }
+  const lapse = (cause: ServerProblem["cause"]): ServerProblem => ({
+    ...problem("stopped", "A calendar account needs reauthorization"),
+    message: { code: "authorization_lapsed", params: { provider: "google" } },
+    cause,
+  })
+  const failed = (kind: ServerProblem["kind"], cause: ServerProblem["cause"]): ServerProblem => ({
+    ...problem(kind, "failed"),
+    cause,
+  })
+
+  it("tells an administrator the fix is theirs, wherever they read it", () => {
+    expect(nextStep(i18n, lapse("oauth_client_invalid"), robin)).toBe(
+      "You fix this as the administrator, in Google Cloud. robin@example.test has nothing to do.",
+    )
+    expect(nextStep(i18n, lapse("oauth_client_invalid"), AS_ADMINISTRATOR)).toBe(
+      "You fix this as the administrator, in Google Cloud.",
+    )
+  })
+
+  it("gives an administrator reading their own page the step for their own Cause", () => {
+    expect(nextStep(i18n, lapse("access_revoked"), AS_ADMINISTRATOR)).toBe(
+      "Reauthorize your Google account in Settings, under Connections.",
+    )
+    for (const cause of ["calendar_forbidden", "calendar_not_found"] as const) {
+      expect(nextStep(i18n, failed("stopped", cause), AS_ADMINISTRATOR)).toBe(
+        "Open the rule to choose another calendar, or remove the rule.",
+      )
+    }
+    for (const cause of ["rate_limited", "temporary"] as const) {
+      expect(nextStep(i18n, failed("waiting", cause), AS_ADMINISTRATOR)).toBe("Nothing to do: Calendar Ghost retries by itself.")
+    }
+    // Calendar Ghost does not know the fix, so the usual step is offered as trying again.
+    expect(nextStep(i18n, failed("stopped", "unknown"), AS_ADMINISTRATOR)).toBe("Open the rule and preview it again to restart it.")
+  })
+
+  it("tells an administrator the User fixes their own Cause, and offers them nothing to do", () => {
+    expect(nextStep(i18n, lapse("access_revoked"), robin)).toBe("robin@example.test can fix this from their dashboard.")
+    expect(nextStep(i18n, failed("stopped", "calendar_not_found"), robin)).toBe(
+      "robin@example.test can fix this from their dashboard.",
+    )
+    expect(nextStep(i18n, failed("stopped", "unknown"), robin)).toBe(
+      "robin@example.test can try again from their dashboard.",
+    )
+    expect(nextStep(i18n, failed("waiting", "rate_limited"), robin)).toBe("Nothing to do: Calendar Ghost retries by itself.")
   })
 })

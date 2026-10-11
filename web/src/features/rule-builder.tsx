@@ -19,7 +19,6 @@ import {
   type TentativeEvents,
   type UnansweredInvitations,
 } from "@/lib/api"
-import { OWN_OVERVIEW_QUERY } from "@/lib/operator-overview"
 import { firstOtherCalendar, writableCalendars } from "@/lib/writable-calendars"
 
 const CALENDAR_STALE_TIME = 5 * 60 * 1000
@@ -70,7 +69,6 @@ export function RuleBuilder({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["rules"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: OWN_OVERVIEW_QUERY }),
       ])
       onCreated(rule)
     },

@@ -10,6 +10,7 @@ from time import sleep
 
 import pytest
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind, RuleNotExecutable
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
@@ -787,6 +788,21 @@ def test_failed_run_records_failure_kind_without_detail() -> None:
     assert outcome.failure_kind == "rate_limit"
 
 
+def test_a_failed_run_records_why_the_provider_refused() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work.state.rules[rule().id] = rule()
+    provider = FakeCalendarProvider(event())
+    provider.failure = ProviderFailure(
+        ProviderFailureKind.AUTHORIZATION, "403", cause=Cause.API_DISABLED
+    )
+
+    with pytest.raises(ProviderFailure):
+        _use_case(unit_of_work, provider).execute(rule().id)
+
+    outcome = unit_of_work.state.outcomes[(rule().id, RunKind.SYNC)]
+    assert outcome.failure_cause is Cause.API_DISABLED
+
+
 def test_run_stops_before_writing_when_the_rule_changes_mid_run(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
@@ -940,3 +956,22 @@ def test_provider_writes_hold_the_rule_write_lock() -> None:
 
     assert observed == [True]
     assert not locks.for_writes(rule().id).locked()
+
+
+def test_a_local_failure_records_no_cause() -> None:
+    # Nothing at the provider refused, so no Cause may say it did (ADR 0031).
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work.state.rules[rule().id] = rule()
+    provider = FakeCalendarProvider(event())
+
+    def broken(*_: object) -> ProviderChangeSet:
+        raise OSError("disk full")
+
+    provider.changes = broken  # type: ignore[method-assign,assignment]
+
+    with pytest.raises(OSError, match="disk full"):
+        _use_case(unit_of_work, provider).execute(rule().id)
+
+    outcome = unit_of_work.state.outcomes[(rule().id, RunKind.SYNC)]
+    assert outcome.failure_kind == "infrastructure"
+    assert outcome.failure_cause is None

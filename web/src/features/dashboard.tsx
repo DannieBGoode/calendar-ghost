@@ -7,7 +7,6 @@ import { RulesView } from "@/features/rules"
 import { SettingsPage } from "@/features/settings"
 import { peopleReturnSearch } from "@/lib/use-people"
 import {
-  activitySearch,
   DEFAULT_PEOPLE_TAB,
   DEFAULT_SETTINGS_TAB,
   type AppLocation,
@@ -67,17 +66,14 @@ export function Dashboard({
         visit={visit}
         onViewChange={onViewChange}
         onOpenPerson={onOpenPerson}
+        onOpenRule={onOpenRule}
+        onOpenSettingsTab={onOpenSettingsTab}
       />
     )
   }
   if (view === "settings") {
     return (
       <SettingsPage
-        ownActions={{
-          openRule: onOpenRule,
-          openConnections: () => onOpenSettingsTab("connections"),
-          openActivity: (ruleId) => onViewChange("activity", ruleId ? { search: activitySearch(ruleId) } : {}),
-        }}
         tab={location.settingsTab ?? DEFAULT_SETTINGS_TAB}
         onOpenTab={onOpenSettingsTab}
         onOpenPeople={() => onViewChange("people")}
@@ -94,12 +90,16 @@ function PeopleRoute({
   visit,
   onViewChange,
   onOpenPerson,
+  onOpenRule,
+  onOpenSettingsTab,
 }: {
   location: AppLocation
   arrival: ViewOptions
   visit: number
   onViewChange: ViewChange
   onOpenPerson: OpenPerson
+  onOpenRule: OpenRule
+  onOpenSettingsTab: OpenSettingsTab
 }) {
   if (personId) {
     return (
@@ -108,6 +108,7 @@ function PeopleRoute({
         personId={personId}
         onBack={() => onViewChange("people", { search: peopleReturnSearch(personId) })}
         onDeleted={(deleted) => onViewChange("people", { notice: deleted, search: peopleReturnSearch(personId) })}
+        own={{ openRule: onOpenRule, openConnections: () => onOpenSettingsTab("connections") }}
       />
     )
   }

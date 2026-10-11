@@ -99,7 +99,11 @@ class CheckAccountAccess:
                 account = self.accounts.get(account_id)
                 provider = account.provider if account is not None else None
                 failure = ProviderFailure(
-                    error.kind, str(error), account_id=account_id, provider=provider
+                    error.kind,
+                    str(error),
+                    account_id=account_id,
+                    provider=provider,
+                    cause=error.cause,
                 )
                 self.lapses.lapsed(account_id, failure, attempted_at=started)
             raise

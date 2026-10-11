@@ -222,8 +222,8 @@ each at its own URL: **Your account** (`/settings/account`, where `/settings` op
 for administrators, **Administration** (`/settings/administration`). Administrators who let other
 people join also get **People** at `/people`, with Installation Health above everyone and each
 person's sync status, and each person's page at `/people/{id}`. They never see anyone's calendar
-names, Google account emails, or events; each person can see exactly what they see under
-**Settings → Your account**.
+names, Google account emails, or events ([data ownership](docs/data-ownership.md) lists exactly what
+they see).
 
 Open **View details** on a rule (`/rules/{id}`) to see its calendars, policy, projection count, and
 latest runs. Changing any of its policies pauses the rule until it passes a new preview,
@@ -378,6 +378,7 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Incident email sender; with the host, each person receives their own incidents by email |
 | `CALENDAR_SYNC_SMTP_RECIPIENT` | No | Operator who receives incidents about the installation itself, such as a stalled scheduler |
 | `CALENDAR_SYNC_SMTP_STARTTLS` | No | Enable SMTP STARTTLS; defaults to `true` |
+| `CALENDAR_SYNC_PUBLIC_URL` | No | Address people open Calendar Ghost at, such as `https://calendar.example.com`; incident email then links to each person's next step. Unset sends email without a link |
 
 Notification delivery is best-effort. A delivery failure never prevents the incident from being
 recorded locally or stops later synchronization attempts.

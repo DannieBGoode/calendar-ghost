@@ -54,9 +54,8 @@ shows:
 
 It never shows a User's calendar names or identifiers, their Google account emails, or any event
 title or other event content, and there is no setting that shows more. Installation Health, above
-the list, counts Users by status and names nobody. Every User sees exactly what administrators see
-about them under **Settings → Your account → What your administrator can see**, which is shown
-whenever someone else can be on the installation. Tests seed calendar names, Google account emails,
+the list, counts Users by status and names nobody. This page is where every User learns what
+administrators see; the Web UI does not repeat it to them. Tests seed calendar names, Google account emails,
 calendar identifiers, and event titles with markers for two Users and check that none reaches the
 Operator Overview, Installation Health, the installation's notifications, or the logs.
 

@@ -218,6 +218,7 @@ export type PersonState = Person["state"]
 export type PersonRow = Schemas["PersonResponse"]
 /** The whole installation's verdict, and how many Users are in each; it names nobody. */
 export type InstallationHealthReport = Schemas["InstallationHealthResponse"]
+export type InstallationHint = Schemas["InstallationHintResponse"]
 /** An Installation Status verdict, as People filters and sorts by it. */
 export type Verdict = PersonRow["verdict"]
 /** How much one User uses: counts only, never what their records say. */
@@ -272,7 +273,6 @@ export const api = {
   setIncidentEmails: (notifyByEmail: boolean) =>
     call("/api/v1/account/notifications", "put", { body: { notify_by_email: notifyByEmail } }),
   /** What the Operator Overview shows administrators about the signed-in User. */
-  ownOverview: () => call("/api/v1/account/overview", "get"),
   /** Whether the signed-in User may delete themself now, and whether nobody would remain. */
   ownAccountDeletion: () => call("/api/v1/account/deletion", "get"),
   deleteOwnAccount: (password: string, projections: ProjectionHandling) =>

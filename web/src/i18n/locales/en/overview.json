@@ -26,7 +26,17 @@
       "reviewThisRule": "Review this rule",
       "reviewRules": "Review rules",
       "createRule": "Create a rule",
-      "openActivity": "Open Activity"
+      "openActivity": "Open Activity",
+      "checkAccess": "Check access in Settings",
+      "openPeople": "Open People"
+    },
+    "chooseAnotherCalendar": "Choose another calendar, or remove the rule.",
+    "administratorCause": {
+      "title": "Temporarily unavailable",
+      "detail": "Google Calendar is not available to Calendar Ghost right now. To try again, choose Check access on your Google account in Settings. Events already synced stay where they are.",
+      "administratorTitle": "You fix this as the administrator",
+      "administratorDetail": "{cause} People shows how to fix it in Google Cloud.",
+      "administratorWaiting": "{cause} You fix this as the administrator, in Google Cloud; Calendar Ghost tries again by itself."
     },
     "setup": {
       "title": "Set up your first synchronization",
@@ -132,8 +142,8 @@
       "other": "{count} accounts need reauthorization"
     },
     "mixed": {
-      "one": "{count} account connected, {reauthorize}",
-      "other": "{count} accounts connected, {reauthorize}"
+      "one": "{count} account, {reauthorize}",
+      "other": "{count} accounts, {reauthorize}"
     },
     "reauthorizeCount": { "one": "{count} needs reauthorization", "other": "{count} need reauthorization" }
   },

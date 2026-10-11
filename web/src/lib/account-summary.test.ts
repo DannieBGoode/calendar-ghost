@@ -29,12 +29,12 @@ describe("accountSummary", () => {
   it("names the accounts that need reauthorization", () => {
     const i18n = testI18n()
     expect(accountSummary(i18n, [connected, connected, disconnected])).toEqual({
-      text: "2 accounts connected, 1 needs reauthorization",
+      text: "3 accounts, 1 needs reauthorization",
       needsAttention: true,
       stopsRules: false,
     })
     expect(accountSummary(i18n, [connected, disconnected, disconnected]).text).toBe(
-      "1 account connected, 2 need reauthorization",
+      "3 accounts, 2 need reauthorization",
     )
   })
 
@@ -51,7 +51,7 @@ describe("accountSummary", () => {
   it("counts a connected account Google stopped accepting as needing reauthorization", () => {
     const lapsed = { state: "connected", rule_count: 2, authorization_lapsed_at: "2026-10-05T09:00:00Z" }
     expect(accountSummary(testI18n(), [connected, connected, lapsed])).toEqual({
-      text: "2 accounts connected, 1 needs reauthorization",
+      text: "3 accounts, 1 needs reauthorization",
       needsAttention: true,
       stopsRules: true,
     })

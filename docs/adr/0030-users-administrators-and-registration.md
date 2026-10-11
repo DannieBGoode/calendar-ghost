@@ -24,8 +24,8 @@ by a password alone.
   pending Invitation revoked, so nobody can join an installation without an administrator.
 - **The Operator Overview** shows each User's Installation Status with calendars only by neutral
   labels, plus the User's email, plan, last sign-in, state, and resource use. It is the same on
-  every installation, with no setting to reveal more, and every User can see exactly what it shows
-  about them.
+  every installation, with no setting to reveal more. What it shows about a User is documented
+  (see the amendment below).
 - **Registration Policy** is Only Me by default, Invitation Only, or Open. Under Only Me, which
   new and upgraded installations start with, nobody can join, and the Web UI hides Users,
   Invitations, Plans, and the Operator Overview. An Installation Administrator may switch to
@@ -68,6 +68,15 @@ then showed Users and Invitations it does not need, so Only Me became the defaul
 value. It changes only who may join and what the Web UI shows; isolation does not depend on it.
 The same review moved Open, with sign-up and email verification, to the phase that builds sign-up,
 because only the Hosted Service needs it.
+
+## Amendment: no "What administrators can see" in Settings (2026-10-10)
+
+The first design showed every User, in Settings, exactly what the Operator Overview shows about
+them. In use it read as a reminder that someone watches, it made no sense to an administrator
+reading about themself, and it repeated what the documentation already promises. It was removed
+with its `GET /api/v1/account/overview` route. The Operator Overview itself is unchanged: it
+still never shows calendar names, calendar identifiers, account emails, or event content, tests
+still prove it, and [data ownership](../data-ownership.md) states what it shows.
 
 ## Considered Options
 

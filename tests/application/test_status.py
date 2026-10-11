@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.locking import RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     AccountStanding,
@@ -483,3 +484,51 @@ def test_a_lapsed_account_no_rule_uses_is_still_a_problem_to_review() -> None:
     )
 
     assert [(p.kind, p.rule_id) for p in status.problems] == [(ProblemKind.REVIEW, None)]
+
+
+def test_a_lapsed_accounts_rules_carry_why_the_provider_refused() -> None:
+    stopped = _rule("rule-1", SyncRuleState.DEGRADED)
+    refused = NOW - timedelta(minutes=30)
+    account_incident = replace(
+        _incident(None, "authorization", opened=NOW - timedelta(hours=2)),
+        id="incident-account",
+        account_id="work-account",
+        cause=Cause.API_DISABLED,
+        updated_at=refused.isoformat(),
+    )
+
+    status = _assess(
+        [_summary(stopped)], _overview(accounts=LAPSED, open_incidents=1), (account_incident,)
+    )
+
+    (problem,) = status.problems
+    assert (problem.cause, problem.last_tried_at) == (Cause.API_DISABLED, refused)
+
+
+def test_a_problem_an_incident_explains_carries_its_cause_and_when_it_was_last_tried() -> None:
+    waiting = replace(
+        _incident("rule-1", "rate_limit", opened=NOW - timedelta(hours=2)),
+        cause=Cause.RATE_LIMITED,
+        updated_at=(NOW - timedelta(minutes=4)).isoformat(),
+    )
+    stopped = replace(_incident("rule-2", "permanent"), cause=Cause.CALENDAR_NOT_FOUND)
+
+    status = _assess(
+        [_summary(_rule("rule-1")), _summary(_rule("rule-2", SyncRuleState.DEGRADED))],
+        incidents=(waiting, stopped),
+    )
+
+    causes = {p.rule_id: (p.kind, p.cause, p.last_tried_at) for p in status.problems}
+    assert causes == {
+        "rule-1": (ProblemKind.WAITING, Cause.RATE_LIMITED, NOW - timedelta(minutes=4)),
+        "rule-2": (ProblemKind.STOPPED, Cause.CALENDAR_NOT_FOUND, NOW - timedelta(hours=1)),
+    }
+
+
+def test_a_problem_no_provider_failure_explains_has_no_cause() -> None:
+    overdue = _summary(_rule("rule-1"), succeeded_at=NOW - timedelta(days=2))
+
+    status = _assess([overdue])
+
+    (problem,) = status.problems
+    assert (problem.kind, problem.cause, problem.last_tried_at) == (ProblemKind.OVERDUE, None, None)

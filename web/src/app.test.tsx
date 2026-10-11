@@ -30,6 +30,7 @@ const dashboard: Dashboard = {
   blocked_events: 0,
   blocked_entry_id: null,
   blocked_rule_id: null,
+  next_pass_at: null,
 }
 
 /** What the Operator Overview shows about someone with nothing set up yet. */
@@ -42,7 +43,7 @@ const NOTHING_SET_UP: UserOverview = {
     version: "0.1.1",
     checked_at: "2026-09-01T00:00:00Z",
     last_synced_at: null,
-    scheduler: { configured: true, last_pass_completed_at: null, current_pass_started_at: null },
+    scheduler: { configured: true, last_pass_completed_at: null, current_pass_started_at: null, next_pass_at: null },
     counts: { rules: 0, running: 0, stopped: 0, paused: 0, overdue: 0, open_incidents: 0, blocked_events: 0, disconnected_accounts: 0, lapsed_accounts: 0 },
     problems: [],
     rules: [],
@@ -60,7 +61,6 @@ const RESPONSES: Record<string, unknown> = {
   "/api/v1/google/configuration": { configured: false, redirect_uri: null },
   "/api/v1/recent-changes": [],
   "/api/v1/integration-tokens": [],
-  "/api/v1/account/overview": NOTHING_SET_UP,
 }
 
 function jsonResponse(body: unknown): Response {
@@ -456,7 +456,7 @@ describe("People", () => {
     page.happyDOM.setURL(address)
   })
 
-  function serveAs(role: string, policy: "only_me" | "invitation_only") {
+  function serveAs(role: string, policy: "only_me" | "invitation_only", hints: unknown[] = []) {
     requested = []
     const answers: Record<string, unknown> = {
       ...RESPONSES,
@@ -486,6 +486,7 @@ describe("People", () => {
         users: { setup: 1 },
         disabled_users: 0,
         checked_at: "2026-10-01T09:00:00Z",
+        hints,
       },
       [`/api/v1/users/${administrator.id}/overview`]: { ...NOTHING_SET_UP, user: { ...NOTHING_SET_UP.user, id: administrator.id } },
       "/api/v1/invitations": [],
@@ -521,6 +522,28 @@ describe("People", () => {
     expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("People")
     expect(document.title).toBe("People – Calendar Ghost")
     expect(requested).toContain("/api/v1/users")
+  })
+
+  it("flags People when something only the administrator can fix needs them", async () => {
+    page.happyDOM.setURL("http://localhost:8000/overview")
+    serveAs("installation_administrator", "invitation_only", [
+      { kind: "shared_cause", cause: "api_disabled", users: 1, anchor: "the-google-calendar-api-is-turned-off" },
+    ])
+    const { container } = await renderApp(testI18n())
+
+    const link = [...container.querySelectorAll<HTMLAnchorElement>("#primary-nav a")].find((item) =>
+      item.textContent.startsWith("People"),
+    )!
+    expect(link.querySelector(".nav-flag")).not.toBeNull()
+    expect(link.textContent).toBe("People (needs you)")
+  })
+
+  it("does not flag People for what people fix themselves", async () => {
+    page.happyDOM.setURL("http://localhost:8000/overview")
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+
+    expect(container.querySelector("#primary-nav .nav-flag")).toBeNull()
   })
 
   it("opens a person's page at its own address, and returns to People", async () => {

@@ -56,10 +56,33 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Each calendar in Installation Status has a `number`: in the Operator Overview, the number its
   neutral label carries ("Calendar 2" has 2), so the Web UI can name it in the reader's language;
   `null` in a User's own status, which names the calendar.
-- **Settings → Your account → What your administrator can see** shows each person exactly what the
-  Operator Overview shows about them, from `GET /api/v1/account/overview`, collapsed to one row,
-  with a key naming their own calendars for each number. A person's page and this view lead with
-  sync health and say who takes the next step for each problem.
+- A person's page leads with sync health and says who takes the next step for each problem.
+- Causes ([ADR 0031](docs/adr/0031-keep-the-providers-reason-as-a-cause.md)). When Google refuses a
+  request, Calendar Ghost reads why from Google's reason code, never its message, and records it as
+  a Cause on the Incident and the run: the Calendar API is turned off, the project's daily quota is
+  used up, or Google no longer accepts the OAuth client, which only an administrator can fix; or
+  the account's grant was revoked, the calendar is closed to the account or gone, Google is limiting
+  requests or failed for a moment, or a reason Calendar Ghost does not recognize, which the person
+  handles from their own dashboard. Problems and incidents in `GET /api/v1/status`,
+  `GET /api/v1/dashboard`, and `GET /api/v1/incidents` carry `cause`, problems say when they were
+  last tried, and the status and dashboard say when the scheduler next tries. **People** says
+  **Needs you** and is marked in the navigation when anyone meets an administrator's Cause, or two
+  or more people fail for an unrecognized reason or lose Google about 7 days after connecting (an
+  OAuth app in Testing mode), each with **How to fix**; people's own problems are not flagged, and
+  their page says what they do if they ask for help; `GET /api/v1/installation/health` returns them as `hints`. A person's page
+  says each problem's likely cause. For an administrator's Cause, each person's Overview says
+  only "Temporarily unavailable", naming neither the cause nor the administrator; otherwise they
+  give its one step. Administrators
+  never contact anyone through Calendar Ghost about a problem.
+- `CALENDAR_SYNC_PUBLIC_URL`: with it, each incident email links to the person's next step in the
+  Web UI. The link names no calendar, account, or event.
+- Migration 26 adds `incidents.cause` and `rule_run_outcomes.failure_cause`. Earlier failures read
+  as unknown. Rolling back is safe.
+- Google's `dailyLimitExceeded` is now retried as a rate limit, and a calendar the account may not
+  change (`requiredAccessLevel`, `forbidden`, `forbiddenForNonOrganizer`) now stops only its rule;
+  earlier both lapsed the whole account as if its authorization had been refused.
+- `GET /api/v1/installation/health` reports `needs_attention` while it has a hint, even when every
+  rule is only waiting.
 
 - Migration 24 records the order rules were created in, and migration 25 counts each person's
   calendar provider calls per day, kept for 30 days. Rolling back past either is safe.

@@ -38,6 +38,7 @@ def list_incidents(services: Services) -> list[IncidentResponse]:
             resolution=incident.resolution,
             account_id=incident.account_id,
             message=message_response(incident.message),
+            cause=incident.cause.value if incident.cause else None,
         )
         for incident in services.operations.incidents()
     ]

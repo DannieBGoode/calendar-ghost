@@ -132,8 +132,8 @@ _URGENCY = {verdict: rank for rank, verdict in enumerate(StatusVerdict)}
 
 @dataclass(slots=True)
 class OperatorOverview:
-    """The Installation Administrator's view of every User's health, and each User's view of
-    what it shows about them. Both come from `_overviews`, so they cannot differ."""
+    """The Installation Administrator's view of every User's health: the list under People and
+    each person's page. Both come from `_overviews`, so they cannot differ."""
 
     users: UserDirectory
     statuses: UserStatuses
@@ -171,10 +171,6 @@ class OperatorOverview:
         except AdministratorRequired as refused:
             raise UserNotFound(f"user {subject.value} does not exist") from refused
         return self._overview(subject)
-
-    def own(self, actor: UserId) -> UserOverview:
-        """What the Operator Overview shows about `actor`, exactly as an administrator sees it."""
-        return self._overview(actor)
 
     def _overview(self, subject: UserId) -> UserOverview:
         user = self.users.get(subject)

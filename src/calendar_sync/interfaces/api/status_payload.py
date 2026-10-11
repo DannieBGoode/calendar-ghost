@@ -18,6 +18,7 @@ from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
 from calendar_sync.interfaces.api.schemas import (
     IncidentMessageResponse,
     InstallationHealthResponse,
+    InstallationHintResponse,
     InstallationIncidentResponse,
     ProblemResponse,
     ProviderCallsResponse,
@@ -44,6 +45,8 @@ def problem_response(problem: Problem) -> ProblemResponse:
         summary=problem.summary,
         since=problem.since.isoformat() if problem.since else None,
         message=message_response(problem.message),
+        cause=problem.cause.value if problem.cause else None,
+        last_tried_at=problem.last_tried_at.isoformat() if problem.last_tried_at else None,
     )
 
 
@@ -71,6 +74,9 @@ def status_response(status: InstallationStatus) -> StatusResponse:
                 if scheduler and scheduler.pass_started_at
                 else None
             ),
+            next_pass_at=(
+                scheduler.next_pass_at.isoformat() if scheduler and scheduler.next_pass_at else None
+            ),
         ),
         counts=StatusCountsResponse(
             rules=len(status.rules),
@@ -95,6 +101,7 @@ def status_response(status: InstallationStatus) -> StatusResponse:
                 category=incident.category,
                 summary=incident.summary,
                 opened_at=incident.opened_at,
+                cause=incident.cause.value if incident.cause else None,
             )
             for incident in status.open_incidents
         ],
@@ -138,6 +145,12 @@ def installation_health_response(health: InstallationHealth) -> InstallationHeal
         users={verdict.value: count for verdict, count in health.users.items()},
         disabled_users=health.disabled_users,
         checked_at=health.checked_at.isoformat(),
+        hints=[
+            InstallationHintResponse(
+                kind=hint.kind.value, cause=hint.cause.value, users=hint.users, anchor=hint.anchor
+            )
+            for hint in health.hints
+        ],
     )
 
 

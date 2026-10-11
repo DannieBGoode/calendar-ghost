@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
+from datetime import datetime
+from urllib.parse import urlsplit
 
 from calendar_sync.application.accounts import (
     CheckAccountAccess,
@@ -53,6 +55,7 @@ from calendar_sync.application.ports import (
     AccountAuthorization,
     AccountCalendars,
     CalendarProvider,
+    CauseSighting,
     Clock,
     ConnectedAccountRepository,
     DatabaseStorage,
@@ -355,7 +358,9 @@ def build_adapters(settings: Settings) -> Adapters:
         database_storage=SqliteStorage(database),
         integration_tokens=tokens.for_user,
         token_authentication=tokens,
-        notifications=lambda owner: OwnerNotifier(users, owner, mail) if mail else None,
+        notifications=lambda owner: (
+            OwnerNotifier(users, owner, mail, public_address(settings)) if mail else None
+        ),
         installation_notifications=_installation_notifier(settings, mail),
         sends_email=mail is not None,
     )
@@ -436,6 +441,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             lambda users: {user: status.health for user, status in statuses.of(users).items()},
             scheduler,
             adapters.clock,
+            _failure_causes(adapters.installation_units),
         ),
         operator_overview=OperatorOverview(
             adapters.users, statuses, adapters.installation_units, adapters.clock
@@ -443,6 +449,18 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         sends_email=adapters.sends_email,
         user_services=user_services,
     )
+
+
+def _failure_causes(
+    installation: InstallationUnitOfWorkFactory,
+) -> Callable[[datetime], Sequence[CauseSighting]]:
+    """Every User's failures with a Cause from a time on, for Installation Hints."""
+
+    def read(since: datetime) -> Sequence[CauseSighting]:
+        with installation() as reading:
+            return reading.failure_causes(since)
+
+    return read
 
 
 def _identity(adapters: Adapters) -> IdentityServices:
@@ -591,6 +609,23 @@ def _compose_user(
         preview_sync_rule=preview_sync_rule,
         reconcile_now=reconcile_now,
     )
+
+
+def public_address(settings: Settings) -> str | None:
+    """Where people reach the Web UI, for links in email: an http or https address at the root
+    of its host, with no path, query, or fragment, without its trailing slash. The Web UI is
+    served at the root of its address, so anything else gives no link."""
+    configured = settings.public_url.strip()
+    try:
+        parsed = urlsplit(configured)
+    except ValueError:
+        # Not even an address, such as an unclosed IPv6 bracket: as if unset.
+        return None
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        return None
+    return configured.rstrip("/")
 
 
 def _mail_server(settings: Settings) -> SmtpServer | None:

@@ -189,40 +189,54 @@
       }
     },
     "calendar": "Calendar {number}",
+    "stops": "Stops {rules}.",
+    "ifTheyAsk": {
+      "reauthorize": "If they ask for help: they reauthorize their Google account in Settings, under Connections.",
+      "preview": "If they ask for help: they open the rule and preview it again to restart it.",
+      "activity": "If they ask for help: their Activity explains what happened and what to do.",
+      "overdue": "If they ask for help: they choose Sync now on the rule, or check their Activity.",
+      "calendar": "If they ask for help: they open the rule to choose another calendar, or remove the rule."
+    },
+    "rulesRunning": {
+      "one": "{running} of {count} rule is running.",
+      "other": "{running} of {count} rules are running."
+    },
+    "go": {
+      "connections": "Open Connections",
+      "rule": "Open the rule"
+    },
     "next": {
       "reauthorize": {
-        "self": "Reauthorize your Google account in Settings, under Connections.",
-        "person": "{name} reauthorizes their Google account in their Settings, under Connections."
+        "self": "Reauthorize your Google account in Settings, under Connections."
       },
       "preview": {
-        "self": "Open the rule and preview it again to restart it.",
-        "person": "{name} previews the rule again on their Rules page to restart it."
+        "self": "Open the rule and preview it again to restart it."
       },
       "activity": {
-        "self": "Activity explains what happened and what to do.",
-        "person": "{name} finds what happened and what to do in their Activity."
+        "self": "Activity explains what happened and what to do."
       },
       "overdue": {
-        "self": "Choose Sync now on the rule, or check Activity.",
-        "person": "{name} can choose Sync now on the rule, or check their Activity."
+        "self": "Choose Sync now on the rule, or check Activity."
       },
       "waiting": "Nothing to do: Calendar Ghost retries by itself.",
-      "stalled": {
-        "self": "Your administrator restarts Calendar Ghost. Nothing synchronizes until it runs again.",
-        "person": "Restart Calendar Ghost on the computer it runs on. Nobody's rules synchronize until it runs again."
+      "stalled": "Restart Calendar Ghost on the computer it runs on. Nobody's rules synchronize until it runs again.",
+      "calendar": {
+        "self": "Open the rule to choose another calendar, or remove the rule."
+      },
+      "administrator": {
+        "administrator": "You fix this as the administrator, in Google Cloud.",
+        "person": "You fix this as the administrator, in Google Cloud. {name} has nothing to do."
+      },
+      "ownCause": {
+        "person": "{name} can fix this from their dashboard.",
+        "unknown": "{name} can try again from their dashboard."
       }
     },
     "statusTitle": "Synchronization",
-    "calendarNamed": "Calendar {number} ({name})",
     "callsMeaning": {
       "normal": "These calls look normal.",
       "limited": "Google asked Calendar Ghost to slow down a few times, and it tried again later.",
       "manyFailed": "Many calls failed. A Google account usually needs reauthorization, or Google is having trouble."
-    },
-    "go": {
-      "connections": "Open Connections",
-      "rule": "Open the rule",
-      "activity": "Open Activity"
     }
   },
   "problems": {
@@ -235,23 +249,47 @@
     "tryAgain": "Try again",
     "summary": {
       "stalled": "Calendar Ghost stopped checking calendars, so nobody's rules synchronize until the service runs again.",
-      "stopped": "Someone's rules stopped syncing.",
-      "review": "Someone's synchronization needs a look.",
-      "waiting": "Google is limiting or failing requests. Calendar Ghost retries by itself.",
-      "healthy": "Everyone's synchronization is working.",
+      "healthy": {
+        "one": "Synchronization works for the {count} person here.",
+        "other": "Synchronization works for all {count} people here."
+      },
       "paused": "Synchronization is paused for everyone here.",
       "setup": "Nobody is synchronizing yet."
     },
     "count": "{verdict}: {count}",
+    "needsYou": "Needs you",
+    "needsYouDetail": "Only you can fix what is below.",
+    "nothingNeedsYou": "Nothing needs you",
+    "ownFixes": {
+      "one": "{count} of {total} people has something to fix on their own dashboard.",
+      "other": "{count} of {total} people have something to fix on their own dashboard."
+    },
     "countsLabel": "Show only",
     "schedulerStalled": "Scheduled synchronization stopped running {relative}.",
-    "meanings": "What each sync status means"
+    "meanings": "What each sync status means",
+    "hints": {
+      "title": "Likely causes",
+      "shared": {
+        "one": "{count} person is affected because {cause}.",
+        "other": "{count} people are affected because {cause}."
+      },
+      "testingMode": {
+        "one": "{count} person lost Google about 7 days after connecting, which usually means the Google OAuth app is in Testing mode.",
+        "other": "{count} people lost Google about 7 days after connecting, which usually means the Google OAuth app is in Testing mode."
+      },
+      "unrecognized": {
+        "one": "{count} person failed for a reason Calendar Ghost does not recognize. The service logs name Google's reason.",
+        "other": "{count} people failed for a reason Calendar Ghost does not recognize. The service logs name Google's reason."
+      },
+      "howToFix": "How to fix",
+      "howToFixLabel": "How to fix: {hint}"
+    }
   },
   "person": {
     "back": "People",
     "loading": "Loading this person",
     "loadFailure": "This person could not load",
-    "intro": "You see what they see about themselves under Settings, never their calendar names, Google account emails, or events.",
+    "intro": "You see whether their synchronization works, never their calendar names, Google account emails, or events.",
     "joined": "Joined {relative}",
     "lastSignIn": "Last signed in {relative}",
     "neverSignedIn": "Never signed in",
@@ -271,5 +309,20 @@
       "other": "{count} waiting"
     },
     "documentTitle": "Invitations – People"
+  },
+  "cause": {
+    "label": "Likely cause: {cause}.",
+    "api_disabled": "the Google Calendar API is turned off for this installation",
+    "quota_exceeded": "this installation's daily quota of Google requests is used up",
+    "oauth_client_invalid": "Google no longer accepts this installation's OAuth client",
+    "access_revoked": "Google no longer accepts this Google account's permission",
+    "calendar_forbidden": "the Google account may not change this calendar",
+    "calendar_not_found": "the calendar no longer exists, or is no longer shared with the account",
+    "rate_limited": "Google asked Calendar Ghost to slow down",
+    "temporary": "Google failed for a moment",
+    "unknown": "Google refused for a reason Calendar Ghost does not recognize",
+    "lastTried": "Last tried {relative}.",
+    "triesAgain": "Tries again {relative}.",
+    "howToFix": "How to fix"
   }
 }

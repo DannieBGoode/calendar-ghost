@@ -14,9 +14,12 @@ from calendar_sync.application.accounts import (
     DiscoverCalendars,
     ListConnectedAccounts,
 )
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import (
+    AccountAccessCheckFailed,
     ConnectedAccountMustBeDisconnected,
     ConnectedAccountNotFound,
+    ProviderFailureKind,
 )
 from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
@@ -29,6 +32,7 @@ from calendar_sync.application.ports import (
     ConnectedAccount,
     ConnectedAccountState,
     DiscoveredCalendar,
+    IncidentReport,
     IncidentRepository,
 )
 from calendar_sync.application.providers import ProviderKind
@@ -353,3 +357,46 @@ def test_checking_access_of_another_users_account_asks_no_provider() -> None:
         check.execute(ACCOUNT)
 
     assert calendars.asked == []
+
+
+class RefusingCalendars(CountingCalendars):
+    def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
+        raise AccountAccessCheckFailed(
+            "denied", ProviderFailureKind.AUTHORIZATION, Cause.API_DISABLED
+        )
+
+
+class OpenedIncidents:
+    def __init__(self) -> None:
+        self.opened: list[IncidentReport] = []
+
+    def open(self, incident: IncidentReport, at: object) -> bool:
+        self.opened.append(incident)
+        return True
+
+    def resolve(self, *args: object, **kwargs: object) -> None:
+        return None
+
+
+def test_a_refused_access_check_records_why_the_provider_refused() -> None:
+    units = InMemoryUnitOfWorkFactory().for_user(USER)
+    units.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    incidents = OpenedIncidents()
+    account = ConnectedAccount(
+        ACCOUNT,
+        "Personal",
+        "personal@example.test",
+        ConnectedAccountState.CONNECTED,
+        provider=ProviderKind.GOOGLE,
+    )
+    check = CheckAccountAccess(
+        RefusingCalendars(),
+        RecordingAccounts(account),
+        LapsedAuthorizations(units, cast(IncidentRepository, incidents), FixedClock()),
+    )
+
+    with pytest.raises(AccountAccessCheckFailed):
+        check.execute(ACCOUNT)
+
+    (incident,) = incidents.opened
+    assert incident.cause is Cause.API_DISABLED

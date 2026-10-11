@@ -1,7 +1,8 @@
 """Installation Health: the one verdict on the whole installation (ADR 0030).
 
 Installation Administrators and their monitors read it: incidents about the installation itself,
-and how many Users are in each Installation Status verdict. It names no rule, calendar, or User.
+how many Users are in each Installation Status verdict, and Installation Hints (ADR 0031). It
+names no rule, calendar, or User.
 """
 
 from __future__ import annotations
@@ -13,7 +14,13 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from calendar_sync.application.installation_hints import (
+    HINT_WINDOW,
+    InstallationHint,
+    installation_hints,
+)
 from calendar_sync.application.ports import (
+    CauseSighting,
     Clock,
     SchedulerHeartbeat,
     SchedulerProgress,
@@ -74,10 +81,14 @@ class InstallationHealth:
     """How many Users who may sign in are in each verdict."""
     disabled_users: int
     checked_at: datetime
+    hints: tuple[InstallationHint, ...] = ()
+    """Likely causes from patterns across Users who may sign in."""
 
     @property
     def needs_attention(self) -> bool:
-        return self.status in NEEDS_ATTENTION
+        """Whether someone must act: a verdict that needs it, or a hint only the administrator
+        can act on, such as a used-up quota while every rule merely waits (ADR 0031)."""
+        return self.status in NEEDS_ATTENTION or bool(self.hints)
 
 
 @dataclass(slots=True)
@@ -87,6 +98,8 @@ class GetInstallationHealth:
     """The Users' Installation Status verdicts, as their own Overviews show them, read at once."""
     scheduler: SchedulerHeartbeat | None
     clock: Clock
+    sightings: Callable[[datetime], Sequence[CauseSighting]] = lambda _since: ()
+    """Every User's failures with a Cause from a time on, read at once."""
 
     def execute(self) -> InstallationHealth:
         now = self.clock.now()
@@ -100,10 +113,13 @@ class GetInstallationHealth:
         status = next(
             (verdict for verdict in _PRECEDENCE if verdict in present), StatusVerdict.SETUP
         )
+        may_sign_in = {user.id for user in active}
+        seen = [seen for seen in self.sightings(now - HINT_WINDOW) if seen.user in may_sign_in]
         return InstallationHealth(
             status=status,
             incidents=incidents,
             users=dict(counts),
             disabled_users=len(everyone) - len(active),
             checked_at=now,
+            hints=installation_hints(seen, now),
         )

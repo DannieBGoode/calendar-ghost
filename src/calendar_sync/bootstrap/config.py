@@ -23,6 +23,8 @@ class Settings:
     smtp_sender: str = ""
     smtp_recipient: str = ""
     smtp_starttls: bool = True
+    public_url: str = ""
+    """Where people reach the Web UI, so incident email can link to their next step."""
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -55,4 +57,5 @@ class Settings:
             smtp_recipient=os.environ.get("CALENDAR_SYNC_SMTP_RECIPIENT", ""),
             smtp_starttls=os.environ.get("CALENDAR_SYNC_SMTP_STARTTLS", "true").lower()
             in {"1", "true", "yes"},
+            public_url=os.environ.get("CALENDAR_SYNC_PUBLIC_URL", ""),
         )

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 import threading
 import time
@@ -12,6 +11,7 @@ from typing import Any
 
 from google.auth.exceptions import RefreshError, TransportError
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
@@ -30,6 +30,12 @@ from calendar_sync.domain.model import (
     OccurrenceStart,
     SyncRuleId,
     TransformationPolicy,
+)
+from calendar_sync.infrastructure.google.causes import (
+    QUOTA_REASONS,
+    RATE_LIMIT_REASONS,
+    cause_of,
+    http_reasons,
 )
 from calendar_sync.infrastructure.google.translation import (
     OPERATION_PROPERTY,
@@ -224,7 +230,9 @@ class GoogleCalendarProvider:
             )
             return to_domain_event(payload, destination.calendar)
         except Exception as error:
-            raise self._failure(error, destination.calendar.connected_account_id) from error
+            raise self._failure(
+                error, destination.calendar.connected_account_id, event_scoped=True
+            ) from error
 
     def delete_projection(
         self,
@@ -500,7 +508,9 @@ class GoogleCalendarProvider:
             )
             return to_domain_event(payload, destination_series.calendar)
         except Exception as error:
-            raise self._failure(error, destination_series.calendar.connected_account_id) from error
+            raise self._failure(
+                error, destination_series.calendar.connected_account_id, event_scoped=True
+            ) from error
 
     def cancel_occurrence(
         self,
@@ -533,14 +543,17 @@ class GoogleCalendarProvider:
                     error, destination_series.calendar.connected_account_id
                 ) from error
 
-    def _failure(self, error: Exception, account: ConnectedAccountId) -> ProviderFailure:
+    def _failure(
+        self, error: Exception, account: ConnectedAccountId, *, event_scoped: bool = False
+    ) -> ProviderFailure:
         # The clock turns a Retry-After date into the seconds the retry helper waits. The account
         # names whose access to renew when Google rejected its credentials, and when the request
         # read them tells whether a Reauthorization has replaced them since.
         now = self._clock.now()
         read: dict[ConnectedAccountId, datetime] = self._credentials_read.__dict__.get("at", {})
         return replace(
-            _provider_failure(error, now),
+            # A write to one event its calendar just listed or returned names that event alone.
+            _provider_failure(error, now, event_scoped),
             account_id=account,
             provider=ProviderKind.GOOGLE,
             attempted_at=read.get(account, now),
@@ -583,28 +596,39 @@ def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) 
     return origin is not None and origin.rule_id == rule_id and origin.source == source
 
 
-def _provider_failure(error: Exception, now: datetime) -> ProviderFailure:
+def _provider_failure(error: Exception, now: datetime, event_scoped: bool) -> ProviderFailure:
     # Refreshing the access token fails before any request is sent, so it carries no status. A
     # revoked or expired grant needs reauthorization; google-auth marks token-endpoint outages
     # retryable. Their text can quote the token endpoint's response, so it is not kept.
+    status = _status_code(error)
+    cause = cause_of(error, status, event_scoped=event_scoped)
     if isinstance(error, RefreshError):
         if error.retryable:
             return ProviderFailure(
-                ProviderFailureKind.TEMPORARY, "Google could not refresh access right now"
+                ProviderFailureKind.TEMPORARY,
+                "Google could not refresh access right now",
+                cause=cause,
             )
         return ProviderFailure(
-            ProviderFailureKind.AUTHENTICATION, "Google no longer accepts this account's access"
+            ProviderFailureKind.AUTHENTICATION,
+            "Google no longer accepts this account's access",
+            cause=cause,
         )
     if isinstance(error, TransportError):
         return ProviderFailure(
-            ProviderFailureKind.TEMPORARY, "Google could not be reached to refresh access"
+            ProviderFailureKind.TEMPORARY,
+            "Google could not be reached to refresh access",
+            cause=cause,
         )
-    status = _status_code(error)
     detail = str(error) or error.__class__.__name__
     if status == 401:
         kind = ProviderFailureKind.AUTHENTICATION
     elif status == 403 and _is_rate_limit_error(error):
         kind = ProviderFailureKind.RATE_LIMIT
+    elif status == 403 and cause is Cause.CALENDAR_FORBIDDEN:
+        # One calendar the account may not change: its rule stops for another calendar, while the
+        # account and its other calendars keep working; reauthorizing would not help (ADR 0031).
+        kind = ProviderFailureKind.PERMANENT
     elif status == 403:
         kind = ProviderFailureKind.AUTHORIZATION
     elif status == 429:
@@ -613,7 +637,7 @@ def _provider_failure(error: Exception, now: datetime) -> ProviderFailure:
         kind = ProviderFailureKind.TEMPORARY
     else:
         kind = ProviderFailureKind.PERMANENT
-    return ProviderFailure(kind, detail, _retry_after_seconds(error, now))
+    return ProviderFailure(kind, detail, _retry_after_seconds(error, now), cause=cause)
 
 
 # Instances are read only for their status and start, so one page covers most series.
@@ -667,29 +691,5 @@ def _status_code(error: Exception) -> int | None:
 
 
 def _is_rate_limit_error(error: Exception) -> bool:
-    content = getattr(error, "content", b"")
-    if isinstance(content, bytes):
-        try:
-            payload = json.loads(content.decode())
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return False
-    elif isinstance(content, str):
-        try:
-            payload = json.loads(content)
-        except json.JSONDecodeError:
-            return False
-    else:
-        return False
-    reasons = {
-        item.get("reason")
-        for item in payload.get("error", {}).get("errors", [])
-        if isinstance(item, dict)
-    }
-    return bool(
-        reasons
-        & {
-            "rateLimitExceeded",
-            "userRateLimitExceeded",
-            "quotaExceeded",
-        }
-    )
+    # A used-up daily quota resets by itself, so it is retried like a rate limit (ADR 0031).
+    return bool(http_reasons(error) & (RATE_LIMIT_REASONS | QUOTA_REASONS))

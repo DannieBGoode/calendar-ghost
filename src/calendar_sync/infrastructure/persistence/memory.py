@@ -7,12 +7,14 @@ from datetime import date, datetime
 from types import TracebackType
 from typing import Self
 
+from calendar_sync.application.causes import WITHOUT_CAUSE
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
     AccountStanding,
     AuditEntry,
     AuditRepository,
     CalendarNameRepository,
+    CauseSighting,
     ConnectedAccountRecords,
     ConnectedAccountState,
     DiscoveredCalendar,
@@ -431,7 +433,12 @@ class InMemoryRuleRunOutcomeRepository:
             else None
         )
         self._state.outcomes[(outcome.rule_id, outcome.kind)] = replace(
-            outcome, last_succeeded_at=succeeded_at, last_full_succeeded_at=full_at
+            outcome,
+            failure_cause=None
+            if outcome.succeeded or outcome.failure_kind in WITHOUT_CAUSE
+            else outcome.failure_cause,
+            last_succeeded_at=succeeded_at,
+            last_full_succeeded_at=full_at,
         )
 
     def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None:
@@ -657,6 +664,20 @@ class InMemoryInstallationUnitOfWork:
             state.provider_calls = {
                 key: counts for key, counts in state.provider_calls.items() if key[1] >= before
             }
+
+    def failure_causes(self, since: datetime) -> list[CauseSighting]:
+        """Failed runs since `since`; this store keeps no Incidents."""
+        return sorted(
+            (
+                CauseSighting(owner, outcome.failure_cause, outcome.completed_at, False)
+                for owner, state in self._database.partitions.items()
+                for outcome in state.outcomes.values()
+                if not outcome.succeeded
+                and outcome.failure_cause is not None
+                and outcome.completed_at >= since
+            ),
+            key=lambda seen: (seen.user.value, seen.at),
+        )
 
     def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
         return {user: _status_records(self._database.partitions.get(user)) for user in users}

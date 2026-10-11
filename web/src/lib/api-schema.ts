@@ -84,27 +84,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/account/overview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Own Overview
-         * @description What the Operator Overview shows Installation Administrators about the signed-in User,
-         *     exactly as they see it.
-         */
-        get: operations["own_overview_api_v1_account_overview_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/account/password": {
         parameters: {
             query?: never;
@@ -1113,6 +1092,8 @@ export interface components {
             last_synced_at: string | null;
             /** Needs Attention */
             needs_attention: boolean;
+            /** Next Pass At */
+            next_pass_at: string | null;
             /** Open Incidents */
             open_incidents: number;
             /** Problems */
@@ -1265,6 +1246,8 @@ export interface components {
             account_id: string | null;
             /** Category */
             category: string;
+            /** Cause */
+            cause: ("api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown") | null;
             /** Id */
             id: string;
             message: components["schemas"]["IncidentMessageResponse"] | null;
@@ -1295,6 +1278,8 @@ export interface components {
             checked_at: string;
             /** Disabled Users */
             disabled_users: number;
+            /** Hints */
+            hints: components["schemas"]["InstallationHintResponse"][];
             /** Incidents */
             incidents: components["schemas"]["InstallationIncidentResponse"][];
             /** Needs Attention */
@@ -1308,6 +1293,26 @@ export interface components {
             users: {
                 [key: string]: number;
             };
+        };
+        /**
+         * InstallationHintResponse
+         * @description A likely cause from a pattern across Users; it names none of them (ADR 0031).
+         */
+        InstallationHintResponse: {
+            /** Anchor */
+            anchor: string;
+            /**
+             * Cause
+             * @enum {string}
+             */
+            cause: "api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "shared_cause" | "testing_mode" | "unrecognized";
+            /** Users */
+            users: number;
         };
         /** InstallationIncidentResponse */
         InstallationIncidentResponse: {
@@ -1486,11 +1491,15 @@ export interface components {
         };
         /** ProblemResponse */
         ProblemResponse: {
+            /** Cause */
+            cause: ("api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown") | null;
             /**
              * Kind
              * @enum {string}
              */
             kind: "stalled" | "stopped" | "review" | "overdue" | "blocked" | "waiting";
+            /** Last Tried At */
+            last_tried_at: string | null;
             message: components["schemas"]["IncidentMessageResponse"] | null;
             /** Rule Id */
             rule_id: string | null;
@@ -1832,6 +1841,8 @@ export interface components {
             current_pass_started_at: string | null;
             /** Last Pass Completed At */
             last_pass_completed_at: string | null;
+            /** Next Pass At */
+            next_pass_at: string | null;
         };
         /** SessionResponse */
         SessionResponse: {
@@ -1934,6 +1945,8 @@ export interface components {
         StatusIncidentResponse: {
             /** Category */
             category: string;
+            /** Cause */
+            cause: ("api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown") | null;
             /** Opened At */
             opened_at: string;
             /** Rule Id */
@@ -2234,37 +2247,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SignedInUserResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    own_overview_api_v1_account_overview_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                calendar_sync_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserOverviewResponse"];
                 };
             };
             /** @description Validation Error */

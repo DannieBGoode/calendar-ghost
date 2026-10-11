@@ -39,6 +39,7 @@ from calendar_sync.application.ports import (
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.infrastructure.google.causes import cause_of
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
@@ -212,22 +213,26 @@ class GoogleOAuthService:
             raise
         except Exception as error:
             status_code = _google_status_code(error)
+            cause = cause_of(error, status_code)
             # A refresh Google rejected carries no status; one it could not answer is retryable.
             revoked = isinstance(error, RefreshError) and not error.retryable
             if status_code == 401 or revoked:
                 raise AccountAccessCheckFailed(
                     "Google authorization has expired; reauthorize this account",
                     ProviderFailureKind.AUTHENTICATION,
+                    cause,
                 ) from error
             if status_code == 403:
                 raise AccountAccessCheckFailed(
                     "Google Calendar access was denied; confirm the Calendar API is enabled "
                     "and reauthorize this account",
                     ProviderFailureKind.AUTHORIZATION,
+                    cause,
                 ) from error
             raise AccountAccessCheckFailed(
                 "Google Calendar access could not be verified; try again",
                 ProviderFailureKind.TEMPORARY,
+                cause,
             ) from error
         return AccountAccess(
             calendars_visible=len(calendars),

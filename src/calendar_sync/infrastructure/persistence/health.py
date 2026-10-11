@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from calendar_sync.application.causes import NO_CAUSE
 from calendar_sync.application.errors import ProviderFailureKind
 from calendar_sync.application.ports import IdGenerator, IncidentReport, IncidentResolution
 from calendar_sync.domain.access import UserId
@@ -126,9 +127,9 @@ class SqliteIncidentRepository:
                 """
                 INSERT INTO incidents (
                     id, deduplication_key, rule_id, account_id, category, state,
-                    summary, opened_at, updated_at, message_code, message_params, user_id
+                    summary, opened_at, updated_at, message_code, message_params, cause, user_id
                 )
-                SELECT ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?
+                SELECT ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?
                 WHERE ? IS NULL OR EXISTS (
                     SELECT 1 FROM connected_accounts
                     WHERE id = ? AND user_id = ? AND authorization_lapsed_at IS NOT NULL
@@ -143,7 +144,8 @@ class SqliteIncidentRepository:
                     resolved_at = NULL,
                     resolution = NULL,
                     message_code = excluded.message_code,
-                    message_params = excluded.message_params
+                    message_params = excluded.message_params,
+                    cause = excluded.cause
                 """,
                 (
                     self._ids.new(),
@@ -158,6 +160,7 @@ class SqliteIncidentRepository:
                     json.dumps(dict(incident.message.params), sort_keys=True)
                     if incident.message
                     else None,
+                    incident.cause.value if incident.cause else NO_CAUSE,
                     self._user,
                     account_only.value if account_only else None,
                     account_only.value if account_only else None,

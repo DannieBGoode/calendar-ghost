@@ -77,6 +77,8 @@ const providerFailure: ServerProblem = {
   summary: "Stored summary: access denied",
   since: justNow(),
   message: { code: "provider_failure", params: { kind: "authorization", provider: "google" } },
+  cause: null,
+  last_tried_at: null,
 }
 // Other problems have no code yet, so their English summaries are data.
 const overdue: ServerProblem = {
@@ -85,6 +87,8 @@ const overdue: ServerProblem = {
   summary: "This rule has not synced in over a day",
   since: justNow(),
   message: null,
+  cause: null,
+  last_tried_at: null,
 }
 const stalled: ServerProblem = {
   kind: "stalled",
@@ -92,6 +96,8 @@ const stalled: ServerProblem = {
   summary: "The scheduler has not run recently",
   since: justNow(),
   message: null,
+  cause: null,
+  last_tried_at: null,
 }
 const SERVER_TEXT = [overdue.summary, stalled.summary]
 
@@ -140,6 +146,7 @@ const attentionDashboard: Dashboard = {
   blocked_events: 0,
   blocked_entry_id: null,
   blocked_rule_id: null,
+  next_pass_at: null,
 }
 
 /** Account names, emails, calendar names, event titles, and avatar initials the fixtures introduce. */

@@ -100,6 +100,13 @@ means Google is slowing the run down and it will finish later. If no `run progre
 several minutes and no `run finished` or `run failed` follows, the run is waiting on a single Google
 call; look for `slow provider call` warnings, or turn on debug logging.
 
+`unrecognized provider reason provider=google status=403 reason=someNewReason` (WARNING): Google
+refused a request for a reason Calendar Ghost does not recognize, so its Cause is `unknown`. The
+line names only Google's short reason code, never its message, and says `reason=unreadable` when
+the code is not a short token. When **Installation health** says that two or more people fail for
+a reason Calendar Ghost does not recognize, look for these lines, and include the reason code when
+you report it so a later release can recognize it.
+
 Set `CALENDAR_SYNC_LOG_LEVEL=DEBUG` in `.env` and run `docker compose up -d` to also log every
 provider call as `provider call provider=google op=events.get status=200 took=84ms`. Debug logging
 is verbose; set it back to
@@ -209,9 +216,10 @@ its mappings and last successful incremental positions, and writes nothing while
 - **Google Calendar rejected synchronization**: Google refused a request for a reason other than
   authorization or rate limiting, or answered in a way Calendar Ghost could not use. Choose **Review
   this rule** and check that both calendars still exist and are shared with the accounts the rule
-  uses. Calendar Ghost does not record the error Google returned, so if both calendars are available,
-  recover the rule; if it stops again with the same incident, note when the incident opened when
-  asking for help.
+  uses. Calendar Ghost records only why Google refused, as a likely cause, never the message Google
+  returned; the sections below say what each one means. If both calendars are available, recover
+  the rule; if it stops again with the same incident, note when the incident opened and its likely
+  cause when asking for help.
 - **Local synchronization infrastructure failed**: an unexpected error inside Calendar Ghost stopped
   the run, not a Google condition. Review the container logs for the error, and check that the data
   volume has free space and the database is writable, before recovering the rule.
@@ -222,6 +230,134 @@ its mappings and last successful incremental positions, and writes nothing while
 To recover the rule, open it, choose **Preview to restart**, inspect the preview, and choose **Start
 syncing**. Its next run repairs drift before advancing either cursor. The next successful scheduled
 run, within five minutes, resolves the incident; **Sync Now** and **Reconcile Now** do not.
+
+## Problems only an administrator can fix
+
+Some failures come from the installation's Google Cloud project, not from anyone's Google account
+or calendars, so only an Installation Administrator can fix them. Calendar Ghost reads why Google
+refused from its reason code, never its message, and records it as a Cause. Each person's own
+Overview says only that Google Calendar is temporarily unavailable, without the cause or a mention
+of you, so people are not prompted to contact you. On
+**People**, **Installation health** says **Needs you**, People is marked in the navigation, and the
+likely cause is shown as soon as anyone meets it, with **How to fix** linking to the section below; a person's page shows the
+likely cause of each of their problems. Administrators never need to contact anyone: once the
+project is fixed, each person's dashboard tells them what, if anything, is left for them.
+
+### The Google Calendar API is turned off
+
+**Symptom.** Rules stop with "Access to Google Calendar was denied" for several people at once, and
+the likely cause reads "the Google Calendar API is turned off for this installation". Check access
+fails the same way for every account.
+
+**Confirm.** In the [Google Cloud Console](https://console.cloud.google.com/), select the project
+that owns the OAuth client in `CALENDAR_SYNC_GOOGLE_CLIENT_ID`, open **APIs & Services → Enabled
+APIs & services**, and look for **Google Calendar API**. If it is missing, or its page offers
+**Enable**, it is off. A project that was suspended or marked for deletion answers the same way.
+
+**Fix.** Choose **Enable** on the Google Calendar API page, and wait a few minutes for Google to
+apply it. Google refused each affected account while the API was off, so their rules stay stopped
+until each account is checked again: each person's Overview says Google Calendar is temporarily
+unavailable and offers **Check access** on their Google account in **Settings → Connections** to
+try again, and a check that passes restarts every rule it stopped, with no preview.
+
+### The Google Cloud project's daily quota is used up
+
+**Symptom.** Several people's rules wait on Google, and the likely cause reads "this installation's
+daily quota of Google requests is used up". Nobody's rules stop; they retry by themselves.
+
+**Confirm.** In the Google Cloud Console, open **APIs & Services → Google Calendar API → Quotas &
+System Limits** for the project that owns the OAuth client, and compare the requests per day with
+the limit.
+
+**Fix.** Google resets the daily quota at midnight Pacific Time, and rules catch up on their own
+after it. If it runs out again, request a higher limit on the same page, or reduce how much
+Calendar Ghost asks for: fewer rules, or rules over smaller calendars.
+
+### Google no longer accepts the OAuth client
+
+**Symptom.** Every person's Google accounts stop at the same time, the likely cause reads "Google
+no longer accepts this installation's OAuth client", and reauthorizing fails too.
+
+**Confirm.** In the Google Cloud Console, open **Google Auth Platform → Clients** (older consoles:
+**APIs & Services → Credentials**) and find the OAuth 2.0 client whose ID is
+`CALENDAR_SYNC_GOOGLE_CLIENT_ID`. It may have been deleted, or its secret reset, so that
+`CALENDAR_SYNC_GOOGLE_CLIENT_SECRET` no longer matches. Do not post either value publicly.
+
+**Fix.** Put the client's current ID and secret in `.env` and run `docker compose up -d`. Each
+person's Overview, which says Google Calendar is temporarily unavailable, offers **Check access** on
+their Google account; a check that passes restarts their rules. If you had to create a new client, Google's grants to the old one do not carry over:
+each person's dashboard asks them to choose **Reauthorize account** once.
+
+### Google accounts stop working 7 days after connecting
+
+**Symptom.** People's Google accounts need reauthorization about a week after they connected or
+last reauthorized them, again and again. **Installation health** says so when it happens to two or
+more people.
+
+**Confirm.** Google gives a refresh token that expires after 7 days to an OAuth app whose user
+type is External and whose publishing status is **Testing**. In the Google Cloud Console, open
+**Google Auth Platform → Audience** (older consoles: **APIs & Services → OAuth consent screen**) and
+read **Publishing status**.
+
+**Fix.** Choose **Publish app** to move it to **In production**. Google may show people an
+"unverified app" warning until the app is verified; a household installation can continue past
+it. Grants given while the app was in Testing still expire, so each affected person reauthorizes
+once from their own dashboard; after that their access lasts. A Google Workspace organization can
+instead set the user type to **Internal**, which has no 7-day limit.
+
+## Problems you fix yourself
+
+When Google refuses one of your requests for a reason that is yours to handle, your Overview and
+the rule say what happened and your one next step. Your administrator sees only that you can fix it from your dashboard, and does not
+contact you about it. If the installation sends email and has a public address, the incident email
+links straight to that step.
+
+### Google no longer accepts your Google account
+
+**What you see.** "A Google Calendar account needs reauthorization", with the likely cause "Google
+no longer accepts this Google account's permission". You removed Calendar Ghost's access in your
+Google account, changed something Google treats as ending the grant, or the grant expired.
+
+**What to do.** Choose **Reauthorize account** in **Settings → Connections**, for the account it
+names. Every rule the lapse stopped restarts on its own, with no preview. If it happens again about
+a week after each reauthorization, tell your administrator: the installation's Google app is
+probably in Testing mode ([Google accounts stop working 7 days after
+connecting](#google-accounts-stop-working-7-days-after-connecting)).
+
+### Your Google account may not change the calendar
+
+**What you see.** The rule stopped, with the likely cause "the Google account may not change this
+calendar". The calendar's owner took away your account's permission to make changes, or a Google
+Workspace policy limits it.
+
+**What to do.** Open the rule. Choose another calendar for it, or remove it. To keep the same
+calendar, ask its owner to share it with your Google account with **Make changes to events**, then
+preview the rule again to restart it.
+
+### The calendar no longer exists
+
+**What you see.** The rule stopped, with the likely cause "the calendar no longer exists, or is no
+longer shared with the account". The calendar was deleted, or unshared from the account the rule
+uses.
+
+**What to do.** Open the rule and choose another calendar for it, or remove the rule.
+
+### Google is slowing Calendar Ghost down
+
+**What you see.** "Waiting for Google", with the likely cause "Google asked Calendar Ghost to slow
+down" or "Google failed for a moment", when the rule was last tried, and when it tries again.
+
+**What to do.** Nothing. Calendar Ghost tries again by itself and catches up afterwards. If it lasts
+more than a day, check the Google Workspace Status Dashboard.
+
+### Google refused for a reason Calendar Ghost does not recognize
+
+**What you see.** The rule stopped or needs a look, with the likely cause "Google refused for a
+reason Calendar Ghost does not recognize".
+
+**What to do.** Try the rule's usual step again: open the rule and preview it to restart it, or read
+what Activity says. If it keeps happening, tell your administrator; the service logs name Google's
+reason ([Reading the logs](#reading-the-logs)).
 
 ## A Google account was disconnected
 

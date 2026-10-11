@@ -5,15 +5,16 @@ from typing import Any, ClassVar
 
 import pytest
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.installation_health import (
     InstallationIncident,
     InstallationIncidentKind,
 )
 from calendar_sync.application.ports import IncidentReport
 from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import build_adapters, compose
+from calendar_sync.bootstrap.container import build_adapters, compose, public_address
 from calendar_sync.domain.access import Role, User, UserId, UserState
-from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 from calendar_sync.infrastructure.notifications import (
     IncidentNotification,
     IncidentNotifier,
@@ -183,3 +184,134 @@ def test_an_installation_emails_rule_incidents_to_their_owner_and_never_to_its_w
     (message,) = RecordingSmtp.sent
     assert message["To"] == ADMIN_EMAIL
     assert posted == []
+
+
+@pytest.mark.parametrize(
+    ("report", "link"),
+    [
+        # The User's own step: reauthorize, or the rule where they choose another calendar.
+        (
+            IncidentReport(
+                "authorization:a",
+                None,
+                "authentication",
+                "expired",
+                account_id=ConnectedAccountId("a"),
+                cause=Cause.ACCESS_REVOKED,
+            ),
+            "https://ghost.example.test/settings/connections",
+        ),
+        (
+            IncidentReport(
+                "provider:rule-1",
+                SyncRuleId("rule-1"),
+                "authorization",
+                "denied",
+                cause=Cause.CALENDAR_FORBIDDEN,
+            ),
+            "https://ghost.example.test/rules/rule-1",
+        ),
+        (
+            IncidentReport(
+                "provider:rule-1",
+                SyncRuleId("rule-1"),
+                "permanent",
+                "rejected",
+                cause=Cause.CALENDAR_NOT_FOUND,
+            ),
+            "https://ghost.example.test/rules/rule-1",
+        ),
+        (
+            IncidentReport(
+                "provider:rule-1",
+                SyncRuleId("rule-1"),
+                "permanent",
+                "rejected",
+                cause=Cause.UNKNOWN,
+            ),
+            "https://ghost.example.test/rules/rule-1",
+        ),
+        # Nothing for them to do: the Overview says it fixes itself, or who fixes it.
+        (
+            IncidentReport(
+                "provider:rule-1",
+                SyncRuleId("rule-1"),
+                "rate_limit",
+                "busy",
+                cause=Cause.RATE_LIMITED,
+            ),
+            "https://ghost.example.test/",
+        ),
+        (
+            IncidentReport(
+                "authorization:a",
+                None,
+                "authorization",
+                "denied",
+                account_id=ConnectedAccountId("a"),
+                cause=Cause.API_DISABLED,
+            ),
+            "https://ghost.example.test/",
+        ),
+        (
+            IncidentReport("blocked:rule-1", SyncRuleId("rule-1"), "conflict", "blocked"),
+            "https://ghost.example.test/activity",
+        ),
+    ],
+)
+def test_an_incident_email_links_to_the_owners_next_step(
+    monkeypatch: pytest.MonkeyPatch, report: IncidentReport, link: str
+) -> None:
+    RecordingSmtp.sent = []
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
+
+    OwnerNotifier(
+        _owner(), UserId("owner"), _server(), public_url="https://ghost.example.test"
+    ).incident_opened(report, NOW)
+
+    (message,) = RecordingSmtp.sent
+    assert f"What to do next: {link}" in message.get_content()
+    assert "Open Calendar Ghost Activity" not in message.get_content()
+
+
+def test_without_a_public_address_an_incident_email_has_no_link(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    RecordingSmtp.sent = []
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
+
+    OwnerNotifier(_owner(), UserId("owner"), _server()).incident_opened(_report(), NOW)
+
+    (message,) = RecordingSmtp.sent
+    assert "http" not in message.get_content()
+    assert "Open Calendar Ghost Activity for current status." in message.get_content()
+
+
+@pytest.mark.parametrize(
+    ("configured", "used"),
+    [
+        ("https://ghost.example.test", "https://ghost.example.test"),
+        ("https://ghost.example.test/", "https://ghost.example.test"),
+        # The Web UI is served at the root of its address, so a path would lead nowhere.
+        ("https://ghost.example.test/calendar/", None),
+        ("http://192.168.1.50:8000", "http://192.168.1.50:8000"),
+        ("", None),
+        ("ghost.example.test", None),
+        ("javascript:alert(1)", None),
+        ("https://ghost.example.test/?q=1", None),
+        # Not even parseable: as if unset, so email still goes out without a link.
+        ("https://[", None),
+    ],
+)
+def test_only_an_http_address_is_used_as_the_public_address(
+    tmp_path: Path, configured: str, used: str | None
+) -> None:
+    settings = Settings(tmp_path / "test.db", public_url=configured)
+
+    assert public_address(settings) == used
+
+
+def test_the_public_address_is_read_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CALENDAR_SYNC_PUBLIC_URL", "https://ghost.example.test")
+
+    assert Settings.from_environment().public_url == "https://ghost.example.test"

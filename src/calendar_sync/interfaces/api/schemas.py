@@ -16,6 +16,20 @@ StatusVerdictValue = Literal[
     "stalled", "stopped", "review", "waiting", "paused", "setup", "healthy"
 ]
 ProblemKindValue = Literal["stalled", "stopped", "review", "overdue", "blocked", "waiting"]
+CauseValue = Literal[
+    "api_disabled",
+    "quota_exceeded",
+    "oauth_client_invalid",
+    "access_revoked",
+    "calendar_forbidden",
+    "calendar_not_found",
+    "rate_limited",
+    "temporary",
+    "unknown",
+]
+"""Why a provider call failed (ADR 0031). A client that meets one it does not know shows it as
+unknown."""
+HintKindValue = Literal["shared_cause", "testing_mode", "unrecognized"]
 
 
 class ApiResponse(BaseModel):
@@ -242,6 +256,10 @@ class ProblemResponse(ApiResponse):
     since: str | None
     message: IncidentMessageResponse | None
     """The message of the Incident behind the problem; None when no Incident names it."""
+    cause: CauseValue | None = None
+    """Why the provider failure behind it happened; None when no provider failure explains it."""
+    last_tried_at: str | None = None
+    """When that failure last happened, which is when the rule was last tried."""
 
 
 class DashboardResponse(ApiResponse):
@@ -261,6 +279,8 @@ class DashboardResponse(ApiResponse):
     """Events of existing rules whose latest decision was a block."""
     blocked_entry_id: int | None = None
     blocked_rule_id: str | None = None
+    next_pass_at: str | None = None
+    """When the scheduler next tries every rule, so waiting on Google says when it tries again."""
 
 
 class GoogleConfigurationResponse(ApiResponse):
@@ -388,6 +408,9 @@ class IncidentResponse(ApiResponse):
     account_id: str | None
     message: IncidentMessageResponse | None
     """None for an Incident recorded before messages, or one whose message is unreadable."""
+    cause: CauseValue | None = None
+    """Why the provider failure behind it happened; unknown when that was not recorded, and None
+    for blocked events, which no provider failure opened."""
 
 
 class DatabaseUsageResponse(ApiResponse):
@@ -437,6 +460,8 @@ class SchedulerResponse(ApiResponse):
     """Whether this installation runs a scheduler; `status` says whether it is keeping up."""
     last_pass_completed_at: str | None
     current_pass_started_at: str | None
+    next_pass_at: str | None = None
+    """When the next pass begins; None while one runs or without a scheduler."""
 
 
 class StatusCountsResponse(ApiResponse):
@@ -478,6 +503,7 @@ class StatusIncidentResponse(ApiResponse):
     category: str
     summary: str
     opened_at: str
+    cause: CauseValue | None = None
 
 
 class StatusResponse(ApiResponse):
@@ -665,6 +691,17 @@ class InstallationIncidentResponse(ApiResponse):
     since: str
 
 
+class InstallationHintResponse(ApiResponse):
+    """A likely cause from a pattern across Users; it names none of them (ADR 0031)."""
+
+    kind: HintKindValue
+    cause: CauseValue
+    users: int
+    """How many Users show the pattern."""
+    anchor: str
+    """The section of docs/troubleshooting.md that explains the fix."""
+
+
 class InstallationHealthResponse(ApiResponse):
     """The whole installation's verdict; it names no rule, calendar, or User (ADR 0030)."""
 
@@ -675,6 +712,7 @@ class InstallationHealthResponse(ApiResponse):
     """How many Users who may sign in are in each Installation Status verdict."""
     disabled_users: int
     checked_at: str
+    hints: list[InstallationHintResponse] = Field(default_factory=list)
 
 
 class NotificationPreferenceRequest(BaseModel):

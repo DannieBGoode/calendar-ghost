@@ -21,6 +21,7 @@ const healthy: Dashboard = {
   blocked_events: 0,
   blocked_entry_id: null,
   blocked_rule_id: null,
+  next_pass_at: null,
 }
 
 const names: Record<string, string> = {
@@ -34,7 +35,7 @@ const problem = (
   rule_id: string | null,
   summary: string,
   since: string | null = "2026-09-28T11:00:00Z",
-): ServerProblem => ({ kind, rule_id, summary, since, message: null })
+): ServerProblem => ({ kind, rule_id, summary, since, message: null, cause: null, last_tried_at: null })
 
 describe("overviewHealth", () => {
   it("reports the last successful sync when everything is quiet", () => {
@@ -85,7 +86,7 @@ describe("overviewHealth", () => {
         ],
       },
       now,
-      ruleName,
+      { ruleName },
     )
     expect(health.tone).toBe("review")
     expect(health.headline).toBe("A rule needs a look")
@@ -104,7 +105,7 @@ describe("overviewHealth", () => {
         problems: [problem("waiting", "rule-7", "Google Calendar is limiting requests")],
       },
       now,
-      ruleName,
+      { ruleName },
     )
     expect(health.tone).toBe("waiting")
     expect(health.headline).toBe("Waiting for Google")
@@ -132,7 +133,7 @@ describe("overviewHealth", () => {
         ],
       },
       now,
-      ruleName,
+      { ruleName },
     )
     expect(health.tone).toBe("stopped")
     expect(health.title).toBe("Family → Work")
@@ -147,7 +148,7 @@ describe("overviewHealth", () => {
   })
 
   it("never calls an installation with an open incident healthy, even before it is described", () => {
-    const health = overviewHealth(i18n, { ...healthy, status: "review", open_incidents: 1 }, now, ruleName)
+    const health = overviewHealth(i18n, { ...healthy, status: "review", open_incidents: 1 }, now, { ruleName })
     expect(health.tone).toBe("review")
     expect(health.headline).toBe("Something needs a look")
   })
@@ -169,13 +170,105 @@ describe("overviewHealth", () => {
         ],
       },
       now,
-      ruleName,
+      { ruleName },
     )
     expect(health.tone).toBe("stopped")
     expect(health.headline).toBe("2 rules stopped syncing")
     expect(health.title).toBe("1 Google account needs reauthorization")
     expect(health.facts).toEqual(["No rules running", "Last sync 3 minutes ago"])
     expect(health.action).toMatchObject({ view: "settings", settingsTab: "connections" })
+  })
+
+  describe("with a Cause", () => {
+    const lapsedFor = (cause: ServerProblem["cause"]): Dashboard => ({
+      ...healthy,
+      status: "stopped",
+      lapsed_accounts: 1,
+      stopped_rules: 2,
+      enabled_rules: 0,
+      problems: [
+        { ...problem("stopped", "rule-7", "A calendar account needs reauthorization", null), cause },
+        { ...problem("stopped", "rule-8", "A calendar account needs reauthorization", null), cause },
+      ],
+    })
+
+    it("tells the User an administrator's Cause is temporarily unavailable, naming neither it nor the administrator", () => {
+      const health = overviewHealth(i18n, lapsedFor("api_disabled"), now, { ruleName })
+
+      expect(health.title).toBe("Temporarily unavailable")
+      expect(health.detail).toBe(
+        "Google Calendar is not available to Calendar Ghost right now. To try again, choose Check access on your Google account in Settings. Events already synced stay where they are.",
+      )
+      expect(health.action).toMatchObject({ label: "Check access in Settings", view: "settings", settingsTab: "connections" })
+    })
+
+    it("tells an administrator the fix is theirs, and where People explains it", () => {
+      const health = overviewHealth(i18n, lapsedFor("oauth_client_invalid"), now, { ruleName, administrator: true })
+
+      expect(health.title).toBe("You fix this as the administrator")
+      expect(health.detail).toBe(
+        "Likely cause: Google no longer accepts this installation's OAuth client. People shows how to fix it in Google Cloud.",
+      )
+      expect(health.action).toMatchObject({ label: "Open People", view: "people" })
+    })
+
+    it("asks the User to reauthorize for their own Cause", () => {
+      const health = overviewHealth(i18n, lapsedFor("access_revoked"), now, { ruleName })
+
+      expect(health.title).toBe("1 Google account needs reauthorization")
+      expect(health.action).toMatchObject({ view: "settings", settingsTab: "connections" })
+    })
+
+    it("asks for another calendar when the calendar is gone or closed to the account", () => {
+      const gone: Dashboard = {
+        ...healthy,
+        status: "stopped",
+        stopped_rules: 1,
+        problems: [{ ...problem("stopped", "rule-7", "Google Calendar rejected synchronization"), cause: "calendar_not_found" }],
+      }
+      const health = overviewHealth(i18n, gone, now, { ruleName })
+
+      expect(health.detail).toContain("Choose another calendar, or remove the rule.")
+      expect(health.action).toMatchObject({ view: "rules", ruleId: "rule-7" })
+    })
+
+    it("says when a rule waiting on Google was last tried and is tried again", () => {
+      const waiting: Dashboard = {
+        ...healthy,
+        status: "waiting",
+        open_incidents: 1,
+        next_pass_at: "2026-09-28T12:03:00Z",
+        problems: [
+          {
+            ...problem("waiting", "rule-7", "Google Calendar is limiting requests"),
+            cause: "rate_limited",
+            last_tried_at: "2026-09-28T11:56:00Z",
+          },
+        ],
+      }
+      const health = overviewHealth(i18n, waiting, now, { ruleName })
+
+      expect(health.detail).toMatch(/Last tried 4 minutes ago\. Tries again in 3 minutes\.$/)
+      expect(health.action).toBeNull()
+    })
+
+    it("tells the User a used-up quota only that Calendar Ghost retries, while the administrator learns the cause", () => {
+      const waiting: Dashboard = {
+        ...healthy,
+        status: "waiting",
+        open_incidents: 1,
+        problems: [{ ...problem("waiting", "rule-7", "Google Calendar is limiting requests"), cause: "quota_exceeded" }],
+      }
+      const health = overviewHealth(i18n, waiting, now, { ruleName })
+      const administrators = overviewHealth(i18n, waiting, now, { ruleName, administrator: true })
+
+      expect(health.detail).toBe(
+        "Google Calendar is limiting requests. First seen 1 hour ago. Wait for Google to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the Google Workspace Status Dashboard.",
+      )
+      expect(administrators.detail).toBe(
+        "Likely cause: this installation's daily quota of Google requests is used up. You fix this as the administrator, in Google Cloud; Calendar Ghost tries again by itself.",
+      )
+    })
   })
 
   it("asks for reauthorization before setup when only a disconnected account remains", () => {
@@ -203,7 +296,7 @@ describe("overviewHealth", () => {
         ],
       },
       now,
-      ruleName,
+      { ruleName },
     )
     expect(health.tone).toBe("stopped")
     expect(health.headline).toBe("A rule stopped syncing")
@@ -222,7 +315,7 @@ describe("overviewHealth", () => {
       i18n,
       { ...healthy, status: "stopped", stopped_rules: 1, problems: [problem("stopped", "rule-gone", "Stopped syncing", null)] },
       now,
-      ruleName,
+      { ruleName },
     )
     expect(health.tone).toBe("stopped")
     expect(health.title).toBe("")
@@ -295,7 +388,7 @@ describe("overviewHealth", () => {
       i18n,
       { ...healthy, status: "stalled", needs_attention: true, problems: [problem("stalled", null, "Scheduled synchronization stopped running", null)] },
       now,
-      ruleName,
+      { ruleName },
     )
     expect(health.tone).toBe("stopped")
     expect(health.headline).toBe("Synchronization stopped running")
@@ -310,7 +403,7 @@ describe("overviewHealth", () => {
       i18n,
       { ...healthy, status: "review", problems: [problem("overdue", "rule-7", "Not synced in over a day", "2026-09-27T10:00:00Z")] },
       now,
-      ruleName,
+      { ruleName },
     )
     expect(health.tone).toBe("review")
     expect(health.title).toBe("Family → Work")
@@ -363,9 +456,9 @@ describe("overviewHealth", () => {
 
   it("takes its tone from the server", () => {
     for (const status of ["stopped", "review", "waiting", "paused", "setup", "healthy"] as const) {
-      expect(overviewHealth(i18n, { ...healthy, status }, now, ruleName).tone).toBe(status)
+      expect(overviewHealth(i18n, { ...healthy, status }, now, { ruleName }).tone).toBe(status)
     }
-    expect(overviewHealth(i18n, { ...healthy, status: "stalled" }, now, ruleName).tone).toBe("stopped")
+    expect(overviewHealth(i18n, { ...healthy, status: "stalled" }, now, { ruleName }).tone).toBe("stopped")
   })
 })
 

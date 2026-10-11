@@ -25,6 +25,7 @@ from calendar_sync.application.activity import (
     RecordedTime,
     activity_category,
 )
+from calendar_sync.application.causes import WITHOUT_CAUSE, Cause
 from calendar_sync.application.ports import (
     AccountStanding,
     IncidentMessage,
@@ -406,7 +407,7 @@ def _open_blocks_of(
 
 
 _INCIDENT_COLUMNS = """id, rule_id, account_id, category, state, summary, opened_at, updated_at,
-    resolved_at, resolution, message_code, message_params"""
+    resolved_at, resolution, message_code, message_params, cause"""
 
 
 def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
@@ -422,6 +423,10 @@ def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
         resolution=row["resolution"],
         account_id=row["account_id"],
         message=_incident_message(row["message_code"], row["message_params"]),
+        # A provider failure's Incident has its Cause, none when it was recorded without one, and
+        # unknown when an earlier release recorded nothing; blocked events and local failures
+        # have none.
+        cause=None if row["category"] in WITHOUT_CAUSE else Cause.recorded(row["cause"]),
     )
 
 

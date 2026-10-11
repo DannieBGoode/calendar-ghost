@@ -1,6 +1,7 @@
 import { CheckCircle2, KeyRound, ShieldAlert, ShieldCheck, Trash2, Unplug } from "lucide-react"
 
 import { AccountAvatar } from "@/components/account-avatar"
+import { OverflowMenu } from "@/components/overflow-menu"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { apiErrorMessage } from "@/i18n/api-errors"
@@ -61,29 +62,19 @@ export function AccountRow({
           )}
         </div>
       </div>
-      <AccountRowNotes account={account} lapsed={connected && !authorized} commands={commands} />
+      <AccountRowNotes account={account} commands={commands} />
     </li>
   )
 }
 
-/** What the row says below its actions: why access lapsed, a check's result, a confirmation. */
-function AccountRowNotes({
-  account,
-  lapsed,
-  commands,
-}: {
-  account: ConnectedAccount
-  lapsed: boolean
-  commands: AccountCommands
-}) {
+/** What the row says below its actions: a check's result, or a confirmation. */
+function AccountRowNotes({ account, commands }: { account: ConnectedAccount; commands: AccountCommands }) {
   const i18n = useI18n()
   const { verifyAccess } = commands
   const access = commands.accessChecks[account.id]
   const checkFailed = verifyAccess.error !== null && verifyAccess.variables === account.id
   return (
     <>
-      {/* A failed check already says why, in its own words. */}
-      {lapsed && !checkFailed && <p className="account-lapse-note">{i18n.t("settings.accounts.lapsed")}</p>}
       {access && <AccessResult access={access} />}
       {checkFailed && (
         <div className="inline-error account-access-error" role="alert">
@@ -199,16 +190,19 @@ function ConnectedAccountActions({
         <ShieldCheck aria-hidden="true" />
         {checking ? t("settings.accounts.actions.checkingAccess") : t("settings.accounts.actions.checkAccess")}
       </Button>
-      <Button
-        className="account-action"
-        variant="ghost"
-        onClick={() => commands.confirmDisconnect(account.id)}
-        disabled={disconnect.isPending || permanentDelete.isPending || verifyAccess.isPending}
-        aria-expanded={confirming}
-        aria-controls={confirming ? `disconnect-${account.id}` : undefined}
-      >
-        <Unplug aria-hidden="true" /> {t("settings.accounts.actions.disconnect")}
-      </Button>
+      {/* Rare and disruptive, so it waits in the row's menu beside the everyday actions. */}
+      <OverflowMenu
+        label={t("settings.accounts.actions.more", { email: account.email })}
+        items={[
+          {
+            id: "disconnect",
+            label: t("settings.accounts.actions.disconnect"),
+            description: t("settings.accounts.actions.disconnectHint"),
+            disabled: confirming || disconnect.isPending || permanentDelete.isPending || verifyAccess.isPending,
+            onSelect: () => commands.confirmDisconnect(account.id),
+          },
+        ]}
+      />
     </>
   )
 }
