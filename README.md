@@ -378,7 +378,7 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Incident email sender; with the host, each person receives their own incidents by email |
 | `CALENDAR_SYNC_SMTP_RECIPIENT` | No | Operator who receives incidents about the installation itself, such as a stalled scheduler |
 | `CALENDAR_SYNC_SMTP_STARTTLS` | No | Enable SMTP STARTTLS; defaults to `true` |
-| `CALENDAR_SYNC_PUBLIC_URL` | No | Address people open Calendar Ghost at, such as `https://calendar.example.com`; incident email then links to each person's next step. Unset sends email without a link |
+| `CALENDAR_SYNC_PUBLIC_URL` | No | Address people open Calendar Ghost at, such as `https://calendar.example.com`: an `http` or `https` address at the root of its host, with no path. Incident email then links to each person's next step. Unset sends email without a link |
 
 Notification delivery is best-effort. A delivery failure never prevents the incident from being
 recorded locally or stops later synchronization attempts.
