@@ -1,10 +1,7 @@
-from datetime import UTC, datetime
-
 import pytest
 
 from calendar_sync.application.operations.activity import (
     ActivityCategory,
-    Dashboard,
     EntryEvents,
     InspectActivityEvent,
     activity_category,
@@ -14,8 +11,7 @@ from calendar_sync.application.operations.errors import (
     ActivityRuleRemoved,
     EventInspectionUnavailable,
 )
-from calendar_sync.application.operations.ports import OpenBlock, OperationsOverview
-from calendar_sync.domain.model import EventId, EventRef, SyncReason, SyncRuleState
+from calendar_sync.domain.model import EventId, EventRef, SyncReason
 from tests.fake_calendar import FakeCalendars
 from tests.helpers import event, rule
 from tests.users import memory_units
@@ -51,36 +47,6 @@ def test_recurring_exclusions_recorded_as_conflicts_are_skips() -> None:
     # Recorded before reason codes existed; the event was never synchronized, not blocked.
     assert activity_category("conflict", SyncReason.RECURRING_UNSUPPORTED.value) == "skipped"
     assert activity_category("ignore", SyncReason.RECURRING_UNSUPPORTED.value) == "skipped"
-
-
-def _overview(*blocks: OpenBlock, incidents: int = 0) -> OperationsOverview:
-    return OperationsOverview(1, 0, incidents, datetime(2026, 9, 1, tzinfo=UTC), blocks)
-
-
-def test_dashboard_counts_rules_by_state() -> None:
-    dashboard = Dashboard.of(
-        [SyncRuleState.ENABLED, SyncRuleState.PAUSED, SyncRuleState.DEGRADED], _overview()
-    )
-
-    assert (dashboard.sync_rules, dashboard.enabled_rules, dashboard.stopped_rules) == (3, 1, 1)
-    assert dashboard.blocked_rule_id is None
-
-
-@pytest.mark.parametrize("state", [SyncRuleState.DEGRADED, SyncRuleState.REMOVING])
-def test_dashboard_counts_degraded_and_removing_rules_as_stopped(state: SyncRuleState) -> None:
-    assert Dashboard.of([state], _overview(incidents=1)).stopped_rules == 1
-
-
-def test_dashboard_names_the_blocked_rule_only_when_every_block_is_its_own() -> None:
-    one_rule = Dashboard.of([], _overview(OpenBlock(9, "a"), OpenBlock(4, "a")))
-    two_rules = Dashboard.of([], _overview(OpenBlock(9, "a"), OpenBlock(4, "b")))
-
-    assert (one_rule.blocked_events, one_rule.blocked_entry_id, one_rule.blocked_rule_id) == (
-        2,
-        9,
-        "a",
-    )
-    assert (two_rules.blocked_entry_id, two_rules.blocked_rule_id) == (9, None)
 
 
 class Entries:

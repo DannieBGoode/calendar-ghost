@@ -297,7 +297,11 @@ class DashboardResponse(ApiResponse):
     """Connected accounts whose authorization lapsed and that need reauthorization."""
     sync_rules: int
     enabled_rules: int
+    """Enabled rules, running or stopped."""
+    running_rules: int
+    """Enabled rules that have not stopped, as the status API's `counts.running`."""
     stopped_rules: int
+    """Rules that do not synchronize until someone acts, as the status API's `counts.stopped`."""
     open_incidents: int
     last_synced_at: str | None
     blocked_events: int = 0
@@ -516,6 +520,7 @@ class StatusCountsResponse(ApiResponse):
     running: int
     """Enabled rules that are not stopped."""
     stopped: int
+    """Rules that do not synchronize until someone acts: each has a `stopped` problem."""
     paused: int
     overdue: int
     open_incidents: int

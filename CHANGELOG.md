@@ -141,6 +141,13 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- The Overview counts stopped and running rules as the status API does: a rule has stopped when it
+  does not synchronize until someone acts. An enabled rule whose account was disconnected or whose
+  authorization lapsed now counts as stopped on the Overview (`stopped_rules`) instead of running,
+  and the Overview's "rules running" and "rules still running" facts count only the rules that
+  still run, from the new `running_rules` field, instead of every enabled rule. A rule whose
+  removal is running is not counted by either. `RuleCounts` in
+  `application/operations/status.py` is the one place both are counted.
 - The Web UI names the provider wherever one is known: account rows read "Google account" or
   "Microsoft account" beside the address, each avatar and Connect button carries its provider's
   mark, a lapsed account's fix reads "Reauthorize with Microsoft", the collapsed account summary

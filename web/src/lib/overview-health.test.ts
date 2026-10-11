@@ -15,6 +15,7 @@ const healthy: Dashboard = {
   lapsed_accounts: 0,
   sync_rules: 3,
   enabled_rules: 2,
+  running_rules: 2,
   stopped_rules: 0,
   open_incidents: 0,
   last_synced_at: "2026-09-28T11:57:00Z",
@@ -181,6 +182,7 @@ describe("overviewHealth", () => {
         lapsed_accounts: 0,
         stopped_rules: 2,
         enabled_rules: 0,
+      running_rules: 0,
         problems: [
           problem("stopped", "rule-7", "A calendar account needs reauthorization", null),
           problem("stopped", "rule-8", "A calendar account needs reauthorization", null),
@@ -196,6 +198,23 @@ describe("overviewHealth", () => {
     expect(health.action).toMatchObject({ view: "settings", settingsTab: "connections" })
   })
 
+  it("counts only the rules still running, not every enabled one, once a rule stops", () => {
+    const health = overviewHealth(
+      i18n,
+      {
+        ...healthy,
+        status: "stopped",
+        lapsed_accounts: 1,
+        stopped_rules: 1,
+        running_rules: 1,
+        problems: [problem("stopped", "rule-7", "A calendar account needs reauthorization", null)],
+      },
+      now,
+      { ruleName },
+    )
+    expect(health.facts).toEqual(["1 rule still running", "Last sync 3 minutes ago"])
+  })
+
   describe("with a Cause", () => {
     const lapsedFor = (cause: ServerProblem["cause"]): Dashboard => ({
       ...healthy,
@@ -203,6 +222,7 @@ describe("overviewHealth", () => {
       lapsed_accounts: 1,
       stopped_rules: 2,
       enabled_rules: 0,
+      running_rules: 0,
       problems: [
         { ...problem("stopped", "rule-7", "A calendar account needs reauthorization", null), cause },
         { ...problem("stopped", "rule-8", "A calendar account needs reauthorization", null), cause },

@@ -95,6 +95,40 @@ class RuleStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class RuleCounts:
+    """How many rules run, stopped, are paused, and are overdue: the one count the Overview, the
+    status API, MCP, and the Operator Overview share.
+
+    A rule has stopped when it does not synchronize until someone acts, so it has a Stopped
+    problem: a degraded rule, an interrupted Rule Removal, and an enabled rule whose account was
+    disconnected or whose authorization lapsed. A rule whose removal is running is not counted at
+    all. Running rules are the enabled rules that have not stopped.
+    """
+
+    rules: int
+    running: int
+    stopped: int
+    paused: int
+    overdue: int
+
+    @classmethod
+    def of(cls, rules: Sequence[RuleStatus], problems: Sequence[Problem]) -> RuleCounts:
+        stopped = {p.rule_id for p in problems if p.kind is ProblemKind.STOPPED and p.rule_id}
+        states = [rule.summary.rule.state for rule in rules]
+        return cls(
+            rules=len(rules),
+            running=sum(
+                rule.summary.rule.state is SyncRuleState.ENABLED
+                and rule.summary.rule.id.value not in stopped
+                for rule in rules
+            ),
+            stopped=len(stopped),
+            paused=states.count(SyncRuleState.PAUSED),
+            overdue=sum(problem.kind is ProblemKind.OVERDUE for problem in problems),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class InstallationStatus:
     health: StatusVerdict
     problems: tuple[Problem, ...]
@@ -114,6 +148,10 @@ class InstallationStatus:
         return self.health in NEEDS_ATTENTION
 
     @property
+    def counts(self) -> RuleCounts:
+        return RuleCounts.of(self.rules, self.problems)
+
+    @property
     def summary(self) -> str:
         if self.problems:
             first = self.problems[0]
@@ -122,12 +160,52 @@ class InstallationStatus:
                 None,
             )
             return f"{named}: {first.summary}." if named else f"{first.summary}."
-        running = sum(rule.summary.rule.state is SyncRuleState.ENABLED for rule in self.rules)
+        running = self.counts.running
         if self.health is StatusVerdict.HEALTHY:
             return f"{running} {'rule' if running == 1 else 'rules'} running."
         if self.health is StatusVerdict.PAUSED:
             return "Synchronization is paused."
         return "Setup is not finished."
+
+
+@dataclass(frozen=True, slots=True)
+class Dashboard:
+    """The Overview's counts, from the same Installation Status its verdict comes from."""
+
+    rules: RuleCounts
+    enabled_rules: int
+    """Enabled rules, running or stopped, so the Overview knows a rule was ever turned on."""
+    connected_accounts: int
+    disconnected_accounts: int
+    lapsed_accounts: int
+    open_incidents: int
+    last_synced_at: datetime | None
+    blocked_events: int
+    blocked_entry_id: int | None
+    """The newest open block, which the dashboard links to."""
+    blocked_rule_id: str | None
+    """The rule every open block belongs to, when they all belong to one."""
+
+    @classmethod
+    def of(cls, status: InstallationStatus) -> Dashboard:
+        overview = status.overview
+        blocks = overview.open_blocks
+        return cls(
+            rules=status.counts,
+            enabled_rules=sum(
+                rule.summary.rule.state is SyncRuleState.ENABLED for rule in status.rules
+            ),
+            connected_accounts=overview.connected_accounts,
+            disconnected_accounts=overview.disconnected_accounts,
+            lapsed_accounts=overview.lapsed_accounts,
+            open_incidents=overview.open_incidents,
+            last_synced_at=overview.last_synced_at,
+            blocked_events=len(blocks),
+            blocked_entry_id=blocks[0].entry_id if blocks else None,
+            blocked_rule_id=(
+                blocks[0].rule_id if len({block.rule_id for block in blocks}) == 1 else None
+            ),
+        )
 
 
 def calendar_display_name(endpoint: CalendarEndpoint, names: Mapping[CalendarEndpoint, str]) -> str:

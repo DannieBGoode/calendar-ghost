@@ -360,12 +360,12 @@ function healthFacts(i18n: I18n, dashboard: Dashboard, now: number): HealthFacts
     : null
   return {
     running: [
-      i18n.t("overview.health.rulesRunning", { count: dashboard.enabled_rules }),
+      i18n.t("overview.health.rulesRunning", { count: dashboard.running_rules }),
       lastSync ?? i18n.t("overview.health.notSyncedYet"),
     ],
     stopped: [
-      dashboard.enabled_rules > 0
-        ? i18n.t("overview.health.rulesStillRunning", { count: dashboard.enabled_rules })
+      dashboard.running_rules > 0
+        ? i18n.t("overview.health.rulesStillRunning", { count: dashboard.running_rules })
         : i18n.t("overview.health.noRulesRunning"),
       lastSync ?? i18n.t("overview.health.waitingForRecovery"),
     ],

@@ -153,8 +153,10 @@ Installation Status follows the same direction ([ADR 0024](adr/0024-integration-
 `assess_installation` is a pure function of the rule summaries, the operations overview, open
 incidents, and the scheduler's `SchedulerProgress`, read through the `SchedulerHeartbeat` port that
 `SyncScheduler` implements in memory. Each User's Installation Status covers their rules and the
-installation problems that affect them. `application/operations/installation_health.py` sums every User's
-verdict into Installation Health for Installation Administrators, beside installation incidents,
+installation problems that affect them. `RuleCounts`, beside it, counts its rules once: a rule has
+stopped when it has a Stopped problem, and runs when it is enabled and has not stopped. The status
+API and the Overview's `Dashboard` both read these counts, so they cannot disagree.
+`application/operations/installation_health.py` sums every User's verdict into Installation Health for Installation Administrators, beside installation incidents,
 such as a scheduler that stalled; `SchedulerWatch` reports that one to the installation's own
 channels.
 

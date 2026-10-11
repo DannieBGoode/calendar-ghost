@@ -359,9 +359,13 @@ def test_counts_never_call_a_stopped_rule_running(tmp_path: Path) -> None:
     with TestClient(create_app(container)) as client:
         _signed_in(client)
         body: dict[str, Any] = client.get("/api/v1/status").json()
+        dashboard: dict[str, Any] = client.get("/api/v1/dashboard").json()
 
     assert body["counts"]["rules"] == 1
     assert (body["counts"]["running"], body["counts"]["stopped"]) == (0, 1)
+    # The Overview counts the rule the same way, though it is still enabled.
+    assert (dashboard["running_rules"], dashboard["stopped_rules"]) == (0, 1)
+    assert dashboard["enabled_rules"] == 1
 
 
 def test_the_scheduler_block_says_whether_a_scheduler_is_configured(tmp_path: Path) -> None:

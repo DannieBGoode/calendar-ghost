@@ -511,6 +511,10 @@
             "title": "Problems",
             "type": "array"
           },
+          "running_rules": {
+            "title": "Running Rules",
+            "type": "integer"
+          },
           "status": {
             "enum": [
               "stalled",
@@ -542,6 +546,7 @@
           "lapsed_accounts",
           "sync_rules",
           "enabled_rules",
+          "running_rules",
           "stopped_rules",
           "open_incidents",
           "last_synced_at",

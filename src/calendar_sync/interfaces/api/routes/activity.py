@@ -11,7 +11,6 @@ from calendar_sync.application.operations.activity import (
     ActivityEvent,
     ActivityFilter,
     ActivityQueries,
-    Dashboard,
     FieldChange,
     InspectActivityEvent,
     RecordedTime,
@@ -37,7 +36,7 @@ from calendar_sync.interfaces.api.schemas import (
     RecordedTimeResponse,
     SourceChangeResponse,
 )
-from calendar_sync.interfaces.api.status_payload import problem_response
+from calendar_sync.interfaces.api.status_payload import dashboard_response
 
 
 class ActivityServices(Protocol):
@@ -59,27 +58,8 @@ router = APIRouter()
     dependencies=[Depends(current_user)],
 )
 def dashboard(services: Services) -> DashboardResponse:
-    # One read: the counts come from the same rules and overview the verdict was decided on.
-    verdict = services.get_installation_status.execute()
-    summary = Dashboard.of([rule.summary.rule.state for rule in verdict.rules], verdict.overview)
-    next_pass = verdict.scheduler.next_pass_at if verdict.scheduler else None
-    return DashboardResponse(
-        status=verdict.health.value,
-        needs_attention=verdict.needs_attention,
-        problems=[problem_response(problem) for problem in verdict.problems],
-        connected_accounts=summary.connected_accounts,
-        disconnected_accounts=summary.disconnected_accounts,
-        lapsed_accounts=summary.lapsed_accounts,
-        sync_rules=summary.sync_rules,
-        enabled_rules=summary.enabled_rules,
-        stopped_rules=summary.stopped_rules,
-        open_incidents=summary.open_incidents,
-        last_synced_at=summary.last_synced_at.isoformat() if summary.last_synced_at else None,
-        blocked_events=summary.blocked_events,
-        blocked_entry_id=summary.blocked_entry_id,
-        blocked_rule_id=summary.blocked_rule_id,
-        next_pass_at=next_pass.isoformat() if next_pass else None,
-    )
+    # One read: the counts come from the same rules and problems the verdict was decided on.
+    return dashboard_response(services.get_installation_status.execute())
 
 
 @router.get(

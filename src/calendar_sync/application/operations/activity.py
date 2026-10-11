@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Literal, Protocol
 
 from calendar_sync.application.operations.errors import (
@@ -25,7 +24,6 @@ from calendar_sync.domain.model import (
     SyncAction,
     SyncReason,
     SyncRuleId,
-    SyncRuleState,
 )
 
 ActivityCategory = Literal["changed", "unchanged", "skipped", "blocked"]
@@ -177,47 +175,6 @@ class OperationsQueries(Protocol):
     def incident(self, incident_id: str) -> IncidentSummary | None:
         """One of the User's incidents, listed or not; None for any other."""
         ...
-
-
-# Rules that stopped synchronizing until the administrator acts.
-_STOPPED = frozenset({SyncRuleState.DEGRADED, SyncRuleState.REMOVING})
-
-
-@dataclass(frozen=True, slots=True)
-class Dashboard:
-    connected_accounts: int
-    disconnected_accounts: int
-    lapsed_accounts: int
-    sync_rules: int
-    enabled_rules: int
-    stopped_rules: int
-    open_incidents: int
-    last_synced_at: datetime | None
-    blocked_events: int
-    blocked_entry_id: int | None
-    """The newest open block, which the dashboard links to."""
-    blocked_rule_id: str | None
-    """The rule every open block belongs to, when they all belong to one."""
-
-    @classmethod
-    def of(cls, states: Sequence[SyncRuleState], overview: OperationsOverview) -> Dashboard:
-        """Counts for the Overview from the rule states and operations overview a verdict read."""
-        blocks = overview.open_blocks
-        return cls(
-            connected_accounts=overview.connected_accounts,
-            disconnected_accounts=overview.disconnected_accounts,
-            lapsed_accounts=overview.lapsed_accounts,
-            sync_rules=len(states),
-            enabled_rules=sum(state is SyncRuleState.ENABLED for state in states),
-            stopped_rules=sum(state in _STOPPED for state in states),
-            open_incidents=overview.open_incidents,
-            last_synced_at=overview.last_synced_at,
-            blocked_events=len(blocks),
-            blocked_entry_id=blocks[0].entry_id if blocks else None,
-            blocked_rule_id=(
-                blocks[0].rule_id if len({block.rule_id for block in blocks}) == 1 else None
-            ),
-        )
 
 
 class EntryEventQueries(Protocol):

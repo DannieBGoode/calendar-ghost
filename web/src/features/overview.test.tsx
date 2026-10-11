@@ -144,6 +144,7 @@ const attentionDashboard: Dashboard = {
   lapsed_accounts: 0,
   sync_rules: 1,
   enabled_rules: 1,
+  running_rules: 1,
   stopped_rules: 0,
   open_incidents: 1,
   last_synced_at: justNow(),
