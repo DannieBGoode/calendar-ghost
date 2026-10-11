@@ -326,10 +326,12 @@ def test_a_series_whose_zone_outlook_cannot_keep_until_its_last_end_writes_nothi
     [
         # Until Saturday 27 March at 09:00.
         (datetime(1976, 3, 27, 8, 0, tzinfo=UTC), "COUNT=1"),
+        # Until late on Saturday 27 March, an hour before Madrid's change.
+        (datetime(1976, 3, 27, 21, 0, tzinfo=UTC), "COUNT=1"),
         # A range that ends after the change, though its only occurrence ends before it.
         (datetime(1976, 3, 27, 8, 0, tzinfo=UTC), "UNTIL=19760328T215959Z"),
     ],
-    ids=["morning", "until"],
+    ids=["morning", "evening", "until"],
 )
 def test_a_series_that_ends_before_its_zone_changes_is_written(ends: datetime, rule: str) -> None:
     provider, graph = outlook()

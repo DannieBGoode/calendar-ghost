@@ -202,7 +202,8 @@ def _same_offsets(first: str, second: str, starts: datetime, ends: datetime) -> 
     moment = starts.astimezone(UTC)
     before = tuple(moment.astimezone(zone).utcoffset() for zone in zones)
     while moment < ends:
-        following = moment + _STEP
+        # Never past the end, where the zones may part.
+        following = min(moment + _STEP, ends)
         after = tuple(following.astimezone(zone).utcoffset() for zone in zones)
         if after[0] != after[1]:
             return False
@@ -216,8 +217,8 @@ _STEP = timedelta(hours=12)
 
 
 def _change(zone: ZoneInfo, after: datetime, before: datetime) -> datetime | None:
-    """The minute the zone's offset changes between two moments half a day apart; None if it
-    does not."""
+    """The minute the zone's offset changes between two moments at most half a day apart; None
+    if it does not."""
     if after.astimezone(zone).utcoffset() == before.astimezone(zone).utcoffset():
         return None
     while before - after > timedelta(minutes=1):
