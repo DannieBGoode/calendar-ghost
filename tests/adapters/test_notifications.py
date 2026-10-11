@@ -13,7 +13,7 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose, public_address
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.incidents import IncidentReport
+from calendar_sync.domain.incidents import IncidentCategory, IncidentReport
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 from calendar_sync.infrastructure.notifications import (
     IncidentNotification,
@@ -92,7 +92,9 @@ def _server() -> SmtpServer:
 
 
 def _report() -> IncidentReport:
-    return IncidentReport("provider:rule-1", SyncRuleId("rule-1"), "temporary", "Google is busy")
+    return IncidentReport(
+        "provider:rule-1", SyncRuleId("rule-1"), IncidentCategory.TEMPORARY, "Google is busy"
+    )
 
 
 def _owner(**changes: Any) -> MemoryUsers:
@@ -194,7 +196,7 @@ def test_an_installation_emails_rule_incidents_to_their_owner_and_never_to_its_w
             IncidentReport(
                 "authorization:a",
                 None,
-                "authentication",
+                IncidentCategory.AUTHENTICATION,
                 "expired",
                 account_id=ConnectedAccountId("a"),
                 cause=Cause.ACCESS_REVOKED,
@@ -205,7 +207,7 @@ def test_an_installation_emails_rule_incidents_to_their_owner_and_never_to_its_w
             IncidentReport(
                 "provider:rule-1",
                 SyncRuleId("rule-1"),
-                "authorization",
+                IncidentCategory.AUTHORIZATION,
                 "denied",
                 cause=Cause.CALENDAR_FORBIDDEN,
             ),
@@ -215,7 +217,7 @@ def test_an_installation_emails_rule_incidents_to_their_owner_and_never_to_its_w
             IncidentReport(
                 "provider:rule-1",
                 SyncRuleId("rule-1"),
-                "permanent",
+                IncidentCategory.PERMANENT,
                 "rejected",
                 cause=Cause.CALENDAR_NOT_FOUND,
             ),
@@ -225,7 +227,7 @@ def test_an_installation_emails_rule_incidents_to_their_owner_and_never_to_its_w
             IncidentReport(
                 "provider:rule-1",
                 SyncRuleId("rule-1"),
-                "permanent",
+                IncidentCategory.PERMANENT,
                 "rejected",
                 cause=Cause.UNKNOWN,
             ),
@@ -236,7 +238,7 @@ def test_an_installation_emails_rule_incidents_to_their_owner_and_never_to_its_w
             IncidentReport(
                 "provider:rule-1",
                 SyncRuleId("rule-1"),
-                "rate_limit",
+                IncidentCategory.RATE_LIMIT,
                 "busy",
                 cause=Cause.RATE_LIMITED,
             ),
@@ -246,7 +248,7 @@ def test_an_installation_emails_rule_incidents_to_their_owner_and_never_to_its_w
             IncidentReport(
                 "authorization:a",
                 None,
-                "authorization",
+                IncidentCategory.AUTHORIZATION,
                 "denied",
                 account_id=ConnectedAccountId("a"),
                 cause=Cause.API_DISABLED,
@@ -254,12 +256,16 @@ def test_an_installation_emails_rule_incidents_to_their_owner_and_never_to_its_w
             "https://ghost.example.test/",
         ),
         (
-            IncidentReport("blocked:rule-1", SyncRuleId("rule-1"), "conflict", "blocked"),
+            IncidentReport(
+                "blocked:rule-1", SyncRuleId("rule-1"), IncidentCategory.CONFLICT, "blocked"
+            ),
             "https://ghost.example.test/activity?rule=rule-1&show=blocked",
         ),
         # A local failure stops the rule until it is reviewed.
         (
-            IncidentReport("provider:rule-1", SyncRuleId("rule-1"), "infrastructure", "failed"),
+            IncidentReport(
+                "provider:rule-1", SyncRuleId("rule-1"), IncidentCategory.INFRASTRUCTURE, "failed"
+            ),
             "https://ghost.example.test/rules/rule-1",
         ),
     ],

@@ -896,6 +896,16 @@
             "title": "Account Id"
           },
           "category": {
+            "enum": [
+              "authentication",
+              "authorization",
+              "rate_limit",
+              "temporary",
+              "permanent",
+              "infrastructure",
+              "conflict",
+              "unknown"
+            ],
             "title": "Category",
             "type": "string"
           },
@@ -3029,6 +3039,16 @@
       "StatusIncidentResponse": {
         "properties": {
           "category": {
+            "enum": [
+              "authentication",
+              "authorization",
+              "rate_limit",
+              "temporary",
+              "permanent",
+              "infrastructure",
+              "conflict",
+              "unknown"
+            ],
             "title": "Category",
             "type": "string"
           },

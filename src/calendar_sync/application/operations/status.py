@@ -15,11 +15,10 @@ from calendar_sync.application.operations.ports import (
     SchedulerProgress,
 )
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.errors import ProviderFailureKind
 from calendar_sync.application.sync.locking import RuleWorkKind
 from calendar_sync.application.sync.rules import ListSyncRules, SyncRuleSummary
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.incidents import IncidentMessage
+from calendar_sync.domain.incidents import IncidentCategory, IncidentMessage
 from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
 
 STALL_AFTER = timedelta(minutes=15)
@@ -30,11 +29,9 @@ OVERDUE_AFTER = timedelta(hours=24)
 WAITING_LIMIT = timedelta(hours=24)
 
 # Provider conditions that retry by themselves; nothing to do unless they last.
-WAITING_CATEGORIES = frozenset(
-    {ProviderFailureKind.RATE_LIMIT.value, ProviderFailureKind.TEMPORARY.value}
-)
+WAITING_CATEGORIES = frozenset({IncidentCategory.RATE_LIMIT, IncidentCategory.TEMPORARY})
 # Blocked-event incidents; the open blocks already describe them.
-BLOCKED_CATEGORY = "conflict"
+BLOCKED_CATEGORY = IncidentCategory.CONFLICT
 UNNAMED_CALENDAR = "Unnamed calendar"
 
 

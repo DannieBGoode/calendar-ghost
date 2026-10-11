@@ -14,6 +14,7 @@ from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import (
     AccountAuthorization,
+    IncidentCategory,
     IncidentFacts,
     IncidentMessage,
     IncidentStep,
@@ -258,7 +259,7 @@ IncidentResolutionValue = Literal[
 class IncidentSummary:
     id: str
     rule_id: str | None
-    category: str
+    category: IncidentCategory
     state: IncidentState
     summary: str
     opened_at: datetime
