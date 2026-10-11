@@ -133,8 +133,9 @@ What this cannot do, and what follows:
 - Exceptions are listed up to 730 days past the sync window's start, as Google's listing stops at
   a page limit: an exception of an endless series further ahead is applied once it comes within
   that horizon.
-- A series whose time zone cannot be recognized (Outlook's legacy custom zones) cannot be
-  expanded. It counts as live, its exceptions are applied only as Graph reports them, and looking
+- A series whose time zone cannot be recognized (Outlook's legacy custom zones), timed or
+  all-day, cannot be expanded: an all-day occurrence is named by its date in that zone, which is
+  unknown, so it is never guessed in UTC. It counts as live, its exceptions are applied only as Graph reports them, and looking
   up one of its occurrences that `instances` does not return is a temporary failure, never proof of
   absence. As a source it reads in UTC, which can move its projected occurrences by an hour across
   daylight saving; the service logs a warning naming the event when it reads one.

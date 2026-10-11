@@ -191,16 +191,17 @@ def _recurrence(item: Mapping[str, Any]) -> tuple[Recurrence | None, str | None]
     return Recurrence(to_ical(rule, _local_start(item, zone))), zone
 
 
-def all_day_series_zone(item: Mapping[str, Any]) -> str:
+def all_day_series_zone(item: Mapping[str, Any]) -> str | None:
     """The IANA zone an all-day series' days fall in: its recurrence's zone, else the zone it
-    started in, else UTC. Monday in Paris is Monday there, though Graph answers in UTC."""
+    started in; None when neither has a name this release knows. Monday in Paris is Monday
+    there, though Graph answers in UTC."""
     recurrence = item.get("recurrence")
     windows = (
         _series_windows_zone(item, recurrence)
         if isinstance(recurrence, Mapping)
         else _optional(item.get("originalStartTimeZone"))
     )
-    return iana_zone(windows) or "Etc/UTC"
+    return iana_zone(windows)
 
 
 def _series_windows_zone(item: Mapping[str, Any], recurrence: Mapping[str, Any]) -> str | None:
@@ -277,8 +278,11 @@ def _occurrence(item: Mapping[str, Any], series_zone: str | None) -> OccurrenceI
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=UTC)
     if item.get("isAllDay"):
-        # An all-day occurrence begins at midnight in its series' zone.
-        zone = series_zone or iana_zone(_optional(item.get("originalStartTimeZone"))) or "Etc/UTC"
+        # An all-day occurrence begins at midnight in its series' zone; in a zone without a
+        # name it cannot be named.
+        zone = series_zone or iana_zone(_optional(item.get("originalStartTimeZone")))
+        if zone is None:
+            return None
         return OccurrenceIdentity(EventId(series), moment.astimezone(ZoneInfo(zone)).date())
     return OccurrenceIdentity(EventId(series), occurrence_start(moment))
 
@@ -472,6 +476,8 @@ def series_of(item: Mapping[str, Any]) -> Series | None:
     except UnsupportedRecurrence:
         return None
     if item.get("isAllDay"):
+        if all_day_series_zone(item) is None:
+            return None
         start: datetime | date = _date(item.get("start"))
         duration = timedelta(days=(_date(item.get("end")) - start).days)
         return Series(rule, start, duration)

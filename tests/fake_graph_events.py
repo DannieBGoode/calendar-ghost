@@ -37,6 +37,8 @@ ZONES = {
     "W. Europe Standard Time": "Europe/Berlin",
     "Romance Standard Time": "Europe/Paris",
     "Pacific Standard Time": "America/Los_Angeles",
+    # A legacy custom zone, two hours ahead of UTC all year, which has no IANA name.
+    "Customized Time Zone": "Etc/GMT-2",
 }
 DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 PROPERTY_FILTER = re.compile(
