@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:bundle": "tsc -b && vite build --outDir dist",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false",
     "api:types": "openapi-typescript openapi.json --output src/lib/api-schema.ts",

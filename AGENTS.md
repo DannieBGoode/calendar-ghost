@@ -243,6 +243,9 @@ npm --prefix web run test
 npm --prefix web run build
 ```
 
+CI's `frontend` job runs the same commands. `lint` fails on any ESLint warning (`--max-warnings 0`):
+fix the code, never disable a rule to pass.
+
 The frontend's API types are generated from the backend's OpenAPI schema (ADR 0025). After changing
 a response or request model in `interfaces/api/schemas.py`, run
 `.venv/bin/python scripts/export_openapi.py` and `npm --prefix web run api:types`, and commit both
