@@ -161,6 +161,7 @@ the Docker build context, and has its own `Site` workflow.
 
 - Never commit `.env`, OAuth credentials, master keys, access tokens, personal calendar exports, or
   real provider responses. Fixtures must be synthetic.
+- A secret-scan failure blocks merging; allowlist in `.gitleaks.toml` only synthetic values.
 - Never print secrets or decrypted credentials. Keep notification payloads free of event content.
 - Validate paths against resolved trusted roots before serving files.
 - Keep every API route behind the signed-in User's session (`current_user` in
@@ -246,6 +247,14 @@ The frontend's API types are generated from the backend's OpenAPI schema (ADR 00
 a response or request model in `interfaces/api/schemas.py`, run
 `.venv/bin/python scripts/export_openapi.py` and `npm --prefix web run api:types`, and commit both
 generated files. Never edit `web/openapi.json` or `web/src/lib/api-schema.ts` by hand.
+
+Scan the repository for secrets with gitleaks (8.30.1, the version CI pins):
+
+```sh
+gitleaks git .
+```
+
+CI's `secrets` job runs the same scan on a pull request's commits and on each push to `main`.
 
 For release-facing changes, also build the image for the supported architectures through CI or
 `docker compose build`. Tests must not require a personal Google account.

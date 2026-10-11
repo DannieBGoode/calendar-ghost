@@ -128,6 +128,10 @@ and plain, the same register as the English copy.
 cd web && npm audit --audit-level=high && npm run api:check && npm run typecheck && npm run lint && npm run doctor && npm run test && npm run build
 ```
 
+CI also scans each pull request's commits, and each push to `main`, for secrets with
+[gitleaks](https://github.com/gitleaks/gitleaks) 8.30.1. Run `gitleaks git .` to scan the whole
+history locally. A finding blocks merging; `.gitleaks.toml` may allowlist only synthetic values.
+
 After changing an API response or request model, regenerate the frontend types in the same commit
 ([ADR 0025](adr/0025-generate-web-api-types-from-openapi.md)):
 
