@@ -336,7 +336,7 @@ def test_incidents_page_on_and_open_one_at_a_time_with_their_next_step(
     with TestClient(create_app(container)) as client:
         sign_in(client)
         (first,) = client.get("/api/v1/incidents").json()
-        (second,) = client.get("/api/v1/incidents", params={"before": first["id"]}).json()
+        (second,) = client.get("/api/v1/incidents", params={"before": first["cursor"]}).json()
         one = client.get("/api/v1/incidents/revoked")
         missing = client.get("/api/v1/incidents/missing")
 

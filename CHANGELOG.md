@@ -120,7 +120,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   the account may no longer use sent the email to the rule while Activity offered to reauthorize.
   The email for blocked events now opens that rule's blocked events. `GET /api/v1/incidents`
   returns each Incident's `step`.
-- Activity lists every incident: `GET /api/v1/incidents` pages with `before`, the table ends in
+- Activity lists every incident: `GET /api/v1/incidents` pages with `before`, the last incident's
+  `cursor`, the table ends in
   "Load older incidents" while there are more, and `GET /api/v1/incidents/{incident_id}` opens an
   incident the list does not hold.
 - An administrator's Cause in Activity's incident details names the Cause and How to fix only to

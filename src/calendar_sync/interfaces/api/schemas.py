@@ -423,6 +423,8 @@ class IncidentResponse(ApiResponse):
     for blocked events, which no provider failure opened."""
     step: IncidentStepValue | None = None
     """Its one next step; None when there is none, such as for a rule since removed."""
+    cursor: str
+    """Pass the last incident's as `before` for the next page; opaque, and fixed when read."""
 
 
 class DatabaseUsageResponse(ApiResponse):

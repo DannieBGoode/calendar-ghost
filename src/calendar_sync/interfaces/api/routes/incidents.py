@@ -28,9 +28,10 @@ router = APIRouter()
 )
 def list_incidents(
     services: Services,
-    before: Annotated[str | None, Query(max_length=200)] = None,
+    before: Annotated[str | None, Query(max_length=1000)] = None,
 ) -> list[IncidentResponse]:
-    """One page of incidents, open ones first; `before` names the last one of the page before."""
+    """One page of incidents, open ones first; `before` is the `cursor` of the last incident of
+    the page before, so the next page goes on where that one stood though it changed since."""
     return [_incident_response(incident) for incident in services.operations.incidents(before)]
 
 
@@ -62,4 +63,5 @@ def _incident_response(incident: IncidentSummary) -> IncidentResponse:
         message=message_response(incident.message),
         cause=incident.cause.value if incident.cause else None,
         step=step.value if step else None,
+        cursor=incident.cursor,
     )

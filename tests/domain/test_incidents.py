@@ -120,3 +120,9 @@ def test_a_time_recorded_without_a_time_zone_is_read_as_utc() -> None:
         facts("authentication", rule_accounts=renewed), last_failure=datetime(2026, 10, 1, 12)
     )
     assert access_renewed(naive)
+
+
+def test_one_account_behind_both_calendars_counts_once() -> None:
+    # Both calendars of the rule belong to one account, which was reauthorized since.
+    shared = (account(FAILING, renewed=True), account(FAILING, renewed=True))
+    assert access_renewed(facts("authentication", rule_accounts=shared, failing_account=None))

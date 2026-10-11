@@ -381,14 +381,38 @@ def test_incidents_page_on_from_the_last_one_shown(
     )
     queries = SqliteOperationsQueries(database, add_user(database))
 
-    first = [incident.id for incident in queries.incidents()]
-    second = [incident.id for incident in queries.incidents(before=first[-1])]
+    first = queries.incidents()
+    second = queries.incidents(before=first[-1].cursor)
 
     # Ties in the update time keep one order, so no incident is shown twice or skipped.
-    assert first == ["open", "resolved-b"]
-    assert second == ["resolved-a", "resolved-old"]
-    assert queries.incidents(before="resolved-old") == []
-    assert queries.incidents(before="missing") == []
+    assert [incident.id for incident in first] == ["open", "resolved-b"]
+    assert [incident.id for incident in second] == ["resolved-a", "resolved-old"]
+    assert queries.incidents(before=second[-1].cursor) == []
+    assert queries.incidents(before="not a cursor") == []
+
+
+def test_a_page_goes_on_from_where_the_last_one_ended_though_that_incident_changed(
+    database: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(activity_queries, "INCIDENTS_READ", 1)
+    _incidents(
+        database,
+        ("open-new", None, "temporary", "open", "2026-09-03T00:00:00+00:00"),
+        ("open-old", None, "temporary", "open", "2026-09-02T00:00:00+00:00"),
+        ("resolved", None, "temporary", "resolved", "2026-09-01T00:00:00+00:00"),
+    )
+    queries = SqliteOperationsQueries(database, add_user(database))
+    (first,) = queries.incidents()
+    # The incident that ended the page resolves before the next page is asked for.
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE incidents SET state = 'resolved', updated_at = ? WHERE id = 'open-new'",
+            ("2026-09-04T00:00:00+00:00",),
+        )
+
+    (second,) = queries.incidents(before=first.cursor)
+
+    assert (first.id, second.id) == ("open-new", "open-old")
 
 
 def test_one_incident_is_found_by_its_id_only_for_its_user(database: Path) -> None:

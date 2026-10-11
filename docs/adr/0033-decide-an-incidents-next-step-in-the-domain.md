@@ -35,9 +35,11 @@ listed or opened, and Activity counted only what it had.
   the same; the Web UI tells the administrator its likely Cause and how to fix it, and anyone else
   that Google Calendar is not available right now, with Check access to try again.
 - **The Incidents API pages.** `GET /api/v1/incidents` lists one page, open incidents first, then
-  resolved ones, each most recently updated first, and `before` names the last incident of the
-  previous page. `GET /api/v1/incidents/{incident_id}` returns one incident, listed or not, and
-  answers 404 for an incident another User owns, as for one that does not exist (ADR 0029).
+  resolved ones, each most recently updated first. Each incident carries an opaque `cursor`, its
+  sort values as they were when read; passing the last one's as `before` goes on where that
+  incident stood, so its refreshing or resolving since repeats or skips nothing.
+  `GET /api/v1/incidents/{incident_id}` returns one incident, listed or not, and answers 404 for an
+  incident another User owns, as for one that does not exist (ADR 0029).
 
 ## Alternatives considered
 

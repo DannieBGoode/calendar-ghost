@@ -300,7 +300,8 @@ export interface paths {
         };
         /**
          * List Incidents
-         * @description One page of incidents, open ones first; `before` names the last one of the page before.
+         * @description One page of incidents, open ones first; `before` is the `cursor` of the last incident of
+         *     the page before, so the next page goes on where that one stood though it changed since.
          */
         get: operations["list_incidents_api_v1_incidents_get"];
         put?: never;
@@ -1268,6 +1269,8 @@ export interface components {
             category: string;
             /** Cause */
             cause: ("api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown") | null;
+            /** Cursor */
+            cursor: string;
             /** Id */
             id: string;
             message: components["schemas"]["IncidentMessageResponse"] | null;

@@ -149,7 +149,8 @@ def access_renewed(facts: IncidentFacts) -> bool:
         and _utc(account.authorized_at) > _utc(facts.last_failure)
     }
     if facts.failing_account is None:
-        return len(renewed) == len(accounts)
+        # A rule whose calendars share one account names it twice; it counts once.
+        return renewed == {account.account_id for account in accounts}
     return facts.failing_account in renewed
 
 

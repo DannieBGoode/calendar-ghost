@@ -135,6 +135,8 @@ function incident(overrides: Partial<Incident>): Incident {
     // The server decides each incident's step (ADR 0033); these fixtures name the one it would.
     step: "reauthorize",
     ...overrides,
+    // The server's cursor is opaque; these fixtures make one from the id.
+    cursor: `cursor-${overrides.id ?? "incident"}`,
   }
 }
 
@@ -246,7 +248,7 @@ type Scenario = {
 /** One page of incidents as the server lists them, after the one `before` names. */
 function incidentPage(incidents: Incident[], url: string): Response {
   const before = new URL(url, "http://localhost").searchParams.get("before")
-  const start = before === null ? 0 : incidents.findIndex((incident) => incident.id === before) + 1
+  const start = before === null ? 0 : incidents.findIndex((incident) => incident.cursor === before) + 1
   return jsonResponse(incidents.slice(start, start + INCIDENTS_PAGE_SIZE))
 }
 

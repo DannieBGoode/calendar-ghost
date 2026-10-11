@@ -921,6 +921,10 @@
             ],
             "title": "Cause"
           },
+          "cursor": {
+            "title": "Cursor",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1028,7 +1032,8 @@
           "account_id",
           "message",
           "cause",
-          "step"
+          "step",
+          "cursor"
         ],
         "title": "IncidentResponse",
         "type": "object"
@@ -4482,7 +4487,7 @@
     },
     "/api/v1/incidents": {
       "get": {
-        "description": "One page of incidents, open ones first; `before` names the last one of the page before.",
+        "description": "One page of incidents, open ones first; `before` is the `cursor` of the last incident of\nthe page before, so the next page goes on where that one stood though it changed since.",
         "operationId": "list_incidents_api_v1_incidents_get",
         "parameters": [
           {
@@ -4492,7 +4497,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 200,
+                  "maxLength": 1000,
                   "type": "string"
                 },
                 {

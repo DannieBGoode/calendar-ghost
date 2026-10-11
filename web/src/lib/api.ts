@@ -363,7 +363,7 @@ export const api = {
     call("/api/v1/audit-entries/{entry_id}/event", "get", { params: { entry_id: entryId } }),
   activityChanges: (entryId: number) =>
     call("/api/v1/audit-entries/{entry_id}/changes", "get", { params: { entry_id: entryId } }),
-  /** One page of incidents, open ones first; `before` names the last one of the page before. */
+  /** One page of incidents, open ones first; `before` is the last incident's `cursor` of the page before. */
   incidents: (before?: string) => call("/api/v1/incidents", "get", { query: { before: before ?? null } }),
   incident: (incidentId: string) =>
     call("/api/v1/incidents/{incident_id}", "get", { params: { incident_id: incidentId } }),

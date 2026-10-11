@@ -30,6 +30,7 @@ function incident(overrides: Partial<Incident> = {}): Incident {
     message: null,
     cause: null,
     step: "wait",
+    cursor: "cursor",
     ...overrides,
   }
 }

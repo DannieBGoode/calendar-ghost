@@ -174,7 +174,7 @@ export function ActivityView({
     queryKey: ["incidents", "list"],
     queryFn: ({ pageParam }) => api.incidents(pageParam),
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (page) => (page.length === INCIDENTS_PAGE_SIZE ? page.at(-1)?.id : undefined),
+    getNextPageParam: (page) => (page.length === INCIDENTS_PAGE_SIZE ? page.at(-1)?.cursor : undefined),
   })
   const context = useRuleContext()
   const entries = activity.data?.pages.flat() ?? []

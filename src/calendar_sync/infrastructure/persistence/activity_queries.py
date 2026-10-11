@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import sqlite3
 import unicodedata
@@ -293,14 +294,19 @@ class SqliteOperationsQueries:
             return operations_of(connection, [self._user])[self._user].overview
 
     def incidents(self, before: str | None = None) -> list[IncidentSummary]:
-        after, cursor = ("", ()) if before is None else (_AFTER_INCIDENT, (before,))
+        after, parameters = "", {"user": self._user, "limit": INCIDENTS_READ}
+        if before is not None:
+            position = _cursor_position(before)
+            if position is None:
+                return []
+            after, parameters = _AFTER_INCIDENT, parameters | position
         with _reading(self._database_path) as connection:
             rows = connection.execute(
                 f"""
-                {_INCIDENT_FACTS} {after} WHERE i.user_id = ?
-                ORDER BY i.state ASC, i.updated_at DESC, i.id DESC LIMIT ?
+                {_INCIDENT_FACTS} WHERE {after} i.user_id = :user
+                ORDER BY i.state ASC, i.updated_at DESC, i.id DESC LIMIT :limit
                 """,
-                (*cursor, self._user, INCIDENTS_READ),
+                parameters,
             ).fetchall()
         return [_incident_with_facts(row) for row in rows]
 
@@ -313,15 +319,35 @@ class SqliteOperationsQueries:
         return None if row is None else _incident_with_facts(row)
 
 
-# Ordered by state, then most recently updated, then id, so ties keep one order and a page goes on
-# exactly after the incident that ended the one before; an incident the User lacks starts none.
+# Ordered by state, then most recently updated, then id, so ties keep one order. A page goes on
+# after where the incident that ended the one before stood then, as its cursor records, so that
+# incident refreshing or resolving since moves nothing.
 _AFTER_INCIDENT = """
-    JOIN incidents c ON c.id = ? AND c.user_id = i.user_id AND (
-        i.state > c.state
-        OR (i.state = c.state AND i.updated_at < c.updated_at)
-        OR (i.state = c.state AND i.updated_at = c.updated_at AND i.id < c.id)
-    )
+    (
+        i.state > :state
+        OR (i.state = :state AND i.updated_at < :updated_at)
+        OR (i.state = :state AND i.updated_at = :updated_at AND i.id < :id)
+    ) AND
 """
+
+
+def _cursor(row: sqlite3.Row) -> str:
+    """Where a page ending with this incident goes on: its sort values as stored, encoded."""
+    values = json.dumps([row["state"], row["updated_at"], row["id"]], separators=(",", ":"))
+    return base64.urlsafe_b64encode(values.encode()).decode().rstrip("=")
+
+
+def _cursor_position(cursor: str) -> dict[str, str] | None:
+    """The sort values a cursor records; None for anything that is not one of its cursors."""
+    try:
+        values = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
+        state, updated_at, incident_id = values
+    except (ValueError, TypeError):
+        return None
+    if not all(isinstance(value, str) for value in (state, updated_at, incident_id)):
+        return None
+    return {"state": state, "updated_at": updated_at, "id": incident_id}
+
 
 INCIDENTS_READ = 100
 """How many of a User's incidents one page holds, as Installation Status and the Web UI read
@@ -458,7 +484,10 @@ def _incident_with_facts(row: sqlite3.Row) -> IncidentSummary:
         if row[f"{end}_account"] is not None
     )
     return replace(
-        _incident_summary(row), rule_exists=row["rule_found"] is not None, rule_accounts=accounts
+        _incident_summary(row),
+        rule_exists=row["rule_found"] is not None,
+        rule_accounts=accounts,
+        cursor=_cursor(row),
     )
 
 

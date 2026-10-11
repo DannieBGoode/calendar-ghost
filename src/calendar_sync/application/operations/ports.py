@@ -277,6 +277,8 @@ class IncidentSummary:
     """Whether its rule exists now; False for an account's or the installation's own Incident."""
     rule_accounts: tuple[AccountAuthorization, ...] = ()
     """Its rule's Connected Accounts as they are now, while the rule exists."""
+    cursor: str = ""
+    """Where a page that ends with it goes on, as it was when read; opaque to its readers."""
 
     @property
     def step(self) -> IncidentStep | None:

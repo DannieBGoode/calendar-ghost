@@ -170,8 +170,8 @@ class OperationsQueries(Protocol):
 
     def incidents(self, before: str | None = None) -> Sequence[IncidentSummary]:
         """One page of incidents: open ones first, then resolved ones, each most recently updated
-        first. `before` names the last one of the previous page; one the User does not have
-        starts no page."""
+        first. `before` is the `cursor` of the last one of the previous page, so a page goes on
+        where that one was, though it has changed since; one that is not a cursor starts none."""
         ...
 
     def incident(self, incident_id: str) -> IncidentSummary | None:
