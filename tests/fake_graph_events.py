@@ -411,7 +411,13 @@ class FakeGraphEvents:
     def _slot_start(self, series: StoredEvent, day: date) -> datetime:
         local = _local(series.fields["start"])
         if series.fields.get("isAllDay"):
-            return datetime.combine(day, datetime.min.time(), tzinfo=local.tzinfo).astimezone(UTC)
+            # An all-day series' days begin at midnight in its recurrence's zone, which may differ
+            # from the zone it was created in, its occurrences' `originalStartTimeZone`.
+            zone = series.fields["recurrence"]["range"].get("recurrenceTimeZone") or series.fields[
+                "start"
+            ].get("timeZone", "UTC")
+            tzinfo = _local({"dateTime": "2000-01-01T00:00:00", "timeZone": zone}).tzinfo
+            return datetime.combine(day, datetime.min.time(), tzinfo=tzinfo).astimezone(UTC)
         return datetime.combine(day, local.timetz()).astimezone(UTC)
 
     def _overlaps(self, series: StoredEvent, day: date, after: datetime, before: datetime) -> bool:

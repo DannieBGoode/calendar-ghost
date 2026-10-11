@@ -277,12 +277,12 @@ def _occurrence(item: Mapping[str, Any], series_zone: str | None) -> OccurrenceI
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=UTC)
     if item.get("isAllDay"):
-        # An all-day occurrence begins at midnight in its series' zone; in a zone without a
-        # name it cannot be named.
-        zone = series_zone or iana_zone(_optional(item.get("originalStartTimeZone")))
-        if zone is None:
+        # An all-day occurrence begins at midnight in its series' zone, which only its master
+        # tells; its own `originalStartTimeZone` is the zone it was created in. Without the
+        # series' zone it cannot be named.
+        if series_zone is None:
             return None
-        return OccurrenceIdentity(EventId(series), moment.astimezone(ZoneInfo(zone)).date())
+        return OccurrenceIdentity(EventId(series), moment.astimezone(ZoneInfo(series_zone)).date())
     return OccurrenceIdentity(EventId(series), occurrence_start(moment))
 
 

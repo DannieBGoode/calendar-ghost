@@ -20,7 +20,7 @@ MONDAY = date(2026, 10, 12)
 
 
 def _weekly_all_day_in_paris(
-    graph: FakeMicrosoftGraph, zone: str = "Romance Standard Time"
+    graph: FakeMicrosoftGraph, zone: str = "Romance Standard Time", created_in: str | None = None
 ) -> EventRef:
     series = graph.events.seed(
         MAILBOX,
@@ -29,8 +29,8 @@ def _weekly_all_day_in_paris(
             "subject": "Office day",
             "body": {"contentType": "text", "content": ""},
             "isAllDay": True,
-            "start": {"dateTime": "2026-10-12T00:00:00", "timeZone": zone},
-            "end": {"dateTime": "2026-10-13T00:00:00", "timeZone": zone},
+            "start": {"dateTime": "2026-10-12T00:00:00", "timeZone": created_in or zone},
+            "end": {"dateTime": "2026-10-13T00:00:00", "timeZone": created_in or zone},
             "recurrence": {
                 "pattern": {
                     "type": "weekly",
@@ -81,3 +81,15 @@ def test_no_occurrence_of_an_all_day_series_in_a_custom_zone_is_inferred_cancell
     assert failed.value.kind is ProviderFailureKind.TEMPORARY
     assert provider.occurrence_exceptions(series, NOW) == ()
     assert provider.has_live_occurrences(series, TransformationPolicy())
+
+
+def test_an_occurrence_of_a_series_in_a_custom_zone_is_never_named_by_its_creation_zone() -> None:
+    provider, graph = outlook()
+    # Created in UTC, but repeating in a zone two hours ahead: Monday's original start is Sunday
+    # at 22:00 UTC, and its `originalStartTimeZone` says UTC.
+    series = _weekly_all_day_in_paris(graph, "Customized Time Zone", created_in="UTC")
+    sunday = MONDAY + timedelta(days=6)
+
+    with pytest.raises(ProviderFailure):
+        provider.get_occurrence(series, sunday)
+    assert provider.list_occurrences(series, {sunday}) == {}

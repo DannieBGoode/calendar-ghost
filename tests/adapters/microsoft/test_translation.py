@@ -142,19 +142,21 @@ def test_an_occurrence_and_an_exception_name_their_series_and_original_start() -
 
 def test_an_all_day_occurrence_starts_on_its_date_in_the_series_zone() -> None:
     # Midnight in Paris is 22:00 UTC the day before in summer.
-    event = to_domain_event(
-        item(
-            type="occurrence",
-            isAllDay=True,
-            seriesMasterId="series-1",
-            originalStart="2026-10-18T22:00:00Z",
-            start={"dateTime": "2026-10-19T00:00:00.0000000", "timeZone": "UTC"},
-            end={"dateTime": "2026-10-20T00:00:00.0000000", "timeZone": "UTC"},
-        ),
-        CALENDAR,
+    occurrence = item(
+        type="occurrence",
+        isAllDay=True,
+        seriesMasterId="series-1",
+        originalStart="2026-10-18T22:00:00Z",
+        start={"dateTime": "2026-10-19T00:00:00.0000000", "timeZone": "UTC"},
+        end={"dateTime": "2026-10-20T00:00:00.0000000", "timeZone": "UTC"},
     )
 
+    event = to_domain_event(occurrence, CALENDAR, series_zone="Europe/Paris")
+    # Its own `originalStartTimeZone` is only where it was created, so it never names its date.
+    unnamed = to_domain_event(occurrence, CALENDAR)
+
     assert event.occurrence == OccurrenceIdentity(EventId("series-1"), date(2026, 10, 19))
+    assert unnamed.occurrence is None
 
 
 def test_a_cancelled_meeting_and_a_removed_event_read_as_cancelled() -> None:
