@@ -448,7 +448,7 @@ class OutlookCalendarProvider:
                 "GET",
                 _event_path(existing.reference),
                 self._token(account),
-                params={"$select": "id", "$expand": EXCEPTION_ATTENDEES},
+                params={"$select": "id,exceptionOccurrences", "$expand": EXCEPTION_ATTENDEES},
             )
         invited = exceptions_have_attendees(item)
         if invited is None:

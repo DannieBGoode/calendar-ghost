@@ -224,7 +224,11 @@ class FakeGraphEvents:
         event = self._event(mailbox, calendar, event_id)
         if event is not None:
             answer = self._serve(event, expand=expand)
-            if "exceptionOccurrences" in params.get("$expand", "") and event.is_series:
+            if (
+                "exceptionOccurrences" in params.get("$expand", "")
+                and "exceptionOccurrences" in params.get("$select", "")
+                and event.is_series
+            ):
                 # "exceptionOccurrences: ... the event instances that are exceptions in a
                 # recurring series. Exceptions can differ from other occurrences in a recurring
                 # series, such as the subject, start or end times, or attendees. Exceptions don't

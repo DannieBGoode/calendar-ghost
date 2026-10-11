@@ -336,7 +336,12 @@ def exceptions_have_attendees(item: Mapping[str, Any]) -> bool | None:
     exceptions = item.get("exceptionOccurrences")
     if not isinstance(exceptions, list) or "exceptionOccurrences@odata.nextLink" in item:
         return None
-    return any(isinstance(each, Mapping) and each.get("attendees") for each in exceptions)
+    # An exception answered without its attendee list says nothing about its guests.
+    if not all(
+        isinstance(each, Mapping) and isinstance(each.get("attendees"), list) for each in exceptions
+    ):
+        return None
+    return any(each["attendees"] for each in exceptions)
 
 
 def _guests(attendees: object) -> tuple[str, ...]:

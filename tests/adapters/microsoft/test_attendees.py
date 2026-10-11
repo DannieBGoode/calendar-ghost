@@ -176,3 +176,34 @@ def test_a_series_whose_exceptions_outlook_did_not_list_is_not_deleted_now() -> 
 
     assert failed.value.kind is ProviderFailureKind.TEMPORARY
     assert _writes(graph) == ["POST"]
+
+
+def test_a_series_whose_exceptions_outlook_listed_without_attendees_is_not_deleted_now() -> None:
+    provider, graph = outlook()
+    destination, source = _series(provider)
+    series = graph.events.stored[destination.event_id.value]
+    series.exceptions[date(2026, 10, 19)] = {"attendees": GUESTS}
+    serve = graph.handle
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if "exceptionOccurrences" in request.url.params.get("$expand", ""):
+            graph.requests.append(request)
+            # The exception is listed, but without the attendees asked for.
+            occurrence = f"{destination.event_id.value}.occ.2026-10-19"
+            return httpx.Response(
+                200,
+                json={
+                    "id": destination.event_id.value,
+                    "exceptionOccurrences": [{"id": occurrence}],
+                },
+            )
+        return serve(request)
+
+    graph.handle = handle  # type: ignore[method-assign]
+
+    with pytest.raises(ProviderFailure) as failed:
+        provider.delete_projection(destination, source, RULE, "key-2")
+
+    assert failed.value.kind is ProviderFailureKind.TEMPORARY
+    assert _writes(graph) == ["POST"]
+    assert graph.events.mail == []
