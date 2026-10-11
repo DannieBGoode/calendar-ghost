@@ -386,6 +386,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- Outlook now holds a yearly series on a day its month always has, such as a birthday on
+  November 30. It refused every yearly series from the 29th on, as if every month could be
+  shorter, and Activity showed such a series as blocked. February 29 and the 31st of a 30-day
+  month stay blocked, because Outlook would move them to another day.
 - Rules that a Lapsed Authorization stopped resume even when the process stopped or failed while
   restoring them. Before, Reauthorization could clear the lapse and leave its rules stopped, with
   the account's Incident open, until the account was reauthorized or checked again. Each

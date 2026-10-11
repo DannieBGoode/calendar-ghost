@@ -258,12 +258,14 @@ def _pattern(parts: Mapping[str, str], first: date) -> Pattern:
         month = _positive(parts["BYMONTH"]) if "BYMONTH" in parts else first.month
         if month > 12:
             raise UnsupportedRecurrence("a month is from 1 to 12")
-        return replace(_within_month("Yearly", parts, interval, first), month=month)
+        return replace(_within_month("Yearly", parts, interval, first, month), month=month)
     raise UnsupportedRecurrence(f"Outlook does not repeat {frequency or 'without a frequency'}")
 
 
-def _within_month(period: str, parts: Mapping[str, str], interval: int, first: date) -> Pattern:
-    """A monthly or yearly pattern's day within its month."""
+def _within_month(
+    period: str, parts: Mapping[str, str], interval: int, first: date, month: int | None = None
+) -> Pattern:
+    """A monthly or yearly pattern's day within its month; `month` is a yearly pattern's."""
     if "BYDAY" in parts:
         if "BYMONTHDAY" in parts:
             raise UnsupportedRecurrence("Outlook does not combine weekdays and days of the month")
@@ -272,18 +274,20 @@ def _within_month(period: str, parts: Mapping[str, str], interval: int, first: d
         if index is None:
             raise UnsupportedRecurrence("Outlook counts weekdays first to fourth, or last")
         return Pattern(f"relative{period}", interval, days, index=index)
-    day = _day_of_month(parts.get("BYMONTHDAY"), parts.get("BYSETPOS"), first)
+    day = _day_of_month(parts.get("BYMONTHDAY"), parts.get("BYSETPOS"), first, month)
     return Pattern(f"absolute{period}", interval, day_of_month=day)
 
 
-def _day_of_month(by_month_day: str | None, by_set_position: str | None, first: date) -> int:
+def _day_of_month(
+    by_month_day: str | None, by_set_position: str | None, first: date, month: int | None
+) -> int:
     if by_month_day is None:
         if by_set_position is not None:
             raise UnsupportedRecurrence("BYSETPOS needs a set of days")
-        return _fixed_day(first.day)
+        return _fixed_day(first.day, month)
     days = [_signed(value) for value in by_month_day.split(",")]
     if len(days) == 1 and by_set_position is None:
-        return _fixed_day(days[0])
+        return _fixed_day(days[0], month)
     # The last of the 28th to the Nth is Outlook's day N, moved to a shorter month's last day.
     last = days[-1]
     if (
@@ -295,10 +299,13 @@ def _day_of_month(by_month_day: str | None, by_set_position: str | None, first: 
     raise UnsupportedRecurrence("Outlook repeats on one day of the month")
 
 
-def _fixed_day(day: int) -> int:
-    """A day of the month every month has; from 29 on, iCalendar skips shorter months, which
-    Outlook would fill with their last day."""
-    if not 1 <= day <= LAST_FIXED_DAY:
+def _fixed_day(day: int, month: int | None = None) -> int:
+    """A day the pattern's month has every time: for a monthly pattern, one every month has, and
+    for a yearly one, one its month has every year, such as November 30 but not February 29.
+    iCalendar skips a month without the day, which Outlook would fill with its last day."""
+    # A common year's months are each as short as they ever are.
+    last = LAST_FIXED_DAY if month is None else calendar.monthrange(2001, month)[1]
+    if not 1 <= day <= last:
         raise UnsupportedRecurrence("Outlook moves days from the 29th to a shorter month's end")
     return day
 
