@@ -175,7 +175,11 @@ Restoring an occurrence deleted in Outlook has no Graph operation, but the sourc
 a direct deletion of a Managed Projection is repaired from the source. So the series is rebuilt:
 the run deletes the Outlook series, guarded as any deletion is, and writes it again from the source
 with its moved and cancelled occurrences, recording `series_rebuilt`. It is rebuilt at most once a
-run. A series Outlook would email someone about deleting is not rebuilt, and the occurrence stays a
+run, and only while the Outlook series is as the source projects it now: a source series that
+changed is changed first as any series is, so one Outlook could not hold is never deleted and left
+unwritten. A projection written again after its destination lost it, rebuilt or deleted by hand,
+is created under an Operation Key that names the one it replaces, so its `transactionId` is new
+for each replacement and the same for each retry of it. A series Outlook would email someone about deleting is not rebuilt, and the occurrence stays a
 Conflict for that reason; one the run could not rebuild otherwise is `occurrence_not_restorable`,
 and the next run tries again. The rebuilt series has a new Outlook id. Every Graph pattern has an exact iCalendar form, so an Outlook source never needs this. A series
 projection keeps, in its private origin, the lines and zone it was written with, and reads back with
@@ -218,8 +222,11 @@ Expanded whole, every exception came with its `attendees` (`[]` without guests),
 answer. Someone may invite guests between that read and the
 write, so every `PATCH` and `DELETE` carries `If-Match` with the `changeKey` read
 (`W/"<changeKey>"`, as Graph's `@odata.etag`). Graph refuses a `PATCH` naming an older version with
-412 (`ErrorIrresolvableConflict`); that failure is temporary, and the next run reads the guests and
-leaves the event. On 2026-10-12 Graph ignored `If-Match` on `DELETE`, of an event and of an
+412 (`ErrorIrresolvableConflict`). The adapter then reads the item again, with every guest check,
+and writes that version once more, so one that now has guests is left as `projection_has_guests`.
+Outlook also changes a series by itself shortly after creating it, which a rebuild's first
+occurrence write met on 2026-10-12; the second read finds that version. A second 412 is temporary,
+and the next run tries again. On 2026-10-12 Graph ignored `If-Match` on `DELETE`, of an event and of an
 occurrence: a stale or invented version still deleted. A guest invited to a projection in the
 moment between the guest read and a `DELETE`, a fraction of a second, would therefore get Outlook's
 cancellation. No Graph operation closes that window, and only someone editing the projection by

@@ -372,6 +372,10 @@ class ExecuteSyncRule:
         rebuilt; the answer is then why, and None once the series is written again.
         """
         run.rebuilt.add(source_series.reference)
+        if not self._series_current(run, source_series):
+            # The series is written again as the source has it now; one the destination could
+            # not hold would be deleted for good. It changes as any series does, then rebuilds.
+            return SyncReason.OCCURRENCE_NOT_RESTORABLE
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
             mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
@@ -415,6 +419,17 @@ class ExecuteSyncRule:
             run, source_series, destination_loaded=False, actual_destination=None
         )
         return None
+
+    def _series_current(self, run: SyncRunContext, source_series: CalendarEvent) -> bool:
+        """Whether the destination series is as the source series projects now."""
+        mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
+        if mapping is None:
+            return False
+        actual = self.provider.get_event(mapping.destination)
+        decision = self.decisions.decide(
+            run.rule, source_series, mapping, actual, window_start=run.window_start
+        )
+        return decision.reason is SyncReason.PROJECTION_CURRENT
 
     def _record_skipped_occurrence(self, run: SyncRunContext, exception: CalendarEvent) -> None:
         """An exception of a series this rule never projected has nothing to protect."""

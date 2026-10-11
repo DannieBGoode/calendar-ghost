@@ -457,6 +457,46 @@ def test_an_occurrence_the_destination_cannot_restore_comes_back_with_its_rebuil
     assert SyncReason.SERIES_REBUILT in {entry.reason for entry in factory.state.audit}
 
 
+def test_a_rebuilt_series_is_created_under_an_operation_key_of_its_own() -> None:
+    # The first series' create key, reused, could make the provider answer with the deleted
+    # series (Graph's transactionId) instead of creating the one that replaces it.
+    calendars, factory, destination = _synced()
+    first_keys = set(calendars.operations)
+    calendars.restores_cancelled = False
+    calendars.cancel_occurrence(destination, week_start(2), series().reference, rule().id, "user")
+    calendars.report(calendars.get_occurrence(destination, week_start(2)))  # type: ignore[arg-type]
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    rebuilt = factory.state.mappings[(rule().id, series().reference)].destination
+    [key] = [key for key, made in calendars.operations.items() if made == rebuilt]
+    assert key not in first_keys
+
+
+def test_a_series_the_source_changed_is_not_rebuilt_before_it_is_updated() -> None:
+    # Rebuilding writes the source's series as it is now; one the destination cannot hold would
+    # be deleted and never written again. The series is left as it is, and so is the occurrence.
+    calendars, factory, destination = _synced()
+    calendars.restores_cancelled = False
+    calendars.cancel_occurrence(destination, week_start(2), series().reference, rule().id, "user")
+    changed = calendars.put(
+        replace(
+            series(), revision="series-revision-2", recurrence=Recurrence(("RRULE:FREQ=HOURLY",))
+        ),
+        starts=STARTS,
+    )
+    calendars.unsupported.add(changed.reference)
+    calendars.report(calendars.get_occurrence(destination, week_start(2)))  # type: ignore[arg-type]
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert factory.state.mappings[(rule().id, series().reference)].destination == destination
+    assert destination in calendars.events
+    assert result.conflicts >= 1
+    blocked = {entry.reason for entry in factory.state.audit if entry.outcome == "blocked"}
+    assert SyncReason.OCCURRENCE_NOT_RESTORABLE in blocked
+
+
 def test_an_occurrence_whose_series_cannot_be_rebuilt_quietly_stays_blocked() -> None:
     calendars, factory, destination = _synced()
     calendars.restores_cancelled = False

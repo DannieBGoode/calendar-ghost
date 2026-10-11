@@ -1,12 +1,13 @@
-"""Every PATCH and DELETE is conditional on the version the adapter just read and found without
-guests (`If-Match` with its `changeKey`). Someone may invite guests in between; the write then
-fails with 412 Precondition Failed and emails nobody, and the next run reads the guests and leaves
-the event (ADR 0034).
+"""Every PATCH is conditional on the version the adapter just read and found without guests
+(`If-Match` with its `changeKey`). Someone may invite guests in between, or Outlook may change the
+item itself, as it does shortly after creating a series; the PATCH then fails with 412 Precondition
+Failed and emails nobody. The adapter reads the item again, with every guest check, and writes that
+version once more: an item that now has guests is left alone (ADR 0034).
 
-Graph answers each Outlook item with `@odata.etag`, `W/"<changeKey>"`, and refuses a write whose
-`If-Match` names an older version with 412 and `ErrorIrresolvableConflict`, Exchange's "the change
-key passed in the request does not match the current change key for the item". ADR 0034 lists
-confirming this with real accounts.
+Graph answers each Outlook item with `@odata.etag`, `W/"<changeKey>"`, and refuses a PATCH whose
+`If-Match` names an older version with 412 and `ErrorIrresolvableConflict`. It ignored `If-Match`
+on DELETE when tried with a real account on 2026-10-12, so a deletion racing an invitation is not
+stopped; ADR 0034 accepts that window.
 """
 
 from collections.abc import Callable
@@ -15,12 +16,13 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 
-from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.application.sync.errors import ProviderFailure, UnsupportedProjection
 from calendar_sync.domain.model import (
     EventId,
     EventProjection,
     EventRef,
     Recurrence,
+    SyncReason,
     SyncRuleId,
     TimedInterval,
 )
@@ -68,6 +70,26 @@ def _refused_for_now(write: Callable[[], object]) -> None:
     assert failed.value.kind is ProviderFailureKind.TEMPORARY
 
 
+def _blocked_for_guests(write: Callable[[], object]) -> None:
+    with pytest.raises(UnsupportedProjection) as refused:
+        write()
+    assert refused.value.reason is SyncReason.PROJECTION_HAS_GUESTS
+
+
+def _changed_by_outlook_just_before(graph: FakeMicrosoftGraph, event_id: str) -> None:
+    """Outlook changes the item itself after the adapter read it, once, as after a create."""
+    serve = graph.handle
+    changed: list[bool] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.method == "PATCH" and not changed:
+            changed.append(True)
+            graph.events._touch(graph.events.stored[event_id])
+        return serve(request)
+
+    graph.handle = handle  # type: ignore[method-assign]
+
+
 def test_an_update_after_someone_invited_guests_emails_nobody() -> None:
     provider, graph = outlook()
     destination, source = _created(provider)
@@ -75,21 +97,36 @@ def test_an_update_after_someone_invited_guests_emails_nobody() -> None:
     later = MONDAY + timedelta(hours=2)
     moved = EventProjection(TimedInterval(later, later + timedelta(hours=1)), "Busy")
 
-    _refused_for_now(lambda: provider.update_projection(destination, source, RULE, moved, "key-2"))
+    _blocked_for_guests(
+        lambda: provider.update_projection(destination, source, RULE, moved, "key-2")
+    )
 
     assert graph.events.mail == []
     assert [method for method, _, _ in graph.events.writes] == ["POST"]
 
 
-def test_a_deletion_after_someone_invited_guests_emails_nobody() -> None:
+def test_an_update_after_outlook_changed_the_event_is_written_to_its_new_version() -> None:
+    provider, graph = outlook()
+    destination, source = _created(provider)
+    _changed_by_outlook_just_before(graph, destination.event_id.value)
+    later = MONDAY + timedelta(hours=2)
+    moved = EventProjection(TimedInterval(later, later + timedelta(hours=1)), "Busy")
+
+    provider.update_projection(destination, source, RULE, moved, "key-2")
+
+    assert [method for method, _, _ in graph.events.writes] == ["POST", "PATCH"]
+
+
+def test_a_deletion_racing_an_invitation_is_not_stopped_by_graph() -> None:
+    # Graph ignores If-Match on DELETE, so a guest invited in the moment between the guest read
+    # and the deletion gets Outlook's cancellation. ADR 0034 accepts this window.
     provider, graph = outlook()
     destination, source = _created(provider)
     _invited_just_before(graph, "DELETE", destination.event_id.value)
 
-    _refused_for_now(lambda: provider.delete_projection(destination, source, RULE, "key-2"))
+    provider.delete_projection(destination, source, RULE, "key-2")
 
-    assert graph.events.mail == []
-    assert destination.event_id.value in graph.events.stored
+    assert destination.event_id.value not in graph.events.stored
 
 
 def test_an_occurrence_written_after_someone_invited_guests_to_its_series_emails_nobody() -> None:
@@ -101,20 +138,34 @@ def test_an_occurrence_written_after_someone_invited_guests_to_its_series_emails
         TimedInterval(later + timedelta(hours=2), later + timedelta(hours=3)), "Busy"
     )
 
-    _refused_for_now(
+    _blocked_for_guests(
         lambda: provider.write_occurrence(destination, later, source, RULE, moved, "key-2")
     )
 
     assert graph.events.mail == []
 
 
-def test_an_occurrence_cancelled_after_someone_invited_guests_to_its_series_emails_nobody() -> None:
+def test_an_occurrence_written_after_outlook_changed_its_series_is_written() -> None:
+    provider, graph = outlook()
+    destination, source = _created(provider, WEEKLY)
+    _changed_by_outlook_just_before(graph, destination.event_id.value)
+    later = MONDAY + timedelta(days=7)
+    moved = EventProjection(
+        TimedInterval(later + timedelta(hours=2), later + timedelta(hours=3)), "Busy"
+    )
+
+    written = provider.write_occurrence(destination, later, source, RULE, moved, "key-2")
+
+    assert written.time == moved.time
+
+
+def test_an_occurrence_cancellation_racing_an_invitation_is_not_stopped_by_graph() -> None:
+    # As for a deletion: Graph ignores If-Match on DELETE, an accepted window (ADR 0034).
     provider, graph = outlook()
     destination, source = _created(provider, WEEKLY)
     _invited_just_before(graph, "DELETE", destination.event_id.value)
     later = MONDAY + timedelta(days=7)
 
-    _refused_for_now(lambda: provider.cancel_occurrence(destination, later, source, RULE, "key-2"))
+    provider.cancel_occurrence(destination, later, source, RULE, "key-2")
 
-    assert graph.events.mail == []
-    assert provider.get_occurrence(destination, later) is not None
+    assert [method for method, _, _ in graph.events.writes] == ["POST", "DELETE"]

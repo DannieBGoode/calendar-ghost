@@ -142,7 +142,14 @@ class SynchronizeEvents:
         """Apply a decision to the destination and the Event Mapping; answer the mapping now."""
         uow, rule = run.uow, run.rule
         operation_key = event_operation_key(
-            rule.id, source_event.reference, source_event.revision, decision.action
+            rule.id,
+            source_event.reference,
+            source_event.revision,
+            decision.action,
+            # Writing a projection again, after its destination lost it, is a create of its own.
+            replacing=mapping.destination
+            if mapping and decision.action is SyncAction.CREATE
+            else None,
         )
         if mapping is not None and decision.action in _DESTINATION_WRITES:
             # Occurrences decided after this write read the series as it now is.
@@ -245,15 +252,21 @@ def event_operation_key(
     source: EventRef,
     revision: str,
     action: SyncAction,
+    *,
+    replacing: EventRef | None = None,
 ) -> str:
-    raw = "|".join(
-        (
-            rule_id.value,
-            source.calendar.connected_account_id.value,
-            source.calendar.calendar_id.value,
-            source.event_id.value,
-            revision,
-            action.value,
-        )
-    )
-    return hashlib.sha256(raw.encode()).hexdigest()
+    """The write's stable key. A create that replaces a projection its destination lost names
+    the lost one, so it is new for each replacement and the same for each retry of it: a
+    provider that keeps the key of a create, as Graph's transactionId does, never answers it
+    with the projection it replaces."""
+    parts = [
+        rule_id.value,
+        source.calendar.connected_account_id.value,
+        source.calendar.calendar_id.value,
+        source.event_id.value,
+        revision,
+        action.value,
+    ]
+    if replacing is not None:
+        parts.append(replacing.event_id.value)
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()
