@@ -20,7 +20,6 @@ from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Any, Protocol
 
-from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
@@ -43,6 +42,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
     TransformationPolicy,
 )
+from calendar_sync.infrastructure.microsoft.causes import cause_of
 from calendar_sync.infrastructure.microsoft.graph import GraphHttp, GraphRefusal, TokenRefusal
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.microsoft.recurrence import occurrence_dates
@@ -680,7 +680,7 @@ class OutlookCalendarProvider:
             account_id=account,
             provider=ProviderKind.OUTLOOK,
             attempted_at=read.get(account, now),
-            cause=_cause(error, event_scoped=event_scoped),
+            cause=cause_of(error, event_scoped=event_scoped),
             provider_label=MICROSOFT.calendar_name,
         )
 
@@ -741,11 +741,6 @@ def _kind(error: GraphRefusal | TokenRefusal) -> ProviderFailureKind:
         return ProviderFailureKind.AUTHORIZATION
     # One calendar the account may not change, or one that is gone: its rule stops alone.
     return ProviderFailureKind.PERMANENT
-
-
-def _cause(error: GraphRefusal | TokenRefusal, *, event_scoped: bool) -> Cause:  # noqa: ARG001
-    """Microsoft's reasons have no mapping to Causes yet, so every refusal reads as unknown."""
-    return Cause.UNKNOWN
 
 
 def _translate(

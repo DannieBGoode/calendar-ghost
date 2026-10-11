@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
@@ -343,6 +344,18 @@ def test_an_access_check_whose_refresh_is_refused_says_how(
 
     assert failed.value.kind is kind
     assert "private-marker" not in str(failed.value)
+
+
+def test_an_access_check_microsoft_refuses_records_why(installation: Installation) -> None:
+    _connect(installation)
+    (account,) = installation.store.for_user(USER).list()
+    installation.clock.moment = NOW + timedelta(hours=2)
+    installation.graph.refuse(token_error("invalid_client", 7000222, status=401))
+
+    with pytest.raises(AccountAccessCheckFailed) as failed:
+        installation.oauth.verify_access(account.id)
+
+    assert failed.value.cause is Cause.OAUTH_CLIENT_INVALID
 
 
 @pytest.mark.parametrize(

@@ -193,10 +193,10 @@ endpoint's `error` field, to the closed set of ADR 0031, citing Microsoft's docu
   and `unauthorized_client` (an application deleted or not found in the directory).
 - `access_revoked`, the User's: `invalid_grant` (an expired or revoked grant, a password reset, or
   a tenant whose administrator has not consented), `interaction_required`, `consent_required`, and
-  Graph's `InvalidAuthenticationToken`. Its step, Reauthorize account, explains that a work account
+  Graph's `InvalidAuthenticationToken` and `Authorization_RequestDenied`. Its step, Reauthorize account, explains that a work account
   may need its organization's administrator to approve the application first.
 - `calendar_forbidden`: `ErrorAccessDenied` on a calendar. `calendar_not_found`:
-  `ErrorItemNotFound` on a calendar. `rate_limited`: 429 and `TooManyRequests`,
+  `ErrorItemNotFound` or `ErrorFolderNotFound` on a calendar. `rate_limited`: 429 and `TooManyRequests`,
   `ApplicationThrottled`, `activityLimitReached`. `temporary`: 503, 504, and other 5xx answers, and
   `temporarily_unavailable`.
 

@@ -40,6 +40,7 @@ from calendar_sync.application.ports import (
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.infrastructure.microsoft.causes import cause_of
 from calendar_sync.infrastructure.microsoft.graph import (
     LOGIN,
     TIMEOUT_SECONDS,
@@ -211,9 +212,9 @@ class MicrosoftOAuthService:
         except (AccountAccessCheckFailed, ConnectedAccountDisconnected, ConnectedAccountNotFound):
             raise
         except TokenRefusal as error:
-            raise _refused_check(_token_failure_kind(error)) from error
+            raise _refused_check(_token_failure_kind(error), cause_of(error)) from error
         except GraphRefusal as error:
-            raise _refused_check(_graph_failure_kind(error)) from error
+            raise _refused_check(_graph_failure_kind(error), cause_of(error)) from error
         return AccountAccess(
             calendars_visible=len(calendars),
             writable_calendars=sum(discovered_calendar(item).writable for item in calendars),
@@ -370,8 +371,8 @@ _CHECK_DETAILS = {
 }
 
 
-def _refused_check(kind: ProviderFailureKind) -> AccountAccessCheckFailed:
-    return AccountAccessCheckFailed(_CHECK_DETAILS[kind], kind, Cause.UNKNOWN)
+def _refused_check(kind: ProviderFailureKind, cause: Cause) -> AccountAccessCheckFailed:
+    return AccountAccessCheckFailed(_CHECK_DETAILS[kind], kind, cause)
 
 
 def _instant(value: object) -> datetime | None:
