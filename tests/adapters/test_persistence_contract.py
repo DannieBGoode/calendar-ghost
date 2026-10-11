@@ -9,10 +9,14 @@ from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.health import SqliteIncidentRepository
 from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
 )
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryIncidentRepository,
+    InMemoryUnitOfWorkFactory,
+)
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
@@ -41,6 +45,7 @@ class TestInMemoryUnitOfWork(PersistenceContract):
             disable=database.database.disabled.add,
             refused=(KeyError, ValueError),
             installation=database.installation(),
+            incidents=lambda user: InMemoryIncidentRepository(database.database, user),
         )
 
 
@@ -87,4 +92,5 @@ class TestSqliteUnitOfWork(PersistenceContract):
             disable=disable,
             refused=(sqlite3.IntegrityError,),
             installation=SqliteInstallationUnitOfWorkFactory(database),
+            incidents=lambda user: SqliteIncidentRepository(database, user),
         )

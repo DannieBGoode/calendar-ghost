@@ -176,7 +176,7 @@ class Incidents:
         self.resolutions: dict[str, IncidentResolution] = {}
         self.reports: list[IncidentReport] = []
 
-    def open(self, incident: IncidentReport, at: datetime) -> bool:
+    def open(self, incident: IncidentReport, at: datetime, *, refresh: bool = True) -> bool:
         self.events.append(("open", incident.key, at))
         self.reports.append(incident)
         newly = incident.key not in self.open_keys
@@ -194,6 +194,15 @@ class Incidents:
         self.events.append(("resolve", key, at))
         self.resolutions[key] = resolution
         self.open_keys.discard(key)
+
+    def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
+        return frozenset(
+            report.account_id
+            for report in self.reports
+            if report.key in self.open_keys
+            and report.rule_id is None
+            and report.account_id is not None
+        )
 
 
 class Notifications:

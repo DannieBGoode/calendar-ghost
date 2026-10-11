@@ -111,7 +111,7 @@ class SqliteIncidentRepository:
         self._user = user_id.value
         self._ids = ids or UuidIdGenerator()
 
-    def open(self, incident: IncidentReport, at: datetime) -> bool:
+    def open(self, incident: IncidentReport, at: datetime, *, refresh: bool = True) -> bool:
         # An Incident about an account alone is its Lapsed Authorization, so it opens only while
         # the account exists and is lapsed, checked in the same statement: neither a deletion
         # nor a restoration that ran just before it can leave it open.
@@ -147,6 +147,7 @@ class SqliteIncidentRepository:
                     message_code = excluded.message_code,
                     message_params = excluded.message_params,
                     cause = excluded.cause
+                WHERE ? OR state != 'open'
                 """,
                 (
                     self._ids.new(),
@@ -166,6 +167,7 @@ class SqliteIncidentRepository:
                     account_only.value if account_only else None,
                     account_only.value if account_only else None,
                     self._user,
+                    refresh,
                 ),
             )
         if cursor.rowcount == 0:
@@ -205,3 +207,15 @@ class SqliteIncidentRepository:
                     self._user,
                 ),
             )
+
+    def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
+        with transaction(self._database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT account_id FROM incidents
+                WHERE user_id = ? AND rule_id IS NULL AND account_id IS NOT NULL
+                    AND state = 'open'
+                """,
+                (self._user,),
+            ).fetchall()
+        return frozenset(ConnectedAccountId(str(row[0])) for row in rows)

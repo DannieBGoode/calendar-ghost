@@ -94,9 +94,10 @@ class InstallationUnitOfWork(Protocol):
         """Every enabled rule of a User who is not disabled, by User and then by rule."""
         ...
 
-    def users_awaiting_reauthorization(self) -> Sequence[UserId]:
-        """Every User who is not disabled with a rule a Lapsed Authorization alone stopped, by
-        identifier, so the scheduler can resume those whose accounts are authorized again."""
+    def users_with_unfinished_lapses(self) -> Sequence[UserId]:
+        """Every User who is not disabled whose Lapsed Authorization an interruption may have left
+        partly done, by identifier: one with a rule a lapse alone stopped, or with an account
+        authorized again while its Incident is still open (ADR 0027)."""
         ...
 
     def forget_change_values(self, before: datetime) -> None:

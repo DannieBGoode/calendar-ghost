@@ -123,6 +123,17 @@ class SqliteConnectedAccountRecords:
         ).fetchone()
         return row is not None
 
+    def lapsed(self) -> dict[ConnectedAccountId, ProviderKind]:
+        rows = self._connection.execute(
+            """
+            SELECT id, provider FROM connected_accounts
+            WHERE user_id = ? AND state = ? AND authorization_lapsed_at IS NOT NULL
+            ORDER BY id
+            """,
+            (self._user, ConnectedAccountState.CONNECTED.value),
+        ).fetchall()
+        return {ConnectedAccountId(str(row[0])): ProviderKind(str(row[1])) for row in rows}
+
     def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
         # The first write of the transaction takes SQLite's write lock until commit or rollback.
         cursor = self._connection.execute(

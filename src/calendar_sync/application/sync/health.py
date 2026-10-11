@@ -135,8 +135,8 @@ class RunHealth(Protocol):
         self, rule: SyncRule, failure: ProviderFailure, *, attempted_at: datetime | None = None
     ) -> None: ...
 
-    def resume_restored(self) -> int:
-        """Resume rules an interrupted restoration left stopped; how many resumed."""
+    def finish_interrupted_lapses(self) -> int:
+        """Finish what an interrupted lapse or restoration left; how many rules resumed."""
         ...
 
 
@@ -161,8 +161,8 @@ class RuleHealth:
     def audit_floor(self) -> int:
         return self.records.audit_floor()
 
-    def resume_restored(self) -> int:
-        return self.lapses.resume_restored()
+    def finish_interrupted_lapses(self) -> int:
+        return self.lapses.finish_interrupted()
 
     def record_success(
         self,

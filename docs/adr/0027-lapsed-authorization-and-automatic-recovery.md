@@ -61,3 +61,22 @@ for Lapsed Authorization names no rule, so Incident Notifications may carry a nu
 Migration 20 marks accounts and rules that an open authorization Incident already stopped, so an
 upgraded installation shows the account to reauthorize at once. Deleting a Disconnected Account
 deletes its own Incidents with it, as its rules' Incidents go with the rules.
+
+## Amendment: finishing an interrupted lapse (2026-10-11)
+
+A lapse and a restoration each commit their steps one at a time, so each scheduler pass finishes
+one that an interruption left partly done: a lapsed account's enabled rules stop and its missing
+Incident opens, and an account authorized again has its open Incident resolved and its waiting
+rules resumed. No provider is called.
+
+When the pass opens a missing Incident, the refusal that lapsed the account is gone: the account
+records when its authorization lapsed, not why. The Incident then names an authentication failure
+for the account's provider, which says what every lapse means, and has no Cause, because none was
+read from a provider's answer ([ADR 0031](0031-keep-the-providers-reason-as-a-cause.md)), so it
+never counts toward an Installation Hint. It opens without refreshing an Incident already open, so
+one a refusal opened meanwhile keeps its own failure and Cause and is not notified twice.
+
+A disconnection interrupted partway is not repaired by the pass and is not made atomic, as
+deleting a Disconnected Account is. The rules it stopped write nothing and need a preview, as they
+would after the disconnection, and the account still shows as connected, so the User retries, and
+retrying stops the remaining rules and disconnects the account.

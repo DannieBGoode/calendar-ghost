@@ -111,7 +111,15 @@ class CheckAccountAccess:
 
 @dataclass(slots=True)
 class DisconnectConnectedAccount:
-    """Discard an account's credentials after degrading every rule that could still write."""
+    """Discard an account's credentials after degrading every rule that could still write.
+
+    Each rule stops in its own transaction, then the account disconnects, so an interruption can
+    leave some rules stopped and the account still connected. That state is safe: a stopped rule
+    writes nothing and restarts only through a preview, as it would after the disconnection the
+    User asked for. The User sees the account still connected and retries, which stops the
+    remaining rules and then disconnects it. So retrying completes it, and it is not made atomic
+    as deletion is.
+    """
 
     unit_of_work: UnitOfWorkFactory
     accounts: ConnectedAccountRepository
