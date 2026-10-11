@@ -147,8 +147,11 @@ npm --prefix web run api:types
 
 Fixtures in `tests/fixtures` are synthetic. Never copy provider responses from a personal account into the repository.
 
-A new calendar adapter adds a `CalendarProviderContract` subclass whose harness seeds Native Events
-in that adapter's backend, next to `tests/adapters/test_calendar_provider_contract.py`.
+A new calendar adapter adds a `CalendarProviderContract` subclass in its own test package, as
+`tests/adapters/google/` and `tests/adapters/microsoft/` do. Its harness seeds and removes Native
+Events in that adapter's backend, makes the backend refuse a calendar's cursors, and, if the
+backend cannot expand a recurrence itself, tells it how the contract's series expands. The fake
+of the provider's API must expand a daily series with a count, as the contract's series is.
 
 ## Architecture rules
 

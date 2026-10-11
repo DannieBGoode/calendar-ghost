@@ -64,8 +64,20 @@ def seed_into(graph: FakeMicrosoftGraph, native: CalendarEvent) -> str:
     return graph.events.seed(address, calendar, graph_json(native))
 
 
+def remove_from(graph: FakeMicrosoftGraph, native: CalendarEvent) -> None:
+    address, calendar = MAILBOXES[native.reference.calendar.connected_account_id.value]
+    graph.events.remove(address, calendar, native.reference.event_id.value)
+
+
 class TestOutlookCalendarProvider(CalendarProviderContract):
     @pytest.fixture
     def harness(self) -> ProviderHarness:
         provider, graph = outlook()
-        return ProviderHarness(provider, lambda native: seed_into(graph, native))
+        return ProviderHarness(
+            provider,
+            lambda native: seed_into(graph, native),
+            lambda native: remove_from(graph, native),
+            lambda _calendar: setattr(graph.events, "expired", True),
+            # Outlook expands a series from its recurrence; nothing to tell it.
+            lambda _series: None,
+        )
