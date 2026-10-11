@@ -2,50 +2,38 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Collection, Sequence
-from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from importlib.resources import files
 from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from calendar_sync.application.causes import NO_CAUSE, WITHOUT_CAUSE, Cause
-from calendar_sync.application.errors import DuplicateDirectionalRelationship
-from calendar_sync.application.ports import (
-    AuditEntry,
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.sync.ports import (
     AuditRepository,
     CalendarNameRepository,
-    CauseSighting,
-    Clock,
     ConnectedAccountRecords,
-    ConnectedAccountState,
     DiscoveredCalendar,
     EventMappingRepository,
     ExceptionReplayRepository,
-    IncidentResolution,
-    InstallationUnitOfWork,
     OccurrenceMappingRepository,
     ProviderCallCounts,
     ProviderCallRepository,
-    ProviderCallUse,
-    RecordedRule,
-    ResourceUse,
     RulePreviewRepository,
     RulePreviewSummary,
-    RuleRunOutcome,
     RuleRunOutcomeRepository,
-    RunKind,
-    ScheduledRule,
     SourceObservationRepository,
-    StatusRecords,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
     UnitOfWorkFactory,
 )
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
+from calendar_sync.domain.audit import AuditEntry
+from calendar_sync.domain.causes import NO_CAUSE, WITHOUT_CAUSE, Cause
+from calendar_sync.domain.incidents import IncidentResolution
 from calendar_sync.domain.model import (
     AllDayRange,
     AllDaySyncPolicy,
@@ -70,7 +58,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
-from calendar_sync.infrastructure.persistence.activity_queries import operations_of
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.source_changes import (
     SqliteSourceObservationRepository,
@@ -78,98 +66,6 @@ from calendar_sync.infrastructure.persistence.source_changes import (
 )
 from calendar_sync.infrastructure.scheduling import SystemClock
 from calendar_sync.infrastructure.security import HistoryCipher
-
-_FORWARD_MIGRATIONS = (
-    (2, "0002_account_avatar.sql"),
-    (3, "0003_audit_reasons.sql"),
-    (4, "0004_rule_editing.sql"),
-    (5, "0005_occurrence_mappings.sql"),
-    (6, "0006_rule_previews.sql"),
-    (7, "0007_audit_run_index.sql"),
-    (8, "0008_last_full_sync.sql"),
-    (9, "0009_audit_event_titles.sql"),
-    (10, "0010_pending_exception_replays.sql"),
-    (11, "0011_rule_block_checks.sql"),
-    (12, "0012_incident_resolutions.sql"),
-    (13, "0013_incident_accounts.sql"),
-    (14, "0014_source_changes.sql"),
-    (15, "0015_invitation_responses.sql"),
-    (16, "0016_calendar_names.sql"),
-    (17, "0017_provider_kinds.sql"),
-    (18, "0018_integration_tokens.sql"),
-    (19, "0019_incident_messages.sql"),
-    (20, "0020_lapsed_authorization.sql"),
-    (21, "0021_users.sql"),
-    (22, "0022_registration.sql"),
-    (23, "0023_token_scopes.sql"),
-    (24, "0024_rule_creation_order.sql"),
-    (25, "0025_provider_calls.sql"),
-    (26, "0026_failure_causes.sql"),
-    (27, "0027_failure_providers.sql"),
-    (28, "0028_oauth_state_providers.sql"),
-)
-_CHECKED_FROM = 21
-"""Migrations from here on prove every reference before committing. Earlier ones ran before
-references were checked, and a database they left may hold rows no reference reaches."""
-
-
-class MigrationFailed(RuntimeError):
-    """A migration would have left a record referring to one that does not exist."""
-
-
-def initialize_database(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    migrations = files("calendar_sync.infrastructure.persistence")
-    with closing(open_connection(path)) as connection:
-        # Recorded in the database file, so every later connection writes ahead too: a reader then
-        # never keeps the scheduler from committing, nor the scheduler a request from reading.
-        connection.execute("PRAGMA journal_mode = WAL")
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS schema_migrations "
-            "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
-        )
-        applied = {
-            int(row[0]) for row in connection.execute("SELECT version FROM schema_migrations")
-        }
-        if 1 not in applied:
-            # Only a new database: later migrations replace tables the initial schema creates.
-            connection.executescript(migrations.joinpath("0001_initial.sql").read_text())
-            connection.execute(
-                "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
-                (1, datetime.now(UTC).isoformat()),
-            )
-            connection.commit()
-        # SQLite rebuilds a table only with references unchecked, and changes that setting only
-        # outside a transaction; each migration checks its own before it commits.
-        connection.execute("PRAGMA foreign_keys = OFF")
-        try:
-            for version, name in _FORWARD_MIGRATIONS:
-                if version not in applied:
-                    _migrate(connection, version, migrations.joinpath(name).read_text())
-        finally:
-            connection.execute("PRAGMA foreign_keys = ON")
-
-
-def _migrate(connection: sqlite3.Connection, version: int, script: str) -> None:
-    """Apply one migration with its version record atomically, so it runs at most once."""
-    connection.executescript(f"BEGIN;\n{script}")
-    broken = (
-        connection.execute("PRAGMA foreign_key_check").fetchall()
-        if version >= _CHECKED_FROM
-        else []
-    )
-    if broken:
-        connection.rollback()
-        tables = ", ".join(sorted({str(row[0]) for row in broken}))
-        raise MigrationFailed(
-            f"migration {version} would leave records in {tables} that refer to missing records; "
-            "nothing was changed"
-        )
-    connection.execute(
-        "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
-        (version, datetime.now(UTC).isoformat()),
-    )
-    connection.commit()
 
 
 class SqliteConnectedAccountRecords:
@@ -227,6 +123,17 @@ class SqliteConnectedAccountRecords:
         ).fetchone()
         return row is not None
 
+    def lapsed(self) -> dict[ConnectedAccountId, ProviderKind]:
+        rows = self._connection.execute(
+            """
+            SELECT id, provider FROM connected_accounts
+            WHERE user_id = ? AND state = ? AND authorization_lapsed_at IS NOT NULL
+            ORDER BY id
+            """,
+            (self._user, ConnectedAccountState.CONNECTED.value),
+        ).fetchall()
+        return {ConnectedAccountId(str(row[0])): ProviderKind(str(row[1])) for row in rows}
+
     def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
         # The first write of the transaction takes SQLite's write lock until commit or rollback.
         cursor = self._connection.execute(
@@ -254,13 +161,13 @@ class SqliteSyncRuleRepository:
         row = self._connection.execute(
             "SELECT * FROM sync_rules WHERE id = ? AND user_id = ?", (rule_id.value, self._user)
         ).fetchone()
-        return _rule_from_row(row) if row else None
+        return rule_from_row(row) if row else None
 
     def list(self) -> Sequence[SyncRule]:
         rows = self._connection.execute(
             "SELECT * FROM sync_rules WHERE user_id = ? ORDER BY id", (self._user,)
         ).fetchall()
-        return tuple(_rule_from_row(row) for row in rows)
+        return tuple(rule_from_row(row) for row in rows)
 
     def add(self, rule: SyncRule) -> None:
         try:
@@ -759,7 +666,7 @@ class SqliteRuleRunOutcomeRepository:
             "SELECT * FROM rule_run_outcomes WHERE rule_id = ? AND kind = ? AND user_id = ?",
             (rule_id.value, kind.value, self._user),
         ).fetchone()
-        return _outcome_from_row(row) if row is not None else None
+        return outcome_from_row(row) if row is not None else None
 
 
 def _caused(outcome: RuleRunOutcome) -> bool:
@@ -767,7 +674,7 @@ def _caused(outcome: RuleRunOutcome) -> bool:
     return not outcome.succeeded and outcome.failure_kind not in WITHOUT_CAUSE
 
 
-def _outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
+def outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
     return RuleRunOutcome(
         rule_id=SyncRuleId(str(row["rule_id"])),
         kind=RunKind(str(row["kind"])),
@@ -785,25 +692,12 @@ def _outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
         if row["succeeded"] or row["failure_kind"] in WITHOUT_CAUSE
         else Cause.recorded(row["failure_cause"]),
         failure_provider=ProviderKind.recorded(row["failure_provider"]),
-        last_succeeded_at=_optional_time(row["last_succeeded_at"]),
-        last_full_succeeded_at=_optional_time(row["last_full_succeeded_at"]),
+        last_succeeded_at=optional_time(row["last_succeeded_at"]),
+        last_full_succeeded_at=optional_time(row["last_full_succeeded_at"]),
     )
 
 
-def _cause_sighting(row: sqlite3.Row) -> CauseSighting:
-    opened, authorized = _optional_time(row["opened_at"]), _optional_time(row["authorized_at"])
-    lived = opened - authorized if row["open"] and opened and authorized else None
-    return CauseSighting(
-        UserId(str(row["user_id"])),
-        Cause.read(row["cause"]),
-        datetime.fromisoformat(str(row["at"])),
-        bool(row["open"]),
-        lived,
-        provider=ProviderKind.recorded(row["provider"]),
-    )
-
-
-def _optional_time(value: object) -> datetime | None:
+def optional_time(value: object) -> datetime | None:
     return None if value is None else datetime.fromisoformat(str(value))
 
 
@@ -844,10 +738,10 @@ class SqliteRulePreviewRepository:
             "SELECT * FROM rule_previews WHERE rule_id = ? AND user_id = ?",
             (rule_id.value, self._user),
         ).fetchone()
-        return _preview_from_row(row) if row is not None else None
+        return preview_from_row(row) if row is not None else None
 
 
-def _preview_from_row(row: sqlite3.Row) -> RulePreviewSummary:
+def preview_from_row(row: sqlite3.Row) -> RulePreviewSummary:
     return RulePreviewSummary(
         rule_id=SyncRuleId(str(row["rule_id"])),
         completed_at=datetime.fromisoformat(str(row["completed_at"])),
@@ -1037,220 +931,6 @@ class _UserUnitsOfWork:
         )
 
 
-class SqliteInstallationUnitOfWork:
-    """What the scheduler and the Operator Overview read across Users (ADR 0029)."""
-
-    def __init__(self, database_path: Path) -> None:
-        self._database_path = database_path
-        self._connection: sqlite3.Connection | None = None
-
-    def __enter__(self) -> Self:
-        self._connection = open_connection(self._database_path)
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> bool | None:
-        assert self._connection is not None
-        if exc_type is not None:
-            self._connection.rollback()
-        self._connection.close()
-        self._connection = None
-        return None
-
-    def commit(self) -> None:
-        assert self._connection is not None
-        self._connection.commit()
-
-    def scheduled_rules(self) -> Sequence[ScheduledRule]:
-        assert self._connection is not None
-        rows = self._connection.execute(
-            """
-            SELECT sync_rules.*, outcome.last_full_succeeded_at
-            FROM sync_rules
-            JOIN users ON users.id = sync_rules.user_id AND users.state = 'active'
-            LEFT JOIN rule_run_outcomes outcome
-              ON outcome.rule_id = sync_rules.id AND outcome.kind = 'sync'
-            WHERE sync_rules.state = ?
-            ORDER BY sync_rules.user_id, sync_rules.id
-            """,
-            (SyncRuleState.ENABLED.value,),
-        ).fetchall()
-        return tuple(
-            ScheduledRule(
-                UserId(str(row["user_id"])),
-                _rule_from_row(row),
-                _optional_time(row["last_full_succeeded_at"]),
-            )
-            for row in rows
-        )
-
-    def forget_change_values(self, before: datetime) -> None:
-        assert self._connection is not None
-        self._connection.execute(
-            """
-            UPDATE audit_entries SET change_sealed = NULL
-            WHERE change_sealed IS NOT NULL AND occurred_at < ?
-            """,
-            (before.isoformat(),),
-        )
-
-    def resource_use(self, users: Collection[UserId], since: date) -> dict[UserId, ResourceUse]:
-        assert self._connection is not None
-        use: dict[UserId, ResourceUse] = {}
-        ordered = sorted({user.value for user in users})
-        for start in range(0, len(ordered), _USERS_PER_QUERY):
-            chunk = ordered[start : start + _USERS_PER_QUERY]
-            use |= _resource_use(self._connection, chunk, since)
-        return use
-
-    def forget_provider_calls(self, before: date) -> None:
-        assert self._connection is not None
-        self._connection.execute("DELETE FROM provider_calls WHERE day < ?", (before.isoformat(),))
-
-    def failure_causes(self, since: datetime) -> list[CauseSighting]:
-        assert self._connection is not None
-        # A lapsed account's Incident is joined to the account, whose last authorization time
-        # tells how long its grant lived; only that time is read, never who the account is.
-        rows = self._connection.execute(
-            """
-            SELECT user_id, failure_cause AS cause, completed_at AS at, 0 AS open,
-                NULL AS opened_at, NULL AS authorized_at, failure_provider AS provider
-            FROM rule_run_outcomes
-            WHERE succeeded = 0 AND failure_cause IS NOT NULL AND failure_cause != 'none'
-                AND completed_at >= ?
-                AND failure_kind NOT IN ('infrastructure', 'conflict')
-            UNION ALL
-            SELECT incident.user_id, incident.cause, incident.updated_at,
-                incident.state = 'open', incident.opened_at, account.updated_at,
-                incident.provider
-            FROM incidents incident
-            LEFT JOIN connected_accounts account
-                ON incident.rule_id IS NULL
-                AND account.id = incident.account_id
-                AND account.user_id = incident.user_id
-                AND account.state = 'connected'
-                AND account.authorization_lapsed_at IS NOT NULL
-            WHERE incident.cause IS NOT NULL AND incident.cause != 'none'
-                AND incident.category NOT IN ('infrastructure', 'conflict')
-                AND (incident.state = 'open' OR incident.updated_at >= ?)
-            ORDER BY user_id, at
-            """,
-            (since.isoformat(), since.isoformat()),
-        ).fetchall()
-        return [_cause_sighting(row) for row in rows]
-
-    def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
-        assert self._connection is not None
-        records: dict[UserId, StatusRecords] = {}
-        ordered = sorted({user.value for user in users})
-        for start in range(0, len(ordered), _USERS_PER_QUERY):
-            chunk = ordered[start : start + _USERS_PER_QUERY]
-            rules = _recorded_rules(self._connection, chunk)
-            for user, operations in operations_of(self._connection, chunk).items():
-                records[UserId(user)] = StatusRecords(
-                    rules=tuple(rules.get(user, ())),
-                    overview=operations.overview,
-                    incidents=operations.incidents,
-                )
-        return records
-
-
-_USERS_PER_QUERY = 500
-"""Users read together, well under SQLite's limit on bound values in one statement."""
-
-
-def _resource_use(
-    connection: sqlite3.Connection, users: Sequence[str], since: date
-) -> dict[UserId, ResourceUse]:
-    marks = ", ".join("?" * len(users))
-
-    def counted(table: str) -> dict[str, int]:
-        # Interpolates only constant table names and `?` placeholders; values stay bound.
-        return dict(
-            connection.execute(
-                f"""
-                SELECT user_id, COUNT(*) FROM {table}
-                WHERE user_id IN ({marks}) GROUP BY user_id
-                """,  # noqa: S608
-                users,
-            ).fetchall()
-        )
-
-    rules, accounts, entries = (
-        counted("sync_rules"),
-        counted("connected_accounts"),
-        counted("audit_entries"),
-    )
-    calls: dict[str, list[ProviderCallUse]] = {}
-    for row in connection.execute(
-        f"""
-        SELECT user_id, provider, SUM(calls), SUM(rate_limited), SUM(failed)
-        FROM provider_calls WHERE user_id IN ({marks}) AND day >= ?
-        GROUP BY user_id, provider ORDER BY user_id, provider
-        """,  # noqa: S608
-        (*users, since.isoformat()),
-    ):
-        calls.setdefault(str(row[0]), []).append(
-            ProviderCallUse(ProviderKind(str(row[1])), int(row[2]), int(row[3]), int(row[4]))
-        )
-    return {
-        UserId(user): ResourceUse(
-            rules=rules.get(user, 0),
-            connected_accounts=accounts.get(user, 0),
-            activity_entries=entries.get(user, 0),
-            provider_calls=tuple(calls.get(user, ())),
-        )
-        for user in users
-    }
-
-
-def _recorded_rules(
-    connection: sqlite3.Connection, users: Sequence[str]
-) -> dict[str, list[RecordedRule]]:
-    """Each of `users`' rules in the order they were created, with what status reads of them."""
-    marks = ", ".join("?" * len(users))
-    # Interpolates only `?` placeholders; values stay bound.
-    outcomes = {
-        str(row["rule_id"]): _outcome_from_row(row)
-        for row in connection.execute(
-            f"SELECT * FROM rule_run_outcomes WHERE kind = 'sync' AND user_id IN ({marks})",  # noqa: S608
-            users,
-        )
-    }
-    previews = {
-        str(row["rule_id"]): _preview_from_row(row)
-        for row in connection.execute(
-            f"SELECT * FROM rule_previews WHERE user_id IN ({marks})",  # noqa: S608
-            users,
-        )
-    }
-    rules: dict[str, list[RecordedRule]] = {}
-    for row in connection.execute(
-        f"""
-        SELECT * FROM sync_rules WHERE user_id IN ({marks})
-        ORDER BY user_id, creation_order, id
-        """,  # noqa: S608
-        users,
-    ):
-        rule_id = str(row["id"])
-        rules.setdefault(str(row["user_id"]), []).append(
-            RecordedRule(_rule_from_row(row), outcomes.get(rule_id), previews.get(rule_id))
-        )
-    return rules
-
-
-@dataclass(frozen=True, slots=True)
-class SqliteInstallationUnitOfWorkFactory:
-    database_path: Path
-
-    def __call__(self) -> InstallationUnitOfWork:
-        return SqliteInstallationUnitOfWork(self.database_path)
-
-
 def _rule_values(rule: SyncRule) -> tuple[object, ...]:
     return (
         rule.id.value,
@@ -1270,7 +950,7 @@ def _rule_values(rule: SyncRule) -> tuple[object, ...]:
     )
 
 
-def _rule_from_row(row: sqlite3.Row) -> SyncRule:
+def rule_from_row(row: sqlite3.Row) -> SyncRule:
     return SyncRule(
         id=SyncRuleId(str(row["id"])),
         source=CalendarEndpoint(

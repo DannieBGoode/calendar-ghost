@@ -301,8 +301,29 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Incidents */
+        /**
+         * List Incidents
+         * @description One page of incidents, open ones first; `before` is the `cursor` of the last incident of
+         *     the page before, so the next page goes on where that one stood though it changed since.
+         */
         get: operations["list_incidents_api_v1_incidents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/incidents/{incident_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Incident */
+        get: operations["get_incident_api_v1_incidents__incident_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1264,11 +1285,15 @@ export interface components {
             category: string;
             /** Cause */
             cause: ("api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown") | null;
+            /** Cursor */
+            cursor: string;
             /** Id */
             id: string;
             message: components["schemas"]["IncidentMessageResponse"] | null;
             /** Opened At */
             opened_at: string;
+            /** Provider */
+            provider: string | null;
             /** Resolution */
             resolution: ("sync_succeeded" | "blocks_cleared" | "rule_removed" | "access_restored") | null;
             /** Resolved At */
@@ -1280,6 +1305,8 @@ export interface components {
              * @enum {string}
              */
             state: "open" | "resolved";
+            /** Step */
+            step: ("reauthorize" | "recover_rule" | "review_rule" | "see_blocked" | "wait" | "administrator" | "see_history") | null;
             /** Summary */
             summary: string;
             /** Updated At */
@@ -2701,7 +2728,9 @@ export interface operations {
     };
     list_incidents_api_v1_incidents_get: {
         parameters: {
-            query?: never;
+            query?: {
+                before?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: {
@@ -2717,6 +2746,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IncidentResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_incident_api_v1_incidents__incident_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incident_id: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentResponse"];
                 };
             };
             /** @description Validation Error */

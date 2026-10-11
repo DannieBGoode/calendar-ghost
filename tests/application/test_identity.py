@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.identity.errors import (
     AdminAlreadyConfigured,
     EmailTaken,
     IncorrectCredentials,
@@ -14,7 +14,7 @@ from calendar_sync.application.errors import (
     SignInThrottled,
     UserDisabled,
 )
-from calendar_sync.application.identity import (
+from calendar_sync.application.identity.sign_in import (
     ChangeOwnPassword,
     SetNotificationEmail,
     SetOwnEmail,

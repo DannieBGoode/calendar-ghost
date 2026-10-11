@@ -6,8 +6,8 @@ from typing import Annotated, Any, Protocol
 
 from fastapi import APIRouter, Depends, status
 
-from calendar_sync.application.errors import (
-    ApplicationError,
+from calendar_sync.application.shared.errors import ApplicationError
+from calendar_sync.application.sync.errors import (
     ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
     NotACalendarChange,
@@ -18,12 +18,12 @@ from calendar_sync.application.errors import (
     RuleNotExecutable,
     RuleNotFound,
 )
-from calendar_sync.application.locking import RuleWork
-from calendar_sync.application.ports import RulePreviewSummary, RuleRunOutcome
-from calendar_sync.application.preview import PreviewSyncRule
-from calendar_sync.application.reconciliation import ReconcileNow
-from calendar_sync.application.removal import RemoveSyncRule
-from calendar_sync.application.rules import (
+from calendar_sync.application.sync.locking import RuleWork
+from calendar_sync.application.sync.ports import RulePreviewSummary
+from calendar_sync.application.sync.preview import PreviewSyncRule
+from calendar_sync.application.sync.reconciliation import ReconcileNow
+from calendar_sync.application.sync.removal import RemoveSyncRule
+from calendar_sync.application.sync.rules import (
     ChangeSyncRulePolicy,
     CreateDraftSyncRule,
     EnableSyncRule,
@@ -32,7 +32,7 @@ from calendar_sync.application.rules import (
     PauseSyncRule,
     ReplaceSyncRuleCalendars,
 )
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
@@ -47,6 +47,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.runs import RuleRunOutcome
 from calendar_sync.interfaces.api.dependencies import available, current_user, user_services
 from calendar_sync.interfaces.api.problems import ApiProblem, problem, problem_from
 from calendar_sync.interfaces.api.schemas import (

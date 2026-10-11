@@ -1,5 +1,5 @@
 """Connecting a Microsoft account: the authorization code flow with PKCE, bound to the User who
-began it, least-privilege scopes, and rotating refresh tokens (ADR 0032)."""
+began it, least-privilege scopes, and rotating refresh tokens (ADR 0034)."""
 
 import json
 import sqlite3
@@ -10,8 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
     AuthorizationNotConfigured,
@@ -19,8 +18,9 @@ from calendar_sync.application.errors import (
     InvalidAuthorizationState,
     ProviderFailureKind,
 )
-from calendar_sync.application.ports import CalendarAccess, DiscoveredCalendar
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.sync.ports import CalendarAccess, DiscoveredCalendar
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.causes import Cause
 from calendar_sync.infrastructure.microsoft.oauth import (
     SCOPES,
     MicrosoftClient,
@@ -31,7 +31,7 @@ from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAcc
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
 )
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.fake_microsoft_graph_api import (

@@ -1,7 +1,6 @@
 import type { I18n } from "@/i18n/translator"
 import type { RuleNames } from "@/lib/activity"
-import type { ConnectedAccount, DiscoveredCalendar, Incident, RuleSummary } from "@/lib/api"
-import { accessRenewedSince, type IncidentRuleState } from "@/lib/incidents"
+import type { ConnectedAccount, DiscoveredCalendar, RuleSummary } from "@/lib/api"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 
 /** The rules, accounts, and calendars Activity uses to name the rule behind each entry. */
@@ -31,14 +30,4 @@ export function endpointName(endpoint: RuleSummary["source"], context: RuleConte
     context.accountsById.get(endpoint.connected_account_id),
     context.calendarsByAccount.get(endpoint.connected_account_id),
   ).calendar
-}
-
-export function incidentRuleState(incident: Incident, context: RuleContext): IncidentRuleState | null {
-  if (!incident.rule_id) return null
-  // Until rules load, assume the rule exists but claim no renewed access.
-  if (!context.rulesLoaded) return { accessRenewed: false }
-  const rule = context.rulesById.get(incident.rule_id)
-  if (!rule) return null
-  const accounts = [rule.source, rule.destination].map((endpoint) => context.accountsById.get(endpoint.connected_account_id))
-  return { accessRenewed: accessRenewedSince(incident, accounts) }
 }

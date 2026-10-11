@@ -6,7 +6,7 @@ from collections import deque
 from datetime import datetime, timedelta
 from threading import Lock
 
-from calendar_sync.application.ports import Clock
+from calendar_sync.application.shared.ports import Clock
 
 WINDOW = timedelta(minutes=15)
 EMAIL_LIMIT = 5

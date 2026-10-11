@@ -2,7 +2,7 @@
 
 import pytest
 
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.providers.routing import RoutingCalendarProvider
 from tests.contracts.calendar_provider import CalendarProviderContract, ProviderHarness

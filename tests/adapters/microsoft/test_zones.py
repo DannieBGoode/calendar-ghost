@@ -1,4 +1,4 @@
-"""Outlook's Windows time zone names and the IANA names the domain uses (ADR 0032)."""
+"""Outlook's Windows time zone names and the IANA names the domain uses (ADR 0034)."""
 
 import time
 

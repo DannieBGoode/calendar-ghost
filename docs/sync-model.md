@@ -9,7 +9,7 @@ minutes or through Sync Now. Source changes project forward; mapped destination 
 authoritative source and repair edits or deletions during that same run. Google's incremental feed
 is not bounded by the initial `timeMin`, so it also reports changes to events that ended long ago;
 the Outlook adapter's feed, a Graph delta round plus a listing of everything modified since the
-previous run, reports them too ([ADR 0032](adr/0032-outlook-through-microsoft-graph.md)).
+previous run, reports them too ([ADR 0034](adr/0034-outlook-through-microsoft-graph.md)).
 An unmapped single event that ended before the rolling window start (30 days before the run) is
 ignored with reason `before_sync_window`; mapped events and recurring series are decided normally.
 Before skipping, the run looks up a projection created with the event's create Operation Key, so a
@@ -150,7 +150,7 @@ releases.
 ## Audit evidence
 
 Every write, block, and meaningful skip in a run appends one Audit Entry carrying the run
-identifier, an `AuditAction` and `AuditOutcome` from `application/ports.py`, and a stable reason
+identifier, an `AuditAction` and `AuditOutcome` from `domain/audit.py`, and a stable reason
 code from `SyncReason` in `domain/model.py`, so the Activity view can explain what changed and why an expected event was not synchronized. Updates
 distinguish a changed
 source (`source_changed`) from a repaired destination edit (`destination_drift_repaired`). Entries
@@ -210,7 +210,8 @@ lapses the Connected Account its provider rejected and opens one Incident for th
 covering every rule it stops; a preview that finds another account's authorization lost lapses
 that account too. Reauthorization, or an access check the provider passes, resolves the account's
 Incident (`access_restored`, migration 20) and resumes the rules the lapse alone stopped
-([ADR 0027](adr/0027-lapsed-authorization-and-automatic-recovery.md)).
+([ADR 0027](adr/0027-lapsed-authorization-and-automatic-recovery.md)). Each scheduled pass also
+finishes a lapse or restoration that an interruption left partly done.
 
 ## Reconciliation
 

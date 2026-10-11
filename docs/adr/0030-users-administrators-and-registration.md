@@ -78,6 +78,17 @@ with its `GET /api/v1/account/overview` route. The Operator Overview itself is u
 still never shows calendar names, calendar identifiers, account emails, or event content, tests
 still prove it, and [data ownership](../data-ownership.md) states what it shows.
 
+## Amendment: the last-administrator check stays in the adapter (2026-10-11)
+
+`User` has no behavior of its own: its role and state change through `UserDirectory.set_role` and
+`set_state`, and the SQLite adapter (`infrastructure/persistence/users.py`) checks that an active
+Installation Administrator remains. This is deliberate. The adapter holds SQLite's write lock from
+that check to the write, in the same transaction, so two administrators who demote or disable each
+other at the same time are serialized: the second is checked against the first's result, and both
+cannot succeed. The rule itself stays in the domain, in `require_administrator_remains`
+(`domain/access.py`), which the adapter calls. Moving the changes onto `User` would also need an
+atomic save that succeeds only while the set of administrators is unchanged.
+
 ## Considered Options
 
 - **A household or workspace as owner.** It suits shared family calendars, but adds membership and

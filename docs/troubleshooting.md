@@ -46,7 +46,7 @@ If status answers but its verdict surprises you:
 The service writes one line per record to the container's standard error, timestamped in UTC:
 
 ```text
-2026-10-01T18:04:12Z INFO calendar_sync.application.sync_run run started rule=7f3c… run=ab12… mode=incremental reason=changes
+2026-10-01T18:04:12Z INFO calendar_sync.application.sync.sync_run run started rule=7f3c… run=ab12… mode=incremental reason=changes
 ```
 
 Follow the logs live, or read the last hour:

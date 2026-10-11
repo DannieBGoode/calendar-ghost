@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import RedirectResponse
 
-from calendar_sync.application.accounts import (
+from calendar_sync.application.sync.accounts import (
     CheckAccountAccess,
     ConnectedAccountSummary,
     DeleteConnectedAccount,
@@ -15,7 +15,7 @@ from calendar_sync.application.accounts import (
     DiscoverCalendars,
     ListConnectedAccounts,
 )
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
     AuthorizationNotConfigured,
@@ -25,9 +25,12 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     InvalidAuthorizationState,
 )
-from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
-from calendar_sync.application.ports import AccountCalendars, CalendarAccess
-from calendar_sync.application.provider_descriptors import ProviderDescriptor, ProviderDirectory
+from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.sync.ports import AccountCalendars, CalendarAccess
+from calendar_sync.application.sync.provider_descriptors import (
+    ProviderDescriptor,
+    ProviderDirectory,
+)
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.interfaces.api.dependencies import (
@@ -204,7 +207,7 @@ def complete_oauth(
     account = authorized.account
     lapses = installation.for_user(authorized.owner).lapsed_authorizations
     # The provider accepted the account when its new credentials were saved.
-    accepted_at = datetime.fromisoformat(account.authorized_at or datetime.now(UTC).isoformat())
+    accepted_at = account.authorized_at or datetime.now(UTC)
     resumed = lapses.restored(account.id, accepted_at=accepted_at) if lapses is not None else 0
     return returned.outcome("connected", account=account.id.value, resumed=resumed)
 
@@ -354,6 +357,8 @@ def _account_response(summary: ConnectedAccountSummary) -> ConnectedAccountRespo
         avatar_url=account.avatar_url,
         state=account.state.value,
         rule_count=summary.rule_count,
-        authorized_at=account.authorized_at,
-        authorization_lapsed_at=account.authorization_lapsed_at,
+        authorized_at=account.authorized_at.isoformat() if account.authorized_at else None,
+        authorization_lapsed_at=(
+            account.authorization_lapsed_at.isoformat() if account.authorization_lapsed_at else None
+        ),
     )

@@ -26,7 +26,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - Outlook is the second calendar provider, for Microsoft 365 work or school accounts and personal
   Outlook.com accounts, through Microsoft Graph v1.0
-  ([ADR 0032](docs/adr/0032-outlook-through-microsoft-graph.md)). An installation that registers a
+  ([ADR 0034](docs/adr/0034-outlook-through-microsoft-graph.md)). An installation that registers a
   Microsoft Entra application and sets `CALENDAR_SYNC_MICROSOFT_CLIENT_ID`,
   `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`, `CALENDAR_SYNC_MICROSOFT_REDIRECT_URI` (default
   `http://localhost:8000/api/v1/oauth/microsoft/callback`), and `CALENDAR_SYNC_MICROSOFT_TENANT`
@@ -39,8 +39,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   rotating its secret before it expires.
 - `httpx` and `tzdata` are runtime dependencies: `httpx` reaches Microsoft Graph and stays inside
   the Microsoft adapter, and `tzdata` maps Outlook's Windows time zone names on any host.
-- Run outcomes carry `failure_provider`, and an access check a provider refuses names it in
-  `params.provider`, so the Web UI names Google or Microsoft in each message.
+- Run outcomes and Incidents carry the Provider Kind that failed (`failure_provider`,
+  `provider`), and an access check a provider refuses names it in `params.provider`, so the Web UI
+  names Google or Microsoft in each message.
 - Migration 28 binds each OAuth state to the provider whose consent began it, so a state returned to
   another provider's callback connects nothing. Rolling back is safe.
 - An event write the destination provider cannot represent exactly is recorded as a Conflict with
@@ -153,6 +154,25 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   `?oauth=<outcome>&provider=<kind>` instead of `?google=<outcome>`.
 - The OpenAPI schemas `GoogleConfigurationResponse` and `GoogleAccountAccessResponse` are now
   `ProviderConfigurationResponse` and `AccountAccessResponse`; their JSON is unchanged.
+- Activity has a History tab and an Incidents tab, each at its own address (`/activity` and
+  `/activity/incidents`), while any Incident is kept; the Incidents tab counts the open ones.
+  Incidents list in one table, open first, each with when it opened, the rule or account, and when
+  it closed and how long it lasted, or "Still open". Selecting one opens it beside the table at
+  `/activity/incidents/<id>` with what it means or how it closed, its likely Cause, and its next
+  step. Open incidents no longer lead the History page.
+- Each Incident's next step is decided once, in the domain, from its Cause, category, and rule
+  as it is now, and the Web UI and the incident email offer the same one
+  ([ADR 0033](docs/adr/0033-decide-an-incidents-next-step-in-the-domain.md)). Before, a calendar
+  the account may no longer use sent the email to the rule while Activity offered to reauthorize.
+  The email for blocked events now opens that rule's blocked events. `GET /api/v1/incidents`
+  returns each Incident's `step`.
+- Activity lists every incident: `GET /api/v1/incidents` pages with `before`, the last incident's
+  `cursor`, the table ends in
+  "Load older incidents" while there are more, and `GET /api/v1/incidents/{incident_id}` opens an
+  incident the list does not hold.
+- An administrator's Cause in Activity's incident details names the Cause and How to fix only to
+  an administrator; anyone else reads that their calendar is not available right now, with Check
+  access, as on the Overview (ADR 0031).
 - Form fields have borders with enough contrast again: a global reset no longer overrides them.
   Midnight's primary color is calmer, so a red status draws the eye first.
 - Settings groups share the border, fill, radius, and padding of the app's other cards. "Your
@@ -203,6 +223,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Rule Details, Settings, Activity, Rules, and Overview are split into section files, and the
   activity copy into focused modules, so every frontend file and function is within the
   complexity and size bounds. The screens render the same markup.
+- The backend's use cases are grouped into one package per bounded context: synchronization,
+  identity, and operations ([ADR 0032](docs/adr/0032-bounded-contexts-as-application-packages.md)).
+  `lint-imports` fails when a context imports one above it. Behavior is unchanged, and API
+  payloads return every time Calendar Ghost stores exactly as before. Log lines from these modules carry their new logger names, such as
+  `calendar_sync.application.sync.sync_run`.
 - Large numbers are grouped.
 - An Activity entry whose action this version does not know reads "Something happened" instead of
   its raw action code, and its recorded detail moves to Technical details instead of standing in
@@ -327,6 +352,21 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- Rules that a Lapsed Authorization stopped resume even when the process stopped or failed while
+  restoring them. Before, Reauthorization could clear the lapse and leave its rules stopped, with
+  the account's Incident open, until the account was reauthorized or checked again. Each
+  scheduled pass now resumes them and resolves that Incident (ADR 0027).
+- A rule resuming after Reauthorization stays stopped when another rule's run records a new lapse
+  of the same account at that moment. Before, it could resume against the lapsed account.
+- An account's Lapsed Authorization Incident resolves once the account is authorized again, even
+  when no rule still waits for it, as after the User paused or removed the rule it stopped. Before,
+  a restoration interrupted at that point left the Incident open. Each scheduled pass now resolves
+  it.
+- A lapse that the process stopped partway is finished at the next scheduled pass: the account's
+  enabled rules stop, and its Incident opens, with one notification, if it had not opened. Before,
+  those rules kept running until their own next authorization failure, and the Incident could
+  stay unopened. Without the provider's refusal at hand, that Incident says the account's
+  authorization expired and has no Cause (ADR 0027).
 - The calendar replacement form no longer shows a rule's previous calendars after the rule
   refreshes; untouched fields follow the rule, and edits are kept.
 - The Web UI's request helper keeps headers passed as a `Headers` object.

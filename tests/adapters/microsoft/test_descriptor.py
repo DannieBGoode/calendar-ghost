@@ -1,8 +1,8 @@
-"""The Microsoft package as bootstrap composes it: one descriptor (ADR 0022, ADR 0032)."""
+"""The Microsoft package as bootstrap composes it: one descriptor (ADR 0022, ADR 0034)."""
 
 from pathlib import Path
 
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.infrastructure.microsoft.descriptor import microsoft_provider
 from calendar_sync.infrastructure.microsoft.oauth import MicrosoftClient, MicrosoftOAuthService
 from calendar_sync.infrastructure.microsoft.provider import OutlookCalendarProvider
@@ -11,7 +11,7 @@ from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAcc
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
 )
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.scheduling import SystemClock
 from calendar_sync.infrastructure.security import CredentialCipher
 

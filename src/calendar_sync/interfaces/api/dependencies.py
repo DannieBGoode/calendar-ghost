@@ -6,7 +6,7 @@ from typing import Annotated, Protocol
 
 from fastapi import Cookie, Depends, Header, Request, Response, status
 
-from calendar_sync.application.ports import (
+from calendar_sync.application.identity.ports import (
     IntegrationTokenAuthentication,
     IntegrationTokenScope,
     Sessions,

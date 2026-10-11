@@ -2,7 +2,19 @@
   "page": {
     "loading": "Loading activity",
     "title": "What your rules did",
-    "intro": "Every event a rule added, updated, removed, skipped, or blocked, and why. Events are named as each run found them."
+    "intro": "Every event a rule added, updated, removed, skipped, or blocked, and why. Events are named as each run found them.",
+    "incidentsTitle": "What needed attention",
+    "incidentsIntro": "Each incident stays open until Calendar Ghost confirms the problem is gone. Open ones need you; select one to see what it means and what to do."
+  },
+  "tabs": {
+    "label": "Activity sections",
+    "history": "History",
+    "incidents": "Incidents",
+    "openCount": {
+      "one": "{count} open",
+      "other": "{count} open"
+    },
+    "documentTitle": "Incidents – Activity"
   },
   "failure": {
     "title": "Activity is temporarily unavailable",
@@ -424,38 +436,91 @@
   },
   "incidents": {
     "title": "Incidents",
-    "intro": "Each stays open until Calendar Ghost confirms the problem is gone.",
-    "open": "Open",
-    "installation": "Installation",
-    "since": "Since {time}",
-    "lastSeen": "Last seen {time}",
-    "resolvedLabel": "Resolved incidents",
-    "hideResolved": "Hide resolved incidents",
-    "showResolved": {
-      "one": "Show {count} resolved incident",
-      "other": "Show {count} resolved incidents"
+    "caption": "Incidents, open ones first",
+    "column": {
+      "incident": "Incident",
+      "rule": "Rule or account",
+      "opened": "Opened",
+      "closed": "Closed"
     },
-    "resolved": "Resolved",
-    "opened": "Opened {time}",
-    "closed": "Closed {time}",
+    "group": {
+      "open": {
+        "one": "{count} open",
+        "other": "{count} open"
+      },
+      "openMore": {
+        "one": "{count}+ open",
+        "other": "{count}+ open"
+      },
+      "resolved": {
+        "one": "{count} resolved",
+        "other": "{count} resolved"
+      },
+      "resolvedMore": {
+        "one": "{count}+ resolved",
+        "other": "{count}+ resolved"
+      }
+    },
+    "stillOpen": "Still open",
+    "loadOlder": "Load older incidents",
+    "loadingOlder": "Loading older incidents…",
+    "status": {
+      "open": "Open",
+      "resolved": "Resolved"
+    },
+    "detail": {
+      "label": "Incident details",
+      "previous": "Previous incident",
+      "next": "Next incident",
+      "missing": "This incident no longer exists.",
+      "opened": "Opened",
+      "lastSeen": "Last seen",
+      "closed": "Closed",
+      "account": "Account",
+      "loading": "Loading this incident…"
+    },
+    "lasted": {
+      "moment": "after less than a minute",
+      "minute": {
+        "one": "after {count} minute",
+        "other": "after {count} minutes"
+      },
+      "hour": {
+        "one": "after {count} hour",
+        "other": "after {count} hours"
+      },
+      "day": {
+        "one": "after {count} day",
+        "other": "after {count} days"
+      }
+    },
+    "empty": {
+      "title": "No incidents",
+      "body": "When a problem needs your attention, it shows here until Calendar Ghost confirms it is gone."
+    },
+    "installation": "Installation",
     "guidance": {
       "accessRenewed": "Calendar access is renewed, but the rule stays stopped until it is recovered.",
       "authorization": "Nothing is written until the calendar account is reauthorized. Existing events stay where they are.",
       "stopped": "The rule is stopped and writes nothing until it is recovered.",
       "retrying": "Nothing to do now. Calendar Ghost keeps retrying and closes this after the next successful sync.",
-      "conflict": "The rest of the rule keeps syncing. This closes when a daily check finds nothing still blocked."
+      "conflict": "The rest of the rule keeps syncing. This closes when a daily check finds nothing still blocked.",
+      "administrator": "You fix this as the administrator, in {console}.",
+      "unavailable": "{Calendar} is not available to Calendar Ghost right now. To try again, choose Check access on your {account} in Settings. Events already synced stay where they are."
     },
     "action": {
       "recover": "Recover this rule",
       "reauthorize": "Reauthorize in Settings",
       "review": "Review this rule",
-      "seeBlocked": "See blocked events"
+      "seeBlocked": "See blocked events",
+      "seeActivity": "See what the rule did",
+      "checkAccess": "Check access in Settings"
     },
     "resolution": {
       "syncSucceeded": "Resolved by a successful sync.",
       "blocksCleared": "Resolved when the daily check found nothing still blocked.",
       "ruleRemoved": "Closed when the rule was removed.",
-      "accessRestored": "Resolved when the calendar provider accepted the account again."
+      "accessRestored": "Resolved when {provider} accepted the account again."
     }
   }
 }

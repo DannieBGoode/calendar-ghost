@@ -112,7 +112,7 @@ Supported providers:
 | Provider | Accounts | Through |
 | --- | --- | --- |
 | Google Calendar | Personal Google accounts and Google Workspace | Google Calendar API |
-| Outlook | Microsoft 365 work or school accounts and personal Outlook.com accounts | Microsoft Graph v1.0 ([ADR 0032](docs/adr/0032-outlook-through-microsoft-graph.md)) |
+| Outlook | Microsoft 365 work or school accounts and personal Outlook.com accounts | Microsoft Graph v1.0 ([ADR 0034](docs/adr/0034-outlook-through-microsoft-graph.md)) |
 
 A rule may read from one provider and write to the other. iCloud support is planned and shown as
 coming soon on the landing page. CalDAV and ICS feeds remain architectural possibilities, not
@@ -327,7 +327,7 @@ status, and setup for Uptime Kuma, Homepage, Claude Code, Codex, and Claude Desk
 The first run reads source events ending no earlier than 30 days before the run, with no future
 cutoff, observes the destination calendar, and records each provider's incremental position for both
 endpoints: Google's sync tokens, or for Outlook a Graph delta link and the time of the last listing
-([ADR 0032](docs/adr/0032-outlook-through-microsoft-graph.md)). Later runs consume both change feeds, so a destination-only edit or deletion is repaired
+([ADR 0034](docs/adr/0034-outlook-through-microsoft-graph.md)). Later runs consume both change feeds, so a destination-only edit or deletion is repaired
 on the next sync without repeatedly scanning every event. Both providers also report edits to
 events of any age; an unsynced single event that ended more than 30 days ago is skipped, while an
 already-synced event keeps being updated.
@@ -501,7 +501,7 @@ See [docs/development.md](docs/development.md) for architecture rules and
 AGENTS.md          Canonical project instructions for coding agents
 src/calendar_sync/
   domain/          Provider-independent entities, value objects, policies, and decisions
-  application/     Use cases and boundary protocols
+  application/     Use cases and boundary protocols, one package per bounded context
   infrastructure/  Google, Microsoft, SQLite, security, scheduling, and notification adapters
   interfaces/      FastAPI routes, the MCP server, and the compiled Web UI
   bootstrap/       Explicit dependency composition

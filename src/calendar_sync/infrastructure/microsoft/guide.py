@@ -1,10 +1,10 @@
-"""How Calendar Ghost names Microsoft and where its troubleshooting guide helps (ADR 0032)."""
+"""How Calendar Ghost names Microsoft and where its troubleshooting guide helps (ADR 0034)."""
 
 from __future__ import annotations
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.provider_descriptors import ProviderGuide
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.sync.provider_descriptors import ProviderGuide
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.causes import Cause
 
 MICROSOFT = ProviderGuide(
     ProviderKind.OUTLOOK,

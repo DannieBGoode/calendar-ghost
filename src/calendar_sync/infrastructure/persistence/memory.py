@@ -5,44 +5,33 @@ from copy import deepcopy
 from dataclasses import dataclass, field, fields, replace
 from datetime import date, datetime
 from types import TracebackType
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
-from calendar_sync.application.causes import WITHOUT_CAUSE
-from calendar_sync.application.errors import DuplicateDirectionalRelationship
-from calendar_sync.application.ports import (
-    AccountStanding,
-    AuditEntry,
+from calendar_sync.application.sync.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.sync.ports import (
     AuditRepository,
     CalendarNameRepository,
-    CauseSighting,
     ConnectedAccountRecords,
-    ConnectedAccountState,
     DiscoveredCalendar,
     EventMappingRepository,
     ExceptionReplayRepository,
-    InstallationUnitOfWork,
     OccurrenceMappingRepository,
-    OperationsOverview,
     ProviderCallCounts,
     ProviderCallRepository,
-    ProviderCallUse,
-    RecordedRule,
-    ResourceUse,
     RulePreviewRepository,
     RulePreviewSummary,
-    RuleRunOutcome,
     RuleRunOutcomeRepository,
-    RunKind,
-    ScheduledRule,
     SourceObservationRepository,
-    StatusRecords,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
 )
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
+from calendar_sync.domain.audit import AuditEntry
+from calendar_sync.domain.causes import WITHOUT_CAUSE
 from calendar_sync.domain.changes import SourceObservation
+from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEndpoint,
@@ -56,8 +45,13 @@ from calendar_sync.domain.model import (
     OccurrenceStart,
     SyncRule,
     SyncRuleId,
-    SyncRuleState,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
+
+if TYPE_CHECKING:
+    from calendar_sync.infrastructure.persistence.memory_installation import (
+        InMemoryInstallationUnitOfWorkFactory,
+    )
 
 
 @dataclass(slots=True)
@@ -129,6 +123,15 @@ class InMemoryConnectedAccountRecords:
             self._state.accounts.get(account_id) is ConnectedAccountState.CONNECTED
             and account_id not in self._state.lapsed
         )
+
+    def lapsed(self) -> dict[ConnectedAccountId, ProviderKind]:
+        # This store knows an account's provider only when a test recorded it.
+        return {
+            account: self._state.providers[account]
+            for account in sorted(self._state.lapsed, key=lambda account: account.value)
+            if self._state.accounts.get(account) is ConnectedAccountState.CONNECTED
+            and account in self._state.providers
+        }
 
     def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
         if self._state.accounts.get(account_id) is not ConnectedAccountState.DISCONNECTED:
@@ -565,9 +568,61 @@ class MemoryDatabase:
     partitions: dict[UserId, MemoryState] = field(default_factory=dict)
     disabled: set[UserId] = field(default_factory=set)
     """Users who may not sign in; the scheduler holds their rules."""
+    incidents: dict[UserId, dict[str, IncidentReport]] = field(default_factory=dict)
+    """Each User's open Incidents by key; like SQLite's, they change outside any unit of work."""
 
     def state_of(self, user_id: UserId) -> MemoryState:
         return self.partitions.setdefault(user_id, MemoryState())
+
+
+class InMemoryIncidentRepository:
+    """One User's open Incidents, as SQLite opens and resolves them; it keeps which are open,
+    not when or why they opened or resolved."""
+
+    def __init__(self, database: MemoryDatabase, user_id: UserId) -> None:
+        self._database = database
+        self._user = user_id
+
+    def open(
+        self,
+        incident: IncidentReport,
+        at: datetime,  # noqa: ARG002
+        *,
+        refresh: bool = True,
+    ) -> bool:
+        state = self._database.state_of(self._user)
+        # An account's own Incident opens only while the account is lapsed.
+        if incident.rule_id is None and incident.account_id not in state.lapsed:
+            return False
+        opened = self._open()
+        newly = incident.key not in opened
+        if newly or refresh:
+            opened[incident.key] = incident
+        return newly
+
+    def resolve(
+        self,
+        key: str,
+        at: datetime,  # noqa: ARG002
+        resolution: IncidentResolution,  # noqa: ARG002
+        *,
+        while_authorized: ConnectedAccountId | None = None,
+    ) -> None:
+        state = self._database.state_of(self._user)
+        if while_authorized is None or InMemoryConnectedAccountRecords(state).authorized(
+            while_authorized
+        ):
+            self._open().pop(key, None)
+
+    def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
+        return frozenset(
+            incident.account_id
+            for incident in self._open().values()
+            if incident.rule_id is None and incident.account_id is not None
+        )
+
+    def _open(self) -> dict[str, IncidentReport]:
+        return self._database.incidents.setdefault(self._user, {})
 
 
 @dataclass(frozen=True, slots=True)
@@ -611,6 +666,11 @@ class InMemoryUnitOfWorkFactory:
         return InMemoryUserUnitOfWorkFactory(self.database, user_id)
 
     def installation(self) -> InMemoryInstallationUnitOfWorkFactory:
+        # Imported here, since that module builds on this one's database.
+        from calendar_sync.infrastructure.persistence.memory_installation import (
+            InMemoryInstallationUnitOfWorkFactory,
+        )
+
         return InMemoryInstallationUnitOfWorkFactory(self.database)
 
 
@@ -626,140 +686,3 @@ class InMemoryUserUnitOfWorkFactory:
 
     def __call__(self) -> UnitOfWork:
         return InMemoryUnitOfWork(self.database, self.user_id)
-
-
-class InMemoryInstallationUnitOfWork:
-    def __init__(self, database: MemoryDatabase) -> None:
-        self._database = database
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> bool | None:
-        return None
-
-    def commit(self) -> None:
-        return None
-
-    def scheduled_rules(self) -> tuple[ScheduledRule, ...]:
-        return tuple(
-            ScheduledRule(owner, rule, _last_full_sync(state, rule.id))
-            for owner, state in sorted(
-                self._database.partitions.items(), key=lambda item: item[0].value
-            )
-            if owner not in self._database.disabled
-            for rule in sorted(state.rules.values(), key=lambda rule: rule.id.value)
-            if rule.state is SyncRuleState.ENABLED
-        )
-
-    def forget_change_values(self, before: datetime) -> None:
-        for state in self._database.partitions.values():
-            state.change_values_forgotten_before = before
-
-    def resource_use(self, users: Collection[UserId], since: date) -> dict[UserId, ResourceUse]:
-        return {user: _resource_use(self._database.partitions.get(user), since) for user in users}
-
-    def forget_provider_calls(self, before: date) -> None:
-        for state in self._database.partitions.values():
-            state.provider_calls = {
-                key: counts for key, counts in state.provider_calls.items() if key[1] >= before
-            }
-
-    def failure_causes(self, since: datetime) -> list[CauseSighting]:
-        """Failed runs since `since`; this store keeps no Incidents."""
-        return sorted(
-            (
-                CauseSighting(
-                    owner,
-                    outcome.failure_cause,
-                    outcome.completed_at,
-                    False,
-                    provider=outcome.failure_provider,
-                )
-                for owner, state in self._database.partitions.items()
-                for outcome in state.outcomes.values()
-                if not outcome.succeeded
-                and outcome.failure_cause is not None
-                and outcome.completed_at >= since
-            ),
-            key=lambda seen: (seen.user.value, seen.at),
-        )
-
-    def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
-        return {user: _status_records(self._database.partitions.get(user)) for user in users}
-
-
-def _resource_use(state: MemoryState | None, since: date) -> ResourceUse:
-    state = state or MemoryState()
-    calls: dict[ProviderKind, ProviderCallCounts] = {}
-    for (provider, day), counts in state.provider_calls.items():
-        if day >= since:
-            total = calls.setdefault(provider, ProviderCallCounts())
-            total.calls += counts.calls
-            total.rate_limited += counts.rate_limited
-            total.failed += counts.failed
-    return ResourceUse(
-        rules=len(state.rules),
-        connected_accounts=len(state.accounts),
-        activity_entries=len(state.audit),
-        provider_calls=tuple(
-            ProviderCallUse(provider, total.calls, total.rate_limited, total.failed)
-            for provider, total in sorted(calls.items(), key=lambda item: item[0].value)
-        ),
-    )
-
-
-def _status_records(state: MemoryState | None) -> StatusRecords:
-    """A User's records as Installation Status reads them. This store keeps no Incidents or
-    Activity blocks; an account's provider is empty unless a test recorded one."""
-    state = state or MemoryState()
-    accounts = tuple(
-        AccountStanding(
-            account.value,
-            standing.value,
-            state.providers[account].value if account in state.providers else "",
-            lapsed=standing is ConnectedAccountState.CONNECTED and account in state.lapsed,
-        )
-        for account, standing in sorted(state.accounts.items(), key=lambda item: item[0].value)
-    )
-    succeeded = [
-        outcome.last_succeeded_at
-        for (_, kind), outcome in state.outcomes.items()
-        if kind is RunKind.SYNC and outcome.last_succeeded_at is not None
-    ]
-    return StatusRecords(
-        # Rules keep the order they were added in, as a dictionary keeps its keys'.
-        rules=tuple(
-            RecordedRule(
-                rule, state.outcomes.get((rule.id, RunKind.SYNC)), state.previews.get(rule.id)
-            )
-            for rule in state.rules.values()
-        ),
-        overview=OperationsOverview(
-            connected_accounts=sum(a.state == "connected" for a in accounts),
-            disconnected_accounts=sum(a.state == "disconnected" for a in accounts),
-            open_incidents=0,
-            last_synced_at=max(succeeded).isoformat() if succeeded else None,
-            open_blocks=(),
-            accounts=accounts,
-        ),
-        incidents=(),
-    )
-
-
-def _last_full_sync(state: MemoryState, rule_id: SyncRuleId) -> datetime | None:
-    outcome = state.outcomes.get((rule_id, RunKind.SYNC))
-    return outcome.last_full_succeeded_at if outcome is not None else None
-
-
-@dataclass(frozen=True, slots=True)
-class InMemoryInstallationUnitOfWorkFactory:
-    database: MemoryDatabase
-
-    def __call__(self) -> InstallationUnitOfWork:
-        return InMemoryInstallationUnitOfWork(self.database)

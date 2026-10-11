@@ -8,14 +8,17 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from calendar_sync.application.integration_tokens import TOKEN_PREFIX, is_well_formed, token_name
-from calendar_sync.application.ports import (
-    Clock,
-    IdGenerator,
+from calendar_sync.application.identity.integration_tokens import (
+    TOKEN_PREFIX,
+    is_well_formed,
+    token_name,
+)
+from calendar_sync.application.identity.ports import (
     IntegrationTokenScope,
     IntegrationTokenSummary,
     IssuedIntegrationToken,
 )
+from calendar_sync.application.shared.ports import Clock, IdGenerator
 from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import token_hash

@@ -1,5 +1,5 @@
 """Graph events translated to Calendar Events, and Event Projections to Graph bodies, as pure
-functions on synthetic dictionaries shaped as Graph documents them (ADR 0032)."""
+functions on synthetic dictionaries shaped as Graph documents them (ADR 0034)."""
 
 import json
 from datetime import UTC, date, datetime, timedelta
@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from calendar_sync.application.errors import UnsupportedProjection
+from calendar_sync.application.sync.errors import UnsupportedProjection
 from calendar_sync.domain.model import (
     AllDayRange,
     EventId,

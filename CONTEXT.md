@@ -49,7 +49,7 @@ A calendar-service identity authorized on this installation by one User, such as
 _Avoid_: Account, user, login
 
 **Provider Kind**:
-The calendar service a Connected Account belongs to: `google` or `outlook` (a Microsoft account, whose calendars Outlook shows). It is recorded when the account is first connected and never changes. Every request about the account's calendars goes to that provider's adapter (ADR 0022, ADR 0032). The domain and application name a provider only by its Provider Kind; what a provider is called, how it connects, and how its reasons read as Causes live in its adapter's descriptor.
+The calendar service a Connected Account belongs to: `google` or `outlook` (a Microsoft account, whose calendars Outlook shows). It is recorded when the account is first connected and never changes. Every request about the account's calendars goes to that provider's adapter (ADR 0022, ADR 0034). The domain and application name a provider only by its Provider Kind; what a provider is called, how it connects, and how its reasons read as Causes live in its adapter's descriptor.
 _Avoid_: Account type, integration
 
 **Disconnected Account**:
@@ -222,11 +222,11 @@ Renewal of a connected or disconnected account's authorization after access is l
 _Avoid_: Reconnect, log in again
 
 **Incident**:
-A persistent operational condition requiring attention, such as expired authorization or identity corruption. Repeated sync attempts update one incident rather than creating duplicate alerts. An incident resolves after a successful scheduled sync, when a daily pass finds nothing still blocked, or when its rule is removed, and records which. An incident for Lapsed Authorization belongs to the Connected Account instead of one rule: it names every rule the lapse stopped, sends one notification, and resolves when the lapse clears; one that opens again starts a new episode with its own opening time. Resolved incidents are kept as evidence until their Connected Account is deleted, but Activity leads only with open ones.
+A persistent operational condition requiring attention, such as expired authorization or identity corruption. Repeated sync attempts update one incident rather than creating duplicate alerts. An incident resolves after a successful scheduled sync, when a daily pass finds nothing still blocked, or when its rule is removed, and records which. An incident for Lapsed Authorization belongs to the Connected Account instead of one rule: it names every rule the lapse stopped, sends one notification, and resolves when the lapse clears; one that opens again starts a new episode with its own opening time. Each incident has one next step, decided from its Cause, its category, and its rule as it is now: reauthorize, recover or review the rule, see its blocked events, wait, leave it to the administrator, or, once resolved, see the rule's history; the Web UI and the email offer the same one (ADR 0033). Resolved incidents are kept as evidence until their Connected Account is deleted. While any incident is kept, Activity lists them under its own Incidents tab, open ones first, and that tab counts the open ones.
 _Avoid_: Error message, failure log
 
 **Incident Notification**:
-A deduplicated notice sent when an incident opens or resolves. It goes to the User who owns the incident's rule or Connected Account, never to another User; the Web UI always retains the incident, and the User receives email too when the installation can send it, unless they turn it off. When the installation has a public address, the email links to the User's one next step for its Cause in the Web UI; the link names no calendar, account, or event. Incidents about the installation itself, such as a stalled scheduler, go to the Installation Administrators' SMTP recipient or generic JSON webhook.
+A deduplicated notice sent when an incident opens or resolves. It goes to the User who owns the incident's rule or Connected Account, never to another User; the Web UI always retains the incident, and the User receives email too when the installation can send it, unless they turn it off. When the installation has a public address, the email links to the Web UI page holding the incident's one next step; the link names no calendar, account, or event. Incidents about the installation itself, such as a stalled scheduler, go to the Installation Administrators' SMTP recipient or generic JSON webhook.
 _Avoid_: Error alert, retry notification
 
 **Installation Status**:
@@ -257,7 +257,7 @@ whose problem keeps its usual next step, said honestly as trying again. A failur
 explains, such as one inside Calendar Ghost or one its adapter concludes itself, has no Cause. A Cause says who fixes a
 failure; whether a rule retries, stops, or lapses its account still follows the failure itself
 (ADR 0031). Each provider's adapter maps its own reason codes to Causes; Microsoft never raises
-`api_disabled` or `quota_exceeded` (ADR 0032). Incidents and run outcomes record it with the
+`api_disabled` or `quota_exceeded` (ADR 0034). Incidents and run outcomes record it with the
 Provider Kind that raised it, and Installation Status shows both on each problem.
 _Avoid_: Error reason, root cause, error message
 

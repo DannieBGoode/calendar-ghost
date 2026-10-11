@@ -1,7 +1,7 @@
 import pytest
 
-from calendar_sync.application.errors import InvalidIntegrationTokenName
-from calendar_sync.application.integration_tokens import is_well_formed, token_name
+from calendar_sync.application.identity.errors import InvalidIntegrationTokenName
+from calendar_sync.application.identity.integration_tokens import is_well_formed, token_name
 
 VALID = "cgs_" + "A" * 43
 

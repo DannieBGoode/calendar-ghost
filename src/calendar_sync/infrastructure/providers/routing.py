@@ -12,14 +12,14 @@ from datetime import datetime
 from threading import Lock
 from typing import Protocol
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationNotConfigured,
     ConnectedAccountNotFound,
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.ports import (
     AccountAccess,
     AccountCalendars,
     CalendarProvider,
@@ -27,8 +27,8 @@ from calendar_sync.application.ports import (
     DiscoveredCalendar,
     ProviderChangeSet,
 )
-from calendar_sync.application.provider_descriptors import ProviderDirectory
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.sync.provider_descriptors import ProviderDirectory
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,

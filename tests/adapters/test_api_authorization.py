@@ -9,9 +9,9 @@ from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, build_container, compose
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
@@ -23,14 +23,7 @@ from calendar_sync.interfaces.api.dependencies import (
 )
 from calendar_sync.interfaces.api.dependencies import administrator as administrator_session
 from tests.helpers import NOW, rule
-from tests.users import (
-    OTHER_USER,
-    add_user,
-    administrator,
-    session_for,
-    sign_in,
-    sqlite_units,
-)
+from tests.users import OTHER_USER, add_user, administrator, session_for, sign_in, sqlite_units
 
 # AGENTS.md: only setup, sign-in, and the token-protected Invitation and Password Reset Links are
 # public under /api/, beside the session status and sign-out, which reveal or revoke nothing
@@ -240,10 +233,21 @@ def test_every_route_answers_another_users_record_as_not_found(tmp_path: Path) -
     token = adapters.integration_tokens(owner).issue("Monitor").summary.id
     with transaction(database) as connection:
         entry = str(connection.execute("SELECT MAX(id) FROM audit_entries").fetchone()[0])
+        connection.execute(
+            """
+            INSERT INTO incidents (
+                id, user_id, deduplication_key, rule_id, category, state, summary, opened_at,
+                updated_at
+            ) VALUES ('incident-1', ?, 'provider:rule-1', 'rule-1', 'temporary', 'open',
+                'Synthetic', ?, ?)
+            """,
+            (owner.value, NOW.isoformat(), NOW.isoformat()),
+        )
     records = {
         "rule_id": rule().id.value,
         "account_id": "personal-account",
         "entry_id": entry,
+        "incident_id": "incident-1",
         "token_id": token,
         "user_id": owner.value,
     }

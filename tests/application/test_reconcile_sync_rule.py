@@ -4,12 +4,13 @@ from threading import Thread
 
 import pytest
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import AuditAction, AuditOutcome, Clock, RunKind
-from calendar_sync.application.reconciliation import ReconcileSyncRule
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.reconciliation import ReconcileSyncRule
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
+from calendar_sync.domain.audit import AuditAction, AuditOutcome
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEvent,
@@ -27,6 +28,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
     TransformationPolicy,
 )
+from calendar_sync.domain.runs import RunKind
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,

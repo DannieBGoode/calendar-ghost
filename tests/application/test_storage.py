@@ -5,10 +5,14 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.errors import FileLoggingOff, InvalidActivityAge, StorageBusy
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import DatabaseUsage, LogUsage
-from calendar_sync.application.storage import StorageAdministration
+from calendar_sync.application.operations.errors import (
+    FileLoggingOff,
+    InvalidActivityAge,
+    StorageBusy,
+)
+from calendar_sync.application.operations.ports import DatabaseUsage, LogUsage
+from calendar_sync.application.operations.storage import StorageAdministration
+from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
 from tests.fake_calendar import FixedClock
 from tests.helpers import endpoint, rule

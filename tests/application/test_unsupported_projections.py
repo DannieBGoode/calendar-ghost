@@ -1,5 +1,5 @@
 """A projection the destination's provider cannot hold exactly is a Conflict for that one event,
-never an approximation, and the rest of the rule keeps synchronizing (ADR 0032)."""
+never an approximation, and the rest of the rule keeps synchronizing (ADR 0034)."""
 
 from dataclasses import replace
 from datetime import timedelta

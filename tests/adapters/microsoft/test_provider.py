@@ -1,19 +1,19 @@
 """The Outlook adapter against the fake Graph API: series kept as series, cancelled occurrences
 found by the pattern, changes followed incrementally, writes that email nobody, and refusals
-translated without Microsoft's words (ADR 0032)."""
+translated without Microsoft's words (ADR 0034)."""
 
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
     ProviderFailureKind,
     UnsupportedProjection,
 )
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEvent,

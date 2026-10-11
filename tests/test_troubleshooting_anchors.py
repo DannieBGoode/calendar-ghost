@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.installation_hints import UNRECOGNIZED_ANCHOR
-from calendar_sync.application.provider_descriptors import ProviderGuide
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.operations.installation_hints import UNRECOGNIZED_ANCHOR
+from calendar_sync.application.sync.provider_descriptors import ProviderGuide
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import calendar_providers
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.causes import Cause
 from calendar_sync.infrastructure.scheduling import SystemClock
 
 GUIDE = Path(__file__).resolve().parents[1] / "docs" / "troubleshooting.md"

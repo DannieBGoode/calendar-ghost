@@ -6,31 +6,31 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.administration import AdministratorRequired, UserNotFound
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.operator_overview import (
+from calendar_sync.application.identity.administration import AdministratorRequired, UserNotFound
+from calendar_sync.application.identity.ports import UserQuery
+from calendar_sync.application.operations.operator_overview import (
     OperatorOverview,
     OverviewQuery,
     UserStatuses,
     calendar_labels,
 )
-from calendar_sync.application.ports import (
-    CalendarAccess,
-    ConnectedAccountState,
-    DiscoveredCalendar,
+from calendar_sync.application.operations.ports import (
     InstallationUnitOfWork,
     InstallationUnitOfWorkFactory,
-    ProviderCallCounts,
     ProviderCallUse,
     ResourceUse,
-    RuleRunOutcome,
-    RunKind,
-    UserQuery,
 )
-from calendar_sync.application.providers import ProviderKind
-from calendar_sync.application.status import StatusVerdict
+from calendar_sync.application.operations.status import StatusVerdict
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import (
+    CalendarAccess,
+    DiscoveredCalendar,
+    ProviderCallCounts,
+)
 from calendar_sync.domain.access import Role, User, UserId, UserState
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.helpers import NOW, RecentSchedulerHeartbeat, endpoint, rule
 from tests.identity_fakes import MemoryUsers

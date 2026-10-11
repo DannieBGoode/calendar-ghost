@@ -6,10 +6,10 @@ from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.provider_descriptors import ProviderDirectory
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.sync.provider_descriptors import ProviderDirectory
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.infrastructure.microsoft.descriptor import microsoft_provider
 from calendar_sync.infrastructure.microsoft.oauth import MicrosoftClient
 from calendar_sync.infrastructure.oauth import OAuthClientConfig

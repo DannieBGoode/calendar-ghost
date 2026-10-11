@@ -1,12 +1,12 @@
 """Microsoft's reasons translated to Causes, read from codes only, never from message text
-(ADR 0031, ADR 0032)."""
+(ADR 0031, ADR 0034)."""
 
 import logging
 
 import pytest
 
-from calendar_sync.application.causes import Cause, CauseOwner
-from calendar_sync.application.errors import ProviderFailure
+from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.domain.causes import Cause, CauseOwner
 from calendar_sync.infrastructure.microsoft.causes import cause_of
 from calendar_sync.infrastructure.microsoft.graph import GraphRefusal, TokenRefusal
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT

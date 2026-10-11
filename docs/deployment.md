@@ -290,7 +290,7 @@ are using, without a tunnel.
 ## Microsoft (Outlook) settings
 
 Outlook calendars connect through a Microsoft Entra application the installation registers
-([self-hosting guide](self-hosting.md), [ADR 0032](adr/0032-outlook-through-microsoft-graph.md)).
+([self-hosting guide](self-hosting.md), [ADR 0034](adr/0034-outlook-through-microsoft-graph.md)).
 Without its settings, the installation behaves as before and offers no Microsoft account.
 
 - `CALENDAR_SYNC_MICROSOFT_CLIENT_ID` and `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`: the
@@ -338,10 +338,11 @@ receives another User's incidents.
 
 Set `CALENDAR_SYNC_PUBLIC_URL` to the address people open Calendar Ghost at, such as
 `https://calendar.example.com` or `http://192.168.1.50:8000`, and each email links to the page
-holding that person's next step for its Cause
-([ADR 0031](adr/0031-keep-the-providers-reason-as-a-cause.md)): their calendar connections to
-reauthorize, the rule to choose another calendar or try again, or the Overview when there is nothing
-for them to do. The link names a page and at most a rule's internal identifier, never a calendar,
+holding the incident's one next step, the same one Activity offers
+([ADR 0031](adr/0031-keep-the-providers-reason-as-a-cause.md),
+[ADR 0033](adr/0033-decide-an-incidents-next-step-in-the-domain.md)): their calendar connections to
+reauthorize, the rule to review or choose another calendar, the rule's blocked events, or the
+Overview when there is nothing for them to do. The link names a page and at most a rule's internal identifier, never a calendar,
 account, or event. Only an `http` or `https` address at the root of its host, with no path or query, is used, because
 the Web UI is served at the root of its address; otherwise email is sent without a link, as before.
 

@@ -1,4 +1,4 @@
-"""Microsoft's reasons, translated to Causes (ADR 0031, ADR 0032).
+"""Microsoft's reasons, translated to Causes (ADR 0031, ADR 0034).
 
 Only codes are read: Graph's `error.code` and every nested `innerError.code`, the most detailed
 first, and the identity platform's RFC 6749 `error` field. Microsoft says to code against these,
@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import re
 
-from calendar_sync.application.causes import Cause
+from calendar_sync.domain.causes import Cause
 from calendar_sync.infrastructure.microsoft.graph import GraphRefusal, TokenRefusal
 
 logger = logging.getLogger(__name__)

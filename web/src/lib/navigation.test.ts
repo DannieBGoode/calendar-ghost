@@ -5,6 +5,8 @@ import {
   accountSearch,
   appLocationFromPathname,
   appLocationFromUrl,
+  appPathForActivityTab,
+  appPathForIncident,
   appPathForLocation,
   appPathForPeopleTab,
   appPathForPerson,
@@ -46,6 +48,35 @@ describe("person URLs", () => {
     expect(appPathForLocation({ view: "people", ruleId: null, personId: "user 1" })).toBe("/people/user%201")
     expect(isKnownAppPath("/people/user%201")).toBe(true)
     expect(appLocationFromPathname("/people/%E0").view).toBe("overview")
+  })
+})
+
+describe("Activity tab URLs", () => {
+  it("opens Incidents at its own address, and history at /activity", () => {
+    expect(appPathForActivityTab("incidents")).toBe("/activity/incidents")
+    expect(appPathForActivityTab("history")).toBe("/activity")
+    expect(appLocationFromPathname("/activity/incidents/")).toEqual({
+      view: "activity",
+      ruleId: null,
+      activityTab: "incidents",
+    })
+    expect(appPathForLocation({ view: "activity", ruleId: null, activityTab: "incidents" })).toBe("/activity/incidents")
+    expect(isKnownAppPath("/activity/incidents")).toBe(true)
+    expect(isKnownAppPath("/activity/elsewhere")).toBe(false)
+  })
+
+  it("opens one Incident at its own address under Incidents", () => {
+    expect(appPathForIncident("incident 1")).toBe("/activity/incidents/incident%201")
+    expect(appLocationFromPathname("/activity/incidents/incident%201")).toEqual({
+      view: "activity",
+      ruleId: null,
+      activityTab: "incidents",
+      incidentId: "incident 1",
+    })
+    expect(appPathForLocation({ view: "activity", ruleId: null, activityTab: "incidents", incidentId: "a" })).toBe(
+      "/activity/incidents/a",
+    )
+    expect(isKnownAppPath("/activity/incidents/a")).toBe(true)
   })
 })
 

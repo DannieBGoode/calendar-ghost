@@ -158,6 +158,8 @@ rules out.
 
 - Domain code cannot import application, infrastructure, interfaces, or bootstrap modules.
 - Application code cannot import concrete adapters.
+- Application contexts depend only downward: `operations`, then `identity`, then `sync`, then
+  `shared` (ADR 0032).
 - Provider dictionaries are translated at the Google adapter boundary.
 - Use constructor injection and small protocols; do not introduce a dependency-injection framework.
 - In `web/src`, features compose components, components render `lib`, and `lib` imports neither;

@@ -16,14 +16,11 @@ import secrets
 from dataclasses import dataclass
 from threading import Lock
 
-from calendar_sync.application.errors import (
-    AuthorizationFailed,
-    InvalidAuthorizationState,
-    UserDisabled,
-)
-from calendar_sync.application.ports import AuthorizedAccount
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.identity.errors import UserDisabled
+from calendar_sync.application.sync.errors import AuthorizationFailed, InvalidAuthorizationState
+from calendar_sync.application.sync.ports import AuthorizedAccount
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (

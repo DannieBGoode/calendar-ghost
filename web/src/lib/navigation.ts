@@ -20,6 +20,10 @@ export function defaultSettingsTab(search: string): SettingsTab {
 export type PeopleTab = "everyone" | "invitations"
 export const DEFAULT_PEOPLE_TAB: PeopleTab = "everyone"
 
+/** Activity's tabs: what the rules did, then the Incidents that needed or need attention. */
+export type ActivityTab = "history" | "incidents"
+export const DEFAULT_ACTIVITY_TAB: ActivityTab = "history"
+
 export type AppLocation = {
   view: AppView
   ruleId: string | null
@@ -28,6 +32,10 @@ export type AppLocation = {
   personId?: string
   /** The Invitations tab of People; People opens at everyone here. */
   peopleTab?: PeopleTab
+  /** The Incidents tab of Activity; Activity opens at its history. */
+  activityTab?: ActivityTab
+  /** One Incident, open beside the Incidents table. */
+  incidentId?: string
 }
 /**
  * Changes view. A notice is announced on arrival; `createRule` opens the rule builder; `search`
@@ -75,6 +83,8 @@ const PATH_VIEWS = new Map(
 const RULE_PATH = /^\/rules\/([^/]+)$/
 const PERSON_PATH = /^\/people\/([^/]+)$/
 const INVITATIONS_PATH = "/people/invitations"
+const INCIDENTS_PATH = "/activity/incidents"
+const INCIDENT_PATH = /^\/activity\/incidents\/([^/]+)$/
 const SETTINGS_TAB_PATH = /^\/settings\/([^/]+)$/
 
 function normalize(pathname: string): string {
@@ -106,6 +116,9 @@ export function appLocationFromPathname(pathname: string): AppLocation {
   const ruleId = ruleIdFromPath(normalized)
   if (ruleId !== null) return { view: "rules", ruleId }
   if (normalized === INVITATIONS_PATH) return { view: "people", ruleId: null, peopleTab: "invitations" }
+  if (normalized === INCIDENTS_PATH) return { view: "activity", ruleId: null, activityTab: "incidents" }
+  const incidentId = idFromPath(INCIDENT_PATH, normalized)
+  if (incidentId !== null) return { view: "activity", ruleId: null, activityTab: "incidents", incidentId }
   const personId = idFromPath(PERSON_PATH, normalized)
   if (personId !== null) return { view: "people", ruleId: null, personId }
   const settingsTab = settingsTabFromPath(normalized)
@@ -141,6 +154,14 @@ export function appPathForPeopleTab(tab: PeopleTab): string {
   return tab === "invitations" ? INVITATIONS_PATH : APP_VIEW_PATHS.people
 }
 
+export function appPathForActivityTab(tab: ActivityTab): string {
+  return tab === "incidents" ? INCIDENTS_PATH : APP_VIEW_PATHS.activity
+}
+
+export function appPathForIncident(incidentId: string): string {
+  return `${INCIDENTS_PATH}/${encodeURIComponent(incidentId)}`
+}
+
 export function appPathForPerson(personId: string): string {
   return `${APP_VIEW_PATHS.people}/${encodeURIComponent(personId)}`
 }
@@ -149,10 +170,17 @@ export function appPathForSettingsTab(tab: SettingsTab): string {
   return `${APP_VIEW_PATHS.settings}/${tab}`
 }
 
+/** Activity's address: one Incident, the Incidents tab, or History. */
+function activityPathForLocation(location: AppLocation): string {
+  if (location.incidentId) return appPathForIncident(location.incidentId)
+  return appPathForActivityTab(location.activityTab ?? DEFAULT_ACTIVITY_TAB)
+}
+
 export function appPathForLocation(location: AppLocation): string {
   if (location.ruleId !== null) return appPathForRule(location.ruleId)
   if (location.view === "people" && location.personId) return appPathForPerson(location.personId)
   if (location.view === "people" && location.peopleTab) return appPathForPeopleTab(location.peopleTab)
+  if (location.view === "activity") return activityPathForLocation(location)
   if (location.view === "settings" && location.settingsTab) return appPathForSettingsTab(location.settingsTab)
   return appPathForView(location.view)
 }
@@ -161,6 +189,8 @@ export function isKnownAppPath(pathname: string): boolean {
   const normalized = normalize(pathname)
   return (
     PATH_VIEWS.has(normalized) ||
+    normalized === INCIDENTS_PATH ||
+    idFromPath(INCIDENT_PATH, normalized) !== null ||
     ruleIdFromPath(normalized) !== null ||
     idFromPath(PERSON_PATH, normalized) !== null ||
     settingsTabFromPath(normalized) !== null

@@ -30,39 +30,28 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
-from calendar_sync.application.accounts import DiscoverCalendars, ListConnectedAccounts
-from calendar_sync.application.activity import InspectActivityEvent
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.identity import SetUpInstallation
-from calendar_sync.application.installation_health import GetInstallationHealth
-from calendar_sync.application.operator_overview import OperatorOverview, UserStatuses
-from calendar_sync.application.ports import (
+from calendar_sync.application.identity.sign_in import SetUpInstallation
+from calendar_sync.application.operations.activity import InspectActivityEvent
+from calendar_sync.application.operations.installation_health import GetInstallationHealth
+from calendar_sync.application.operations.operator_overview import OperatorOverview, UserStatuses
+from calendar_sync.application.operations.ports import CauseSighting, SchedulerProgress
+from calendar_sync.application.operations.status import GetInstallationStatus
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.accounts import DiscoverCalendars, ListConnectedAccounts
+from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.ports import (
     AccountAuthorization,
     AccountCalendars,
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
     CalendarAccess,
     CalendarProvider,
-    CauseSighting,
-    Clock,
-    ConnectedAccount,
     ConnectedAccountRepository,
-    ConnectedAccountState,
     DiscoveredCalendar,
-    RecordedEvent,
-    RuleRunOutcome,
-    RunKind,
-    SchedulerProgress,
 )
-from calendar_sync.application.provider_descriptors import (
+from calendar_sync.application.sync.provider_descriptors import (
     ProviderConnection,
     ProviderDescriptor,
     ProviderDirectory,
 )
-from calendar_sync.application.providers import ProviderKind
-from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import (
     Adapters,
@@ -72,6 +61,9 @@ from calendar_sync.bootstrap.container import (
     compose,
 )
 from calendar_sync.domain.access import Role, User, UserId, UserState
+from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     AllDayRange,
@@ -90,6 +82,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TimedInterval,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteActivityQueries
@@ -360,7 +353,7 @@ def _scenario_accounts(scenario: Scenario, now: datetime) -> tuple[ConnectedAcco
         return ()
     if scenario in _EXPIRED:
         # Lapsed Authorization: still connected, but its provider no longer accepts it (ADR 0027).
-        lapsed_at = (now - timedelta(minutes=60)).isoformat()
+        lapsed_at = now - timedelta(minutes=60)
         return tuple(
             replace(account, authorization_lapsed_at=lapsed_at)
             if account.id == _lapsed_account(scenario)
@@ -552,7 +545,7 @@ def _robin_lapse(scenario: Scenario) -> ConnectedAccountId | None:
 def _robin_accounts(
     now: datetime, lapsed: ConnectedAccountId | None
 ) -> tuple[ConnectedAccount, ...]:
-    lapsed_at = (now - timedelta(minutes=50)).isoformat()
+    lapsed_at = now - timedelta(minutes=50)
     return tuple(
         ConnectedAccount(
             account,
@@ -599,7 +592,7 @@ def _seed_robin(adapters: Adapters, path: Path, now: datetime, scenario: Scenari
                     account.state.value,
                     authorized,
                     authorized,
-                    account.authorization_lapsed_at,
+                    _stored_time(account.authorization_lapsed_at),
                 )
                 for account in _robin_accounts(now, lapsed)
             ],
@@ -799,6 +792,11 @@ def _preview_change(found: CalendarEvent, seeded: SeededEntry) -> SourceChange |
     return SourceChange.between(before, after)
 
 
+def _stored_time(value: datetime | None) -> str | None:
+    """A time as SQLite stores it."""
+    return value.isoformat() if value else None
+
+
 def _authorized_at(scenario: Scenario, now: datetime) -> str:
     """When Sam last authorized their accounts: a week before the lapse Testing mode causes."""
     if scenario is Scenario.ACCESS_REVOKED:
@@ -835,7 +833,7 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
                     account.state.value,
                     _authorized_at(scenario, now),
                     _authorized_at(scenario, now),
-                    account.authorization_lapsed_at,
+                    _stored_time(account.authorization_lapsed_at),
                 )
                 for account in _scenario_accounts(scenario, now)
             ],

@@ -8,28 +8,28 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from itertools import zip_longest
 
-from calendar_sync.application.errors import (
-    ProviderFailure,
-    ProviderFailureKind,
-    RuleNotExecutable,
-)
-from calendar_sync.application.health import RunHealth
-from calendar_sync.application.installation_health import (
+from calendar_sync.application.operations.installation_health import (
     InstallationIncidentKind,
     InstallationNotifications,
     installation_incidents,
 )
-from calendar_sync.application.ports import (
-    Clock,
+from calendar_sync.application.operations.ports import (
     InstallationUnitOfWorkFactory,
-    ScheduledRule,
     SchedulerHeartbeat,
     SchedulerProgress,
 )
-from calendar_sync.application.resource_use import first_counted_day
-from calendar_sync.application.retry import with_retries
-from calendar_sync.application.sync_run import SOURCE_CHANGE_RETENTION
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import (
+    ProviderFailure,
+    ProviderFailureKind,
+    RuleNotExecutable,
+)
+from calendar_sync.application.sync.health import RunHealth
+from calendar_sync.application.sync.ports import ScheduledRule
+from calendar_sync.application.sync.resource_use import first_counted_day
+from calendar_sync.application.sync.retry import with_retries
+from calendar_sync.application.sync.sync_run import SOURCE_CHANGE_RETENTION
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRule
 
@@ -118,6 +118,9 @@ class SyncScheduler:
             installation.forget_change_values(now - SOURCE_CHANGE_RETENTION)
             installation.forget_provider_calls(first_counted_day(today))
             installation.commit()
+            # Before listing the pass's rules, so a rule resumed here runs in this same pass.
+            for owner in installation.users_with_unfinished_lapses():
+                await asyncio.to_thread(self._finish_lapses, owner)
             # Each rule's daily full pass is due from its own last one, so a restart or another
             # rule's failure never re-lists calendars that already completed today's pass.
             due = tuple(
@@ -134,6 +137,15 @@ class SyncScheduler:
 
         await asyncio.gather(*(run(scheduled, full) for scheduled, full in due))
         return frozenset(scheduled.rule.id.value for scheduled, _ in due)
+
+    def _finish_lapses(self, owner: UserId) -> None:
+        """Finish what an interrupted lapse or restoration left; a failure waits for a pass."""
+        try:
+            self._services_for(owner).health.finish_interrupted_lapses()
+        except Exception:
+            logger.exception(
+                "Finishing an interrupted lapse or restoration failed; trying again next pass"
+            )
 
     def _execute_with_retry(self, scheduled: ScheduledRule, full: bool = False) -> bool:
         rule = scheduled.rule

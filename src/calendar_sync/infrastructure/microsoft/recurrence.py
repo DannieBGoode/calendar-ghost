@@ -2,7 +2,7 @@
 
 A Graph `patternedRecurrence` has one value where iCalendar allows lists, so every Graph pattern
 has an exact iCalendar line, while many iCalendar rules have no Graph pattern. Those raise
-UnsupportedRecurrence and are never approximated (ADR 0032).
+UnsupportedRecurrence and are never approximated (ADR 0034).
 """
 
 from __future__ import annotations

@@ -896,6 +896,10 @@
             ],
             "title": "Cause"
           },
+          "cursor": {
+            "title": "Cursor",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -913,6 +917,17 @@
           "opened_at": {
             "title": "Opened At",
             "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
           },
           "resolution": {
             "anyOf": [
@@ -961,6 +976,26 @@
             "title": "State",
             "type": "string"
           },
+          "step": {
+            "anyOf": [
+              {
+                "enum": [
+                  "reauthorize",
+                  "recover_rule",
+                  "review_rule",
+                  "see_blocked",
+                  "wait",
+                  "administrator",
+                  "see_history"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
           "summary": {
             "title": "Summary",
             "type": "string"
@@ -982,7 +1017,10 @@
           "resolution",
           "account_id",
           "message",
-          "cause"
+          "cause",
+          "step",
+          "provider",
+          "cursor"
         ],
         "title": "IncidentResponse",
         "type": "object"
@@ -4548,8 +4586,26 @@
     },
     "/api/v1/incidents": {
       "get": {
+        "description": "One page of incidents, open ones first; `before` is the `cursor` of the last incident of\nthe page before, so the next page goes on where that one stood though it changed since.",
         "operationId": "list_incidents_api_v1_incidents_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
           {
             "in": "cookie",
             "name": "calendar_sync_session",
@@ -4594,6 +4650,61 @@
           }
         },
         "summary": "List Incidents"
+      }
+    },
+    "/api/v1/incidents/{incident_id}": {
+      "get": {
+        "operationId": "get_incident_api_v1_incidents__incident_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Incident"
       }
     },
     "/api/v1/installation/health": {

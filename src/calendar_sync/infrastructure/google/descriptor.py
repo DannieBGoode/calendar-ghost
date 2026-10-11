@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from calendar_sync.application.ports import Clock
-from calendar_sync.application.provider_descriptors import ProviderConnection, ProviderDescriptor
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.provider_descriptors import (
+    ProviderConnection,
+    ProviderDescriptor,
+)
 from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider

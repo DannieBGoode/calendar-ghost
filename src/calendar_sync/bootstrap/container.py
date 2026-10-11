@@ -5,19 +5,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from urllib.parse import urlsplit
 
-from calendar_sync.application.accounts import (
-    CheckAccountAccess,
-    DeleteConnectedAccount,
-    DisconnectConnectedAccount,
-    DiscoverCalendars,
-    ListConnectedAccounts,
-)
-from calendar_sync.application.activity import (
-    ActivityQueries,
-    InspectActivityEvent,
-    OperationsQueries,
-)
-from calendar_sync.application.administration import (
+from calendar_sync.application.identity.administration import (
     AcceptInvitation,
     ChangeRole,
     ChangeUserState,
@@ -36,53 +24,70 @@ from calendar_sync.application.administration import (
     ShowOwnAccountDeletion,
     ShowRegistration,
 )
-from calendar_sync.application.health import RuleHealth
-from calendar_sync.application.identity import (
+from calendar_sync.application.identity.ports import (
+    IntegrationTokenAuthentication,
+    IntegrationTokens,
+    Invitations,
+    PasswordHasher,
+    PasswordResetLinks,
+    RegistrationSettings,
+    Sessions,
+    SignInThrottle,
+    UserDirectory,
+)
+from calendar_sync.application.identity.sign_in import (
     ChangeOwnPassword,
     SetNotificationEmail,
     SetOwnEmail,
     SetUpInstallation,
     SignIn,
 )
-from calendar_sync.application.installation_health import (
+from calendar_sync.application.operations.activity import (
+    ActivityQueries,
+    InspectActivityEvent,
+    OperationsQueries,
+)
+from calendar_sync.application.operations.installation_health import (
     GetInstallationHealth,
     InstallationNotifications,
 )
-from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.operator_overview import OperatorOverview, UserStatuses
-from calendar_sync.application.ports import (
+from calendar_sync.application.operations.operator_overview import OperatorOverview, UserStatuses
+from calendar_sync.application.operations.ports import (
+    CauseSighting,
+    DatabaseStorage,
+    InstallationUnitOfWorkFactory,
+    LogFiles,
+    SchedulerHeartbeat,
+)
+from calendar_sync.application.operations.status import GetInstallationStatus
+from calendar_sync.application.operations.storage import StorageAdministration
+from calendar_sync.application.shared.ports import Clock, IdGenerator
+from calendar_sync.application.sync.accounts import (
+    CheckAccountAccess,
+    DeleteConnectedAccount,
+    DisconnectConnectedAccount,
+    DiscoverCalendars,
+    ListConnectedAccounts,
+)
+from calendar_sync.application.sync.health import RuleHealth
+from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import (
     AccountCalendars,
     CalendarProvider,
-    CauseSighting,
-    Clock,
     ConnectedAccountRepository,
-    DatabaseStorage,
-    IdGenerator,
     IncidentNotifications,
     IncidentRepository,
-    InstallationUnitOfWorkFactory,
-    IntegrationTokenAuthentication,
-    IntegrationTokens,
-    Invitations,
-    LogFiles,
-    PasswordHasher,
-    PasswordResetLinks,
     ProviderCallStats,
-    RegistrationSettings,
     RuleHealthRecords,
     RunIdGenerator,
-    SchedulerHeartbeat,
-    Sessions,
-    SignInThrottle,
     UnitOfWorkFactory,
-    UserDirectory,
 )
-from calendar_sync.application.preview import PreviewSyncRule
-from calendar_sync.application.provider_descriptors import ProviderDirectory
-from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
-from calendar_sync.application.removal import RemoveSyncRule
-from calendar_sync.application.rules import (
+from calendar_sync.application.sync.preview import PreviewSyncRule
+from calendar_sync.application.sync.provider_descriptors import ProviderDirectory
+from calendar_sync.application.sync.reconciliation import ReconcileNow, ReconcileSyncRule
+from calendar_sync.application.sync.removal import RemoveSyncRule
+from calendar_sync.application.sync.rules import (
     ChangeSyncRulePolicy,
     CreateDraftSyncRule,
     CreateSyncRule,
@@ -92,10 +97,8 @@ from calendar_sync.application.rules import (
     PauseSyncRule,
     ReplaceSyncRuleCalendars,
 )
-from calendar_sync.application.run_log import UntalliedProviderCalls
-from calendar_sync.application.status import GetInstallationStatus
-from calendar_sync.application.storage import StorageAdministration
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.run_log import UntalliedProviderCalls
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.logs import configure_logging
 from calendar_sync.domain.access import UserId
@@ -125,23 +128,21 @@ from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteActivityQueries,
     SqliteOperationsQueries,
 )
-from calendar_sync.infrastructure.persistence.authorization_states import (
-    SqliteAuthorizationStates,
-)
+from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.persistence.health import (
     SqliteIncidentRepository,
     SqliteRuleHealthRecords,
 )
+from calendar_sync.infrastructure.persistence.installation import (
+    SqliteInstallationUnitOfWorkFactory,
+)
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.registration import (
     SqliteInvitations,
     SqlitePasswordResetLinks,
     SqliteRegistrationSettings,
 )
-from calendar_sync.infrastructure.persistence.sqlite import (
-    SqliteInstallationUnitOfWorkFactory,
-    SqliteUnitOfWorkFactory,
-    initialize_database,
-)
+from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.storage import SqliteStorage
 from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats

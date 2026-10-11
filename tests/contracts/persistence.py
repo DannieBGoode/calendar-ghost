@@ -12,30 +12,29 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.errors import DuplicateDirectionalRelationship
-from calendar_sync.application.ports import (
+from calendar_sync.application.operations.ports import (
     AccountStanding,
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
-    CalendarAccess,
     CauseSighting,
-    ConnectedAccountState,
-    DiscoveredCalendar,
     InstallationUnitOfWorkFactory,
-    ProviderCallCounts,
     ProviderCallUse,
     RecordedRule,
+)
+from calendar_sync.application.sync.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.sync.ports import (
+    CalendarAccess,
+    DiscoveredCalendar,
+    IncidentRepository,
+    ProviderCallCounts,
     RulePreviewSummary,
-    RuleRunOutcome,
-    RunKind,
     UnitOfWork,
     UnitOfWorkFactory,
 )
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.changes import SourceObservation
+from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarId,
@@ -53,6 +52,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TimedInterval,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from tests.helpers import NOW, endpoint, rule, week_start
 from tests.users import OTHER_USER, USER
 
@@ -62,6 +62,7 @@ OTHER_RULE = replace(
 )
 """Sorts before RULE, so listing order is by identifier rather than by insertion."""
 ACCOUNT = ConnectedAccountId("personal-account")
+THEIR_ACCOUNT = ConnectedAccountId("their-account")
 THEIR_SOURCE = endpoint("their-personal-account", "personal-calendar")
 THEIR_DESTINATION = endpoint("their-work-account", "work-calendar")
 """Another User's calendars, with the same calendar identifiers as RULE's."""
@@ -81,6 +82,8 @@ class PersistenceHarness:
     """What this storage raises for a record whose parent does not exist or is taken."""
     installation: InstallationUnitOfWorkFactory
     """Units of work across every User, as the scheduler and the Operator Overview read them."""
+    incidents: Callable[[UserId], IncidentRepository]
+    """Each User's Incidents, which open and resolve outside any unit of work."""
 
     @property
     def unit_of_work(self) -> UnitOfWorkFactory:
@@ -123,6 +126,25 @@ def _observation(ends_at: datetime = NOW, recurrence: tuple[str, ...] = ()) -> S
         time=TimedInterval(ends_at - timedelta(hours=1), ends_at),
         recurrence=recurrence,
     )
+
+
+def _account_incident(account_id: ConnectedAccountId) -> IncidentReport:
+    """The Incident an account's Lapsed Authorization opens."""
+    return IncidentReport(
+        f"authorization:{account_id.value}",
+        None,
+        "authentication",
+        "Authorization for Google Calendar expired",
+        account_id=account_id,
+    )
+
+
+def _lapse(harness: PersistenceHarness, account_id: ConnectedAccountId, user: UserId) -> None:
+    """Lapse the account and open its Incident, as a refused request does."""
+    with harness.units(user)() as uow:
+        assert uow.accounts.lapse(account_id, attempted_at=NOW)
+        uow.commit()
+    assert harness.incidents(user).open(_account_incident(account_id), NOW)
 
 
 def _calendar(calendar_id: str, name: str) -> DiscoveredCalendar:
@@ -549,6 +571,56 @@ class PersistenceContract:
             CauseSighting(USER, Cause.API_DISABLED, NOW, False, provider=ProviderKind.GOOGLE)
         ]
 
+    def test_users_with_unfinished_lapses_have_a_rule_a_lapse_alone_stopped(
+        self, harness: PersistenceHarness
+    ) -> None:
+        theirs = replace(
+            RULE, id=SyncRuleId("their-rule"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
+        )
+        for account in (THEIR_SOURCE, THEIR_DESTINATION):
+            harness.connect_account(account.connected_account_id, OTHER_USER)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE.degrade(awaiting_reauthorization=True))
+            uow.rules.add(OTHER_RULE)
+            uow.commit()
+        with harness.units(OTHER_USER)() as uow:
+            # Stopped for another reason, so recovering needs a preview, not an account.
+            uow.rules.add(theirs.degrade())
+            uow.commit()
+
+        with harness.installation() as installation:
+            unfinished = list(installation.users_with_unfinished_lapses())
+        harness.disable(USER)
+        with harness.installation() as installation:
+            while_disabled = list(installation.users_with_unfinished_lapses())
+
+        assert (unfinished, while_disabled) == ([USER], [])
+
+    def test_users_with_unfinished_lapses_have_an_authorized_account_with_its_incident_open(
+        self, harness: PersistenceHarness
+    ) -> None:
+        harness.connect_account(ACCOUNT)
+        harness.connect_account(THEIR_ACCOUNT, OTHER_USER)
+        _lapse(harness, ACCOUNT, USER)
+        # Still lapsed, so its open Incident is no unfinished restoration.
+        _lapse(harness, THEIR_ACCOUNT, OTHER_USER)
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.clear_lapse(ACCOUNT, requested_before=NOW)
+            uow.commit()
+
+        with harness.installation() as installation:
+            unfinished = list(installation.users_with_unfinished_lapses())
+        harness.incidents(USER).resolve(
+            _account_incident(ACCOUNT).key,
+            NOW,
+            IncidentResolution.ACCESS_RESTORED,
+            while_authorized=ACCOUNT,
+        )
+        with harness.installation() as installation:
+            once_resolved = list(installation.users_with_unfinished_lapses())
+
+        assert (unfinished, once_resolved) == ([USER], [])
+
     def test_a_local_failure_has_no_cause_and_suggests_nothing(
         self, harness: PersistenceHarness
     ) -> None:
@@ -664,6 +736,115 @@ class PersistenceContract:
             assert not uow.accounts.lapse(missing, attempted_at=NOW)
             assert not uow.accounts.authorized(ACCOUNT)
             assert not uow.accounts.authorized(missing)
+
+    def test_users_with_unfinished_lapses_have_a_lapsed_account_with_a_rule_still_enabled(
+        self, harness: PersistenceHarness
+    ) -> None:
+        for account in RULE.source, RULE.destination:
+            harness.connect_account(account.connected_account_id)
+        harness.connect_account(THEIR_ACCOUNT, OTHER_USER)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.commit()
+        _lapse(harness, ACCOUNT, USER)
+        # Lapsed with its Incident open and no rule enabled: nothing is left to finish.
+        _lapse(harness, THEIR_ACCOUNT, OTHER_USER)
+
+        with harness.installation() as installation:
+            unfinished = list(installation.users_with_unfinished_lapses())
+        with harness.unit_of_work() as uow:
+            uow.rules.save(RULE.pause())
+            uow.commit()
+        with harness.installation() as installation:
+            once_paused = list(installation.users_with_unfinished_lapses())
+
+        assert (unfinished, once_paused) == ([USER], [])
+
+    def test_users_with_unfinished_lapses_have_a_lapsed_account_without_its_incident(
+        self, harness: PersistenceHarness
+    ) -> None:
+        harness.connect_account(ACCOUNT)
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.lapse(ACCOUNT, attempted_at=NOW)
+            uow.commit()
+
+        with harness.installation() as installation:
+            unfinished = list(installation.users_with_unfinished_lapses())
+        assert harness.incidents(USER).open(_account_incident(ACCOUNT), NOW, refresh=False)
+        with harness.installation() as installation:
+            once_opened = list(installation.users_with_unfinished_lapses())
+
+        assert (unfinished, once_opened) == ([USER], [])
+
+    def test_an_open_incident_opened_without_refreshing_is_not_opened_again(
+        self, harness: PersistenceHarness
+    ) -> None:
+        harness.connect_account(ACCOUNT)
+        _lapse(harness, ACCOUNT, USER)
+        incidents = harness.incidents(USER)
+
+        assert not incidents.open(_account_incident(ACCOUNT), NOW, refresh=False)
+        assert incidents.accounts_with_open_incidents() == {ACCOUNT}
+
+    def test_lapsed_accounts_are_the_connected_ones_whose_authorization_lapsed(
+        self, harness: PersistenceHarness
+    ) -> None:
+        disconnected = ConnectedAccountId("work-account")
+        for account in ACCOUNT, disconnected:
+            harness.connect_account(account)
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.lapsed() == {}
+            for account in ACCOUNT, disconnected:
+                assert uow.accounts.lapse(account, attempted_at=NOW)
+            uow.commit()
+        harness.disconnect_account(disconnected)
+
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.lapsed() == {ACCOUNT: ProviderKind.GOOGLE}
+        with harness.units(OTHER_USER)() as uow:
+            assert uow.accounts.lapsed() == {}
+
+    def test_an_accounts_incident_opens_only_while_the_account_is_lapsed(
+        self, harness: PersistenceHarness
+    ) -> None:
+        harness.connect_account(ACCOUNT)
+        incidents = harness.incidents(USER)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.commit()
+
+        assert not incidents.open(_account_incident(ACCOUNT), NOW)
+        # A rule's Incident is not its account's, even when it names the account.
+        rules = IncidentReport("provider:rule-1", RULE.id, "temporary", "x", account_id=ACCOUNT)
+        assert incidents.open(rules, NOW)
+        assert incidents.accounts_with_open_incidents() == frozenset()
+        _lapse(harness, ACCOUNT, USER)
+
+        assert not incidents.open(_account_incident(ACCOUNT), NOW)
+        assert incidents.accounts_with_open_incidents() == {ACCOUNT}
+        assert harness.incidents(OTHER_USER).accounts_with_open_incidents() == frozenset()
+
+    def test_an_accounts_incident_resolves_only_while_the_account_is_authorized(
+        self, harness: PersistenceHarness
+    ) -> None:
+        harness.connect_account(ACCOUNT)
+        incidents = harness.incidents(USER)
+        key = _account_incident(ACCOUNT).key
+        _lapse(harness, ACCOUNT, USER)
+
+        incidents.resolve(key, NOW, IncidentResolution.ACCESS_RESTORED, while_authorized=ACCOUNT)
+        while_lapsed = incidents.accounts_with_open_incidents()
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.clear_lapse(ACCOUNT, requested_before=NOW)
+            uow.commit()
+        incidents.resolve(key, NOW, IncidentResolution.ACCESS_RESTORED, while_authorized=ACCOUNT)
+
+        assert (while_lapsed, incidents.accounts_with_open_incidents()) == (
+            frozenset({ACCOUNT}),
+            frozenset(),
+        )
+        # A new lapse opens it again, as a new episode.
+        _lapse(harness, ACCOUNT, USER)
 
     def test_calendar_names_belong_to_an_existing_account_and_go_with_it(
         self, harness: PersistenceHarness
@@ -991,7 +1172,7 @@ class PersistenceContract:
             AccountStanding("work-account", "disconnected", "google"),
         )
         assert (mine.connected_accounts, mine.disconnected_accounts) == (1, 1)
-        assert mine.last_synced_at == NOW.isoformat()
+        assert mine.last_synced_at == NOW
         assert theirs.accounts == (
             AccountStanding("their-personal-account", "connected", "google"),
         )

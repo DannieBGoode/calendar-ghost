@@ -1,4 +1,4 @@
-"""Graph events and Calendar Events, translated both ways by pure functions (ADR 0032).
+"""Graph events and Calendar Events, translated both ways by pure functions (ADR 0034).
 
 Raw Graph dictionaries never leave the Microsoft package: the adapter reads them through these
 functions and writes the bodies they build. Every read asks for UTC times and text bodies.
@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from calendar_sync.application.errors import UnsupportedProjection
+from calendar_sync.application.sync.errors import UnsupportedProjection
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEndpoint,
@@ -46,7 +46,7 @@ from calendar_sync.infrastructure.microsoft.recurrence import (
 )
 from calendar_sync.infrastructure.microsoft.zones import iana_zone, windows_zone
 
-# Calendar Ghost's own namespace for single-value extended properties (ADR 0032).
+# Calendar Ghost's own namespace for single-value extended properties (ADR 0034).
 NAMESPACE = "{8EF42533-0AD0-4C67-A411-7FD5CF9F109E}"
 RULE_PROPERTY = f"String {NAMESPACE} Name CalendarGhostRule"
 OPERATION_PROPERTY = f"String {NAMESPACE} Name CalendarGhostOperation"
@@ -182,7 +182,7 @@ def _recurrence(item: Mapping[str, Any]) -> tuple[Recurrence | None, str | None]
     if written is not None:
         return written
     if zone is None and not item.get("isAllDay"):
-        # Legacy custom zones have no IANA name; the series reads in UTC (ADR 0032).
+        # Legacy custom zones have no IANA name; the series reads in UTC (ADR 0034).
         logger.warning("series in an unrecognized time zone reads in UTC event=%s", item.get("id"))
     return Recurrence(to_ical(rule, _local_start(item, zone))), zone
 
@@ -498,7 +498,7 @@ def format_occurrence_start(value: OccurrenceStart) -> str:
 
 def _content(projection: EventProjection) -> Json:
     """What a projection shows, and the settings that keep it from ever emailing anyone: no
-    attendees, no online meeting, no response requested (ADR 0032)."""
+    attendees, no online meeting, no response requested (ADR 0034)."""
     body: Json = {
         "subject": projection.title,
         "body": {"contentType": "text", "content": projection.description},

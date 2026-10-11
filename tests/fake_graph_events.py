@@ -1,4 +1,4 @@
-"""Events in fake Graph mailboxes, served as Graph v1.0 documents them (ADR 0032).
+"""Events in fake Graph mailboxes, served as Graph v1.0 documents them (ADR 0034).
 
 Single events and series masters are stored as written. A series expands, in its own zone, into
 occurrences; an occurrence patched becomes an exception, and one deleted is cancelled and is no
@@ -206,7 +206,7 @@ class FakeGraphEvents:
         if "start" in body and not self._between_neighbours(series, day, _utc(body["start"])):
             return _error(400, "ErrorOccurrenceCrossingBoundary")
         series.exceptions[day] = {**series.exceptions.get(day, {}), **body}
-        # Outlook changes the master when one of its occurrences changes (ADR 0032, item 2).
+        # Outlook changes the master when one of its occurrences changes (ADR 0034, item 2).
         self._touch(series)
         self._changed(mailbox, calendar, event_id, series=series.id)
         return httpx.Response(200, json=self._instance(series, day, expand=False))

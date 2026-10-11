@@ -8,22 +8,24 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Cookie, Depends, Response, status
 
-from calendar_sync.application.administration import (
+from calendar_sync.application.identity.administration import (
     DeleteOwnAccount,
     ShowOwnAccountDeletion,
     UserDeletionInterrupted,
 )
-from calendar_sync.application.errors import (
+from calendar_sync.application.identity.errors import (
     EmailTaken,
     IncorrectPassword,
     PasswordPolicyViolation,
-    RemovalRequiresAuthorization,
-    RemovalRequiresProvider,
 )
-from calendar_sync.application.identity import (
+from calendar_sync.application.identity.sign_in import (
     ChangeOwnPassword,
     SetNotificationEmail,
     SetOwnEmail,
+)
+from calendar_sync.application.sync.errors import (
+    RemovalRequiresAuthorization,
+    RemovalRequiresProvider,
 )
 from calendar_sync.domain.access import InvalidEmail, LastAdministrator, User, UserId
 from calendar_sync.domain.model import ProjectionHandling

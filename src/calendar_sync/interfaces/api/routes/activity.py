@@ -5,7 +5,7 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, Query, status
 
-from calendar_sync.application.activity import (
+from calendar_sync.application.operations.activity import (
     ActivityCategory,
     ActivityEntry,
     ActivityEvent,
@@ -16,13 +16,13 @@ from calendar_sync.application.activity import (
     InspectActivityEvent,
     RecordedTime,
 )
-from calendar_sync.application.errors import (
+from calendar_sync.application.operations.errors import (
     ActivityEventNotFound,
     ActivityRuleRemoved,
     EventInspectionUnavailable,
-    ProviderFailure,
 )
-from calendar_sync.application.status import GetInstallationStatus
+from calendar_sync.application.operations.status import GetInstallationStatus
+from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.domain.model import CalendarEvent, EventStatus, TimedInterval
 from calendar_sync.interfaces.api.dependencies import current_user, user_services
 from calendar_sync.interfaces.api.problems import ApiProblem, failure_params, problem
@@ -74,7 +74,7 @@ def dashboard(services: Services) -> DashboardResponse:
         enabled_rules=summary.enabled_rules,
         stopped_rules=summary.stopped_rules,
         open_incidents=summary.open_incidents,
-        last_synced_at=summary.last_synced_at,
+        last_synced_at=summary.last_synced_at.isoformat() if summary.last_synced_at else None,
         blocked_events=summary.blocked_events,
         blocked_entry_id=summary.blocked_entry_id,
         blocked_rule_id=summary.blocked_rule_id,

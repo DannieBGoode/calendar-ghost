@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.errors import AuthorizationFailed, InvalidAuthorizationState
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.sync.errors import AuthorizationFailed, InvalidAuthorizationState
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.oauth import (
     OAuthClientConfig,
@@ -22,7 +22,7 @@ from calendar_sync.infrastructure.oauth import (
 )
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.users import OTHER_USER, USER, add_user
 

@@ -4,7 +4,7 @@ The authorization code flow with PKCE runs against the identity platform's v2.0 
 tenant the installation chose (`common` admits personal and work or school accounts), on the
 neutral OAuth mechanics: a single-use state bound to the signed-in, active User and to this
 provider. Scopes are least-privilege and need no administrator's consent. Microsoft rotates the
-refresh token on every use, so each refresh keeps the new one (ADR 0032).
+refresh token on every use, so each refresh keeps the new one (ADR 0034).
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from urllib.parse import urlencode
 
 import httpx
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.errors import (
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
     AuthorizationNotConfigured,
@@ -30,15 +30,15 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     ProviderFailureKind,
 )
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.ports import (
     AccountAccess,
     AuthorizedAccount,
     CalendarAccess,
-    Clock,
     DiscoveredCalendar,
 )
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.microsoft.causes import cause_of
 from calendar_sync.infrastructure.microsoft.graph import (
@@ -321,7 +321,7 @@ def _grants_calendars(scope: object) -> bool:
 
 def _account_address(me: Mapping[str, Any], id_token: object) -> str | None:
     """The account's address: Graph's `mail`, else its sign-in name, else the ID token's.
-    Microsoft documents these as display values that may change (ADR 0032)."""
+    Microsoft documents these as display values that may change (ADR 0034)."""
     claims = _claims(id_token)
     for candidate in (
         me.get("mail"),

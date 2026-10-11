@@ -16,7 +16,7 @@ PACKAGE = Path(__file__).resolve().parents[1] / "src" / "calendar_sync"
 CORE = ("domain", "application", "interfaces")
 ADAPTER_PACKAGES = ("infrastructure/google", "infrastructure/microsoft")
 # ProviderKind's own definition, and the routes kept so earlier clients keep working.
-NAMING_ALLOWED = {"application/providers.py", "interfaces/api/routes/compatibility.py"}
+NAMING_ALLOWED = {"domain/accounts.py", "interfaces/api/routes/compatibility.py"}
 PROVIDER_NAMES = re.compile(
     r"google|gmail|microsoft|outlook|office ?365|entra|azure|aadsts|graph\.microsoft|icloud",
     re.IGNORECASE,
@@ -49,7 +49,7 @@ def _outside_adapters() -> list[Path]:
         module
         for module in _modules(".")
         if not _relative(module).startswith(ADAPTER_PACKAGES)
-        and _relative(module) != "application/providers.py"
+        and _relative(module) != "domain/accounts.py"
     ]
 
 

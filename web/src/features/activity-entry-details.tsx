@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query"
-import { ChevronDown, ChevronUp, ExternalLink, Repeat, X } from "lucide-react"
+import { ExternalLink, Repeat } from "lucide-react"
 import { useEffect, useRef, type KeyboardEvent, type RefObject } from "react"
 
 import { EventWhen } from "@/components/activity-event"
+import { DetailToolbar } from "@/components/detail-toolbar"
 import { Button } from "@/components/ui/button"
 import { HappenedLabel, RuleDirection } from "@/features/activity-labels"
 import { useI18n } from "@/i18n/provider"
@@ -46,19 +47,12 @@ export function ActivityDetail({
     if (event.key === "Escape") onClose()
   }
   const toolbar = (
-    <div className="activity-detail-bar">
-      <Button variant="ghost" size="sm" onClick={onClose}>
-        <X aria-hidden="true" /> {t("activity.detail.close")}
-      </Button>
-      <div className="activity-detail-steps">
-        <Button variant="ghost" size="sm" onClick={onNewer} disabled={!onNewer} aria-label={t("activity.detail.newer")}>
-          <ChevronUp aria-hidden="true" />
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onOlder} disabled={!onOlder} aria-label={t("activity.detail.older")}>
-          <ChevronDown aria-hidden="true" />
-        </Button>
-      </div>
-    </div>
+    <DetailToolbar
+      labels={{ close: t("activity.detail.close"), previous: t("activity.detail.newer"), next: t("activity.detail.older") }}
+      onClose={onClose}
+      onPrevious={onNewer}
+      onNext={onOlder}
+    />
   )
 
   if (!entry) {

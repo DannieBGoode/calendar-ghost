@@ -1,11 +1,14 @@
-"""The Microsoft package as bootstrap composes it: one descriptor (ADR 0022, ADR 0032)."""
+"""The Microsoft package as bootstrap composes it: one descriptor (ADR 0022, ADR 0034)."""
 
 from __future__ import annotations
 
 import httpx
 
-from calendar_sync.application.ports import Clock
-from calendar_sync.application.provider_descriptors import ProviderConnection, ProviderDescriptor
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.provider_descriptors import (
+    ProviderConnection,
+    ProviderDescriptor,
+)
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.microsoft.oauth import MicrosoftClient, MicrosoftOAuthService
 from calendar_sync.infrastructure.microsoft.provider import OutlookCalendarProvider

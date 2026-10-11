@@ -1,5 +1,5 @@
 """Outlook's patterned recurrence and iCalendar lines, translated exactly or not at all, and the
-occurrences a pattern defines (ADR 0032)."""
+occurrences a pattern defines (ADR 0034)."""
 
 from datetime import UTC, date, datetime
 from typing import Any

@@ -9,15 +9,13 @@ from typing import Any
 
 import pytest
 
-from calendar_sync.application.errors import ProviderFailureKind
-from calendar_sync.application.providers import ProviderKind
-from calendar_sync.infrastructure.persistence import sqlite as sqlite_persistence
+from calendar_sync.application.sync.errors import ProviderFailureKind
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.infrastructure.persistence import migrations
 from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.persistence.connections import open_connection, transaction
 from calendar_sync.infrastructure.persistence.health import SqliteRuleHealthRecords
-from calendar_sync.infrastructure.persistence.sqlite import (
-    initialize_database,
-)
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from tests.helpers import NOW, rule
 from tests.users import USER, add_user, sqlite_units
 
@@ -258,12 +256,12 @@ def test_a_migration_that_fails_leaves_no_partial_change(
     with closing(open_connection(database)) as connection:
         applied = {row[0] for row in connection.execute("SELECT version FROM schema_migrations")}
     monkeypatch.setattr(
-        sqlite_persistence,
+        migrations,
         "_FORWARD_MIGRATIONS",
-        (*sqlite_persistence._FORWARD_MIGRATIONS, (9999, _MigrationsWithAFailure.NAME)),
+        (*migrations._FORWARD_MIGRATIONS, (9999, _MigrationsWithAFailure.NAME)),
     )
     monkeypatch.setattr(
-        sqlite_persistence, "files", lambda package: _MigrationsWithAFailure(files(package))
+        migrations, "files", lambda package: _MigrationsWithAFailure(files(package))
     )
 
     with pytest.raises(sqlite3.OperationalError):

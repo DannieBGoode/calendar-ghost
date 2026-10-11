@@ -9,15 +9,10 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from calendar_sync.application.errors import EmailTaken
-from calendar_sync.application.ports import Clock, Session, UserPage, UserQuery, UserSort
-from calendar_sync.domain.access import (
-    Role,
-    User,
-    UserId,
-    UserState,
-    require_administrator_remains,
-)
+from calendar_sync.application.identity.errors import EmailTaken
+from calendar_sync.application.identity.ports import Session, UserPage, UserQuery, UserSort
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.domain.access import Role, User, UserId, UserState, require_administrator_remains
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import token_hash
 

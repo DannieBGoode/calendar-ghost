@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from calendar_sync.application.ports import IncidentResolutionValue, IncidentState
+from calendar_sync.application.operations.ports import IncidentResolutionValue, IncidentState
 
 ProjectionChoice = Literal["delete", "detach"]
 # What a rule does with events its source calendar answered Maybe to, or has not answered yet.
@@ -29,6 +29,16 @@ CauseValue = Literal[
 ]
 """Why a provider call failed (ADR 0031). A client that meets one it does not know shows it as
 unknown."""
+IncidentStepValue = Literal[
+    "reauthorize",
+    "recover_rule",
+    "review_rule",
+    "see_blocked",
+    "wait",
+    "administrator",
+    "see_history",
+]
+"""An Incident's one next step (ADR 0033), as the domain decides it for the Web UI and email."""
 HintKindValue = Literal["shared_cause", "testing_mode", "unrecognized"]
 
 
@@ -431,6 +441,12 @@ class IncidentResponse(ApiResponse):
     cause: CauseValue | None = None
     """Why the provider failure behind it happened; unknown when that was not recorded, and None
     for blocked events, which no provider failure opened."""
+    step: IncidentStepValue | None = None
+    """Its one next step; None when there is none, such as for a rule since removed."""
+    provider: str | None = None
+    """The Provider Kind whose failure opened it, when that was recorded."""
+    cursor: str
+    """Pass the last incident's as `before` for the next page; opaque, and fixed when read."""
 
 
 class DatabaseUsageResponse(ApiResponse):

@@ -253,6 +253,8 @@ export type IssuedLink = Schemas["IssuedLinkResponse"]
 export type UserDeletion = Schemas["UserDeletionResponse"]
 
 export const ACTIVITY_PAGE_SIZE = 100
+/** How many incidents the server lists at a time, as `INCIDENTS_READ` sets it. */
+export const INCIDENTS_PAGE_SIZE = 100
 const PEOPLE_PAGE_SIZE = 50
 
 export const api = {
@@ -363,7 +365,10 @@ export const api = {
     call("/api/v1/audit-entries/{entry_id}/event", "get", { params: { entry_id: entryId } }),
   activityChanges: (entryId: number) =>
     call("/api/v1/audit-entries/{entry_id}/changes", "get", { params: { entry_id: entryId } }),
-  incidents: () => call("/api/v1/incidents", "get"),
+  /** One page of incidents, open ones first; `before` is the last incident's `cursor` of the page before. */
+  incidents: (before?: string) => call("/api/v1/incidents", "get", { query: { before: before ?? null } }),
+  incident: (incidentId: string) =>
+    call("/api/v1/incidents/{incident_id}", "get", { params: { incident_id: incidentId } }),
   recentChanges: (limit = 5) =>
     call("/api/v1/recent-changes", "get", { query: { limit } }),
   storage: () => call("/api/v1/storage", "get"),

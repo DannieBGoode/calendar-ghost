@@ -41,7 +41,7 @@ Homepage that show one tile per service.
   content, or token data; a calendar name that is missing, equal to its own calendar ID, or
   containing `@` is replaced with "Unnamed calendar", because Google stores `summary or id` as a
   calendar's name and a primary calendar's summary defaults to the account's email address.
-- **The server owns the verdict.** `GetInstallationStatus` in `application/status.py` is the one
+- **The server owns the verdict.** `GetInstallationStatus` in `application/operations/status.py` is the one
   place that classifies the installation's health from the rules, their latest run outcomes, open
   incidents, open blocks, connected-account state, and the scheduler heartbeat. The Overview,
   `/api/v1/status`, and MCP's `get_status` tool all render the same `InstallationStatus`; the
@@ -49,7 +49,7 @@ Homepage that show one tile per service.
   takes its tone from the server's status even when the client's own per-rule problem list has not
   caught up yet, such as between one dashboard poll and the next: a generic hero for that tone
   still tells the truth instead of contradicting it with healthy, paused, or setup copy.
-- **The scheduler reports its own heartbeat.** `SchedulerHeartbeat` in `application/ports.py`
+- **The scheduler reports its own heartbeat.** `SchedulerHeartbeat` in `application/operations/ports.py`
   exposes when the current pass started, if one is running, when the last pass completed without
   raising, and which rules that pass listed. A completed pass is published before the running one is
   cleared, so a reader never sees no pass running next to the previous completion. With enabled

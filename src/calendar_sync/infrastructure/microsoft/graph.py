@@ -3,7 +3,7 @@
 Every Graph request names an operation, carries the account's access token, asks for UTC times
 and text bodies, and is tallied for the run that made it. A refusal keeps only what may be
 recorded: its HTTP status, Microsoft's error codes, and its Retry-After hint, never its message,
-which can quote the request (ADR 0031, ADR 0032).
+which can quote the request (ADR 0031, ADR 0034).
 """
 
 from __future__ import annotations
@@ -15,12 +15,12 @@ from typing import Any
 
 import httpx
 
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.infrastructure.provider_calls import record_call
 
 GRAPH = "https://graph.microsoft.com/v1.0"
 LOGIN = "https://login.microsoftonline.com"
-# Every read asks for UTC times and plain-text bodies (ADR 0032).
+# Every read asks for UTC times and plain-text bodies (ADR 0034).
 READ_PREFERENCES = 'outlook.timezone="UTC", outlook.body-content-type="text"'
 # How long one request may take before it counts as not answered.
 TIMEOUT_SECONDS = 30.0

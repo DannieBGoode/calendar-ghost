@@ -4,7 +4,7 @@ import ast
 import sqlite3
 from pathlib import Path
 
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 
 # Tables that hold no User's records: the migration ledger, the Users themselves, the
 # installation's settings, and Invitations, which belong to nobody until they are used.
@@ -14,11 +14,11 @@ SOURCE = Path(__file__).resolve().parents[2] / "src" / "calendar_sync"
 # adapters that implement it and run migrations, the scheduler, the Operator Overview, and the
 # composition root that hands it to both.
 INSTALLATION_UNIT_RECEIVERS = {
-    "application/operator_overview.py",
-    "application/ports.py",
+    "application/operations/operator_overview.py",
+    "application/operations/ports.py",
     "bootstrap/container.py",
-    "infrastructure/persistence/memory.py",
-    "infrastructure/persistence/sqlite.py",
+    "infrastructure/persistence/installation.py",
+    "infrastructure/persistence/memory_installation.py",
     "infrastructure/scheduling.py",
 }
 
@@ -90,4 +90,4 @@ def test_only_the_scheduler_overview_and_migrations_get_the_installation_unit() 
 
     assert receivers <= INSTALLATION_UNIT_RECEIVERS, receivers - INSTALLATION_UNIT_RECEIVERS
     assert "infrastructure/scheduling.py" in receivers
-    assert "application/operator_overview.py" in receivers
+    assert "application/operations/operator_overview.py" in receivers

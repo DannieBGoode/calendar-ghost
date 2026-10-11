@@ -6,25 +6,25 @@ from unittest.mock import Mock
 
 import pytest
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationNotConfigured,
     ConnectedAccountNotFound,
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.ports import (
     AccountAccess,
     AccountCalendars,
     CalendarAccess,
     DiscoveredCalendar,
 )
-from calendar_sync.application.provider_descriptors import (
+from calendar_sync.application.sync.provider_descriptors import (
     ProviderDescriptor,
     ProviderDirectory,
     ProviderGuide,
 )
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.providers.routing import (
     RoutingAccountCalendars,

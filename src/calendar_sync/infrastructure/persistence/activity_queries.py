@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import sqlite3
 import unicodedata
 from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
-from calendar_sync.application.activity import (
+from calendar_sync.application.operations.activity import (
     BLOCK_ACTIONS,
     LEGACY_SKIP_REASON,
     NO_CHANGE_REASONS,
@@ -25,18 +27,18 @@ from calendar_sync.application.activity import (
     RecordedTime,
     activity_category,
 )
-from calendar_sync.application.causes import WITHOUT_CAUSE, Cause
-from calendar_sync.application.ports import (
+from calendar_sync.application.operations.ports import (
     AccountStanding,
-    IncidentMessage,
     IncidentSummary,
     OpenBlock,
     OperationsOverview,
 )
-from calendar_sync.application.providers import ProviderKind
-from calendar_sync.application.sync_run import UNRECORDED_REASONS
+from calendar_sync.application.sync.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.access import UserId
-from calendar_sync.domain.model import SyncAction, SyncReason
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
+from calendar_sync.domain.causes import WITHOUT_CAUSE, Cause
+from calendar_sync.domain.incidents import AccountAuthorization, IncidentMessage
+from calendar_sync.domain.model import ConnectedAccountId, SyncAction, SyncReason
 from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.source_changes import open_change_values
 from calendar_sync.infrastructure.security import HistoryCipher
@@ -291,20 +293,65 @@ class SqliteOperationsQueries:
         with _reading(self._database_path) as connection:
             return operations_of(connection, [self._user])[self._user].overview
 
-    def incidents(self) -> list[IncidentSummary]:
+    def incidents(self, before: str | None = None) -> list[IncidentSummary]:
+        after, parameters = "", {"user": self._user, "limit": INCIDENTS_READ}
+        if before is not None:
+            position = _cursor_position(before)
+            if position is None:
+                return []
+            after, parameters = _AFTER_INCIDENT, parameters | position
         with _reading(self._database_path) as connection:
             rows = connection.execute(
                 f"""
-                SELECT {_INCIDENT_COLUMNS} FROM incidents WHERE user_id = ?
-                ORDER BY state ASC, updated_at DESC LIMIT ?
-                """,  # noqa: S608
-                (self._user, INCIDENTS_READ),
+                {_INCIDENT_FACTS} WHERE {after} i.user_id = :user
+                ORDER BY i.state ASC, i.updated_at DESC, i.id DESC LIMIT :limit
+                """,
+                parameters,
             ).fetchall()
-        return [_incident_summary(row) for row in rows]
+        return [_incident_with_facts(row) for row in rows]
+
+    def incident(self, incident_id: str) -> IncidentSummary | None:
+        with _reading(self._database_path) as connection:
+            row = connection.execute(
+                f"{_INCIDENT_FACTS} WHERE i.id = ? AND i.user_id = ?",
+                (incident_id, self._user),
+            ).fetchone()
+        return None if row is None else _incident_with_facts(row)
+
+
+# Ordered by state, then most recently updated, then id, so ties keep one order. A page goes on
+# after where the incident that ended the one before stood then, as its cursor records, so that
+# incident refreshing or resolving since moves nothing.
+_AFTER_INCIDENT = """
+    (
+        i.state > :state
+        OR (i.state = :state AND i.updated_at < :updated_at)
+        OR (i.state = :state AND i.updated_at = :updated_at AND i.id < :id)
+    ) AND
+"""
+
+
+def _cursor(row: sqlite3.Row) -> str:
+    """Where a page ending with this incident goes on: its sort values as stored, encoded."""
+    values = json.dumps([row["state"], row["updated_at"], row["id"]], separators=(",", ":"))
+    return base64.urlsafe_b64encode(values.encode()).decode().rstrip("=")
+
+
+def _cursor_position(cursor: str) -> dict[str, str] | None:
+    """The sort values a cursor records; None for anything that is not one of its cursors."""
+    try:
+        values = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
+        state, updated_at, incident_id = values
+    except (ValueError, TypeError):
+        return None
+    if not all(isinstance(value, str) for value in (state, updated_at, incident_id)):
+        return None
+    return {"state": state, "updated_at": updated_at, "id": incident_id}
 
 
 INCIDENTS_READ = 100
-"""How many of a User's incidents Installation Status reads, the most recently updated first."""
+"""How many of a User's incidents one page holds, as Installation Status and the Web UI read
+them, the most recently updated first."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,12 +390,13 @@ def operations_of(
     incidents: dict[str, list[IncidentSummary]] = {user: [] for user in users}
     for row in connection.execute(
         f"""
-        SELECT {_INCIDENT_COLUMNS}, user_id FROM incidents
-        WHERE state = 'open' AND user_id IN ({marks}) ORDER BY updated_at DESC
-        """,  # noqa: S608
+        {_INCIDENT_FACTS}
+        WHERE i.state = 'open' AND i.user_id IN ({marks}) ORDER BY i.updated_at DESC, i.id DESC
+        """,
         users,
     ):
-        incidents[row["user_id"]].append(_incident_summary(row))
+        # The same facts as each User's own reader, so both readers assess the same incidents.
+        incidents[row["owner"]].append(_incident_with_facts(row))
     last_synced = dict(
         connection.execute(
             f"""
@@ -367,7 +415,7 @@ def operations_of(
                 # Every open incident counts, though only the most recent are read, as in
                 # `SqliteOperationsQueries`, so both readers assess the same ones.
                 open_incidents=len(incidents[user]),
-                last_synced_at=last_synced.get(user),
+                last_synced_at=_optional_time(last_synced.get(user)),
                 open_blocks=tuple(blocks.get(user, ())),
                 accounts=tuple(accounts[user]),
             ),
@@ -407,8 +455,48 @@ def _open_blocks_of(
     return found
 
 
+def _optional_time(value: object) -> datetime | None:
+    return None if value is None else datetime.fromisoformat(str(value))
+
+
 _INCIDENT_COLUMNS = """id, rule_id, account_id, category, state, summary, opened_at, updated_at,
     resolved_at, resolution, message_code, message_params, cause, provider"""
+
+
+# Each incident with its rule and the rule's accounts as they are now, which its next step weighs.
+_INCIDENT_FACTS = f"""
+    SELECT {", ".join(f"i.{column.strip()}" for column in _INCIDENT_COLUMNS.split(","))},
+        i.user_id AS owner, r.id AS rule_found,
+        s.id AS source_account, s.state AS source_state, s.updated_at AS source_updated_at,
+        d.id AS destination_account, d.state AS destination_state,
+        d.updated_at AS destination_updated_at
+    FROM incidents i
+    LEFT JOIN sync_rules r ON r.id = i.rule_id AND r.user_id = i.user_id
+    LEFT JOIN connected_accounts s ON s.id = r.source_account_id AND s.user_id = i.user_id
+    LEFT JOIN connected_accounts d ON d.id = r.destination_account_id AND d.user_id = i.user_id
+"""  # noqa: S608
+
+
+def _incident_with_facts(row: sqlite3.Row) -> IncidentSummary:
+    accounts = tuple(
+        _account_authorization(row[f"{end}_account"], row[f"{end}_state"], row[f"{end}_updated_at"])
+        for end in ("source", "destination")
+        if row[f"{end}_account"] is not None
+    )
+    return replace(
+        _incident_summary(row),
+        rule_exists=row["rule_found"] is not None,
+        rule_accounts=accounts,
+        cursor=_cursor(row),
+    )
+
+
+def _account_authorization(account_id: str, state: str, updated_at: str) -> AccountAuthorization:
+    # Only connecting, reauthorizing, and disconnecting write the row, so a connected account's
+    # last update is when it was last authorized, as the account repository reads it.
+    connected = state == ConnectedAccountState.CONNECTED.value
+    authorized = datetime.fromisoformat(updated_at) if connected else None
+    return AccountAuthorization(ConnectedAccountId(account_id), connected, authorized)
 
 
 def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
@@ -418,9 +506,9 @@ def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
         category=row["category"],
         state=row["state"],
         summary=row["summary"],
-        opened_at=row["opened_at"],
-        updated_at=row["updated_at"],
-        resolved_at=row["resolved_at"],
+        opened_at=datetime.fromisoformat(row["opened_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+        resolved_at=_optional_time(row["resolved_at"]),
         resolution=row["resolution"],
         account_id=row["account_id"],
         message=_incident_message(row["message_code"], row["message_params"]),

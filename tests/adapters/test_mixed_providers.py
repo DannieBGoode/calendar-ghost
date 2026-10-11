@@ -1,5 +1,5 @@
 """Rules whose calendars belong to different providers: a Google source with an Outlook
-destination, the reverse, and both at once without loops (ADR 0022, ADR 0032).
+destination, the reverse, and both at once without loops (ADR 0022, ADR 0034).
 
 Each rule runs through the router to the real Google and Outlook adapters, against their fakes.
 """
@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
-from calendar_sync.application.providers import ProviderKind
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import (
     ConnectedAccountId,
     EventStatus,

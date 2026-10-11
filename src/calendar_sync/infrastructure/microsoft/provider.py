@@ -1,4 +1,4 @@
-"""Outlook calendars through Microsoft Graph v1.0: every calendar role (ADR 0032).
+"""Outlook calendars through Microsoft Graph v1.0: every calendar role (ADR 0034).
 
 Graph v1.0 lists one calendar's changes only through `calendarView/delta`, which expands series
 into occurrences and never returns their masters. The adapter keeps series as series: a delta
@@ -20,14 +20,15 @@ from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Any, Protocol
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
     ProviderFailureKind,
     UnsupportedProjection,
 )
-from calendar_sync.application.ports import Clock, CreatedProjection, ProviderChangeSet
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.sync.ports import CreatedProjection, ProviderChangeSet
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEndpoint,
@@ -68,7 +69,7 @@ from calendar_sync.infrastructure.microsoft.translation import (
 from calendar_sync.infrastructure.retry_after import retry_after_seconds
 
 # A delta round only tells what changed; its window is kept small, since changes outside it still
-# arrive, as removals the adapter reads again (ADR 0032).
+# arrive, as removals the adapter reads again (ADR 0034).
 DELTA_WINDOW = timedelta(days=1)
 # How far before the last run a modified-since listing reaches, for clocks that disagree.
 MODIFIED_MARGIN = timedelta(minutes=10)
@@ -397,7 +398,7 @@ class OutlookCalendarProvider:
 
     def _delete(self, calendar: CalendarEndpoint, event_id: str) -> None:
         """DELETE, which notifies nobody about an event without attendees, as projections are;
-        never `/cancel`, which always would (ADR 0032)."""
+        never `/cancel`, which always would (ADR 0034)."""
         with self._refusals(calendar.connected_account_id):
             try:
                 self._graph.request(

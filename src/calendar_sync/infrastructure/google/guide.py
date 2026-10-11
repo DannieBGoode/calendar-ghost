@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.provider_descriptors import GrantLifetime, ProviderGuide
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.sync.provider_descriptors import GrantLifetime, ProviderGuide
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.causes import Cause
 
 GOOGLE = ProviderGuide(
     ProviderKind.GOOGLE,

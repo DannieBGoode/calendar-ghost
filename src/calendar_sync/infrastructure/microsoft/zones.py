@@ -4,7 +4,7 @@ The table is the Unicode CLDR `windowsZones.xml` mapping for territory 001, the 
 name stands for (https://github.com/unicode-org/cldr/blob/main/common/supplemental/windowsZones.xml,
 Unicode License v3, Copyright (c) 1991-2026 Unicode, Inc.). A series keeps its local time across
 daylight saving only in its own zone, so a zone this table cannot name is unsupported rather than
-replaced by UTC (ADR 0032).
+replaced by UTC (ADR 0034).
 """
 
 from __future__ import annotations

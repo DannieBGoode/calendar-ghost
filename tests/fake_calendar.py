@@ -6,19 +6,19 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
     ProviderFailureKind,
     UnsupportedProjection,
 )
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.ports import (
     CalendarReader,
     CreatedProjection,
     ProviderChangeSet,
     UnitOfWorkFactory,
 )
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEndpoint,

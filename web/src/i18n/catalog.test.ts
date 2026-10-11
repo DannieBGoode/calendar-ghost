@@ -101,6 +101,7 @@ const SOURCES = Object.values(
 const PROVIDER_KINDS = ["google", "outlook"]
 
 const TEMPLATE_VALUES: TemplateValues = {
+  "activity.incidents.lasted.*": ["moment", "minute", "hour", "day"],
   "people.*.title": ["empty", "beyond"],
   "people.*.body": ["empty", "beyond"],
   "people.roles.*": ["installation_administrator", "user"],

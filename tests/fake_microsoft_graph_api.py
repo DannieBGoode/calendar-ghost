@@ -1,7 +1,7 @@
 """A fake of Microsoft's identity platform and Graph v1.0, served through httpx, with synthetic
 data.
 
-It answers the requests the Outlook adapter makes, in the shapes Microsoft documents (ADR 0032):
+It answers the requests the Outlook adapter makes, in the shapes Microsoft documents (ADR 0034):
 the OAuth 2.0 token endpoint with PKCE and rotating refresh tokens, `/me`, and calendars. Tests
 place mailboxes in it, consent as their owner would, and refuse requests the way Microsoft does.
 No request leaves the process.

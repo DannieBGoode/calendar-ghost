@@ -10,6 +10,8 @@ export type PageTab<T extends string> = {
   count?: number
   /** What the count means, for screen readers, such as "2 waiting". */
   countLabel?: string
+  /** Attention for a count of things to act on, such as open Incidents; neutral otherwise. */
+  countTone?: "attention"
 }
 
 /**
@@ -44,7 +46,7 @@ export function PageTabs<T extends string>({
         >
           {tab.label}
           {tab.count ? (
-            <Badge variant="neutral" className="page-tab-count">
+            <Badge variant={tab.countTone ?? "neutral"} className="page-tab-count" data-tone={tab.countTone}>
               <span aria-hidden="true">{tab.count}</span>
               <span className="sr-only">{tab.countLabel}</span>
             </Badge>

@@ -10,16 +10,13 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from oauthlib.oauth2 import WebApplicationClient  # type: ignore[import-untyped]
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
     CalendarPermissionRequired,
 )
-from calendar_sync.application.ports import (
-    CalendarAccess,
-    DiscoveredCalendar,
-)
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.sync.ports import CalendarAccess, DiscoveredCalendar
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.oauth import (
     CALENDAR_SCOPES,
@@ -33,7 +30,7 @@ from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAcc
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
 )
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.users import OTHER_USER, USER, add_user
 
