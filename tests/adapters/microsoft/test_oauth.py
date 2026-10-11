@@ -281,6 +281,26 @@ def test_an_access_check_answered_without_its_calendars_is_retried(
     assert failed.value.kind is ProviderFailureKind.TEMPORARY
 
 
+def test_an_access_check_answered_without_its_events_is_retried(
+    installation: Installation,
+) -> None:
+    _connect(installation)
+    (account,) = installation.store.for_user(USER).list()
+    serve = installation.graph.handle
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/events"):
+            return httpx.Response(200, json={"value": "unavailable"})
+        return serve(request)
+
+    installation.graph.handle = handle  # type: ignore[method-assign]
+
+    with pytest.raises(AccountAccessCheckFailed) as failed:
+        installation.oauth.verify_access(account.id)
+
+    assert failed.value.kind is ProviderFailureKind.TEMPORARY
+
+
 def test_a_refused_code_exchange_connects_nothing(installation: Installation) -> None:
     url = installation.oauth.authorization_url(USER)
     installation.graph.consent(url, ADDRESS)

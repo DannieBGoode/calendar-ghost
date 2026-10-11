@@ -203,12 +203,15 @@ class MicrosoftOAuthService:
                     "Outlook did not expose a calendar for permission verification"
                 )
             calendar = next((c for c in calendars if c.get("isDefaultCalendar")), calendars[0])
-            self._graph.request(
-                "events.list",
-                "GET",
-                f"/me/calendars/{calendar['id']}/events",
-                token,
-                params={"$top": "1", "$select": "id"},
+            # A page without a list is no answer, never proof the calendar's events are readable.
+            items_of(
+                self._graph.request(
+                    "events.list",
+                    "GET",
+                    f"/me/calendars/{calendar['id']}/events",
+                    token,
+                    params={"$top": "1", "$select": "id"},
+                )
             )
         except (AccountAccessCheckFailed, ConnectedAccountDisconnected, ConnectedAccountNotFound):
             raise
