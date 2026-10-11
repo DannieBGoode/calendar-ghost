@@ -287,6 +287,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- Rules that a Lapsed Authorization stopped resume even when the process stopped or failed while
+  restoring them. Before, Reauthorization could clear the lapse and leave its rules stopped, with
+  the account's Incident open, until the account was reauthorized or checked again. Each
+  scheduled pass now resumes them and resolves that Incident (ADR 0027).
 - The calendar replacement form no longer shows a rule's previous calendars after the rule
   refreshes; untouched fields follow the rule, and edits are kept.
 - The Web UI's request helper keeps headers passed as a `Headers` object.

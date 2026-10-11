@@ -61,6 +61,9 @@ from calendar_sync.infrastructure.persistence.health import (
     SqliteIncidentRepository,
     SqliteRuleHealthRecords,
 )
+from calendar_sync.infrastructure.persistence.installation import (
+    SqliteInstallationUnitOfWorkFactory,
+)
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryInstallationUnitOfWork,
     InMemoryInstallationUnitOfWorkFactory,
@@ -129,6 +132,9 @@ class RecordingHealth:
         self, _rule: object, failure: ProviderFailure, *, attempted_at: datetime | None = None
     ) -> None:
         self.failures.append(failure)
+
+    def resume_restored(self) -> int:
+        return 0
 
 
 def _scheduler(execute: object, units: object, health: object, **options: Any) -> SyncScheduler:
@@ -456,6 +462,52 @@ def _enabled_rules(count: int) -> InMemoryUserUnitOfWorkFactory:
             )
         uow.commit()
     return factory
+
+
+def _awaiting_reauthorization() -> InMemoryUserUnitOfWorkFactory:
+    factory = InMemoryUnitOfWorkFactory().for_user(USER)
+    with factory() as uow:
+        uow.rules.add(rule().degrade(awaiting_reauthorization=True))
+        uow.commit()
+    return factory
+
+
+def test_a_pass_first_resumes_rules_an_interrupted_restoration_left_stopped() -> None:
+    units = _awaiting_reauthorization()
+
+    class Resuming(RecordingHealth):
+        def resume_restored(self) -> int:
+            with units() as uow:
+                stopped = uow.rules.get(rule().id)
+                assert stopped is not None
+                uow.rules.save(stopped.resume_after_reauthorization())
+                uow.commit()
+            return 1
+
+    execute = RecordingExecuteRule([None])
+
+    asyncio.run(_scheduler(execute, units, Resuming()).run_once())
+
+    # Resumed before the pass listed its rules, so the rule ran in the same pass.
+    assert execute.calls == 1
+
+
+def test_a_failure_to_resume_rules_never_stops_the_pass(caplog: pytest.LogCaptureFixture) -> None:
+    units = _awaiting_reauthorization()
+    with units() as uow:
+        uow.rules.add(replace(rule(), id=SyncRuleId("running"), source=endpoint("other", "cal")))
+        uow.commit()
+
+    class Failing(RecordingHealth):
+        def resume_restored(self) -> int:
+            raise sqlite3.OperationalError("database is locked")
+
+    execute = RecordingExecuteRule([None])
+
+    asyncio.run(_scheduler(execute, units, Failing()).run_once())
+
+    assert execute.calls == 1
+    assert "Resuming rules after Reauthorization failed" in caplog.text
 
 
 def test_a_pass_runs_different_rules_at_the_same_time() -> None:
@@ -1205,6 +1257,47 @@ def test_restoring_an_account_while_its_rule_is_being_stopped_leaves_the_rule_ru
         stopped = uow.rules.get(running.id)
     assert stopped is not None
     assert stopped.state is SyncRuleState.ENABLED
+
+
+def test_a_pass_finishes_a_restoration_the_process_stopped_before(tmp_path: Path) -> None:
+    # Reauthorizing saved the new credentials, clearing the lapse, then the process stopped
+    # before restoring resumed the rule or resolved the account's Incident.
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
+    work = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    stopped = replace(
+        rule(), source=endpoint(work.id.value, "home"), destination=endpoint(work.id.value, "work")
+    )
+    unit_of_work = sqlite_units(database)
+    with unit_of_work() as uow:
+        uow.rules.add(stopped)
+        uow.commit()
+    health = _rule_health(database, unit_of_work)
+    expired = ProviderFailure(ProviderFailureKind.AUTHENTICATION, "expired", account_id=work.id)
+    health.record_failure(stopped, expired, attempted_at=datetime.now(UTC))
+    store.for_user(USER).save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    assert not _lapsed(store, work.id)
+    execute = RecordingExecuteRule([None])
+    services = ScheduledServices(cast(ExecuteSyncRule, execute), health)
+
+    asyncio.run(
+        SyncScheduler(
+            SqliteInstallationUnitOfWorkFactory(database), lambda _owner: services
+        ).run_once()
+    )
+
+    with unit_of_work() as uow:
+        resumed = uow.rules.get(stopped.id)
+    with sqlite3.connect(database) as connection:
+        incidents = connection.execute("SELECT state, resolution FROM incidents").fetchall()
+    assert resumed is not None
+    assert resumed.state is SyncRuleState.ENABLED
+    assert incidents == [("resolved", "access_restored")]
+    assert execute.calls == 1
 
 
 def _lapsed(store: SqliteConnectedAccountStore, account_id: ConnectedAccountId) -> bool:

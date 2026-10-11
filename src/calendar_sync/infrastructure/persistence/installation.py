@@ -96,6 +96,20 @@ class SqliteInstallationUnitOfWork:
             for row in rows
         )
 
+    def users_awaiting_reauthorization(self) -> Sequence[UserId]:
+        assert self._connection is not None
+        rows = self._connection.execute(
+            """
+            SELECT DISTINCT sync_rules.user_id
+            FROM sync_rules
+            JOIN users ON users.id = sync_rules.user_id AND users.state = 'active'
+            WHERE sync_rules.state = ? AND sync_rules.awaiting_reauthorization = 1
+            ORDER BY sync_rules.user_id
+            """,
+            (SyncRuleState.DEGRADED.value,),
+        ).fetchall()
+        return tuple(UserId(str(row[0])) for row in rows)
+
     def forget_change_values(self, before: datetime) -> None:
         assert self._connection is not None
         self._connection.execute(

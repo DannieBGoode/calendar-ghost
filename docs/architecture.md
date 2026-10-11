@@ -123,7 +123,10 @@ authorization lost. A provider failure names the Connected Account whose request
 authorization failure marks that account's Lapsed Authorization through `LapsedAuthorizations` in
 `application/sync/lapsed_authorization.py`, which opens one Incident for the account rather than one per
 rule; Reauthorization and a passing access check clear it and resume the rules it alone stopped
-(ADR 0027). Scheduled runs and Rule Removal share one retry helper in
+(ADR 0027). Restoring commits each step on its own, so each scheduler pass first asks
+`InstallationUnitOfWork.users_awaiting_reauthorization` which Users have rules still stopped,
+and `RunHealth.resume_restored` resumes those whose accounts are authorized again and resolves
+those accounts' Incidents. Scheduled runs and Rule Removal share one retry helper in
 `application/sync/retry.py`, which retries only temporary and rate-limited failures.
 
 Installation Status follows the same direction ([ADR 0024](adr/0024-integration-tokens-installation-status-and-mcp.md)).

@@ -97,6 +97,37 @@ class LapsedAuthorizations:
             # Every rule of the account, not only those already stopped: a run may stop one
             # until its write lock is released, and `_resume` decides under that lock.
             waiting = tuple(rule.id for rule in uow.rules.list() if rule.uses_account(account_id))
+        self._resolve(account_id)
+        return sum(self._resume(rule_id) for rule_id in waiting)
+
+    def resume_restored(self) -> int:
+        """Finish restorations an interruption left; how many rules resumed.
+
+        Reauthorizing clears a lapse with the new credentials, and `restored` then commits each
+        step on its own, so a stop or failure between them leaves rules the lapse alone stopped
+        while their accounts are authorized again. Each scheduler pass calls this, so they resume
+        and their accounts' Incidents resolve without another Reauthorization (ADR 0027).
+        """
+        with self.unit_of_work() as uow:
+            waiting = tuple(
+                rule
+                for rule in uow.rules.list()
+                if rule.state is SyncRuleState.DEGRADED and rule.awaiting_reauthorization
+            )
+            accounts = {
+                account
+                for rule in waiting
+                for account in (
+                    rule.source.connected_account_id,
+                    rule.destination.connected_account_id,
+                )
+            }
+            authorized = {account for account in accounts if uow.accounts.authorized(account)}
+        for account_id in sorted(authorized, key=lambda account: account.value):
+            self._resolve(account_id)
+        return sum(self._resume(rule.id) for rule in waiting)
+
+    def _resolve(self, account_id: ConnectedAccountId) -> None:
         # A newer lapse recorded since keeps its reopened Incident open.
         self.incidents.resolve(
             authorization_key(account_id),
@@ -104,7 +135,6 @@ class LapsedAuthorizations:
             IncidentResolution.ACCESS_RESTORED,
             while_authorized=account_id,
         )
-        return sum(self._resume(rule_id) for rule_id in waiting)
 
     def _stop(self, rule_id: SyncRuleId, account_id: ConnectedAccountId) -> None:
         """Stop an enabled rule until the account is authorized again; waits for any write."""
