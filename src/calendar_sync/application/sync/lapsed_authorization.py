@@ -11,10 +11,11 @@ from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
     IncidentNotifications,
     IncidentRepository,
+    UnitOfWork,
     UnitOfWorkFactory,
 )
 from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
-from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 
 
 def authorization_key(account_id: ConnectedAccountId) -> str:
@@ -157,10 +158,20 @@ class LapsedAuthorizations:
                 rule is None
                 or rule.state is not SyncRuleState.DEGRADED
                 or not rule.awaiting_reauthorization
-                or not uow.accounts.authorized(rule.source.connected_account_id)
-                or not uow.accounts.authorized(rule.destination.connected_account_id)
+                or not _both_authorized(uow, rule)
             ):
                 return False
             uow.rules.save(rule.resume_after_reauthorization())
+            # Recording a lapse takes no rule lock, so check again inside the write the save
+            # began, which holds off other writers: a lapse committed before this check keeps
+            # the rule stopped, and one committed after it finds the rule enabled and stops it.
+            if not _both_authorized(uow, rule):
+                return False
             uow.commit()
         return True
+
+
+def _both_authorized(uow: UnitOfWork, rule: SyncRule) -> bool:
+    return uow.accounts.authorized(rule.source.connected_account_id) and uow.accounts.authorized(
+        rule.destination.connected_account_id
+    )

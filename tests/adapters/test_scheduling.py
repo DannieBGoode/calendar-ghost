@@ -71,7 +71,10 @@ from calendar_sync.infrastructure.persistence.memory import (
     InMemoryUserUnitOfWorkFactory,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
-from calendar_sync.infrastructure.persistence.sqlite import SqliteConnectedAccountRecords
+from calendar_sync.infrastructure.persistence.sqlite import (
+    SqliteConnectedAccountRecords,
+    SqliteSyncRuleRepository,
+)
 from calendar_sync.infrastructure.scheduling import (
     ScheduledServices,
     SchedulerWatch,
@@ -1298,6 +1301,44 @@ def test_a_pass_finishes_a_restoration_the_process_stopped_before(tmp_path: Path
     assert resumed.state is SyncRuleState.ENABLED
     assert incidents == [("resolved", "access_restored")]
     assert execute.calls == 1
+
+
+def test_a_lapse_committed_while_a_rule_resumes_keeps_it_stopped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Another rule's run commits a new lapse after resuming checked the accounts, before it saved.
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
+    work = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    stopped = replace(
+        rule(), source=endpoint(work.id.value, "home"), destination=endpoint(work.id.value, "work")
+    ).degrade(awaiting_reauthorization=True)
+    unit_of_work = sqlite_units(database)
+    with unit_of_work() as uow:
+        uow.rules.add(stopped)
+        uow.commit()
+    health = _rule_health(database, unit_of_work)
+    save = SqliteSyncRuleRepository.save
+
+    def lapsing_first(self: SqliteSyncRuleRepository, saved: SyncRule) -> None:
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "UPDATE connected_accounts SET authorization_lapsed_at = ? WHERE id = ?",
+                (datetime.now(UTC).isoformat(), work.id.value),
+            )
+        save(self, saved)
+
+    monkeypatch.setattr(SqliteSyncRuleRepository, "save", lapsing_first)
+
+    assert health.resume_restored() == 0
+    with unit_of_work() as uow:
+        kept = uow.rules.get(stopped.id)
+    assert kept is not None
+    assert kept.state is SyncRuleState.DEGRADED
 
 
 def _lapsed(store: SqliteConnectedAccountStore, account_id: ConnectedAccountId) -> bool:
