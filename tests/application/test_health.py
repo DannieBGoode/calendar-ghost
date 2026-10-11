@@ -23,10 +23,9 @@ from calendar_sync.domain.incidents import (
 )
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 from calendar_sync.domain.providers import ProviderFailureKind
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, rule
-from tests.users import USER
+from tests.users import memory_units
 
 RULE = SyncRuleId("rule-1")
 ACCOUNT = ConnectedAccountId("work-account")
@@ -220,7 +219,7 @@ class Notifications:
 
 
 def test_rule_health_times_everything_by_its_clock_and_notifies_only_new_incidents() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[RULE] = rule()
     records, incidents, notifications = Records(), Incidents(), Notifications()
     health = RuleHealth(unit_of_work, records, incidents, FixedClock(), notifications=notifications)
@@ -248,7 +247,7 @@ def test_rule_health_times_everything_by_its_clock_and_notifies_only_new_inciden
 
 def test_recovery_lapses_the_account_still_unauthorized() -> None:
     # The rule stopped on one account; recovering it met the other, which also lost access.
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[RULE] = rule(state=SyncRuleState.DEGRADED)
     unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     records, incidents, notifications = Records(), Incidents(), Notifications()
@@ -266,7 +265,7 @@ def test_recovery_lapses_the_account_still_unauthorized() -> None:
 
 
 def test_recovery_without_the_account_refreshes_the_rules_incident() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     records, incidents = Records(), Incidents()
     incidents.open_keys.add("provider:rule-1")
     health = RuleHealth(unit_of_work, records, incidents, FixedClock())
@@ -278,7 +277,7 @@ def test_recovery_without_the_account_refreshes_the_rules_incident() -> None:
 
 
 def test_a_refused_account_stops_its_rule_until_reauthorization() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[RULE] = rule()
     unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     records, incidents, notifications = Records(), Incidents(), Notifications()
@@ -298,7 +297,7 @@ def test_a_refused_account_stops_its_rule_until_reauthorization() -> None:
 
 def test_a_refusal_of_credentials_reauthorization_replaced_stops_nothing() -> None:
     # The run began with the old credentials; the account was reauthorized before it failed.
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[RULE] = rule()
     unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     unit_of_work.state.authorized_at[ACCOUNT] = NOW
@@ -327,7 +326,7 @@ class RestoredRightAfterLapsing(LapsedAuthorizations):
 def test_a_rule_whose_account_was_restored_before_it_stopped_keeps_running() -> None:
     # Reauthorization landed after the account lapsed but before the rule was stopped, so it
     # found nothing to resume; the rule must not stop for an account that is authorized again.
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[RULE] = rule()
     unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock())
@@ -341,7 +340,7 @@ def test_a_rule_whose_account_was_restored_before_it_stopped_keeps_running() -> 
 
 
 def test_a_permanent_failure_stops_its_rule_for_a_preview() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[RULE] = rule()
     health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock())
 
@@ -379,7 +378,7 @@ def test_a_failure_without_a_provider_has_a_null_provider() -> None:
 def test_a_refusal_of_a_request_made_after_reauthorization_lapses_its_account() -> None:
     # The run began before the account was reauthorized, but its failing request read the new
     # credentials, so the refusal is about them.
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[RULE] = rule()
     unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     unit_of_work.state.authorized_at[ACCOUNT] = NOW

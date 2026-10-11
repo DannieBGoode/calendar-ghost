@@ -20,8 +20,26 @@ class RuleNotFound(RuleNotExecutable):
     """The requested Directional Sync Rule does not exist, or is another User's (ADR 0029)."""
 
 
-class DuplicateDirectionalRelationship(ApplicationError):
+class RecordRefused(ApplicationError):
+    """A unit of work refused a write that would break what its records must keep true.
+
+    Every store raises one of these subclasses, at the write or when the unit commits, so a use
+    case can handle a refusal without knowing which store refused it.
+    """
+
+
+class DuplicateDirectionalRelationship(RecordRefused):
     """The same source-to-destination relationship already exists."""
+
+
+class IdentityCollision(RecordRefused):
+    """An identifier, or another key only one record may hold, already names a different record,
+    which may be another User's."""
+
+
+class MissingReference(RecordRefused):
+    """A record names a rule, Event Mapping, or Connected Account that does not exist, or that is
+    another User's (ADR 0029)."""
 
 
 class NotACalendarChange(ApplicationError):

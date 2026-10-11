@@ -13,7 +13,13 @@ from calendar_sync.application.identity.sign_in import SetUpInstallation
 from calendar_sync.application.shared.ports import Clock, IdGenerator
 from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccountState
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule
 from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUnitOfWorkFactory,
+    InMemoryUserUnitOfWorkFactory,
+)
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 from calendar_sync.infrastructure.scheduling import SystemClock
@@ -85,6 +91,33 @@ def sqlite_units(
     for account in accounts:
         add_account(database, account, user)
     return SqliteUnitOfWorkFactory(database, clock or SystemClock(), history).for_user(user)
+
+
+def rule_accounts(*rules: SyncRule) -> tuple[str, ...]:
+    """The accounts `rules` name, each once, for `memory_units` or `sqlite_units` to record."""
+    return tuple(
+        dict.fromkeys(
+            endpoint.connected_account_id.value
+            for each in rules
+            for endpoint in (each.source, each.destination)
+        )
+    )
+
+
+def memory_units(
+    database: InMemoryUnitOfWorkFactory | None = None,
+    *,
+    user: UserId = USER,
+    accounts: Sequence[str] = RULE_ACCOUNTS,
+) -> InMemoryUserUnitOfWorkFactory:
+    """`user`'s in-memory units of work, with `accounts` recorded as connected, as `sqlite_units`
+    records them: the store refuses a rule whose accounts are not its User's."""
+    units = (database or InMemoryUnitOfWorkFactory()).for_user(user)
+    for account in accounts:
+        units.state.accounts.setdefault(
+            ConnectedAccountId(account), ConnectedAccountState.CONNECTED
+        )
+    return units
 
 
 ADMIN_EMAIL = "admin@example.test"
