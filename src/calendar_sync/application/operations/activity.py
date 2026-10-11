@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal, Protocol
 
 from calendar_sync.application.operations.errors import (
@@ -185,7 +186,7 @@ class Dashboard:
     enabled_rules: int
     stopped_rules: int
     open_incidents: int
-    last_synced_at: str | None
+    last_synced_at: datetime | None
     blocked_events: int
     blocked_entry_id: int | None
     """The newest open block, which the dashboard links to."""

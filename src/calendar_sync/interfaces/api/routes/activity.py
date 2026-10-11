@@ -74,7 +74,7 @@ def dashboard(services: Services) -> DashboardResponse:
         enabled_rules=summary.enabled_rules,
         stopped_rules=summary.stopped_rules,
         open_incidents=summary.open_incidents,
-        last_synced_at=summary.last_synced_at,
+        last_synced_at=summary.last_synced_at.isoformat() if summary.last_synced_at else None,
         blocked_events=summary.blocked_events,
         blocked_entry_id=summary.blocked_entry_id,
         blocked_rule_id=summary.blocked_rule_id,

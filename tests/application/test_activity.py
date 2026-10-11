@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from calendar_sync.application.operations.activity import (
@@ -53,7 +55,7 @@ def test_recurring_exclusions_recorded_as_conflicts_are_skips() -> None:
 
 
 def _overview(*blocks: OpenBlock, incidents: int = 0) -> OperationsOverview:
-    return OperationsOverview(1, 0, incidents, "2026-09-01T00:00:00+00:00", blocks)
+    return OperationsOverview(1, 0, incidents, datetime(2026, 9, 1, tzinfo=UTC), blocks)
 
 
 def test_dashboard_counts_rules_by_state() -> None:

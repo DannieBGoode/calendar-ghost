@@ -971,7 +971,7 @@ class PersistenceContract:
             AccountStanding("work-account", "disconnected", "google"),
         )
         assert (mine.connected_accounts, mine.disconnected_accounts) == (1, 1)
-        assert mine.last_synced_at == NOW.isoformat()
+        assert mine.last_synced_at == NOW
         assert theirs.accounts == (
             AccountStanding("their-personal-account", "connected", "google"),
         )

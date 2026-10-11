@@ -1022,7 +1022,7 @@ def test_migration_20_lapses_accounts_an_open_authorization_incident_names(
         for account in store.for_user(USER).list()
         if account.id in {work.id, renewed.id}
     }
-    assert lapsed == {work.id: "9999-01-01T00:00:00+00:00", renewed.id: None}
+    assert lapsed == {work.id: datetime(9999, 1, 1, tzinfo=UTC), renewed.id: None}
     with sqlite_units(database)() as uow:
         awaiting = {rule.id: rule.awaiting_reauthorization for rule in uow.rules.list()}
     assert awaiting == {stopped.id: True, other.id: False}
@@ -1372,7 +1372,8 @@ def test_migration_26_reads_earlier_failures_as_unknown(tmp_path: Path) -> None:
             """
             INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
                 summary, opened_at, updated_at, user_id)
-            VALUES (?, ?, 'rule-1', ?, 'open', 's', 't', 't', ?)
+            VALUES (?, ?, 'rule-1', ?, 'open', 's', '2026-10-01T00:00:00+00:00',
+                '2026-10-01T00:00:00+00:00', ?)
             """,
             [
                 ("i-1", "provider:rule-1", "authorization", user.value),

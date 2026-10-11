@@ -327,7 +327,7 @@ def _scenario_accounts(scenario: Scenario, now: datetime) -> tuple[ConnectedAcco
         return ()
     if scenario in _EXPIRED:
         # Lapsed Authorization: still connected, but Google no longer accepts it (ADR 0027).
-        lapsed_at = (now - timedelta(minutes=60)).isoformat()
+        lapsed_at = now - timedelta(minutes=60)
         return tuple(
             replace(account, authorization_lapsed_at=lapsed_at)
             if account.id == PERSONAL_ACCOUNT
@@ -491,7 +491,7 @@ ROBIN_AUTHORIZED_BEFORE = timedelta(days=7, hours=1)
 
 
 def _robin_accounts(now: datetime, *, lapsed: bool) -> tuple[ConnectedAccount, ...]:
-    lapsed_at = (now - timedelta(minutes=50)).isoformat() if lapsed else None
+    lapsed_at = now - timedelta(minutes=50) if lapsed else None
     return tuple(
         ConnectedAccount(
             account,
@@ -534,7 +534,7 @@ def _seed_robin(adapters: Adapters, path: Path, now: datetime, cause: Cause | No
                     account.state.value,
                     authorized,
                     authorized,
-                    account.authorization_lapsed_at,
+                    _stored_time(account.authorization_lapsed_at),
                 )
                 for account in _robin_accounts(now, lapsed=cause is not None)
             ],
@@ -724,6 +724,11 @@ def _preview_change(found: CalendarEvent, seeded: SeededEntry) -> SourceChange |
     return SourceChange.between(before, after)
 
 
+def _stored_time(value: datetime | None) -> str | None:
+    """A time as SQLite stores it."""
+    return value.isoformat() if value else None
+
+
 def _authorized_at(scenario: Scenario, now: datetime) -> str:
     """When Sam last authorized his accounts: a week before the lapse when Testing mode ends it."""
     if scenario is Scenario.ACCESS_REVOKED:
@@ -752,7 +757,7 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
                     account.state.value,
                     _authorized_at(scenario, now),
                     _authorized_at(scenario, now),
-                    account.authorization_lapsed_at,
+                    _stored_time(account.authorization_lapsed_at),
                 )
                 for account in _scenario_accounts(scenario, now)
             ],

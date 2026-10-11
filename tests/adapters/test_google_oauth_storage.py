@@ -217,13 +217,13 @@ def test_authorized_at_follows_connection_and_reauthorization_only(tmp_path: Pat
         "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
     )
 
-    assert account.authorized_at == connected_at.isoformat()
+    assert account.authorized_at == connected_at
     assert disconnected.authorized_at is None
     assert [item.authorized_at for item in listed_disconnected] == [None]
-    assert reauthorized.authorized_at == reauthorized_at.isoformat()
+    assert reauthorized.authorized_at == reauthorized_at
     fetched = store.for_user(USER).get(account.id)
     assert fetched is not None
-    assert fetched.authorized_at == reauthorized_at.isoformat()
+    assert fetched.authorized_at == reauthorized_at
 
 
 def test_oauth_state_is_single_use(tmp_path: Path) -> None:

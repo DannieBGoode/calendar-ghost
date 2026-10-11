@@ -69,7 +69,7 @@ def _overview(
     accounts: tuple[AccountStanding, ...] = CONNECTED,
     open_incidents: int = 0,
     blocks: tuple[OpenBlock, ...] = (),
-    last_synced_at: str | None = "2026-10-03T11:58:00+00:00",
+    last_synced_at: datetime | None = datetime(2026, 10, 3, 11, 58, tzinfo=UTC),
 ) -> OperationsOverview:
     return OperationsOverview(
         connected_accounts=sum(a.state == "connected" for a in accounts),
@@ -90,8 +90,8 @@ def _incident(
         category=category,
         state="open",
         summary="Calendar provider authorization expired",
-        opened_at=opened.isoformat(),
-        updated_at=opened.isoformat(),
+        opened_at=opened,
+        updated_at=opened,
     )
 
 
@@ -493,7 +493,7 @@ def test_a_lapsed_accounts_rules_carry_why_the_provider_refused() -> None:
         id="incident-account",
         account_id="work-account",
         cause=Cause.API_DISABLED,
-        updated_at=refused.isoformat(),
+        updated_at=refused,
     )
 
     status = _assess(
@@ -508,7 +508,7 @@ def test_a_problem_an_incident_explains_carries_its_cause_and_when_it_was_last_t
     waiting = replace(
         _incident("rule-1", "rate_limit", opened=NOW - timedelta(hours=2)),
         cause=Cause.RATE_LIMITED,
-        updated_at=(NOW - timedelta(minutes=4)).isoformat(),
+        updated_at=NOW - timedelta(minutes=4),
     )
     stopped = replace(_incident("rule-2", "permanent"), cause=Cause.CALENDAR_NOT_FOUND)
 

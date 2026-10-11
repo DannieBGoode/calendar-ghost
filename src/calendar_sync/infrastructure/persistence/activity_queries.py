@@ -8,6 +8,7 @@ import unicodedata
 from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -366,7 +367,7 @@ def operations_of(
                 # Every open incident counts, though only the most recent are read, as in
                 # `SqliteOperationsQueries`, so both readers assess the same ones.
                 open_incidents=len(incidents[user]),
-                last_synced_at=last_synced.get(user),
+                last_synced_at=_optional_time(last_synced.get(user)),
                 open_blocks=tuple(blocks.get(user, ())),
                 accounts=tuple(accounts[user]),
             ),
@@ -406,6 +407,10 @@ def _open_blocks_of(
     return found
 
 
+def _optional_time(value: object) -> datetime | None:
+    return None if value is None else datetime.fromisoformat(str(value))
+
+
 _INCIDENT_COLUMNS = """id, rule_id, account_id, category, state, summary, opened_at, updated_at,
     resolved_at, resolution, message_code, message_params, cause"""
 
@@ -417,9 +422,9 @@ def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
         category=row["category"],
         state=row["state"],
         summary=row["summary"],
-        opened_at=row["opened_at"],
-        updated_at=row["updated_at"],
-        resolved_at=row["resolved_at"],
+        opened_at=datetime.fromisoformat(row["opened_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+        resolved_at=_optional_time(row["resolved_at"]),
         resolution=row["resolution"],
         account_id=row["account_id"],
         message=_incident_message(row["message_code"], row["message_params"]),

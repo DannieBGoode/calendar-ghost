@@ -310,7 +310,7 @@ def _lapse_problem(
         "A calendar account needs reauthorization",
         message=IncidentMessage("authorization_lapsed", {"provider": lapsed[account]}),
         cause=incident.cause if incident is not None else Cause.UNKNOWN,
-        last_tried_at=datetime.fromisoformat(incident.updated_at) if incident else None,
+        last_tried_at=incident.updated_at if incident else None,
     )
 
 
@@ -320,17 +320,16 @@ def _incident_problem(kind: ProblemKind, incident: IncidentSummary, rule_id: str
         kind,
         rule_id,
         incident.summary,
-        datetime.fromisoformat(incident.opened_at),
+        incident.opened_at,
         incident.message,
         incident.cause,
-        datetime.fromisoformat(incident.updated_at),
+        incident.updated_at,
     )
 
 
 def _is_waiting(incident: IncidentSummary, now: datetime) -> bool:
     """Whether a provider condition that retries by itself still has time left to do so."""
-    opened = datetime.fromisoformat(incident.opened_at)
-    return incident.category in WAITING_CATEGORIES and now - opened <= WAITING_LIMIT
+    return incident.category in WAITING_CATEGORIES and now - incident.opened_at <= WAITING_LIMIT
 
 
 def _primary_incident(incidents: Sequence[IncidentSummary], now: datetime) -> IncidentSummary:

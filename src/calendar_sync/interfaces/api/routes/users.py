@@ -414,7 +414,9 @@ def _person(overview: UserOverview) -> PersonResponse:
         **_user(overview.user).model_dump(),
         verdict=status_.health.value,
         problems=len(status_.problems),
-        last_synced_at=status_.overview.last_synced_at,
+        last_synced_at=last_synced.isoformat()
+        if (last_synced := status_.overview.last_synced_at)
+        else None,
         resources=resource_use_response(overview),
     )
 

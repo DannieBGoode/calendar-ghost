@@ -733,7 +733,7 @@ def _status_records(state: MemoryState | None) -> StatusRecords:
             connected_accounts=sum(a.state == "connected" for a in accounts),
             disconnected_accounts=sum(a.state == "disconnected" for a in accounts),
             open_incidents=0,
-            last_synced_at=max(succeeded).isoformat() if succeeded else None,
+            last_synced_at=max(succeeded) if succeeded else None,
             open_blocks=(),
             accounts=accounts,
         ),

@@ -477,6 +477,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
         dashboard = client.get("/api/v1/dashboard")
 
     assert listed.status_code == 200
+    assert account.authorized_at is not None
     # The other accounts are the synthetic ones the other rules use.
     assert [item for item in listed.json() if item["id"] == account.id.value] == [
         {
@@ -487,11 +488,10 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
             "avatar_url": "https://lh3.googleusercontent.com/a/synthetic=s96-c",
             "state": "connected",
             "rule_count": 4,
-            "authorized_at": account.authorized_at,
+            "authorized_at": account.authorized_at.isoformat(),
             "authorization_lapsed_at": None,
         }
     ]
-    assert account.authorized_at is not None
     assert disconnected.status_code == 200
     assert disconnected.json()["state"] == "disconnected"
     assert disconnected.json()["rule_count"] == 4

@@ -221,7 +221,7 @@ class OperationsOverview:
     connected_accounts: int
     disconnected_accounts: int
     open_incidents: int
-    last_synced_at: str | None
+    last_synced_at: datetime | None
     open_blocks: tuple[OpenBlock, ...]
     """Events of existing rules whose latest decision was a block, newest first."""
     accounts: tuple[AccountStanding, ...] = ()
@@ -249,9 +249,9 @@ class IncidentSummary:
     category: str
     state: IncidentState
     summary: str
-    opened_at: str
-    updated_at: str
-    resolved_at: str | None = None
+    opened_at: datetime
+    updated_at: datetime
+    resolved_at: datetime | None = None
     resolution: IncidentResolutionValue | None = None
     """Why a resolved Incident resolved; None while open or when the reason was not recorded."""
     account_id: str | None = None

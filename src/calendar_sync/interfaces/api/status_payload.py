@@ -61,7 +61,7 @@ def status_response(status: InstallationStatus) -> StatusResponse:
         summary=status.summary,
         version=__version__,
         checked_at=status.checked_at.isoformat(),
-        last_synced_at=overview.last_synced_at,
+        last_synced_at=overview.last_synced_at.isoformat() if overview.last_synced_at else None,
         scheduler=SchedulerResponse(
             configured=scheduler is not None,
             last_pass_completed_at=(
@@ -100,7 +100,7 @@ def status_response(status: InstallationStatus) -> StatusResponse:
                 rule_id=incident.rule_id,
                 category=incident.category,
                 summary=incident.summary,
-                opened_at=incident.opened_at,
+                opened_at=incident.opened_at.isoformat(),
                 cause=incident.cause.value if incident.cause else None,
             )
             for incident in status.open_incidents
