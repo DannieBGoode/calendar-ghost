@@ -27,26 +27,28 @@ states will not hold while it grows.
   | `application/operations` | Activity, Installation Status, Installation Health and Installation Hints, the Operator Overview, and storage |
   | `application/shared` | The base application error and the clock and identifier ports, which every context uses |
 
-  Each context declares the ports and errors that more than one of its modules use in its own
-  `ports.py` and `errors.py`. A small port or error that one use case alone uses, such as the
-  query protocols in `operations/activity.py` or the administration errors in
-  `identity/administration.py`, stays beside that use case.
+  Each context's `ports.py` and `errors.py` hold the ports and errors its modules share. A
+  use-case module may also declare ports and errors of its own beside its use cases, such as the
+  query protocols in `operations/activity.py` and the administration errors in
+  `identity/administration.py`. Other modules, in the same context or one above it, import those
+  from that module.
 
 - **The contexts depend in one direction:** `operations`, then `identity`, then `sync`, then
   `shared`. An exhaustive `layers` contract in `pyproject.toml` makes `lint-imports` fail on an
-  import against this direction, and on an application module outside every context. The order follows the code, not a preference: User Deletion removes a User's
-  rules, so `identity` uses `sync`; the Operator Overview reads Users and their rules, so
-  `operations` uses both.
+  import against this direction, and on an application module outside every context. The order
+  follows the code, not a preference: User Deletion removes a User's rules, so `identity` uses
+  `sync`; the Operator Overview reads Users and their rules, so `operations` uses both.
 
 - **Connected Accounts and rule health belong to `sync`.** The account use cases are mostly about
   rules: disconnecting an account degrades its rules, deleting it purges them, and a Lapsed
   Authorization stops and later resumes them. Rule health degrades rules when runs fail. Each of
-  these reads and changes accounts and rules through the same unit of work, under the rule locks.
-  Only deleting an account changes both in one transaction. Disconnection and Lapsed
-  Authorization commit in steps, so an interruption between steps can leave them partly done, as
-  before this decision. Moving accounts to a context of their own would put this coordination in two contexts that
-  both need the other. Google authorization, credentials, and discovery stay in the Google adapter,
-  as before.
+  these use cases coordinates accounts and rules, but only deleting an account changes both in one
+  transaction. Disconnection degrades each rule in its own transaction under that rule's lock,
+  then disconnects the account in another. Lapsed Authorization records the lapse, then stops each
+  rule, then opens its Incident, each committed separately; restoring it clears the lapse, then
+  resolves the Incident, then resumes each rule. Moving accounts to a context of their own would
+  put this coordination in two contexts that both need the other. Google authorization,
+  credentials, and discovery stay in the Google adapter, as before.
 
 - **Glossary concepts live in the domain.** `domain/accounts.py` holds the Connected Account and
   its Provider Kind, `domain/audit.py` the Audit Entry, `domain/incidents.py` the Incident report,

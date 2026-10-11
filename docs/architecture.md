@@ -21,7 +21,7 @@ billing behind Commercial Mode, both off by default (ADR 0028), follow in the ph
 ## Bounded contexts
 
 Each context is one package of `application/`, with its own `ports.py` and `errors.py` for the
-ports and errors more than one of its modules use
+ports and errors its modules share
 ([ADR 0032](adr/0032-bounded-contexts-as-application-packages.md)):
 
 - **Synchronization** (`application/sync`) owns Directional Sync Rules, transformation, mappings,
