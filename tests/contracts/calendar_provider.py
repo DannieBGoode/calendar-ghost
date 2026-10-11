@@ -67,6 +67,9 @@ class ProviderHarness:
     """Make the provider refuse every cursor it gave for the calendar, as one that expired."""
     know_series: Callable[[CalendarEvent], object]
     """Let the backend expand a source series, if it cannot read the recurrence itself."""
+    backdate: Callable[[CalendarEvent], object]
+    """Make a seeded event read as last changed a day ago, for a backend that re-reads events
+    changed shortly before a cursor, as Outlook does for clocks that disagree."""
 
 
 def _projection(title: str = "Busy") -> EventProjection:
@@ -99,16 +102,41 @@ def _occurrence_projection(start: datetime, title: str) -> EventProjection:
     return EventProjection(time=TimedInterval(start, start + timedelta(hours=1)), title=title)
 
 
-def _write(harness: ProviderHarness, series: EventRef, start: datetime, key: str) -> None:
+def _write(
+    harness: ProviderHarness,
+    series: EventRef,
+    start: datetime,
+    key: str,
+    source: EventRef = SOURCE_SERIES.reference,
+) -> None:
     harness.provider.write_occurrence(
-        series, start, SOURCE_SERIES.reference, RULE_ID, _occurrence_projection(start, "Moved"), key
+        series, start, source, RULE_ID, _occurrence_projection(start, "Moved"), key
     )
 
 
-def _cancel(harness: ProviderHarness, series: EventRef, start: datetime) -> None:
+def _cancel(
+    harness: ProviderHarness,
+    series: EventRef,
+    start: datetime,
+    source: EventRef = SOURCE_SERIES.reference,
+) -> None:
     harness.provider.cancel_occurrence(
-        series, start, SOURCE_SERIES.reference, RULE_ID, f"cancel-{start.isoformat()}"
+        series, start, source, RULE_ID, f"cancel-{start.isoformat()}"
     )
+
+
+def _assert_refused(harness: ProviderHarness, series: EventRef, source: EventRef) -> None:
+    """Writing or cancelling an occurrence of `series` for `source` and RULE_ID fails, and the
+    occurrence stays as it was."""
+    with pytest.raises(ProviderFailure) as written:
+        _write(harness, series, SERIES_STARTS[1], "key-write", source)
+    with pytest.raises(ProviderFailure) as cancelled:
+        _cancel(harness, series, SERIES_STARTS[1], source)
+
+    assert written.value.kind is ProviderFailureKind.PERMANENT
+    assert cancelled.value.kind is ProviderFailureKind.PERMANENT
+    kept = _occurrence(harness, series, SERIES_STARTS[1])
+    assert (kept.status, kept.title) == (EventStatus.CONFIRMED, "Busy")
 
 
 def _occurrence(harness: ProviderHarness, series: EventRef, start: datetime) -> CalendarEvent:
@@ -312,15 +340,15 @@ class CalendarProviderContract:
     ) -> None:
         theirs = _series(harness, "key-theirs", OTHER_RULE_ID)
 
-        with pytest.raises(ProviderFailure) as written:
-            _write(harness, theirs, SERIES_STARTS[1], "key-write")
-        with pytest.raises(ProviderFailure) as cancelled:
-            _cancel(harness, theirs, SERIES_STARTS[1])
+        _assert_refused(harness, theirs, SOURCE_SERIES.reference)
 
-        assert written.value.kind is ProviderFailureKind.PERMANENT
-        assert cancelled.value.kind is ProviderFailureKind.PERMANENT
-        kept = _occurrence(harness, theirs, SERIES_STARTS[1])
-        assert (kept.status, kept.title) == (EventStatus.CONFIRMED, "Busy")
+    def test_a_series_of_another_source_is_never_written_or_cancelled(
+        self, harness: ProviderHarness
+    ) -> None:
+        # The same rule, but the series projects another source: the source must match too.
+        series = _series(harness, "key-series")
+
+        _assert_refused(harness, series, EventRef(SOURCE, EventId("other-source-series")))
 
     def test_a_series_whose_every_occurrence_is_cancelled_has_none_live(
         self, harness: ProviderHarness
@@ -362,6 +390,7 @@ class CalendarProviderContract:
         removed = event("native-removed", calendar=SOURCE)
         harness.seed(kept)
         harness.seed(removed)
+        harness.backdate(kept)
         cursor = harness.provider.changes(SOURCE, None, WINDOW_START).next_cursor
         added = event("native-added", calendar=SOURCE)
 
@@ -374,6 +403,9 @@ class CalendarProviderContract:
         assert later.next_cursor
         assert reported[added.reference].status is EventStatus.CONFIRMED
         assert reported[removed.reference].status is EventStatus.CANCELLED
+        # Only what changed since the cursor: an event left alone well before it is not reported
+        # again, though one changed just before it may be, which a Sync Run decides by content.
+        assert kept.reference not in reported
 
     def test_a_refused_cursor_answers_with_a_full_listing(self, harness: ProviderHarness) -> None:
         native = event("native-event", calendar=SOURCE)

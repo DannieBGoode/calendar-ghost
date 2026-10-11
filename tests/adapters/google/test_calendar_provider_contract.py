@@ -32,4 +32,6 @@ class TestGoogleCalendarProvider(CalendarProviderContract):
             lambda _calendar: setattr(api, "refused_tokens", True),
             # Google expands a series from its recurrence; nothing to tell it.
             lambda _series: None,
+            # A sync token orders changes by version, not time, so nothing needs to age.
+            lambda _native: None,
         )

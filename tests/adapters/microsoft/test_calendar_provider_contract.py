@@ -1,6 +1,7 @@
 """The Outlook adapter honors the Calendar Provider contract, through the fake Graph API."""
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 import pytest
 
@@ -69,6 +70,12 @@ def remove_from(graph: FakeMicrosoftGraph, native: CalendarEvent) -> None:
     graph.events.remove(address, calendar, native.reference.event_id.value)
 
 
+def backdate_in(graph: FakeMicrosoftGraph, native: CalendarEvent) -> None:
+    """Outlook re-reads events modified shortly before a cursor; one a day older it does not."""
+    stored = graph.events.stored[native.reference.event_id.value]
+    stored.modified -= timedelta(days=1)
+
+
 class TestOutlookCalendarProvider(CalendarProviderContract):
     @pytest.fixture
     def harness(self) -> ProviderHarness:
@@ -80,4 +87,5 @@ class TestOutlookCalendarProvider(CalendarProviderContract):
             lambda _calendar: setattr(graph.events, "expired", True),
             # Outlook expands a series from its recurrence; nothing to tell it.
             lambda _series: None,
+            lambda native: backdate_in(graph, native),
         )

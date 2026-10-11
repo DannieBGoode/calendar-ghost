@@ -216,10 +216,11 @@ Mechanics every provider shares are tested once, in `tests/adapters/shared/`, an
 both directions at once, to prove neither copies the other's projections. The contract states,
 through the ports alone, the ownership, idempotency, and listing guarantees the use cases rely on.
 It covers recurring series too (ADR 0011): each occurrence resolves by its original start, only the
-rule that owns a series writes or cancels its occurrences, a series that cannot be read never
-proves an occurrence absent, and a series whose every occurrence is cancelled has none live. For
-change feeds, a cursor reports what was added and removed since it, and a refused cursor answers
-with a full listing. Each adapter's own tests cover what is particular to its provider
+rule that owns a series, for the source series it projects, writes or cancels its occurrences, a
+series that cannot be read never proves an occurrence absent, and a series whose every occurrence is
+cancelled has none live. For change feeds, a cursor reports what was added and removed since it and
+not an event left alone well before it, and a refused cursor answers with a full listing. Each
+adapter's own tests cover what is particular to its provider
 (`tests/adapters/google/test_provider.py`, `tests/adapters/microsoft/test_provider.py`).
 
 ## Provider descriptors

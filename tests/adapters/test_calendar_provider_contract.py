@@ -38,6 +38,8 @@ def fake_harness(calendars: FakeCalendars, provider: CalendarProvider) -> Provid
         remove,
         calendars.expired.add,
         lambda series: calendars.put(series, starts=daily_starts(series)),
+        # The fake orders changes, not times, so nothing it holds needs to age.
+        lambda _native: None,
     )
 
 

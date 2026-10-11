@@ -149,8 +149,9 @@ Fixtures in `tests/fixtures` are synthetic. Never copy provider responses from a
 
 A new calendar adapter adds a `CalendarProviderContract` subclass in its own test package, as
 `tests/adapters/google/` and `tests/adapters/microsoft/` do. Its harness seeds and removes Native
-Events in that adapter's backend, makes the backend refuse a calendar's cursors, and, if the
-backend cannot expand a recurrence itself, tells it how the contract's series expands. The fake
+Events in that adapter's backend, makes the backend refuse a calendar's cursors, ages a seeded
+event if the backend re-reads events changed shortly before a cursor, and, if the backend cannot
+expand a recurrence itself, tells it how the contract's series expands. The fake
 of the provider's API must expand a daily series with a count, as the contract's series is.
 
 ## Architecture rules
