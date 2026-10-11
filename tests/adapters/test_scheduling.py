@@ -37,6 +37,7 @@ from calendar_sync.application.sync.synchronization import ExecuteSyncRule, Sync
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
     ConnectedAccountId,
@@ -1372,6 +1373,92 @@ def test_a_pass_resolves_an_authorized_accounts_incident_with_no_rule_waiting(
     with sqlite3.connect(database) as connection:
         incidents = connection.execute("SELECT state, resolution FROM incidents").fetchall()
     assert incidents == [("resolved", "access_restored")]
+
+
+def _work_account(database: Path) -> tuple[ConnectedAccountId, SyncRule, UnitOfWorkFactory]:
+    """A Google account recorded with its credentials, and an enabled rule that uses it."""
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
+    work = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    running = replace(
+        rule(), source=endpoint(work.id.value, "home"), destination=endpoint(work.id.value, "work")
+    )
+    unit_of_work = sqlite_units(database)
+    with unit_of_work() as uow:
+        uow.rules.add(running)
+        uow.commit()
+    return work.id, running, unit_of_work
+
+
+def _account_incidents(database: Path) -> list[tuple[str, str, str, str]]:
+    with sqlite3.connect(database) as connection:
+        return connection.execute(
+            "SELECT deduplication_key, state, category, cause FROM incidents"
+        ).fetchall()
+
+
+def test_a_pass_finishes_a_lapse_the_process_stopped_after_recording(tmp_path: Path) -> None:
+    # The lapse committed, then the process stopped before it stopped the account's rules or
+    # opened its Incident.
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    work, running, unit_of_work = _work_account(database)
+    with unit_of_work() as uow:
+        assert uow.accounts.lapse(work, attempted_at=datetime.now(UTC))
+        uow.commit()
+    notifications = RecordingNotifications()
+    health = _rule_health(database, unit_of_work, notifications)
+    execute = RecordingExecuteRule([])
+    services = ScheduledServices(cast(ExecuteSyncRule, execute), health)
+    scheduler = SyncScheduler(
+        SqliteInstallationUnitOfWorkFactory(database), lambda _owner: services
+    )
+
+    asyncio.run(scheduler.run_once())
+    asyncio.run(scheduler.run_once())
+
+    with unit_of_work() as uow:
+        stopped = uow.rules.get(running.id)
+    assert stopped is not None
+    assert (stopped.state, stopped.awaiting_reauthorization) == (SyncRuleState.DEGRADED, True)
+    assert execute.calls == 0
+    # No refusal is at hand, so the Incident says what every lapse means, with no Cause.
+    assert _account_incidents(database) == [
+        (f"authorization:{work.value}", "open", "authentication", "none")
+    ]
+    (notified,) = notifications.incidents
+    assert notified.summary == "Authorization for Google Calendar expired"
+
+
+def test_finishing_a_lapse_keeps_the_incident_a_lapse_opens_meanwhile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Another request's lapse opens the Incident after finishing read that none was open.
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    work, _, unit_of_work = _work_account(database)
+    notifications = RecordingNotifications()
+    health = _rule_health(database, unit_of_work, notifications)
+    refused = ProviderFailure(
+        ProviderFailureKind.AUTHORIZATION,
+        "client invalid",
+        account_id=work,
+        provider=ProviderKind.GOOGLE,
+        cause=Cause.OAUTH_CLIENT_INVALID,
+    )
+    health.lapses.lapsed(work, refused, attempted_at=datetime.now(UTC))
+    monkeypatch.setattr(
+        SqliteIncidentRepository, "accounts_with_open_incidents", lambda _self: frozenset()
+    )
+
+    health.finish_interrupted_lapses()
+
+    assert _account_incidents(database) == [
+        (f"authorization:{work.value}", "open", "authorization", "oauth_client_invalid")
+    ]
+    assert len(notifications.incidents) == 1
 
 
 def _lapsed(store: SqliteConnectedAccountStore, account_id: ConnectedAccountId) -> bool:

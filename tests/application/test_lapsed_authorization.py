@@ -10,6 +10,7 @@ from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryIncidentRepository,
     InMemoryUnitOfWorkFactory,
     InMemoryUserUnitOfWorkFactory,
 )
@@ -30,7 +31,7 @@ class Incidents:
         self.resolved: list[tuple[str, IncidentResolution]] = []
         self.open_ones: dict[str, IncidentReport] = {}
 
-    def open(self, incident: IncidentReport, at: datetime) -> bool:
+    def open(self, incident: IncidentReport, at: datetime, *, refresh: bool = True) -> bool:
         self.opened.append(incident)
         self.open_ones[incident.key] = incident
         return len(self.opened) == 1
@@ -52,6 +53,28 @@ class Incidents:
             for incident in self.open_ones.values()
             if incident.rule_id is None and incident.account_id is not None
         )
+
+
+class Notifications:
+    def __init__(self) -> None:
+        self.sent: list[IncidentReport] = []
+
+    def incident_opened(self, incident: IncidentReport, at: datetime) -> None:
+        self.sent.append(incident)
+
+
+def _stored(
+    unit_of_work: InMemoryUserUnitOfWorkFactory,
+) -> tuple[InMemoryIncidentRepository, Notifications, LapsedAuthorizations]:
+    """Lapses over the store's own Incidents, as SQLite opens and resolves them."""
+    for account in (PERSONAL, WORK):
+        unit_of_work.state.accounts[account] = ConnectedAccountState.CONNECTED
+    incidents = InMemoryIncidentRepository(unit_of_work.database, USER)
+    notifications = Notifications()
+    lapses = LapsedAuthorizations(
+        unit_of_work, incidents, FixedClock(), notifications=notifications
+    )
+    return incidents, notifications, lapses
 
 
 def _installation() -> tuple[InMemoryUserUnitOfWorkFactory, Incidents, LapsedAuthorizations]:
@@ -263,3 +286,70 @@ def test_the_check_leaves_the_incident_of_an_account_still_lapsed() -> None:
 
     assert lapses.finish_interrupted() == 0
     assert incidents.resolved == []
+
+
+def test_the_check_stops_the_rules_an_interrupted_lapse_left_enabled() -> None:
+    # The lapse committed, then the process stopped before it stopped a rule or opened the
+    # account's Incident.
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    incidents, notifications, lapses = _stored(unit_of_work)
+    elsewhere = replace(
+        rule(),
+        id=SyncRuleId("elsewhere"),
+        source=endpoint("personal-account", "home"),
+        destination=endpoint("personal-account", "away"),
+    )
+    unit_of_work.state.rules = {rule().id: rule(), elsewhere.id: elsewhere}
+    unit_of_work.state.lapsed[WORK] = NOW
+
+    lapses.finish_interrupted()
+    lapses.finish_interrupted()
+
+    states = {
+        rule_id.value: (stored.state, stored.awaiting_reauthorization)
+        for rule_id, stored in unit_of_work.state.rules.items()
+    }
+    assert states == {
+        "rule-1": (SyncRuleState.DEGRADED, True),
+        "elsewhere": (SyncRuleState.ENABLED, False),
+    }
+    assert incidents.accounts_with_open_incidents() == {WORK}
+    # No refusal is at hand: what every lapse means, with no Cause, notified once.
+    (sent,) = notifications.sent
+    assert (sent.key, sent.category, sent.summary, sent.cause) == (
+        "authorization:work-account",
+        "authentication",
+        "Authorization for Google Calendar expired",
+        None,
+    )
+    assert sent.message is not None
+    assert sent.message.params == {"kind": "authentication", "provider": "google"}
+
+
+def test_the_check_opens_the_incident_an_interrupted_lapse_left_unopened() -> None:
+    # Every rule stopped before the process stopped.
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    incidents, notifications, lapses = _stored(unit_of_work)
+    stopped = rule().degrade(awaiting_reauthorization=True)
+    unit_of_work.state.rules = {stopped.id: stopped}
+    unit_of_work.state.lapsed[WORK] = NOW
+
+    assert lapses.finish_interrupted() == 0
+    assert unit_of_work.state.rules[stopped.id] == stopped
+    assert incidents.accounts_with_open_incidents() == {WORK}
+    assert len(notifications.sent) == 1
+
+
+def test_the_check_leaves_an_open_incident_as_its_lapse_opened_it() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    _, notifications, lapses = _stored(unit_of_work)
+    refused = replace(EXPIRED, cause=Cause.OAUTH_CLIENT_INVALID)
+    lapses.lapsed(WORK, refused, attempted_at=NOW)
+    # A rule the lapse did not reach before the process stopped.
+    unit_of_work.state.rules = {rule().id: rule()}
+
+    lapses.finish_interrupted()
+
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DEGRADED
+    (sent,) = notifications.sent
+    assert unit_of_work.database.incidents[USER][sent.key].cause is Cause.OAUTH_CLIENT_INVALID

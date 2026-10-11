@@ -105,21 +105,41 @@ class SqliteInstallationUnitOfWork:
                 EXISTS (
                     SELECT 1 FROM sync_rules
                     WHERE sync_rules.user_id = users.id
-                        AND sync_rules.state = ? AND sync_rules.awaiting_reauthorization = 1
+                        AND sync_rules.state = :degraded
+                        AND sync_rules.awaiting_reauthorization = 1
                 )
                 OR EXISTS (
-                    SELECT 1 FROM incidents
-                    JOIN connected_accounts account
-                        ON account.id = incidents.account_id
-                        AND account.user_id = incidents.user_id
-                    WHERE incidents.user_id = users.id AND incidents.rule_id IS NULL
-                        AND incidents.state = 'open'
-                        AND account.state = ? AND account.authorization_lapsed_at IS NULL
+                    SELECT 1 FROM connected_accounts account
+                    LEFT JOIN incidents incident
+                        ON incident.user_id = account.user_id
+                        AND incident.account_id = account.id
+                        AND incident.rule_id IS NULL
+                        AND incident.state = 'open'
+                    WHERE account.user_id = users.id AND account.state = :connected AND (
+                        -- Authorized again while its Incident is open: a restoration.
+                        (account.authorization_lapsed_at IS NULL AND incident.id IS NOT NULL)
+                        -- Lapsed with no Incident open, or a rule still enabled: a lapse.
+                        OR (account.authorization_lapsed_at IS NOT NULL AND (
+                            incident.id IS NULL OR EXISTS (
+                                SELECT 1 FROM sync_rules
+                                WHERE sync_rules.user_id = account.user_id
+                                    AND sync_rules.state = :enabled
+                                    AND account.id IN (
+                                        sync_rules.source_account_id,
+                                        sync_rules.destination_account_id
+                                    )
+                            )
+                        ))
+                    )
                 )
             )
             ORDER BY users.id
             """,
-            (SyncRuleState.DEGRADED.value, ConnectedAccountState.CONNECTED.value),
+            {
+                "degraded": SyncRuleState.DEGRADED.value,
+                "enabled": SyncRuleState.ENABLED.value,
+                "connected": ConnectedAccountState.CONNECTED.value,
+            },
         ).fetchall()
         return tuple(UserId(str(row[0])) for row in rows)
 

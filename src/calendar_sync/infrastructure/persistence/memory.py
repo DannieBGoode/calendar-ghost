@@ -122,6 +122,14 @@ class InMemoryConnectedAccountRecords:
             and account_id not in self._state.lapsed
         )
 
+    def lapsed(self) -> dict[ConnectedAccountId, ProviderKind]:
+        # Every account this store records is a Google account.
+        return {
+            account: ProviderKind.GOOGLE
+            for account in sorted(self._state.lapsed, key=lambda account: account.value)
+            if self._state.accounts.get(account) is ConnectedAccountState.CONNECTED
+        }
+
     def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
         if self._state.accounts.get(account_id) is not ConnectedAccountState.DISCONNECTED:
             return False
@@ -569,14 +577,21 @@ class InMemoryIncidentRepository:
         self._database = database
         self._user = user_id
 
-    def open(self, incident: IncidentReport, at: datetime) -> bool:  # noqa: ARG002
+    def open(
+        self,
+        incident: IncidentReport,
+        at: datetime,  # noqa: ARG002
+        *,
+        refresh: bool = True,
+    ) -> bool:
         state = self._database.state_of(self._user)
         # An account's own Incident opens only while the account is lapsed.
         if incident.rule_id is None and incident.account_id not in state.lapsed:
             return False
         opened = self._open()
         newly = incident.key not in opened
-        opened[incident.key] = incident
+        if newly or refresh:
+            opened[incident.key] = incident
         return newly
 
     def resolve(

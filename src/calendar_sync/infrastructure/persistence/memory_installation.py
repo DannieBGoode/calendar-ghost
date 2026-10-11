@@ -65,20 +65,7 @@ class InMemoryInstallationUnitOfWork:
             for owner, state in sorted(
                 self._database.partitions.items(), key=lambda item: item[0].value
             )
-            if owner not in self._database.disabled
-            and (
-                any(
-                    rule.state is SyncRuleState.DEGRADED and rule.awaiting_reauthorization
-                    for rule in state.rules.values()
-                )
-                or any(
-                    state.accounts.get(account) is ConnectedAccountState.CONNECTED
-                    and account not in state.lapsed
-                    for account in InMemoryIncidentRepository(
-                        self._database, owner
-                    ).accounts_with_open_incidents()
-                )
-            )
+            if owner not in self._database.disabled and _unfinished(self._database, owner, state)
         )
 
     def forget_change_values(self, before: datetime) -> None:
@@ -110,6 +97,30 @@ class InMemoryInstallationUnitOfWork:
 
     def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
         return {user: _status_records(self._database.partitions.get(user)) for user in users}
+
+
+def _unfinished(database: MemoryDatabase, owner: UserId, state: MemoryState) -> bool:
+    """Whether a lapse or restoration of the owner's may have been left partly done."""
+    if any(
+        rule.state is SyncRuleState.DEGRADED and rule.awaiting_reauthorization
+        for rule in state.rules.values()
+    ):
+        return True
+    incidents = InMemoryIncidentRepository(database, owner).accounts_with_open_incidents()
+    for account, standing in state.accounts.items():
+        if standing is not ConnectedAccountState.CONNECTED:
+            continue
+        if account not in state.lapsed:
+            # Authorized again while its Incident is open: a restoration.
+            if account in incidents:
+                return True
+        # Lapsed with no Incident open, or a rule still enabled: a lapse.
+        elif account not in incidents or any(
+            rule.state is SyncRuleState.ENABLED and rule.uses_account(account)
+            for rule in state.rules.values()
+        ):
+            return True
+    return False
 
 
 def _resource_use(state: MemoryState | None, since: date) -> ResourceUse:

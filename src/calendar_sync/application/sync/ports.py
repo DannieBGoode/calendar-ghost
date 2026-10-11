@@ -349,6 +349,10 @@ class ConnectedAccountRecords(Protocol):
         """Whether the account is connected and its authorization has not lapsed."""
         ...
 
+    def lapsed(self) -> Mapping[ConnectedAccountId, ProviderKind]:
+        """Every connected account whose authorization has lapsed, with its Provider Kind."""
+        ...
+
     def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
         """Delete the account if it is disconnected; whether it was.
 
@@ -466,11 +470,12 @@ class AccountAuthorizations(Protocol):
 
 
 class IncidentRepository(Protocol):
-    def open(self, incident: IncidentReport, at: datetime) -> bool:
+    def open(self, incident: IncidentReport, at: datetime, *, refresh: bool = True) -> bool:
         """Open or refresh the Incident under its key; whether it was newly opened.
 
         Reopening a resolved Incident starts a new episode, so its opening time is `at`. One
-        about an account alone opens only while that account's authorization has lapsed.
+        about an account alone opens only while that account's authorization has lapsed. With
+        `refresh=False`, an Incident already open keeps what it says.
         """
         ...
 

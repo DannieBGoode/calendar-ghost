@@ -734,6 +734,73 @@ class PersistenceContract:
             assert not uow.accounts.authorized(ACCOUNT)
             assert not uow.accounts.authorized(missing)
 
+    def test_users_with_unfinished_lapses_have_a_lapsed_account_with_a_rule_still_enabled(
+        self, harness: PersistenceHarness
+    ) -> None:
+        for account in RULE.source, RULE.destination:
+            harness.connect_account(account.connected_account_id)
+        harness.connect_account(THEIR_ACCOUNT, OTHER_USER)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.commit()
+        _lapse(harness, ACCOUNT, USER)
+        # Lapsed with its Incident open and no rule enabled: nothing is left to finish.
+        _lapse(harness, THEIR_ACCOUNT, OTHER_USER)
+
+        with harness.installation() as installation:
+            unfinished = list(installation.users_with_unfinished_lapses())
+        with harness.unit_of_work() as uow:
+            uow.rules.save(RULE.pause())
+            uow.commit()
+        with harness.installation() as installation:
+            once_paused = list(installation.users_with_unfinished_lapses())
+
+        assert (unfinished, once_paused) == ([USER], [])
+
+    def test_users_with_unfinished_lapses_have_a_lapsed_account_without_its_incident(
+        self, harness: PersistenceHarness
+    ) -> None:
+        harness.connect_account(ACCOUNT)
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.lapse(ACCOUNT, attempted_at=NOW)
+            uow.commit()
+
+        with harness.installation() as installation:
+            unfinished = list(installation.users_with_unfinished_lapses())
+        assert harness.incidents(USER).open(_account_incident(ACCOUNT), NOW, refresh=False)
+        with harness.installation() as installation:
+            once_opened = list(installation.users_with_unfinished_lapses())
+
+        assert (unfinished, once_opened) == ([USER], [])
+
+    def test_an_open_incident_opened_without_refreshing_is_not_opened_again(
+        self, harness: PersistenceHarness
+    ) -> None:
+        harness.connect_account(ACCOUNT)
+        _lapse(harness, ACCOUNT, USER)
+        incidents = harness.incidents(USER)
+
+        assert not incidents.open(_account_incident(ACCOUNT), NOW, refresh=False)
+        assert incidents.accounts_with_open_incidents() == {ACCOUNT}
+
+    def test_lapsed_accounts_are_the_connected_ones_whose_authorization_lapsed(
+        self, harness: PersistenceHarness
+    ) -> None:
+        disconnected = ConnectedAccountId("work-account")
+        for account in ACCOUNT, disconnected:
+            harness.connect_account(account)
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.lapsed() == {}
+            for account in ACCOUNT, disconnected:
+                assert uow.accounts.lapse(account, attempted_at=NOW)
+            uow.commit()
+        harness.disconnect_account(disconnected)
+
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.lapsed() == {ACCOUNT: ProviderKind.GOOGLE}
+        with harness.units(OTHER_USER)() as uow:
+            assert uow.accounts.lapsed() == {}
+
     def test_an_accounts_incident_opens_only_while_the_account_is_lapsed(
         self, harness: PersistenceHarness
     ) -> None:

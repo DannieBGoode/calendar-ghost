@@ -176,7 +176,7 @@ class Incidents:
         self.resolutions: dict[str, IncidentResolution] = {}
         self.reports: list[IncidentReport] = []
 
-    def open(self, incident: IncidentReport, at: datetime) -> bool:
+    def open(self, incident: IncidentReport, at: datetime, *, refresh: bool = True) -> bool:
         self.events.append(("open", incident.key, at))
         self.reports.append(incident)
         newly = incident.key not in self.open_keys
