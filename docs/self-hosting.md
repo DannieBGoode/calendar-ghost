@@ -25,6 +25,13 @@ machine or place it behind HTTPS before exposing it beyond your local network.
 Register Calendar Ghost with Google, with Microsoft, or with both, depending on whose calendars you
 will connect. A provider you do not register is not offered.
 
+| To | Read |
+| --- | --- |
+| Connect Gmail or Google Workspace calendars | [Create a Google Cloud application](#create-a-google-cloud-application) |
+| Connect Outlook.com or Microsoft 365 calendars | [Register a Microsoft Entra application](#register-a-microsoft-entra-application) |
+| Put each client ID and secret in place | [3. Configure the installation](#3-configure-the-installation) |
+| Run on a Raspberry Pi or another host than your computer | [5. Use a LAN host or HTTPS](#5-use-a-lan-host-or-https) |
+
 ### Create a Google Cloud application
 
 Each self-hosted installation should use its own Google Cloud project and OAuth client. Do not
@@ -117,6 +124,8 @@ personal Outlook.com accounts. Outlook support is a preview until the checks in
      (tenant) ID** from the application's **Overview**.
    - **Personal accounts only** ("Personal Microsoft accounts only") lets only Outlook.com accounts
      connect. Set `CALENDAR_SYNC_MICROSOFT_TENANT=consumers`.
+
+   ![The Supported account types list in App registrations, with Any Entra ID Tenant + Personal Microsoft accounts among its options](assets/microsoft-entra-account-types.png)
 3. Under **Redirect URI**, choose the **Web** platform and enter this exact address, then choose
    **Register**:
 
@@ -127,7 +136,11 @@ personal Outlook.com accounts. Outlook support is a preview until the checks in
    Like Google, Microsoft accepts plain HTTP only for `localhost`; for another host, register an
    HTTPS address ([5. Use a LAN host or HTTPS](#5-use-a-lan-host-or-https)). More addresses can be
    added later under **Authentication**.
-4. On the application's **Overview**, copy the **Application (client) ID**.
+4. On the application's **Overview**, copy the **Application (client) ID**. It is
+   `CALENDAR_SYNC_MICROSOFT_CLIENT_ID` in [3. Configure the installation](#3-configure-the-installation).
+   **Supported account types** reads **All Microsoft account users** for the first choice in step 2.
+
+   ![The application's Overview, with its Application (client) ID, Supported account types, and the Add a certificate or secret link](assets/microsoft-entra-overview.png)
 5. Open **API permissions → Add a permission → Microsoft Graph → Delegated permissions** and add
    these, keeping **User.Read**, which is there already:
 
@@ -144,10 +157,15 @@ personal Outlook.com accounts. Outlook support is a preview until the checks in
    Connected Account. Add no application permissions and no `Calendars.ReadWrite.Shared`. None of
    these needs an administrator's consent, but an organization may allow only its IT administrator
    to approve applications: they then choose **Grant admin consent** on this page.
-6. Open **Certificates & secrets → Client secrets → New client secret**, enter a description, and
-   choose when it expires. The admin center recommends 180 days; the longest is 24 months. Copy the
-   secret's **Value** at once, since it is shown only this one time, and not its **Secret ID**.
-   Keep it out of source control and out of screenshots.
+
+   The list then shows five delegated permissions, none of which needs an administrator's consent:
+
+   ![API permissions listing Calendars.ReadWrite, email, offline_access, openid, and User.Read, each Delegated](assets/microsoft-entra-api-permissions.png)
+6. Open **Certificates & secrets → Client secrets → New client secret** (or **Add a certificate or
+   secret** on the **Overview**), enter a description, and choose when it expires. The portal
+   recommends 180 days; the longest is 24 months. Copy the secret's **Value** at once, since it is
+   shown only this one time, and not its **Secret ID**. It is
+   `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`. Keep it out of source control and out of screenshots.
 7. Write down the secret's **Expires** date and set yourself a reminder before it. Calendar Ghost
    cannot read the date, and does not warn you before the secret expires.
 
