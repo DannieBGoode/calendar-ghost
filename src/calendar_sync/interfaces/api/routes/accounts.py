@@ -295,6 +295,9 @@ def discover_calendars(account_id: str, services: Services) -> list[DiscoveredCa
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except ConnectedAccountDisconnected as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
+    except AccountAccessCheckFailed as error:
+        # The provider refused the listing; an authorization refusal has lapsed the account.
+        raise problem_from(status.HTTP_424_FAILED_DEPENDENCY, error) from error
     except AuthorizationNotConfigured as error:
         raise problem_from(status.HTTP_503_SERVICE_UNAVAILABLE, error) from error
     return [

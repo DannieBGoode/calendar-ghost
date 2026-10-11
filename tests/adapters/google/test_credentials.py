@@ -218,6 +218,8 @@ def test_a_token_refresh_is_counted_toward_the_run_and_logged_without_the_token(
     assert "work@example.test" not in caplog.text
 
 
+# Listing calendars is refused as an access check is (ADR 0027).
+@pytest.mark.parametrize("check", ["verify_access", "calendars"])
 @pytest.mark.parametrize(
     ("error", "expected"),
     [
@@ -232,6 +234,7 @@ def test_a_token_refresh_is_counted_toward_the_run_and_logged_without_the_token(
     ],
 )
 def test_an_access_check_whose_token_refresh_fails_explains_what_to_do(
+    check: str,
     tmp_path: Path,
     built: list[Credentials],
     monkeypatch: pytest.MonkeyPatch,
@@ -252,7 +255,7 @@ def test_an_access_check_whose_token_refresh_fails_explains_what_to_do(
     monkeypatch.setattr(Credentials, "refresh", refresh)
 
     with pytest.raises(AccountAccessCheckFailed, match=expected):
-        _oauth(tmp_path, store).verify_access(account.id)
+        getattr(_oauth(tmp_path, store), check)(account.id)
     assert built == []
 
 

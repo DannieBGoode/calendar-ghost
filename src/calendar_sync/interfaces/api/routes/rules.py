@@ -161,6 +161,9 @@ async def sync_now(rule_id: str, services: Services) -> SyncResultResponse:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except RuleNotExecutable as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
+    except ProviderFailure as error:
+        # The run failed and recorded why, as a scheduled run does; the answer names the failure.
+        raise problem_from(status.HTTP_424_FAILED_DEPENDENCY, error) from error
     return SyncResultResponse(
         rule_id=result.rule_id.value,
         created=result.created,
@@ -188,6 +191,8 @@ async def reconcile_now(rule_id: str, services: Services) -> ReconcileResultResp
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except RuleNotExecutable as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
+    except ProviderFailure as error:
+        raise problem_from(status.HTTP_424_FAILED_DEPENDENCY, error) from error
     result, report = reconciled.sync, reconciled.report
     return ReconcileResultResponse(
         rule_id=result.rule_id.value,

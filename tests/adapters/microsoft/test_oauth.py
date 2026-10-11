@@ -381,6 +381,8 @@ def test_an_access_check_counts_calendars_and_writable_ones(installation: Instal
     assert (access.calendars_visible, access.writable_calendars) == (2, 1)
 
 
+# Listing calendars is refused as an access check is (ADR 0027).
+@pytest.mark.parametrize("check", ["verify_access", "calendars"])
 @pytest.mark.parametrize(
     ("refusal", "kind"),
     [
@@ -393,7 +395,7 @@ def test_an_access_check_counts_calendars_and_writable_ones(installation: Instal
     ],
 )
 def test_an_access_check_whose_refresh_is_refused_says_how(
-    installation: Installation, refusal: object, kind: ProviderFailureKind
+    check: str, installation: Installation, refusal: object, kind: ProviderFailureKind
 ) -> None:
     _connect(installation)
     (account,) = installation.store.for_user(USER).list()
@@ -401,7 +403,7 @@ def test_an_access_check_whose_refresh_is_refused_says_how(
     installation.graph.refuse(refusal)  # type: ignore[arg-type]
 
     with pytest.raises(AccountAccessCheckFailed) as failed:
-        installation.oauth.verify_access(account.id)
+        getattr(installation.oauth, check)(account.id)
 
     assert failed.value.kind is kind
     assert "private-marker" not in str(failed.value)
@@ -419,6 +421,8 @@ def test_an_access_check_microsoft_refuses_records_why(installation: Installatio
     assert failed.value.cause is Cause.OAUTH_CLIENT_INVALID
 
 
+# Listing calendars is refused as an access check is (ADR 0027).
+@pytest.mark.parametrize("check", ["verify_access", "calendars"])
 @pytest.mark.parametrize(
     ("status", "code", "kind"),
     [
@@ -428,14 +432,14 @@ def test_an_access_check_microsoft_refuses_records_why(installation: Installatio
     ],
 )
 def test_an_access_check_graph_refuses_says_how(
-    installation: Installation, status: int, code: str, kind: ProviderFailureKind
+    check: str, installation: Installation, status: int, code: str, kind: ProviderFailureKind
 ) -> None:
     _connect(installation)
     (account,) = installation.store.for_user(USER).list()
     installation.graph.refuse(graph_error(status, code))
 
     with pytest.raises(AccountAccessCheckFailed) as failed:
-        installation.oauth.verify_access(account.id)
+        getattr(installation.oauth, check)(account.id)
 
     assert failed.value.kind is kind
     assert "private-marker" not in str(failed.value)

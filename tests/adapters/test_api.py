@@ -1182,6 +1182,32 @@ def test_discovered_calendars_report_googles_original_access_role(
     ]
 
 
+def test_a_calendar_listing_the_provider_refuses_asks_to_reauthorize(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    google = _google(adapters)
+    _connect_accounts(tmp_path / "test.db", "account-1")
+    refused = AccountAccessCheckFailed(
+        "Google authorization has expired; reauthorize this account",
+        ProviderFailureKind.AUTHENTICATION,
+    )
+    monkeypatch.setattr(google, "calendars", Mock(side_effect=refused))
+
+    with TestClient(create_app(container)) as client:
+        sign_in(client)
+        response = client.get("/api/v1/accounts/account-1/calendars")
+        accounts = client.get("/api/v1/accounts").json()
+
+    # Not a server error: the account lapses and the answer says to reauthorize it.
+    assert response.status_code == 424
+    assert response.json()["code"] == "account_access_check_failed"
+    assert response.json()["params"]["reason"] == "authentication"
+    assert [item["authorization_lapsed_at"] is not None for item in accounts] == [True]
+
+
 @pytest.mark.parametrize(
     ("failure", "expected_status", "expected_code"),
     [
@@ -1924,6 +1950,42 @@ def test_sync_and_reconcile_now_report_a_rule_that_is_not_enabled(tmp_path: Path
     assert reconciled.status_code == 409
 
 
+def test_sync_and_reconcile_now_answer_a_failed_run_as_the_providers_failure(
+    tmp_path: Path,
+) -> None:
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    with _units(adapters)() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        uow.commit()
+    failure = ProviderFailure(
+        ProviderFailureKind.TEMPORARY, "Outlook did not list the exceptions of a series"
+    )
+
+    def failed_run(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> None:
+        raise failure
+
+    container = _with_services(
+        container,
+        execute_sync_rule=Mock(execute=Mock(side_effect=failure)),
+        reconcile_now=replace(
+            _reconcile_now(container),
+            synchronize=cast(ExecuteSyncRule, _sync_stand_in(failed_run)),
+        ),
+    )
+
+    with TestClient(create_app(container)) as client:
+        sign_in(client)
+        synced = client.post("/api/v1/rules/rule-1/sync")
+        reconciled = client.post("/api/v1/rules/rule-1/reconcile")
+
+    for answer in (synced, reconciled):
+        assert answer.status_code == 424
+        assert answer.json()["code"] == "provider_failed"
+        assert answer.json()["params"]["kind"] == "temporary"
+
+
 def _sync_stand_in(execute: object) -> Mock:
     """A full pass for Reconcile Now, with the locks and clock it reports its work through."""
     return Mock(execute=execute, locks=RuleLocks(), clock=FixedClock())
@@ -2097,9 +2159,10 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
         ),
     )
 
-    with TestClient(create_app(container), raise_server_exceptions=False) as client:
+    with TestClient(create_app(container)) as client:
         sign_in(client)
-        assert client.post("/api/v1/rules/rule-1/reconcile").status_code >= 500
+        # The provider's failure is answered as such, never as a server error.
+        assert client.post("/api/v1/rules/rule-1/reconcile").status_code == 424
         incidents = client.get("/api/v1/incidents").json()
 
     assert [(item["rule_id"], item["state"]) for item in incidents] == [("rule-1", "open")]
