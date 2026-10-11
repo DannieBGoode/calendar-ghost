@@ -767,9 +767,7 @@ class OutlookCalendarProvider:
         return ProviderFailure(
             _kind(error),
             str(error),
-            retry_after_seconds(error.retry_after, now)
-            if isinstance(error, GraphRefusal)
-            else None,
+            retry_after_seconds(error.retry_after, now),
             account_id=account,
             provider=ProviderKind.OUTLOOK,
             attempted_at=read.get(account, now),
@@ -819,6 +817,9 @@ class _Refusals(AbstractContextManager[None]):
 def _kind(error: GraphRefusal | TokenRefusal) -> ProviderFailureKind:
     """What Calendar Ghost does about a refusal: retry, stop the rule, or lapse the account."""
     if isinstance(error, TokenRefusal):
+        if error.status == 429:
+            # Throttled; the grant still holds.
+            return ProviderFailureKind.RATE_LIMIT
         temporary = error.status is None or error.status >= 500
         if temporary or error.error == "temporarily_unavailable":
             return ProviderFailureKind.TEMPORARY

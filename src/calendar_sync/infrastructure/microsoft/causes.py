@@ -119,6 +119,8 @@ def _graph_cause(error: GraphRefusal) -> Cause:
 
 
 def _token_cause(error: TokenRefusal) -> Cause:
+    if error.status == 429:
+        return Cause.RATE_LIMITED
     if error.status is not None and error.status >= 500:
         return Cause.TEMPORARY
     cause = TOKEN_CAUSES.get(error.error or "", Cause.UNKNOWN)

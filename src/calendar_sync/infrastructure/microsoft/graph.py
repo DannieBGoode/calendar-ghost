@@ -51,6 +51,8 @@ class TokenRefusal(Exception):
     """The RFC 6749 `error` field, which clients react to."""
     codes: tuple[int, ...] = field(default=())
     """`error_codes`: AADSTS numbers, for diagnostics only."""
+    retry_after: str | None = None
+    """How long a throttled request should wait, as Microsoft's `Retry-After` header says."""
 
     def __str__(self) -> str:
         return f"Microsoft refused the token request: {self.error or self.status or 'no answer'}"
@@ -72,6 +74,7 @@ def token_refusal(response: httpx.Response) -> TokenRefusal:
         response.status_code,
         error,
         tuple(code for code in codes if isinstance(code, int)) if isinstance(codes, list) else (),
+        response.headers.get("retry-after"),
     )
 
 

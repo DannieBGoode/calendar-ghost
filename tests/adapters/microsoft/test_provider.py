@@ -5,6 +5,7 @@ translated without Microsoft's words (ADR 0034)."""
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+import httpx
 import pytest
 
 from calendar_sync.application.sync.errors import (
@@ -27,7 +28,10 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
+from calendar_sync.infrastructure.microsoft.graph import GraphHttp, token_refusal
+from calendar_sync.infrastructure.microsoft.provider import OutlookCalendarProvider
 from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
+from calendar_sync.infrastructure.scheduling import SystemClock
 from tests.adapters.microsoft.test_calendar_provider_contract import MAILBOXES, outlook
 from tests.fake_microsoft_graph_api import FakeMicrosoftGraph, graph_error
 from tests.helpers import endpoint
@@ -450,6 +454,24 @@ def test_a_rate_limit_waits_as_long_as_microsoft_asks() -> None:
         provider.get_event(_ref("anything"))
 
     assert (raised.value.retryable, raised.value.retry_after_seconds) == (True, 7)
+
+
+class ThrottledTokens:
+    """The token endpoint throttles every refresh, as Microsoft's identity platform may."""
+
+    def access_token(self, account_id: object) -> str:
+        raise token_refusal(httpx.Response(429, headers={"Retry-After": "7"}, json={}))
+
+
+def test_a_throttled_token_refresh_waits_and_never_asks_to_reauthorize() -> None:
+    graph = FakeMicrosoftGraph()
+    provider = OutlookCalendarProvider(ThrottledTokens(), GraphHttp(graph.client()), SystemClock())
+
+    with pytest.raises(ProviderFailure) as raised:
+        provider.get_event(_ref("anything"))
+
+    assert raised.value.kind is ProviderFailureKind.RATE_LIMIT
+    assert raised.value.retry_after_seconds == 7
 
 
 def test_every_call_is_tallied_for_outlook_by_its_operation_alone() -> None:

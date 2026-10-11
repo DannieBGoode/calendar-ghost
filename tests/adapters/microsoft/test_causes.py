@@ -91,6 +91,10 @@ def test_no_answer_at_all_is_temporary() -> None:
     assert cause_of(TokenRefusal(None)) is Cause.TEMPORARY
 
 
+def test_a_throttled_token_request_is_a_rate_limit() -> None:
+    assert cause_of(TokenRefusal(429)) is Cause.RATE_LIMITED
+
+
 def test_only_microsoft_client_failures_are_the_administrators() -> None:
     owners = {
         cause.owner

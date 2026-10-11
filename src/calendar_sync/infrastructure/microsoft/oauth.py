@@ -348,8 +348,11 @@ def _claims(id_token: object) -> Mapping[str, Any]:
 
 
 def _token_failure_kind(error: TokenRefusal) -> ProviderFailureKind:
-    """A refresh Microsoft could not answer is temporary; any refusal needs reauthorization."""
-    if error.status is None or error.status >= 500 or error.error == "temporarily_unavailable":
+    """A refresh Microsoft could not answer, or throttled, is temporary; any other refusal
+    needs reauthorization."""
+    if error.status is None or error.status >= 500 or error.status == 429:
+        return ProviderFailureKind.TEMPORARY
+    if error.error == "temporarily_unavailable":
         return ProviderFailureKind.TEMPORARY
     return ProviderFailureKind.AUTHENTICATION
 

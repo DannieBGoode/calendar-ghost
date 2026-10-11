@@ -37,6 +37,7 @@ from calendar_sync.infrastructure.security import CredentialCipher
 from tests.fake_microsoft_graph_api import (
     FakeCalendar,
     FakeMicrosoftGraph,
+    Refusal,
     graph_error,
     token_error,
 )
@@ -329,6 +330,8 @@ def test_an_access_check_counts_calendars_and_writable_ones(installation: Instal
         (token_error("interaction_required", 50076), ProviderFailureKind.AUTHENTICATION),
         (token_error("invalid_client", 7000222, status=401), ProviderFailureKind.AUTHENTICATION),
         (token_error("temporarily_unavailable", 0, status=503), ProviderFailureKind.TEMPORARY),
+        # Throttled: the grant still holds, so the check is only retried later.
+        (Refusal(429, {}, {"Retry-After": "7"}), ProviderFailureKind.TEMPORARY),
     ],
 )
 def test_an_access_check_whose_refresh_is_refused_says_how(
