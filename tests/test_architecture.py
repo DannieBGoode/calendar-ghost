@@ -14,7 +14,9 @@ import calendar_sync.application
 REPOSITORY = Path(__file__).resolve().parents[1]
 SOURCE = REPOSITORY / "src" / "calendar_sync"
 PYPROJECT = tomllib.loads((REPOSITORY / "pyproject.toml").read_text(encoding="utf-8"))
-RUFF = PYPROJECT["tool"]["ruff"]["lint"]
+RUFF = PYPROJECT["tool"]["ruff"]
+# Ruff reads its rule selection from `[tool.ruff.lint]`, and still from `[tool.ruff]` itself.
+RUFF_TABLES = (RUFF, RUFF.get("lint", {}))
 
 BOUNDS = ("C901", "PLR0912", "PLR0913", "PLR0915")
 # A `noqa` naming a bound, or naming no rule at all, which silences every rule on its line.
@@ -63,10 +65,18 @@ def test_ruff_configuration_exempts_no_production_code_from_the_bounds() -> None
     def covers(code: str) -> bool:
         return any(bound.startswith(code) for bound in BOUNDS)
 
-    ignored = [code for code in RUFF.get("ignore", []) if covers(code)]
+    ignored = [
+        code
+        for table in RUFF_TABLES
+        for key in ("ignore", "extend-ignore")
+        for code in table.get(key, [])
+        if covers(code)
+    ]
     per_file = [
         (pattern, code)
-        for pattern, codes in RUFF.get("per-file-ignores", {}).items()
+        for table in RUFF_TABLES
+        for key in ("per-file-ignores", "extend-per-file-ignores")
+        for pattern, codes in table.get(key, {}).items()
         if not pattern.startswith("tests/")
         for code in codes
         if covers(code)
@@ -74,6 +84,18 @@ def test_ruff_configuration_exempts_no_production_code_from_the_bounds() -> None
 
     assert ignored == []
     assert per_file == []
+
+
+def test_no_other_ruff_configuration_can_override_the_bounds() -> None:
+    """A `ruff.toml` or `.ruff.toml` takes precedence over `pyproject.toml` where it sits."""
+    found = [
+        str(path.relative_to(REPOSITORY))
+        for name in ("ruff.toml", ".ruff.toml")
+        for path in [REPOSITORY / name, *SOURCE.parents[0].rglob(name)]
+        if path.exists()
+    ]
+
+    assert found == []
 
 
 def _application_dataclasses() -> list[type]:
