@@ -177,8 +177,9 @@ comes from its `originalStartTimeZone`, translated from Windows to IANA names wi
 mapping, so series keep their local time across daylight saving. A series projection is written in
 the Windows zone CLDR maps its IANA zone to. Failing that, it uses the first Windows zone whose IANA
 zone keeps the same UTC offset at every moment of the series' lifetime: offsets compared twice a
-day, and each change matched to the minute, from its first day to the day after its last, or for an
-endless series through 2039, after which time zone data repeats each zone's yearly rule. A series no
+day, and each change matched to the minute, from its first day until its last occurrence ends,
+which for a multi-day occurrence is days after its last day begins, or for an endless series through
+2039, after which time zone data repeats each zone's yearly rule. A series no
 Windows zone keeps exactly is unsupported, a Conflict, rather than written in a zone or in UTC that
 would shift its occurrences. Single events and occurrences are written in UTC. An all-day event is
 read by its dates and written from midnight to midnight with `isAllDay`, so it stays all-day; an

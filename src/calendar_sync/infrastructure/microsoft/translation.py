@@ -504,7 +504,7 @@ def projection_body(
             rule = from_ical(projection.recurrence.lines, start)
         except UnsupportedRecurrence as error:
             raise UnsupportedProjection(f"Outlook cannot repeat this series: {error}") from error
-        windows = _windows(zone, _lifetime(rule, start, zone))
+        windows = _windows(zone, _lifetime(rule, start, zone, _duration(projection)))
         body["recurrence"] = to_graph(rule, windows)
         if isinstance(projection.time, TimedInterval):
             body["start"] = _local(projection.time.starts_at, zone, windows)
@@ -608,9 +608,12 @@ def _windows(zone: str, lifetime: tuple[datetime, datetime]) -> str:
 _ZONE_RULES_SETTLED = datetime(2040, 1, 1, tzinfo=UTC)
 
 
-def _lifetime(rule: SeriesRule, start: datetime | date, zone: str) -> tuple[datetime, datetime]:
-    """From the series' first day to the day after its last; an endless series to the year its
-    zone's rules repeat unchanged, or two years after it starts if that is later."""
+def _lifetime(
+    rule: SeriesRule, start: datetime | date, zone: str, duration: timedelta
+) -> tuple[datetime, datetime]:
+    """From the series' first day until its last occurrence ends, which may be days after it
+    starts; an endless series to the year its zone's rules repeat unchanged, or two years after
+    it starts if that is later."""
     first = start if isinstance(start, date) and not isinstance(start, datetime) else start.date()
     if rule.range.end is not None:
         last: date | None = rule.range.end
@@ -623,7 +626,13 @@ def _lifetime(rule: SeriesRule, start: datetime | date, zone: str) -> tuple[date
     if last is None:
         return begins, max(_ZONE_RULES_SETTLED, begins + timedelta(days=731))
     ends = datetime.combine(last + timedelta(days=1), datetime.min.time(), tzinfo=local)
-    return begins, ends.astimezone(UTC)
+    return begins, ends.astimezone(UTC) + duration
+
+
+def _duration(projection: EventProjection) -> timedelta:
+    if isinstance(projection.time, AllDayRange):
+        return projection.time.ends_before - projection.time.starts_on
+    return projection.time.ends_at - projection.time.starts_at
 
 
 def _projection_start(projection: EventProjection, zone: str) -> datetime | date:
