@@ -1,4 +1,5 @@
 import { ArrowRight, CircleCheck, TriangleAlert } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
 import { useEffect, useRef, type KeyboardEvent, type RefObject } from "react"
 
 import { DetailToolbar } from "@/components/detail-toolbar"
@@ -8,9 +9,10 @@ import { Button } from "@/components/ui/button"
 import { RuleDirection } from "@/features/activity-labels"
 import { incidentText } from "@/i18n/incident-text"
 import { formatRunTime } from "@/lib/activity"
-import { incidentRuleState, type RuleContext } from "@/lib/activity-rule-context"
-import type { Incident } from "@/lib/api"
+import type { RuleContext } from "@/lib/activity-rule-context"
+import { api, type Incident } from "@/lib/api"
 import { causeText } from "@/lib/causes"
+import { isAdministrator } from "@/lib/people"
 import { incidentClosedAt, incidentDetail, incidentDuration, type IncidentStep } from "@/lib/incidents"
 
 type IncidentProps = { incident: Incident; context: RuleContext }
@@ -21,6 +23,7 @@ type IncidentProps = { incident: Incident; context: RuleContext }
  */
 export function IncidentDetail({
   incident,
+  loading,
   context,
   focusRef,
   onClose,
@@ -29,6 +32,8 @@ export function IncidentDetail({
   onNext,
 }: {
   incident: Incident | undefined
+  /** Whether an incident the list does not hold is still loading on its own. */
+  loading: boolean
   context: RuleContext
   focusRef: RefObject<boolean>
   onClose: () => void
@@ -52,13 +57,13 @@ export function IncidentDetail({
       onNext={onNext}
     />
   )
-  // The server lists only the most recent incidents, so a link to an older one is still kept but
-  // not listed; the panel says so rather than claim it is gone.
   if (!incident) {
     return (
       <aside className="activity-detail" aria-label={t("activity.incidents.detail.label")} onKeyDown={close}>
         {toolbar}
-        <p className="activity-event-status" role="status">{t("activity.incidents.detail.missing")}</p>
+        <p className="activity-event-status" role="status">
+          {loading ? t("activity.incidents.detail.loading") : t("activity.incidents.detail.missing")}
+        </p>
       </aside>
     )
   }
@@ -86,7 +91,7 @@ function IncidentSummary({
   const { i18n } = context
   const { t } = i18n
   const open = incident.state === "open"
-  const { explanation, cause, step, fixUrl } = incidentDetail(i18n, incident, incidentRuleState(incident, context))
+  const { explanation, cause, step, fixUrl } = incidentDetail(i18n, incident, { administrator: useIsAdministrator() })
   return (
     <div className="activity-detail-heading">
       <Badge variant={open ? "attention" : "neutral"}>
@@ -176,4 +181,10 @@ function IncidentSubjectFact({ incident, context }: IncidentProps) {
       <dd>{account.email}</dd>
     </div>
   )
+}
+
+/** Whether the signed-in User administers the installation, from the session the app already holds. */
+function useIsAdministrator(): boolean {
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session })
+  return isAdministrator(session.data?.user)
 }

@@ -12,8 +12,14 @@ from calendar_sync.application.sync.ports import RulePreviewSummary, ScheduledRu
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.incidents import IncidentMessage
-from calendar_sync.domain.model import SyncRule
+from calendar_sync.domain.incidents import (
+    AccountAuthorization,
+    IncidentFacts,
+    IncidentMessage,
+    IncidentStep,
+    next_step,
+)
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule
 from calendar_sync.domain.runs import RuleRunOutcome
 
 
@@ -266,3 +272,22 @@ class IncidentSummary:
     cause: Cause | None = None
     """Why the provider failure behind it happened (ADR 0031); unknown when that was not recorded,
     and None for an Incident no provider failure opened, such as events still blocked."""
+    rule_exists: bool = False
+    """Whether its rule exists now; False for an account's or the installation's own Incident."""
+    rule_accounts: tuple[AccountAuthorization, ...] = ()
+    """Its rule's Connected Accounts as they are now, while the rule exists."""
+
+    @property
+    def step(self) -> IncidentStep | None:
+        """Its one next step, as the domain decides it for the Web UI and the email alike."""
+        return next_step(
+            IncidentFacts(
+                self.category,
+                self.cause,
+                open=self.state == "open",
+                rule_exists=self.rule_exists,
+                rule_accounts=self.rule_accounts,
+                failing_account=ConnectedAccountId(self.account_id) if self.account_id else None,
+                last_failure=self.updated_at,
+            )
+        )

@@ -16,8 +16,7 @@ from calendar_sync.application.operations.installation_health import (
     InstallationIncidentKind,
 )
 from calendar_sync.domain.access import User, UserId, UserState
-from calendar_sync.domain.causes import Cause, CauseOwner
-from calendar_sync.domain.incidents import IncidentReport
+from calendar_sync.domain.incidents import IncidentFacts, IncidentReport, IncidentStep, next_step
 
 logger = logging.getLogger(__name__)
 
@@ -117,21 +116,23 @@ def _notification(incident: IncidentReport, at: datetime) -> IncidentNotificatio
 
 
 def _step_path(incident: IncidentReport) -> str:
-    """The page holding the owner's one next step for the Incident's Cause (ADR 0031): their
-    Google connections to reauthorize, the rule to choose another calendar or try again, the
-    Overview when there is nothing for them to do, or Activity for blocked events. A rule is named
-    only by its internal identifier."""
-    cause = incident.cause
-    if cause is None:
-        return "/activity"
-    if cause.owner is CauseOwner.ADMINISTRATOR or cause in _FIXES_ITSELF:
-        return "/"
-    if cause is Cause.ACCESS_REVOKED:
+    """The page holding the owner's one next step, as the domain decides it for the Web UI too
+    (ADR 0033): their Google connections to reauthorize, the rule to review, its blocked events,
+    or the Overview when there is nothing for them to do. Its rule exists, having just run, and
+    nobody has renewed access since it failed. A rule is named only by its internal identifier."""
+    step = next_step(
+        IncidentFacts(
+            incident.category, incident.cause, open=True, rule_exists=incident.rule_id is not None
+        )
+    )
+    rule = quote(incident.rule_id.value, safe="") if incident.rule_id else ""
+    if step is IncidentStep.REAUTHORIZE:
         return "/settings/connections"
-    return f"/rules/{quote(incident.rule_id.value, safe='')}" if incident.rule_id else "/"
-
-
-_FIXES_ITSELF = frozenset({Cause.RATE_LIMITED, Cause.TEMPORARY})
+    if step in {IncidentStep.RECOVER_RULE, IncidentStep.REVIEW_RULE}:
+        return f"/rules/{rule}"
+    if step is IncidentStep.SEE_BLOCKED:
+        return f"/activity?rule={rule}&show=blocked"
+    return "/"
 
 
 class NotificationChannel:

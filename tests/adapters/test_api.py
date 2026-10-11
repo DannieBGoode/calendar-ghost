@@ -5,7 +5,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Thread
-from typing import Any, cast
+from typing import Any, cast, get_args
 from unittest.mock import Mock
 
 import pytest
@@ -46,7 +46,7 @@ from calendar_sync.bootstrap.container import (
 )
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
-from calendar_sync.domain.incidents import IncidentReport
+from calendar_sync.domain.incidents import IncidentReport, IncidentStep
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -76,12 +76,14 @@ from calendar_sync.domain.services import (
 )
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, discovered_calendar
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
+from calendar_sync.infrastructure.persistence import activity_queries
 from calendar_sync.infrastructure.persistence.accounts import SqliteUserConnectedAccounts
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.providers.routing import RoutingAccountCalendars
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
+from calendar_sync.interfaces.api.schemas import IncidentStepValue
 from tests.fake_calendar import FakeCalendars, FixedClock
 from tests.helpers import (
     RecentSchedulerHeartbeat,
@@ -300,6 +302,53 @@ def test_incident_times_come_back_exactly_as_calendar_ghost_stored_them(
         stored,
         stored,
     )
+
+
+def test_incidents_page_on_and_open_one_at_a_time_with_their_next_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(activity_queries, "INCIDENTS_READ", 1)
+    database = tmp_path / "test.db"
+    container, adapters = _installation(Settings(database))
+    owner = administrator(adapters).value
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            """
+            INSERT INTO incidents (
+                id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
+                cause, user_id
+            ) VALUES (?, ?, NULL, ?, 'open', 'Synthetic', ?, ?, ?, ?)
+            """,
+            [
+                ("waiting", "k1", "rate_limit", "2026-09-02", "2026-09-02", "rate_limited", owner),
+                (
+                    "revoked",
+                    "k2",
+                    "authentication",
+                    "2026-09-01",
+                    "2026-09-01",
+                    "access_revoked",
+                    owner,
+                ),
+            ],
+        )
+
+    with TestClient(create_app(container)) as client:
+        sign_in(client)
+        (first,) = client.get("/api/v1/incidents").json()
+        (second,) = client.get("/api/v1/incidents", params={"before": first["id"]}).json()
+        one = client.get("/api/v1/incidents/revoked")
+        missing = client.get("/api/v1/incidents/missing")
+
+    assert (first["id"], first["step"]) == ("waiting", "wait")
+    assert (second["id"], second["step"]) == ("revoked", "reauthorize")
+    assert one.json()["step"] == "reauthorize"
+    assert missing.status_code == 404
+    assert missing.json()["code"] == "incident_not_found"
+
+
+def test_the_api_offers_every_next_step_the_domain_decides() -> None:
+    assert set(get_args(IncidentStepValue)) == {step.value for step in IncidentStep}
 
 
 def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: Path) -> None:

@@ -13,7 +13,9 @@ from calendar_sync.application.operations.activity import (
     activity_category,
 )
 from calendar_sync.application.operations.ports import AccountStanding, OpenBlock
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
+from calendar_sync.domain.incidents import IncidentStep
 from calendar_sync.domain.model import SyncAction, SyncReason, SyncRuleId, TimedInterval
 from calendar_sync.infrastructure.persistence import activity_queries
 from calendar_sync.infrastructure.persistence.activity_queries import (
@@ -348,3 +350,83 @@ def test_incidents_list_open_ones_first_then_most_recently_updated(database: Pat
         datetime(2026, 9, 5),
         "rule_removed",
     )
+
+
+def _incidents(database: Path, *rows: tuple[str, str | None, str, str, str]) -> None:
+    """Incidents as (id, rule, category, state, updated at), each opened on 2026-09-01."""
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            """
+            INSERT INTO incidents (
+                id, deduplication_key, rule_id, account_id, category, state, summary, opened_at,
+                updated_at, user_id
+            )
+            VALUES (?, ?, ?, 'personal-account', ?, ?, 'Synthetic', '2026-09-01T00:00:00+00:00',
+                ?, (SELECT id FROM users ORDER BY rowid LIMIT 1))
+            """,
+            [(row[0], row[0], *row[1:]) for row in rows],
+        )
+
+
+def test_incidents_page_on_from_the_last_one_shown(
+    database: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(activity_queries, "INCIDENTS_READ", 2)
+    _incidents(
+        database,
+        ("open", None, "temporary", "open", "2026-09-03T00:00:00+00:00"),
+        ("resolved-b", None, "temporary", "resolved", "2026-09-02T00:00:00+00:00"),
+        ("resolved-a", None, "temporary", "resolved", "2026-09-02T00:00:00+00:00"),
+        ("resolved-old", None, "temporary", "resolved", "2026-09-01T00:00:00+00:00"),
+    )
+    queries = SqliteOperationsQueries(database, add_user(database))
+
+    first = [incident.id for incident in queries.incidents()]
+    second = [incident.id for incident in queries.incidents(before=first[-1])]
+
+    # Ties in the update time keep one order, so no incident is shown twice or skipped.
+    assert first == ["open", "resolved-b"]
+    assert second == ["resolved-a", "resolved-old"]
+    assert queries.incidents(before="resolved-old") == []
+    assert queries.incidents(before="missing") == []
+
+
+def test_one_incident_is_found_by_its_id_only_for_its_user(database: Path) -> None:
+    _incidents(database, ("mine", None, "temporary", "open", "2026-09-02T00:00:00+00:00"))
+    other = add_user(database, UserId("other-user"))
+
+    found = SqliteOperationsQueries(database, add_user(database)).incident("mine")
+
+    assert found is not None
+    assert found.id == "mine"
+    assert SqliteOperationsQueries(database, add_user(database)).incident("missing") is None
+    assert SqliteOperationsQueries(database, other).incident("mine") is None
+
+
+def test_incidents_carry_what_their_next_step_depends_on(database: Path) -> None:
+    with sqlite_units(database)() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    # The failing account was reauthorized after the incident last recorded a failure.
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE connected_accounts SET updated_at = ? WHERE id = 'personal-account'",
+            ("2026-09-05T00:00:00+00:00",),
+        )
+    _incidents(
+        database,
+        ("renewed", "rule-1", "authentication", "open", "2026-09-02T00:00:00+00:00"),
+        ("removed", "gone-rule", "conflict", "open", "2026-09-02T00:00:00+00:00"),
+    )
+
+    incidents = {
+        incident.id: incident
+        for incident in SqliteOperationsQueries(database, add_user(database)).incidents()
+    }
+
+    renewed = incidents["renewed"]
+    assert renewed.rule_exists
+    assert {account.account_id.value for account in renewed.rule_accounts} == set(RULE_ACCOUNTS)
+    assert renewed.step is IncidentStep.RECOVER_RULE
+    assert not incidents["removed"].rule_exists
+    assert incidents["removed"].step is None
