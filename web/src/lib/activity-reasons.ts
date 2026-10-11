@@ -203,6 +203,29 @@ export const REASONS: Record<string, CopyKeys> = {
     explanation: "activity.reason.projectionUnsupported.explanation",
     next: "activity.reason.projectionUnsupported.next",
   },
+  occurrence_past_neighbour: {
+    trigger: "activity.reason.occurrencePastNeighbour.trigger",
+    effect: "activity.reason.occurrencePastNeighbour.effect",
+    explanation: "activity.reason.occurrencePastNeighbour.explanation",
+    next: "activity.reason.occurrencePastNeighbour.next",
+  },
+  occurrence_not_restorable: {
+    trigger: "activity.reason.occurrenceNotRestorable.trigger",
+    effect: "activity.reason.occurrenceNotRestorable.effect",
+    explanation: "activity.reason.occurrenceNotRestorable.explanation",
+    next: "activity.reason.occurrenceNotRestorable.next",
+  },
+  projection_has_guests: {
+    trigger: "activity.reason.projectionHasGuests.trigger",
+    effect: "activity.reason.projectionHasGuests.effect",
+    explanation: "activity.reason.projectionHasGuests.explanation",
+    next: "activity.reason.projectionHasGuests.next",
+  },
+  series_rebuilt: {
+    trigger: "activity.reason.seriesRebuilt.trigger",
+    effect: "activity.reason.seriesRebuilt.effect",
+    explanation: "activity.reason.seriesRebuilt.explanation",
+  },
 }
 
 export const ACTION_FALLBACK: Record<string, MessageKey> = {

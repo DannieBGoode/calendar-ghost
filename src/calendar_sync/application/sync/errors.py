@@ -8,7 +8,7 @@ from datetime import datetime
 from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
+from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId
 from calendar_sync.domain.providers import ProviderFailureKind
 
 
@@ -142,6 +142,13 @@ class UnsupportedProjection(ApplicationError):
     """The destination's provider cannot hold this projection exactly, such as a recurrence it
     cannot repeat or an occurrence it cannot restore. It is never approximated: the run blocks
     that one event as a Conflict and keeps synchronizing the rest (ADR 0034)."""
+
+    def __init__(
+        self, message: str, reason: SyncReason = SyncReason.PROJECTION_UNSUPPORTED
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
+        """Why, as the Conflict records it."""
 
 
 @dataclass(frozen=True, slots=True)

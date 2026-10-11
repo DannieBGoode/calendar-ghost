@@ -5,11 +5,16 @@ from dataclasses import dataclass, field
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.change_feeds import ChangeFeedCursors
-from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable, RuleNotFound
-from calendar_sync.application.sync.event_sync import SynchronizeEvents
+from calendar_sync.application.sync.errors import (
+    ProviderFailure,
+    RuleNotExecutable,
+    RuleNotFound,
+    UnsupportedProjection,
+)
+from calendar_sync.application.sync.event_sync import SynchronizeEvents, event_operation_key
 from calendar_sync.application.sync.exception_replays import ExceptionReplays
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.sync.occurrences import SynchronizeOccurrences
+from calendar_sync.application.sync.occurrences import SeriesRepairs, SynchronizeOccurrences
 from calendar_sync.application.sync.own_writes import is_own_occurrence_write, is_own_write
 from calendar_sync.application.sync.ports import (
     CalendarProvider,
@@ -101,7 +106,7 @@ class ExecuteSyncRule:
             self.decisions,
             self.fingerprinter,
             self.clock,
-            self._repair_series,
+            SeriesRepairs(self._repair_series, self._rebuild_series),
             self.locks,
         )
         self.exception_replays = ExceptionReplays(self.provider, self.occurrences)
@@ -356,6 +361,60 @@ class ExecuteSyncRule:
             actual_destination=None,
             record_current=False,
         ).reason
+
+    def _rebuild_series(
+        self, run: SyncRunContext, source_series: CalendarEvent
+    ) -> SyncReason | None:
+        """Delete the destination series and write it again from the source, with its moved and
+        cancelled occurrences, to bring back an occurrence its provider cannot restore (ADR 0034).
+
+        Deleting it is guarded as any deletion is, so a series someone invited guests to is not
+        rebuilt; the answer is then why, and None once the series is written again.
+        """
+        run.rebuilt.add(source_series.reference)
+        with self.locks.for_writes(run.rule.id):
+            require_unchanged(run)
+            mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
+            if mapping is None:
+                return SyncReason.OCCURRENCE_NOT_RESTORABLE
+            try:
+                self.provider.delete_projection(
+                    mapping.destination,
+                    source_series.reference,
+                    run.rule.id,
+                    event_operation_key(
+                        run.rule.id,
+                        source_series.reference,
+                        source_series.revision,
+                        SyncAction.DELETE,
+                    ),
+                )
+            except UnsupportedProjection as unsupported:
+                return unsupported.reason
+            run.count(SyncAction.DELETE, source_series.reference)
+            record(
+                run,
+                AuditEntry(
+                    occurred_at=self.clock.now(),
+                    rule_id=run.rule.id,
+                    action=AuditAction.of(SyncAction.DELETE),
+                    outcome=AuditOutcome.of(SyncAction.DELETE),
+                    source_event_id=source_series.reference.event_id.value,
+                    destination_event_id=mapping.destination.event_id.value,
+                    reason=SyncReason.SERIES_REBUILT,
+                    run_id=run.run_id,
+                    event=RecordedEvent.of(source_series),
+                ),
+            )
+            run.uow.commit()
+        # Found missing, the series is written again and every recorded occurrence re-applied,
+        # including those this run checked against the series just deleted.
+        for recorded in run.uow.occurrences.for_series(mapping.id):
+            run.handled.discard(recorded.source)
+        self._synchronize_event(
+            run, source_series, destination_loaded=False, actual_destination=None
+        )
+        return None
 
     def _record_skipped_occurrence(self, run: SyncRunContext, exception: CalendarEvent) -> None:
         """An exception of a series this rule never projected has nothing to protect."""

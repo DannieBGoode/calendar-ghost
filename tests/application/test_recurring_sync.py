@@ -430,6 +430,50 @@ def test_destination_cancellation_of_a_confirmed_occurrence_is_restored() -> Non
     assert calendars.get_occurrence(destination, week_start(2)).status is EventStatus.CONFIRMED  # type: ignore[union-attr]
 
 
+def test_an_occurrence_the_destination_cannot_restore_comes_back_with_its_rebuilt_series() -> None:
+    # Outlook cannot restore an occurrence deleted in it, so the series is written again with its
+    # moved and cancelled occurrences, and the source's occurrence returns (ADR 0034).
+    calendars, factory, destination = _synced()
+    moved = calendars.put(occurrence(series(), 1, moved_by=timedelta(hours=1)))
+    cancelled = calendars.put(occurrence(series(), 3, status=EventStatus.CANCELLED))
+    calendars.report(moved, cancelled)
+    sync_use_case(factory, calendars).execute(rule().id)
+    calendars.restores_cancelled = False
+    calendars.cancel_occurrence(destination, week_start(2), series().reference, rule().id, "user")
+    # A new revision of the source series has the run re-check its occurrences, finding them
+    # current, before it reaches the deleted one, as Outlook's feed reporting the master does.
+    calendars.report(calendars.put(replace(series(), revision="series-revision-2"), starts=STARTS))
+    calendars.report(calendars.get_occurrence(destination, week_start(2)))  # type: ignore[arg-type]
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    rebuilt = factory.state.mappings[(rule().id, series().reference)].destination
+    assert rebuilt != destination
+    assert destination not in calendars.events
+    assert calendars.get_occurrence(rebuilt, week_start(2)).status is EventStatus.CONFIRMED  # type: ignore[union-attr]
+    assert calendars.get_occurrence(rebuilt, week_start(1)).time == moved.time  # type: ignore[union-attr]
+    assert calendars.get_occurrence(rebuilt, week_start(3)).status is EventStatus.CANCELLED  # type: ignore[union-attr]
+    assert result.conflicts == 0
+    assert SyncReason.SERIES_REBUILT in {entry.reason for entry in factory.state.audit}
+
+
+def test_an_occurrence_whose_series_cannot_be_rebuilt_quietly_stays_blocked() -> None:
+    calendars, factory, destination = _synced()
+    calendars.restores_cancelled = False
+    # Someone invited guests to the series in the destination, so deleting it would email them.
+    calendars.undeletable.add(destination)
+    calendars.cancel_occurrence(destination, week_start(2), series().reference, rule().id, "user")
+    calendars.report(calendars.get_occurrence(destination, week_start(2)))  # type: ignore[arg-type]
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert factory.state.mappings[(rule().id, series().reference)].destination == destination
+    assert calendars.get_occurrence(destination, week_start(2)).status is EventStatus.CANCELLED  # type: ignore[union-attr]
+    assert result.conflicts == 1
+    blocked = [entry for entry in factory.state.audit if entry.outcome == "blocked"]
+    assert [entry.reason for entry in blocked] == [SyncReason.PROJECTION_HAS_GUESTS]
+
+
 def test_recreated_destination_series_keeps_source_cancellations() -> None:
     calendars, factory, destination = _synced()
     calendars.report(calendars.put(occurrence(series(), 1, status=EventStatus.CANCELLED)))

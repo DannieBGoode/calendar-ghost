@@ -38,6 +38,7 @@ from calendar_sync.domain.model import (
     EventStatus,
     ManagedOrigin,
     OccurrenceStart,
+    SyncReason,
     SyncRuleId,
     TimedInterval,
     TransformationPolicy,
@@ -454,7 +455,9 @@ class OutlookCalendarProvider:
         if invited is None:
             raise self._unproven("Outlook did not list the exceptions of a series")
         if invited:
-            raise UnsupportedProjection("Outlook would notify the guests of an occurrence")
+            raise UnsupportedProjection(
+                "Outlook would notify the guests of an occurrence", SyncReason.PROJECTION_HAS_GUESTS
+            )
 
     def _delete(self, existing: CalendarEvent) -> None:
         """DELETE of the version read, which notifies nobody about an event without attendees,
@@ -677,7 +680,10 @@ class OutlookCalendarProvider:
                 provider_label=MICROSOFT.calendar_name,
             )
         if instance.status is EventStatus.CANCELLED:
-            raise UnsupportedProjection("Outlook cannot restore a cancelled occurrence")
+            raise UnsupportedProjection(
+                "Outlook cannot restore a cancelled occurrence",
+                SyncReason.OCCURRENCE_NOT_RESTORABLE,
+            )
         body = occurrence_body(projection, rule_id, source_series, operation_key, original_start)
         calendar = destination_series.calendar
         with self._refusals(calendar.connected_account_id, event_scoped=True):
@@ -693,7 +699,8 @@ class OutlookCalendarProvider:
             except GraphRefusal as error:
                 if CROSSING_NEIGHBOURS in error.codes:
                     raise UnsupportedProjection(
-                        "Outlook cannot move an occurrence past its neighbours"
+                        "Outlook cannot move an occurrence past its neighbours",
+                        SyncReason.OCCURRENCE_PAST_NEIGHBOUR,
                     ) from error
                 raise
             return _written(written, body, calendar)
@@ -876,7 +883,9 @@ def _refuse_guests(event: CalendarEvent | None) -> None:
     """Refuse to change an event someone invited guests to: Outlook emails them about any update
     or deletion, and would about clearing them too. The event is left as it is (ADR 0034)."""
     if event is not None and event.guests:
-        raise UnsupportedProjection("Outlook would notify the guests of this event")
+        raise UnsupportedProjection(
+            "Outlook would notify the guests of this event", SyncReason.PROJECTION_HAS_GUESTS
+        )
 
 
 def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) -> bool:

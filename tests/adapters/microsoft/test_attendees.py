@@ -14,6 +14,7 @@ from calendar_sync.domain.model import (
     EventProjection,
     EventRef,
     Recurrence,
+    SyncReason,
     SyncRuleId,
     TimedInterval,
 )
@@ -75,6 +76,7 @@ def test_a_projection_with_guests_is_never_updated() -> None:
     assert _writes(graph) == ["POST"]
     assert graph.events.mail == []
     assert "guest@example.test" not in str(refused.value)
+    assert refused.value.reason is SyncReason.PROJECTION_HAS_GUESTS
 
 
 def test_a_projection_with_guests_is_never_deleted() -> None:

@@ -63,9 +63,9 @@ class SynchronizeEvents:
         run.count(decision.action, source_event.reference)
         try:
             mapping = self._write(run, source_event, mapping, decision, source_moved=source_moved)
-        except UnsupportedProjection:
+        except UnsupportedProjection as unsupported:
             # The destination cannot hold it exactly, so it is blocked rather than approximated.
-            blocked = SyncDecision(SyncAction.CONFLICT, SyncReason.PROJECTION_UNSUPPORTED)
+            blocked = SyncDecision(SyncAction.CONFLICT, unsupported.reason)
             run.recount(decision.action, blocked.action, source_event.reference)
             decision, source_moved = blocked, False
         if record_current or decision.reason is not SyncReason.PROJECTION_CURRENT:

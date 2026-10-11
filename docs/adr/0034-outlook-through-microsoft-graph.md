@@ -162,12 +162,22 @@ Anything else has no Graph equivalent and is never approximated: hourly or finer
 `BYMONTHDAY` from 29 without the last-day form, unless the rule is yearly and its month has that
 day in every year, negative or several `BYMONTHDAY` values, several
 `BYMONTH` values, `BYYEARDAY`, `BYWEEKNO`, `BYHOUR` and finer, `BYSETPOS` lists, a fifth weekday
-(`5MO` or `-2MO`), `COUNT` with `UNTIL`, and `RDATE`, `EXDATE`, or `EXRULE` lines. Restoring an
-occurrence Outlook cancelled has no Graph operation either, nor has moving an exception past a
-neighbour. Each raises `UnsupportedProjection`, and the Sync Run records a **Conflict** for that one
-event or occurrence (`projection_unsupported`), leaving the destination unchanged while the rest of
-the rule keeps synchronizing; a Conflict still there at the daily pass opens the rule's blocked
-Incident. Every Graph pattern has an exact iCalendar form, so an Outlook source never needs this. A series
+(`5MO` or `-2MO`), `COUNT` with `UNTIL`, and `RDATE`, `EXDATE`, or `EXRULE` lines. Moving an
+exception past a neighbour has no Graph operation either. Each raises `UnsupportedProjection` with
+its own reason, and the Sync Run records a **Conflict** for that one event or occurrence, leaving
+the destination unchanged while the rest of the rule keeps synchronizing; a Conflict still there at
+the daily pass opens the rule's blocked Incident. The reason tells the User why and what to do:
+`projection_unsupported` for a recurrence or time zone Outlook cannot repeat,
+`occurrence_past_neighbour` for an occurrence moved to or past its neighbour's day, and
+`projection_has_guests` for guests invited in Outlook (below).
+
+Restoring an occurrence deleted in Outlook has no Graph operation, but the source still has it, and
+a direct deletion of a Managed Projection is repaired from the source. So the series is rebuilt:
+the run deletes the Outlook series, guarded as any deletion is, and writes it again from the source
+with its moved and cancelled occurrences, recording `series_rebuilt`. It is rebuilt at most once a
+run. A series Outlook would email someone about deleting is not rebuilt, and the occurrence stays a
+Conflict for that reason; one the run could not rebuild otherwise is `occurrence_not_restorable`,
+and the next run tries again. The rebuilt series has a new Outlook id. Every Graph pattern has an exact iCalendar form, so an Outlook source never needs this. A series
 projection keeps, in its private origin, the lines and zone it was written with, and reads back with
 them while Outlook still holds exactly that rule, so an equivalent rule written differently is never
 mistaken for Drift and rewritten on every run.
@@ -196,7 +206,7 @@ sensitivity, and set no reminder. The adapter never calls `/cancel`, `/forward`,
 sends a cancellation only for a meeting with attendees, which a projection never is. Someone may
 still invite guests to a projection, or to one occurrence of a projected series, in Outlook. Such an
 event is never updated, deleted, or cancelled again, and its guests are never cleared, since each of
-those emails them: the write is refused as a Conflict (`projection_unsupported`), the event is left
+those emails them: the write is refused as a Conflict (`projection_has_guests`), the event is left
 as it is, and Rule Removal leaves it too. Updating or deleting a series also reaches the guests of
 each of its exceptions, so before either the adapter reads the series' `exceptionOccurrences` with
 their attendees: if any has guests, the write is a Conflict as well, and if Graph does not list them
@@ -207,9 +217,14 @@ exception's `id` and etag only, so no attendee list could ever prove a series fr
 Expanded whole, every exception came with its `attendees` (`[]` without guests), 150 of them in one
 answer. Someone may invite guests between that read and the
 write, so every `PATCH` and `DELETE` carries `If-Match` with the `changeKey` read
-(`W/"<changeKey>"`, as Graph's `@odata.etag`). Graph refuses a write naming an older version with
+(`W/"<changeKey>"`, as Graph's `@odata.etag`). Graph refuses a `PATCH` naming an older version with
 412 (`ErrorIrresolvableConflict`); that failure is temporary, and the next run reads the guests and
-leaves the event. A change that could email anyone is release-blocking, as for Google.
+leaves the event. On 2026-10-12 Graph ignored `If-Match` on `DELETE`, of an event and of an
+occurrence: a stale or invented version still deleted. A guest invited to a projection in the
+moment between the guest read and a `DELETE`, a fraction of a second, would therefore get Outlook's
+cancellation. No Graph operation closes that window, and only someone editing the projection by
+hand can open it, so the risk is accepted; `DELETE` still names the version read, in case Graph
+honors it later. Any other change that could email anyone is release-blocking, as for Google.
 
 ### Reading source events
 
@@ -290,7 +305,9 @@ release that enables the provider:
     ids only.
 16. That `PATCH` and `DELETE` on an event and on an occurrence honor `If-Match: W/"<changeKey>"`,
     refusing an older version with 412, and that inviting guests to a series changes the
-    `changeKey` of each of its occurrences.
+    `changeKey` of each of its occurrences. A personal account on 2026-10-12: `PATCH` of a master
+    and of an occurrence answered 412 for an older version; `DELETE` ignored `If-Match`; changing
+    a master changed every occurrence's `changeKey`.
 
 ## Alternatives considered
 
@@ -314,6 +331,6 @@ Outlook calendars synchronize with the guarantees Google calendars have, at the 
 series' instances when its master changes and of expanding Outlook patterns in the adapter. The
 CLDR zone mapping, the pattern translation table, and the extended property names become
 compatibility surfaces. Occurrence cancellations made in Outlook may wait for the daily pass.
-Recurrences that only Google can express, and restoring occurrences Outlook cancelled, are blocked
-events rather than approximations. `httpx` becomes a runtime dependency. The items above must be
+Recurrences that only Google can express are blocked events rather than approximations, and an
+occurrence deleted in Outlook is brought back by rebuilding its series, which gives it a new id. `httpx` becomes a runtime dependency. The items above must be
 verified against a live tenant before release.
