@@ -249,6 +249,11 @@ def _pattern(parts: Mapping[str, str], first: date) -> Pattern:
         _only(parts, {"BYDAY", "BYMONTHDAY", "BYSETPOS"})
         return _within_month("Monthly", parts, interval, first)
     if frequency == "YEARLY":
+        if "BYMONTH" not in parts:
+            # Without a month, iCalendar repeats days of the month in every month and counts
+            # weekdays through the whole year (RFC 5545, 3.3.10); Outlook repeats a yearly
+            # pattern in one month, so only the bare rule, on its first date, is exact.
+            _only(parts, set())
         _only(parts, {"BYDAY", "BYMONTHDAY", "BYSETPOS", "BYMONTH"})
         month = _positive(parts["BYMONTH"]) if "BYMONTH" in parts else first.month
         if month > 12:

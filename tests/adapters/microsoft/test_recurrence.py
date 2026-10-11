@@ -193,6 +193,13 @@ def test_an_all_day_series_ends_on_its_until_date() -> None:
         ("RRULE:FREQ=WEEKLY;BYSECOND=5",),
         ("RRULE:FREQ=WEEKLY;X-NAME=1",),
         ("RRULE:FREQ=MONTHLY",),
+        # Without BYMONTH, a yearly rule's days of the month fall in every month, and its
+        # weekdays are counted through the whole year (RFC 5545, section 3.3.10).
+        ("RRULE:FREQ=YEARLY;BYMONTHDAY=15",),
+        ("RRULE:FREQ=YEARLY;BYDAY=2MO",),
+        ("RRULE:FREQ=YEARLY;BYDAY=-1FR",),
+        ("RRULE:FREQ=YEARLY;BYDAY=MO",),
+        ("RRULE:FREQ=YEARLY;BYDAY=MO;BYSETPOS=2",),
     ],
 )
 def test_what_outlook_cannot_repeat_exactly_is_never_approximated(lines: tuple[str, ...]) -> None:
@@ -201,6 +208,17 @@ def test_what_outlook_cannot_repeat_exactly_is_never_approximated(lines: tuple[s
 
     with pytest.raises(UnsupportedRecurrence):
         from_ical(lines, start)
+
+
+def test_a_yearly_rule_without_a_month_repeats_on_its_first_date() -> None:
+    # Without BYMONTH or a day, it repeats on the month and day it starts (RFC 5545).
+    rule = from_ical(("RRULE:FREQ=YEARLY",), START)
+
+    assert (rule.pattern.kind, rule.pattern.month, rule.pattern.day_of_month) == (
+        "absoluteYearly",
+        START.month,
+        START.day,
+    )
 
 
 def test_an_unknown_graph_pattern_is_unsupported() -> None:
