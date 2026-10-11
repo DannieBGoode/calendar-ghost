@@ -4,7 +4,7 @@ import { formatEventTime } from "@/lib/activity-time"
 import type { AuditEntry } from "@/lib/api"
 
 /** Which part of a recurring event an entry was about; null for single events or when unknown. */
-export type EventScope = "series" | "occurrence" | null
+type EventScope = "series" | "occurrence" | null
 
 export type EventCell =
   | { state: "event"; title: string; when: string; recurring: boolean; scope: EventScope; note?: string }

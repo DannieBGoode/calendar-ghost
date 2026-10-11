@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Dead code is checked in src only; Vite, Vitest, ESLint, and TypeScript plugins read the root configs.
+  "project": ["src/**/*.{ts,tsx,css}"],
+  "ignoreIssues": {
+    // Generated from openapi.json by openapi-typescript (ADR 0025); its top-level exports follow
+    // the generator's output, not our imports, and the file is never edited by hand.
+    "src/lib/api-schema.ts": ["types"]
+  }
+}

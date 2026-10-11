@@ -161,6 +161,7 @@ the Docker build context, and has its own `Site` workflow.
 
 - Never commit `.env`, OAuth credentials, master keys, access tokens, personal calendar exports, or
   real provider responses. Fixtures must be synthetic.
+- A secret-scan failure blocks merging; allowlist in `.gitleaks.toml` only synthetic values.
 - Never print secrets or decrypted credentials. Keep notification payloads free of event content.
 - Validate paths against resolved trusted roots before serving files.
 - Keep every API route behind the signed-in User's session (`current_user` in
@@ -209,7 +210,9 @@ change under `web/`, run the frontend build and include the regenerated static a
 commit.
 
 User-visible Web UI text lives in `web/src/i18n/locales/en/` and renders through `t()`; dates and
-numbers go through `i18n.format`. Server text the UI shows carries a stable code: raise API errors
+numbers go through `i18n.format`. `web/src/i18n/catalog.test.ts` fails on an English key no source
+file names: delete a key with the code that used it, and give a key built from a template, such as
+`people.overview.next.${step}.self`, its known values in that test's `TEMPLATE_VALUES`. Server text the UI shows carries a stable code: raise API errors
 through `interfaces/api/problems.py` and give Incidents a message (ADR 0026). Never use em dashes.
 
 ## Testing
@@ -238,14 +241,27 @@ npm --prefix web run api:check
 npm --prefix web run typecheck
 npm --prefix web run lint
 npm --prefix web run doctor
+npm --prefix web run knip
 npm --prefix web run test
 npm --prefix web run build
 ```
+
+CI's `frontend` job runs the same commands. `lint` fails on any ESLint warning (`--max-warnings 0`):
+fix the code, never disable a rule to pass. `knip` fails on an unused file, export, or dependency in
+`web/src`: delete it. Add an exception to `web/knip.jsonc` only with a comment saying why.
 
 The frontend's API types are generated from the backend's OpenAPI schema (ADR 0025). After changing
 a response or request model in `interfaces/api/schemas.py`, run
 `.venv/bin/python scripts/export_openapi.py` and `npm --prefix web run api:types`, and commit both
 generated files. Never edit `web/openapi.json` or `web/src/lib/api-schema.ts` by hand.
+
+Scan the repository for secrets with gitleaks (8.30.1, the version CI pins):
+
+```sh
+gitleaks git .
+```
+
+CI's `secrets` job runs the same scan on a pull request's commits and on each push to `main`.
 
 For release-facing changes, also build the image for the supported architectures through CI or
 `docker compose build`. Tests must not require a personal Google account.

@@ -9,6 +9,37 @@ permissions:
   contents: read
 
 jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      # From the release's gitleaks_8.30.1_checksums.txt.
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        working-directory: ${{ runner.temp }}
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl --fail --silent --show-error --location --output "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "$archive" gitleaks
+      # Scans only the commits this event adds: a pull request's own commits, or the commits a push
+      # to main brings. Any finding fails the job.
+      - name: Scan new commits for secrets
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          range="${BASE}..${HEAD}"
+          # A push that creates the branch, or that follows a force push, has no earlier commit to
+          # compare with, so everything reachable from it is new.
+          if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then range="$HEAD"; fi
+          "$RUNNER_TEMP/gitleaks" git . --log-opts="$range" --redact --verbose --no-banner
+
   backend:
     runs-on: ubuntu-latest
     steps:
@@ -44,6 +75,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run doctor
+      - run: npm run knip
       - run: npm run test
       - run: npm run build
 

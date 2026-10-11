@@ -8,16 +8,9 @@ import { ACTION_FALLBACK, REASONS, RULE_ACTIONS, type CopyKeys, type ReasonCopy 
 import { ApiError, type ActivityCategory, type AuditEntry, type RecordedEvent } from "@/lib/api"
 
 export type { RuleNames } from "@/lib/activity-names"
-export { changeListing, fieldChangeLines, fieldLabel, type FieldChangeLines } from "@/lib/activity-fields"
-export { eventCell, type EventCell, type EventScope } from "@/lib/activity-events"
-export {
-  activityDayGroups,
-  activityRows,
-  groupRuns,
-  type ActivityDayGroup,
-  type ActivityGroup,
-  type ActivityRun,
-} from "@/lib/activity-runs"
+export { changeListing, fieldChangeLines, fieldLabel } from "@/lib/activity-fields"
+export { eventCell, type EventCell } from "@/lib/activity-events"
+export { activityDayGroups, activityRows, groupRuns, type ActivityDayGroup } from "@/lib/activity-runs"
 export { formatClockTime, formatDay, formatEventTime, formatRunTime } from "@/lib/activity-time"
 
 // Decisions a source change can explain: an update, or a check that found nothing to write.

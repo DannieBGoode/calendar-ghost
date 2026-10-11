@@ -22,7 +22,7 @@ const BUSY_TENTATIVE_TITLE = "Busy (tentative)"
 const MAYBE_PREFIX = "Maybe: "
 
 /** How a Maybe event's projection is titled, matching the domain's EventProjector. */
-export function tentativeTitle(i18n: I18n, privacy: RulePolicyPayload["privacy_policy"]): string {
+function tentativeTitle(i18n: I18n, privacy: RulePolicyPayload["privacy_policy"]): string {
   if (privacy === "busy_only") {
     return i18n.t("rules.invitations.tentativeTitle.busyOnly", { title: BUSY_TENTATIVE_TITLE })
   }

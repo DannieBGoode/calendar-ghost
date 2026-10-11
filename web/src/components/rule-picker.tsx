@@ -14,7 +14,7 @@ import {
 } from "@/lib/rule-picker"
 import { cn } from "@/lib/utils"
 
-export type RulePickerEndpoint = {
+type RulePickerEndpoint = {
   calendar: string
   accountId: string
   account: ConnectedAccount | undefined

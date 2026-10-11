@@ -1,5 +1,5 @@
 /** The shortest password the server accepts. */
-export const MINIMUM_PASSWORD_LENGTH = 12
+const MINIMUM_PASSWORD_LENGTH = 12
 
 /** Whether a confirmation was typed and differs from the new password. */
 export function passwordMismatch(password: string, confirmation: string): boolean {

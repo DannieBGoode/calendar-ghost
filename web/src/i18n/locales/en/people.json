@@ -39,8 +39,7 @@
     "joined": "Joined",
     "lastSignIn": "Last sign-in",
     "actions": "Actions",
-    "sync": "Sync",
-    "open": "Open {email}"
+    "sync": "Sync"
   },
   "pagination": {
     "label": "Pages of people",
@@ -281,7 +280,6 @@
         "one": "{count} person failed for a reason Calendar Ghost does not recognize. The service logs name Google's reason.",
         "other": "{count} people failed for a reason Calendar Ghost does not recognize. The service logs name Google's reason."
       },
-      "howToFix": "How to fix",
       "howToFixLabel": "How to fix: {hint}"
     }
   },
