@@ -4,7 +4,7 @@ import type { PeopleQuery } from "@/lib/api"
 import { peopleQueryFromSearch, peopleSearch } from "@/lib/people-query"
 
 /** Whether a change adds a history entry, as a new page does, or replaces the current one. */
-export type HistoryMode = "push" | "replace"
+type HistoryMode = "push" | "replace"
 export type UpdatePeopleQuery = (next: Partial<PeopleQuery>, history: HistoryMode) => void
 
 /**

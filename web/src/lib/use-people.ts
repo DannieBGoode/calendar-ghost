@@ -7,7 +7,7 @@ import { api, type IssuedLink, type PeopleQuery, type Person, type UserDeletion 
 import { deletionMessage, personName } from "@/lib/people"
 
 /** What an Installation Administrator can do to another User. */
-export type PersonAction = "promote" | "demote" | "disable" | "enable" | "reset" | "delete"
+type PersonAction = "promote" | "demote" | "disable" | "enable" | "reset" | "delete"
 export type PersonCommand = { person: Person; action: PersonAction }
 
 /** What a command returned that the administrator needs next: a link to pass on, or a deletion's counts. */

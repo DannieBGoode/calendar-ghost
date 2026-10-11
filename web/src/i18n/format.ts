@@ -1,6 +1,6 @@
 import type { MessageKey, MessageParams } from "./types"
 
-export type DateInput = Date | string
+type DateInput = Date | string
 export type Formatters = {
   number: (value: number) => string
   bytes: (bytes: number) => string

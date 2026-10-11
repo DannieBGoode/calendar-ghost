@@ -19,7 +19,7 @@ export type OverviewTone = "stopped" | "review" | "waiting" | "paused" | "setup"
 export type HealthAction = { label: string; view: AppView; ruleId?: string; search?: string; settingsTab?: SettingsTab }
 
 /** A problem the hero lists under the main one, in a few words. */
-export type OtherProblem = { tone: OverviewTone; summary: string; action: HealthAction | null }
+type OtherProblem = { tone: OverviewTone; summary: string; action: HealthAction | null }
 
 export type OverviewHealth = {
   tone: OverviewTone
@@ -70,7 +70,7 @@ export function overviewRules<T extends { id: string; state: string; running: Ru
  * A rule-level problem the Overview can name: stopped until the administrator acts, waiting on
  * Google, or another open incident to review. Blocked events come from the dashboard instead.
  */
-export type RuleProblem = {
+type RuleProblem = {
   ruleId: string
   name: string
   detail: string
@@ -82,7 +82,7 @@ export type RuleProblem = {
 }
 
 /** The server's per-rule problems in the Overview's words. */
-export function ruleProblemsOf(
+function ruleProblemsOf(
   i18n: I18n,
   dashboard: Pick<Dashboard, "problems" | "next_pass_at">,
   ruleName: (ruleId: string) => string | null,

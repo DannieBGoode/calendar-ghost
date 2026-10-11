@@ -33,7 +33,7 @@ export const REFRESH_INTERVAL = 60_000
 const OVERVIEW_RULE_LIMIT = 6
 const RECENT_CHANGE_LIMIT = 5
 
-export type Endpoints = (rule: Pick<RuleSummary, "source" | "destination">) => RuleEndpoints
+type Endpoints = (rule: Pick<RuleSummary, "source" | "destination">) => RuleEndpoints
 
 type SectionProps = {
   rules: RuleSummary[]

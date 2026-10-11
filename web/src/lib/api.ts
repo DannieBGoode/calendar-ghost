@@ -251,7 +251,7 @@ export type IssuedLink = Schemas["IssuedLinkResponse"]
 export type UserDeletion = Schemas["UserDeletionResponse"]
 
 export const ACTIVITY_PAGE_SIZE = 100
-export const PEOPLE_PAGE_SIZE = 50
+const PEOPLE_PAGE_SIZE = 50
 
 export const api = {
   setup: () => call("/api/v1/setup", "get"),

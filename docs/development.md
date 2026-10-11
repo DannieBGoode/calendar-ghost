@@ -125,7 +125,7 @@ and plain, the same register as the English copy.
 .venv/bin/mypy
 .venv/bin/lint-imports
 .venv/bin/pytest --cov
-cd web && npm audit --audit-level=high && npm run api:check && npm run typecheck && npm run lint && npm run doctor && npm run test && npm run build
+cd web && npm audit --audit-level=high && npm run api:check && npm run typecheck && npm run lint && npm run doctor && npm run knip && npm run test && npm run build
 ```
 
 CI also scans each pull request's commits, and each push to `main`, for secrets with

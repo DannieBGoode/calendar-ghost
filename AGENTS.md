@@ -241,12 +241,14 @@ npm --prefix web run api:check
 npm --prefix web run typecheck
 npm --prefix web run lint
 npm --prefix web run doctor
+npm --prefix web run knip
 npm --prefix web run test
 npm --prefix web run build
 ```
 
 CI's `frontend` job runs the same commands. `lint` fails on any ESLint warning (`--max-warnings 0`):
-fix the code, never disable a rule to pass.
+fix the code, never disable a rule to pass. `knip` fails on an unused file, export, or dependency in
+`web/src`: delete it. Add an exception to `web/knip.jsonc` only with a comment saying why.
 
 The frontend's API types are generated from the backend's OpenAPI schema (ADR 0025). After changing
 a response or request model in `interfaces/api/schemas.py`, run
