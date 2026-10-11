@@ -150,13 +150,15 @@ class GoogleOAuthService:
         self._states.cancel(state)
 
     def calendars(self, account_id: ConnectedAccountId) -> tuple[DiscoveredCalendar, ...]:
-        credentials = self._credentials(account_id)
-        service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
-        return tuple(
-            discovered_calendar(item)
-            for item in self._calendar_items(service)
-            if isinstance(item.get("id"), str)
-        )
+        try:
+            credentials = self._credentials(account_id)
+            service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+            items = self._calendar_items(service)
+        except (ConnectedAccountDisconnected, ConnectedAccountNotFound):
+            raise
+        except Exception as error:
+            raise _refused_access(error) from error
+        return tuple(discovered_calendar(item) for item in items if isinstance(item.get("id"), str))
 
     def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
         try:
@@ -194,28 +196,7 @@ class GoogleOAuthService:
         except (AccountAccessCheckFailed, ConnectedAccountDisconnected, ConnectedAccountNotFound):
             raise
         except Exception as error:
-            status_code = _google_status_code(error)
-            cause = cause_of(error, status_code)
-            # A refresh Google rejected carries no status; one it could not answer is retryable.
-            revoked = isinstance(error, RefreshError) and not error.retryable
-            if status_code == 401 or revoked:
-                raise AccountAccessCheckFailed(
-                    "Google authorization has expired; reauthorize this account",
-                    ProviderFailureKind.AUTHENTICATION,
-                    cause,
-                ) from error
-            if status_code == 403:
-                raise AccountAccessCheckFailed(
-                    "Google Calendar access was denied; confirm the Calendar API is enabled "
-                    "and reauthorize this account",
-                    ProviderFailureKind.AUTHORIZATION,
-                    cause,
-                ) from error
-            raise AccountAccessCheckFailed(
-                "Google Calendar access could not be verified; try again",
-                ProviderFailureKind.TEMPORARY,
-                cause,
-            ) from error
+            raise _refused_access(error) from error
         return AccountAccess(
             calendars_visible=len(calendars),
             writable_calendars=sum(
@@ -343,3 +324,29 @@ def _google_status_code(error: Exception) -> int | None:
     response = getattr(error, "resp", None)
     status_code = getattr(response, "status", None)
     return int(status_code) if isinstance(status_code, int) else None
+
+
+def _refused_access(error: Exception) -> AccountAccessCheckFailed:
+    """Why Google refused a request about an account, as an access check reports it."""
+    status_code = _google_status_code(error)
+    cause = cause_of(error, status_code)
+    # A refresh Google rejected carries no status; one it could not answer is retryable.
+    revoked = isinstance(error, RefreshError) and not error.retryable
+    if status_code == 401 or revoked:
+        return AccountAccessCheckFailed(
+            "Google authorization has expired; reauthorize this account",
+            ProviderFailureKind.AUTHENTICATION,
+            cause,
+        )
+    if status_code == 403:
+        return AccountAccessCheckFailed(
+            "Google Calendar access was denied; confirm the Calendar API is enabled "
+            "and reauthorize this account",
+            ProviderFailureKind.AUTHORIZATION,
+            cause,
+        )
+    return AccountAccessCheckFailed(
+        "Google Calendar access could not be verified; try again",
+        ProviderFailureKind.TEMPORARY,
+        cause,
+    )

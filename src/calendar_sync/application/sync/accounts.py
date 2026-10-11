@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass
+from datetime import datetime
 
 from calendar_sync.application.sync.errors import (
     AUTHORIZATION_FAILURES,
@@ -48,6 +49,8 @@ class DiscoverCalendars:
 
     calendars: AccountCalendars
     unit_of_work: UnitOfWorkFactory
+    accounts: ConnectedAccountRepository
+    lapses: LapsedAuthorizations
 
     def execute(self, account_id: ConnectedAccountId) -> tuple[DiscoveredCalendar, ...]:
         # The provider answers for any account, so only the User's own may be asked about.
@@ -56,7 +59,12 @@ class DiscoverCalendars:
                 raise ConnectedAccountNotFound(
                     f"connected account {account_id.value} does not exist"
                 )
-        discovered = tuple(self.calendars.calendars(account_id))
+        started = self.lapses.clock.now()
+        try:
+            discovered = tuple(self.calendars.calendars(account_id))
+        except AccountAccessCheckFailed as error:
+            _lapse_if_refused(self.accounts, self.lapses, account_id, error, started)
+            raise
         # Recorded after the provider answered, so no write lock is held across the request.
         with self.unit_of_work() as uow:
             uow.calendar_names.remember(account_id, discovered)
@@ -91,19 +99,30 @@ class CheckAccountAccess:
         try:
             access = self.calendars.verify_access(account_id)
         except AccountAccessCheckFailed as error:
-            if error.kind in AUTHORIZATION_FAILURES:
-                account = self.accounts.get(account_id)
-                provider = account.provider if account is not None else None
-                failure = ProviderFailure(
-                    error.kind,
-                    str(error),
-                    account_id=account_id,
-                    provider=provider,
-                    cause=error.cause,
-                )
-                self.lapses.lapsed(account_id, failure, attempted_at=started)
+            _lapse_if_refused(self.accounts, self.lapses, account_id, error, started)
             raise
         return AccessCheck(access, self.lapses.restored(account_id, accepted_at=started))
+
+
+def _lapse_if_refused(
+    accounts: ConnectedAccountRepository,
+    lapses: LapsedAuthorizations,
+    account_id: ConnectedAccountId,
+    error: AccountAccessCheckFailed,
+    started: datetime,
+) -> None:
+    """Lapse an account its provider refused for authentication or authorization (ADR 0027)."""
+    if error.kind not in AUTHORIZATION_FAILURES:
+        return
+    account = accounts.get(account_id)
+    failure = ProviderFailure(
+        error.kind,
+        str(error),
+        account_id=account_id,
+        provider=account.provider if account is not None else None,
+        cause=error.cause,
+    )
+    lapses.lapsed(account_id, failure, attempted_at=started)
 
 
 @dataclass(slots=True)

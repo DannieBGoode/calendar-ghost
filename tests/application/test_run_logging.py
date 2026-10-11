@@ -238,7 +238,9 @@ def test_a_long_run_reports_its_progress_as_it_decides(logs: pytest.LogCaptureFi
     )
 
 
-def test_a_failed_run_logs_its_failure_kind_and_duration(logs: pytest.LogCaptureFixture) -> None:
+def test_a_failed_run_logs_its_failure_kind_site_and_duration(
+    logs: pytest.LogCaptureFixture,
+) -> None:
     calendars = FailingCalendars(ProviderFailure(ProviderFailureKind.RATE_LIMIT, "quota"))
     calendars.put(event())
 
@@ -248,7 +250,9 @@ def test_a_failed_run_logs_its_failure_kind_and_duration(logs: pytest.LogCapture
     [failed] = [record for record in logs.records if record.getMessage().startswith("run failed")]
     assert failed.levelno == logging.WARNING
     assert re.fullmatch(
-        f"run failed rule=rule-1 run={RUN} kind=rate_limit after 0s provider_calls=0 "
+        # The site names the last of Calendar Ghost's functions the failure passed through.
+        f"run failed rule=rule-1 run={RUN} kind=rate_limit "
+        "at=synchronization._execute_serialized>change_feeds.begin after 0s provider_calls=0 "
         "token_refreshes=0 rate_limited=0 server_errors=0 slowest_call=0.0s",
         failed.getMessage(),
     )
@@ -263,7 +267,10 @@ def test_an_unexpected_error_is_logged_as_an_infrastructure_failure(
     with pytest.raises(RuntimeError):
         sync_use_case(enabled_rule_factory(), calendars).execute(rule().id)
 
-    assert "kind=infrastructure" in lines(logs, "run failed")[0]
+    assert (
+        "kind=infrastructure at=synchronization._execute_serialized>change_feeds.begin "
+        in (lines(logs, "run failed")[0])
+    )
 
 
 def test_a_run_stopped_by_a_rule_change_is_logged_as_information(

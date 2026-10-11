@@ -6,6 +6,7 @@ calendar identifiers, account emails, and provider payloads never reach them.
 
 from __future__ import annotations
 
+import traceback
 from contextlib import AbstractContextManager, nullcontext
 from datetime import timedelta
 
@@ -38,3 +39,28 @@ def call_summary(calls: ProviderCallTally) -> str:
         f"rate_limited={calls.rate_limited} server_errors={calls.server_errors} "
         f"slowest_call={calls.slowest_seconds:.1f}s"
     )
+
+
+# How many of Calendar Ghost's own functions a failure's site names, innermost last.
+SITE_DEPTH = 2
+
+
+def failure_site(error: BaseException) -> str:
+    """Where a failure was raised, as the last of Calendar Ghost's own functions it passed
+    through, such as `provider.update_projection>provider._refuse_exception_guests`.
+
+    It names code, never data, so a log tells which check failed without any event content.
+    The innermost cause that passed through Calendar Ghost's code is the most precise.
+    """
+    sites = ""
+    current: BaseException | None = error
+    while current is not None:
+        own = [
+            f"{frame.f_globals.get('__name__', '').rsplit('.', 1)[-1]}.{frame.f_code.co_name}"
+            for frame, _ in traceback.walk_tb(current.__traceback__)
+            if str(frame.f_globals.get("__name__", "")).startswith("calendar_sync.")
+        ]
+        if own:
+            sites = ">".join(own[-SITE_DEPTH:])
+        current = current.__cause__
+    return sites or "unknown"

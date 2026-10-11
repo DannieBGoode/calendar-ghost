@@ -621,7 +621,11 @@ def _compose_user(
             if calendars and accounts
             else None
         ),
-        discover_calendars=DiscoverCalendars(calendars, unit_of_work) if calendars else None,
+        discover_calendars=(
+            DiscoverCalendars(calendars, unit_of_work, accounts, rule_health.lapses)
+            if calendars and accounts
+            else None
+        ),
         execute_sync_rule=execute_sync_rule,
         preview_sync_rule=preview_sync_rule,
         reconcile_now=reconcile_now,

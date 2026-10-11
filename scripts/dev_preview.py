@@ -39,6 +39,7 @@ from calendar_sync.application.operations.status import GetInstallationStatus
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.accounts import DiscoverCalendars, ListConnectedAccounts
 from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.ports import (
     AccountAuthorization,
     AccountCalendars,
@@ -427,7 +428,14 @@ def build_preview_container(
                 adapters.activity(user), units, cast(CalendarProvider, PreviewCalendar(moment))
             ),
             list_connected_accounts=ListConnectedAccounts(units, accounts),
-            discover_calendars=DiscoverCalendars(cast(AccountCalendars, providers), units),
+            discover_calendars=DiscoverCalendars(
+                cast(AccountCalendars, providers),
+                units,
+                accounts,
+                LapsedAuthorizations(
+                    units, adapters.incidents(user), adapters.clock, adapters.locks
+                ),
+            ),
             # The preview has no scheduler (no master key is ever configured here); a heartbeat
             # that always reports a recent pass keeps each scenario's own health visible instead
             # of "stalled", which is correct for a real installation with no scheduler at all.

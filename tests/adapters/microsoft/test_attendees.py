@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from calendar_sync.application.sync.errors import ProviderFailure, UnsupportedProjection
+from calendar_sync.application.sync.run_log import failure_site
 from calendar_sync.domain.model import (
     EventId,
     EventProjection,
@@ -237,3 +238,7 @@ def test_a_series_whose_exceptions_outlook_listed_without_attendees_is_not_delet
     assert failed.value.kind is ProviderFailureKind.TEMPORARY
     assert _writes(graph) == ["POST"]
     assert graph.events.mail == []
+    # A failed run's log names this check, and nothing of the event.
+    assert (
+        failure_site(failed.value) == "provider.delete_projection>provider._refuse_exception_guests"
+    )

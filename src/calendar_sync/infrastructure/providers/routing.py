@@ -243,7 +243,12 @@ class RoutingAccountCalendars:
         return adapter
 
     def calendars(self, account_id: ConnectedAccountId) -> Sequence[DiscoveredCalendar]:
-        return self._for(account_id).calendars(account_id)
+        try:
+            return self._for(account_id).calendars(account_id)
+        except AccountAccessCheckFailed as error:
+            # Named as an access check's refusal is, so the User reads which provider refused.
+            error.provider = self._kinds.of(account_id)
+            raise
 
     def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
         try:
