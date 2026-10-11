@@ -143,6 +143,17 @@ recorded it, the event as it is in Google now, and a link to open it in Google C
   the source, or is an all-day occurrence the rule excludes, so there is nothing to show in the
   destination calendar. This is common for the remainder of a "this and following" split. The
   series is synchronized again once one of its occurrences is restored.
+- **Blocked: the destination calendar cannot show it exactly**: nothing was written for this
+  event, and the destination was left unchanged. For an Outlook destination, this means one of:
+  - someone invited guests to the event, or to one occurrence of it, in Outlook. Changing or
+    deleting it would email them, so Calendar Ghost leaves it as it is from then on. Delete it in
+    Outlook yourself if you no longer want it; Outlook then tells its guests.
+  - its recurrence is one Outlook cannot repeat exactly, such as an hourly rule, several days of
+    the month, or a yearly rule on a weekday without a month. Change it in the source to a
+    simpler one.
+  - it is a series in a time zone whose UTC offsets no Windows time zone keeps for the series'
+    whole lifetime, which happens mostly with dates long ago.
+  - it is an occurrence cancelled in Outlook, which Outlook cannot bring back.
 - **Blocked: the occurrence was not found in the destination series**: the destination series no
   longer expands to the source occurrence even after repair. Run **Reconcile now**; if it persists,
   remove the rule and create it again.
@@ -184,6 +195,9 @@ from the remaining projections.
   for example because their private Calendar Ghost metadata names another rule or was removed.
   They were not deleted. Open **Activity**, choose **Blocked**, and delete them in Google Calendar
   yourself if they are no longer wanted.
+- **Left because deleting them would notify someone**: someone invited guests to these Outlook
+  events, or to an occurrence of them, so deleting them would email the guests. They were not
+  deleted. Delete them in Outlook yourself if they are no longer wanted.
 
 ## Activity is temporarily unavailable
 

@@ -327,8 +327,8 @@
     "projectionUnsupported": {
       "trigger": "{destination} cannot show it exactly",
       "effect": "blocked, {destination} left unchanged",
-      "explanation": "The calendar service of {destination} has no way to show this event exactly as it is in {source}, such as a recurrence it cannot repeat or an occurrence it cannot bring back. Calendar Ghost never shows an approximation, so nothing was written for it. The rest of the rule keeps syncing.",
-      "next": "To show it in {destination}, change its recurrence in {source} to a simpler one, or add it to {destination} yourself."
+      "explanation": "The calendar service of {destination} has no way to show this event exactly as it is in {source}, such as a recurrence it cannot repeat or an occurrence it cannot bring back. Or someone invited guests to it in {destination}, and changing it there would email them. Calendar Ghost never shows an approximation or emails anyone, so nothing was written for it. The rest of the rule keeps syncing.",
+      "next": "To show it in {destination}, change its recurrence in {source} to a simpler one, or add it to {destination} yourself. If it has guests in {destination}, it stays as it is: remove it there yourself if you no longer want it."
     }
   },
   "action": {
