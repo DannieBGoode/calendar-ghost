@@ -40,7 +40,7 @@ describe("English copy", () => {
     )
     expect(en.trust.cards).toContainEqual({
       title: "No app telemetry",
-      body: "The installed application talks only to Google and to the notification targets you set up.",
+      body: "The installed application talks only to Google, Microsoft, and the notification targets you set up.",
     })
   })
 
