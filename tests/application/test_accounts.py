@@ -361,7 +361,14 @@ def test_discovering_calendars_of_another_users_account_asks_no_provider() -> No
     database = InMemoryUnitOfWorkFactory()
     database.for_user(OTHER_USER).state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     calendars = CountingCalendars()
-    discover = DiscoverCalendars(calendars, database.for_user(USER))
+    discover = DiscoverCalendars(
+        calendars,
+        database.for_user(USER),
+        RecordingAccounts(),
+        LapsedAuthorizations(
+            memory_units(), cast(IncidentRepository, None), FixedClock(), locks=RuleLocks()
+        ),
+    )
 
     with pytest.raises(ConnectedAccountNotFound):
         discover.execute(ACCOUNT)
@@ -433,3 +440,41 @@ def test_a_refused_access_check_records_why_the_provider_refused() -> None:
 
     (incident,) = incidents.opened
     assert incident.cause is Cause.API_DISABLED
+
+
+class RefusingListing(CountingCalendars):
+    def calendars(self, account_id: ConnectedAccountId) -> tuple[DiscoveredCalendar, ...]:
+        raise AccountAccessCheckFailed(
+            "expired", ProviderFailureKind.AUTHENTICATION, Cause.ACCESS_REVOKED
+        )
+
+
+def test_a_refused_calendar_listing_lapses_the_account() -> None:
+    # Listing calendars is a provider request like any other: a refusal of the account's
+    # credentials marks it as Lapsed Authorization, so the User is asked to reauthorize.
+    units = memory_units()
+    units.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    incidents = OpenedIncidents()
+    account = ConnectedAccount(
+        ACCOUNT,
+        "Personal",
+        "personal@example.test",
+        ConnectedAccountState.CONNECTED,
+        provider=ProviderKind.GOOGLE,
+    )
+    discover = DiscoverCalendars(
+        RefusingListing(),
+        units,
+        RecordingAccounts(account),
+        LapsedAuthorizations(
+            units, cast(IncidentRepository, incidents), FixedClock(), locks=RuleLocks()
+        ),
+    )
+
+    with pytest.raises(AccountAccessCheckFailed):
+        discover.execute(ACCOUNT)
+
+    (incident,) = incidents.opened
+    assert incident.cause is Cause.ACCESS_REVOKED
+    assert ACCOUNT in units.state.lapsed
+    assert units.state.calendar_names == {}

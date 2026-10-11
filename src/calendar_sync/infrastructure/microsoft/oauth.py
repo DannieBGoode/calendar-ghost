@@ -184,11 +184,13 @@ class MicrosoftOAuthService:
         self._states.cancel(state)
 
     def calendars(self, account_id: ConnectedAccountId) -> tuple[DiscoveredCalendar, ...]:
-        return tuple(
-            discovered_calendar(item)
-            for item in self._calendar_items(self.access_token(account_id))
-            if isinstance(item.get("id"), str)
-        )
+        try:
+            items = self._calendar_items(self.access_token(account_id))
+        except TokenRefusal as error:
+            raise _refused_check(_token_failure_kind(error), cause_of(error)) from error
+        except GraphRefusal as error:
+            raise _refused_check(_graph_failure_kind(error), cause_of(error)) from error
+        return tuple(discovered_calendar(item) for item in items if isinstance(item.get("id"), str))
 
     def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
         try:

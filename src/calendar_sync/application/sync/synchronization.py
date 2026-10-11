@@ -21,7 +21,7 @@ from calendar_sync.application.sync.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.application.sync.resource_use import record_provider_calls
-from calendar_sync.application.sync.run_log import UntalliedProviderCalls
+from calendar_sync.application.sync.run_log import UntalliedProviderCalls, failure_site
 from calendar_sync.application.sync.sync_run import (
     SyncRunContext,
     SyncRunLog,
@@ -132,13 +132,13 @@ class ExecuteSyncRule:
             log.stopped()
             raise
         except ProviderFailure as failure:
-            log.failed(failure.kind.value)
+            log.failed(failure.kind.value, failure_site(failure))
             self._record_failure(
                 rule_id, full, failure.kind, failure.provider_cause, failure.provider
             )
             raise
-        except Exception:
-            log.failed(ProviderFailureKind.INFRASTRUCTURE.value)
+        except Exception as error:
+            log.failed(ProviderFailureKind.INFRASTRUCTURE.value, failure_site(error))
             # A local failure: no provider refused, so it has no Cause.
             self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE)
             raise

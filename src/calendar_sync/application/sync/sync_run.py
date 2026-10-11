@@ -116,11 +116,12 @@ class SyncRunLog:
             call_summary(self.calls),
         )
 
-    def failed(self, kind: str) -> None:
+    def failed(self, kind: str, site: str) -> None:
         logger.warning(
-            "run failed %s kind=%s after %s %s",
+            "run failed %s kind=%s at=%s after %s %s",
             self._names(),
             kind,
+            site,
             self._elapsed(),
             call_summary(self.calls),
         )

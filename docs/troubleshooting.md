@@ -83,8 +83,11 @@ Each Sync Run, scheduled or started with **Sync now**, writes:
   `decided` also counts each occurrence of a recurring event, so it can be larger.
 - `run finished … in 28m14s created=… provider_calls=… token_refreshes=… rate_limited=…
   server_errors=… slowest_call=1.3s`: the run's counts and how its provider calls went.
-- `run failed … kind=rate_limit after 3m02s` (WARNING): the run stopped with this failure kind; the
-  scheduler retries temporary and rate-limit failures as a new run with a new `run=` identifier.
+- `run failed … kind=rate_limit at=provider.update_projection>graph.request after 3m02s` (WARNING):
+  the run stopped with this failure kind. `at=` names the last two of Calendar Ghost's own functions
+  the failure passed through, which tells which check or request failed; it names code only, never
+  an event. The scheduler retries temporary and rate-limit failures as a new run with a new `run=`
+  identifier.
 - `run stopped … rule changed`: the rule was paused, edited, or removed while the run was in
   progress. Nothing needs fixing.
 
