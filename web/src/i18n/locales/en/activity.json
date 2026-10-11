@@ -325,10 +325,33 @@
       "next": "If you don't want it in {destination}, delete it there yourself."
     },
     "projectionUnsupported": {
-      "trigger": "{destination} cannot show it exactly",
+      "trigger": "{destination} cannot repeat it exactly",
       "effect": "blocked, {destination} left unchanged",
-      "explanation": "The calendar service of {destination} has no way to show this event exactly as it is in {source}, such as a recurrence it cannot repeat or an occurrence it cannot bring back. Or someone invited guests to it in {destination}, and changing it there would email them. Calendar Ghost never shows an approximation or emails anyone, so nothing was written for it. The rest of the rule keeps syncing.",
-      "next": "To show it in {destination}, change its recurrence in {source} to a simpler one, or add it to {destination} yourself. If it has guests in {destination}, it stays as it is: remove it there yourself if you no longer want it."
+      "explanation": "{destination} has no way to repeat this event exactly as {source} does, such as its recurrence or its time zone. Calendar Ghost never shows an approximation, so nothing was written for it. The rest of the rule keeps syncing.",
+      "next": "To show it in {destination}, change its recurrence in {source} to a simpler one, or add it to {destination} yourself."
+    },
+    "occurrencePastNeighbour": {
+      "trigger": "Moved past another occurrence in {source}",
+      "effect": "blocked, {destination} left unchanged",
+      "explanation": "In {source}, this occurrence moved to or past the day of the occurrence before or after it. {destination} cannot move an occurrence that far, so nothing was written for it. The rest of the series keeps syncing.",
+      "next": "To show it in {destination}, move it in {source} to a day between the occurrences before and after it. This clears by itself when you do, or when you cancel it in {source}."
+    },
+    "occurrenceNotRestorable": {
+      "trigger": "Deleted in {destination}",
+      "effect": "blocked, {destination} left unchanged",
+      "explanation": "This occurrence was deleted in {destination}, which cannot bring back a deleted occurrence. Calendar Ghost brings it back by writing the whole series again, and could not do that in this sync.",
+      "next": "Nothing to do now. Calendar Ghost tries again at the next sync."
+    },
+    "projectionHasGuests": {
+      "trigger": "Guests were invited to it in {destination}",
+      "effect": "blocked, left in {destination}",
+      "explanation": "Someone invited guests to this event in {destination}. Changing or deleting it there would email them, and Calendar Ghost never emails anyone, so it leaves the event as it is.",
+      "next": "If you want Calendar Ghost to sync it again, remove the guests from the event in {destination}, or delete the event there yourself."
+    },
+    "seriesRebuilt": {
+      "trigger": "An occurrence was deleted in {destination}",
+      "effect": "series written again in {destination}",
+      "explanation": "{destination} cannot bring back an occurrence deleted in it. Calendar Ghost removed the series there and wrote it again from {source}, with its moved and cancelled occurrences, so it matches {source} again."
     }
   },
   "action": {

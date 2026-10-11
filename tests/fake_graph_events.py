@@ -165,7 +165,13 @@ class FakeGraphEvents:
             return self._get(mailbox, calendar, event_id, params)
         condition = request.headers.get("If-Match")
         current = self._etag(mailbox, calendar, event_id)
-        if condition is not None and current is not None and condition != current:
+        # Graph v1.0 honored If-Match on PATCH and ignored it on DELETE (2026-10-12, ADR 0034).
+        if (
+            method == "PATCH"
+            and condition is not None
+            and current is not None
+            and condition != current
+        ):
             # The item changed since the version the write names: Exchange's "the change key
             # passed in the request does not match the current change key for the item".
             return _error(412, "ErrorIrresolvableConflict")

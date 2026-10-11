@@ -23,6 +23,7 @@ from calendar_sync.domain.model import (
     EventStatus,
     ManagedOrigin,
     Recurrence,
+    SyncReason,
     SyncRuleId,
     TimedInterval,
     TransformationPolicy,
@@ -385,7 +386,7 @@ def test_an_occurrence_outlook_cancelled_cannot_be_restored_and_is_left_alone() 
     provider.cancel_occurrence(destination, MONDAY, source, RULE, "key-2")
     writes = len(graph.events.writes)
 
-    with pytest.raises(UnsupportedProjection):
+    with pytest.raises(UnsupportedProjection) as refused:
         provider.write_occurrence(
             destination,
             MONDAY,
@@ -395,6 +396,7 @@ def test_an_occurrence_outlook_cancelled_cannot_be_restored_and_is_left_alone() 
             "key-3",
         )
 
+    assert refused.value.reason is SyncReason.OCCURRENCE_NOT_RESTORABLE
     assert len(graph.events.writes) == writes
 
 
@@ -403,7 +405,7 @@ def test_an_occurrence_moved_past_its_neighbour_is_unsupported() -> None:
     destination, source = _destination_series(provider, graph)
     past = MONDAY + timedelta(days=8)
 
-    with pytest.raises(UnsupportedProjection):
+    with pytest.raises(UnsupportedProjection) as refused:
         provider.write_occurrence(
             destination,
             MONDAY,
@@ -412,6 +414,8 @@ def test_an_occurrence_moved_past_its_neighbour_is_unsupported() -> None:
             EventProjection(TimedInterval(past, past + timedelta(hours=1)), "Busy"),
             "key-2",
         )
+
+    assert refused.value.reason is SyncReason.OCCURRENCE_PAST_NEIGHBOUR
 
 
 def test_an_occurrence_of_another_rules_series_is_never_written() -> None:
