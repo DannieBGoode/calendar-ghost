@@ -4,7 +4,7 @@ import { testI18n } from "@/i18n/testing"
 
 import settingsAccountRowSource from "../features/settings-account-row.tsx?raw"
 import settingsAccountsSource from "../features/settings-accounts.tsx?raw"
-import settingsGoogleReturnSource from "../features/settings-google-return.tsx?raw"
+import settingsOAuthReturnSource from "../features/settings-oauth-return.tsx?raw"
 import settingsStorageSource from "../features/settings-storage.tsx?raw"
 import settingsPageSource from "../features/settings.tsx?raw"
 import apiSource from "./api.ts?raw"
@@ -15,7 +15,7 @@ const settingsSource = [
   settingsAccountsSource,
   settingsAccountRowSource,
   settingsStorageSource,
-  settingsGoogleReturnSource,
+  settingsOAuthReturnSource,
 ].join("\n")
 
 describe("permanent Connected Account deletion", () => {
@@ -29,7 +29,7 @@ describe("permanent Connected Account deletion", () => {
     expect(t("settings.accounts.actions.delete")).toBe("Delete account")
     expect(t("settings.accounts.delete.confirm")).toBe("Delete permanently")
     expect(t("settings.accounts.delete.bodyWithRules", { count: 2 })).toContain(
-      "Managed Projections in Google Calendar will not be deleted",
+      "Managed Projections in their calendars will not be deleted",
     )
   })
 })

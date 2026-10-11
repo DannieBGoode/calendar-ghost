@@ -522,6 +522,7 @@ class PersistenceContract:
             False,
             failure_kind="authorization",
             failure_cause=Cause.API_DISABLED,
+            failure_provider=ProviderKind.GOOGLE,
         )
         older = replace(failed, rule_id=OTHER_RULE.id, completed_at=NOW - DAY)
         with harness.unit_of_work() as uow:
@@ -543,8 +544,10 @@ class PersistenceContract:
         with harness.installation() as installation:
             seen = installation.failure_causes(NOW - timedelta(hours=1))
 
-        # Only who and why: never which rule, calendar, or account.
-        assert list(seen) == [CauseSighting(USER, Cause.API_DISABLED, NOW, False)]
+        # Only who, why, and which provider said so: never which rule, calendar, or account.
+        assert list(seen) == [
+            CauseSighting(USER, Cause.API_DISABLED, NOW, False, provider=ProviderKind.GOOGLE)
+        ]
 
     def test_a_local_failure_has_no_cause_and_suggests_nothing(
         self, harness: PersistenceHarness
@@ -685,6 +688,21 @@ class PersistenceContract:
             uow.commit()
         with harness.unit_of_work() as uow:
             assert uow.calendar_names.names([family]) == {}
+
+    def test_a_calendar_its_provider_gave_no_name_is_remembered_without_one(
+        self, harness: PersistenceHarness
+    ) -> None:
+        family = CalendarEndpoint(ACCOUNT, CalendarId("family"))
+        harness.connect_account(ACCOUNT)
+        unnamed = replace(_calendar("family", "family"), named=False)
+        with harness.unit_of_work() as uow:
+            uow.calendar_names.remember(ACCOUNT, [_calendar("family", "Family")])
+            uow.calendar_names.remember(ACCOUNT, [unnamed])
+            uow.commit()
+
+        # Its label, such as its identifier, is no name, so a rule never shows it as one.
+        with harness.unit_of_work() as uow:
+            assert uow.calendar_names.names([family]) == {family: ""}
 
     # Records need their rule, and identities stay unique
 

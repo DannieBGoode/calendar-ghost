@@ -335,6 +335,7 @@ def test_installation_health_hints_a_cause_people_share_without_naming_them(
             "cause": "api_disabled",
             "users": 2,
             "anchor": "the-google-calendar-api-is-turned-off",
+            "provider": "google",
         }
     ]
 

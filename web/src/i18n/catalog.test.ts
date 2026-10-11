@@ -120,6 +120,8 @@ const TEMPLATE_VALUES: TemplateValues = {
     "unknown",
   ],
   "common.provider.*": ["google"],
+  "common.providerName.*": ["google"],
+  "common.providerAccount.*": ["google"],
   "common.apiError.*": "server",
   "common.apiError.*_*": "server",
 }

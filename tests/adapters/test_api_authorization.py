@@ -72,9 +72,9 @@ USER_NAMING_ADMINISTRATOR_ROUTES = {("GET", "/api/v1/users/{user_id}/overview")}
 STATUS_READER_ROUTES = {("GET", "/api/v1/status")}
 INSTALLATION_READER_ROUTES = {("GET", "/api/v1/installation/health")}
 TOKEN_ROUTES = STATUS_READER_ROUTES | INSTALLATION_READER_ROUTES
-# Google's redirect cannot be answered with a 401, so the OAuth callback reads the session itself
-# and connects an account only for the User who began the flow in this browser.
-SESSION_AND_STATE_ROUTES = {("GET", "/api/v1/oauth/google/callback")}
+# A provider's redirect cannot be answered with a 401, so the OAuth callback reads the session
+# itself and connects an account only for the User who began the flow in this browser.
+SESSION_AND_STATE_ROUTES = {("GET", "/api/v1/oauth/{slug}/callback")}
 
 
 def _requires(dependant: Dependant, guard: object) -> bool:
@@ -259,6 +259,8 @@ def test_every_route_answers_another_users_record_as_not_found(tmp_path: Path) -
                 not isinstance(route, APIRoute)
                 or not route.path.startswith("/api/")
                 or "{" not in route.path
+                # A connection flow names a provider, which is no User's record.
+                or "{slug}" in route.path
             ):
                 continue
             for method in route.methods or ():

@@ -20,7 +20,7 @@ billing behind Commercial Mode, both off by default (ADR 0028), follow in the ph
 
 ## Bounded contexts
 
-- **Calendar Integration** owns provider authorization, discovery, change cursors, rate limits, provider errors, and translation. Google is the initial adapter.
+- **Calendar Integration** owns provider authorization, discovery, change cursors, rate limits, provider errors, and translation. Each provider is one adapter package behind the same ports.
 - **Synchronization** owns directional rules, transformation, mappings, source authority, loop prevention, idempotent actions, and rule lifecycle.
 - **Reconciliation** derives expected projections and proves provider state, independently of normal incremental synchronization.
 - **Identity and Access** owns Users, their roles and sessions, the Registration Policy, Invitations and Password Reset Links, connected-account authorization, and credential lifecycle.
@@ -83,10 +83,12 @@ to every other route to prove each one refuses it, walks every route that names 
 second User's session to prove each answers 404, and refuses a User who does not administer on
 every administrator route.
 
-Google authorization is split the same way. `infrastructure/google/oauth.py` holds the
-OAuth flow, protected by its state and by the session of the User who began it, Google credentials, and Google calendar discovery, configured by an
-`OAuthClientConfig` value that bootstrap builds from Settings. Connected Accounts and their
-credentials, encrypted by the `CredentialCipher` in
+Provider authorization is split the same way. Each provider's package holds its OAuth flow,
+credentials, and calendar discovery, configured by an `OAuthClientConfig` value that bootstrap
+builds from Settings, such as `infrastructure/google/oauth.py`. The mechanics every flow shares live
+in `infrastructure/oauth.py`: single-use states bound to the session of the User who began the flow,
+PKCE, one token refresh per account at a time, and connecting only for a User still active.
+Connected Accounts and their credentials, encrypted by the `CredentialCipher` in
 `infrastructure/security.py`, live in `infrastructure/persistence/accounts.py`, which implements the
 `ConnectedAccountRepository` port. Deleting an account and its rules is the `DeleteConnectedAccount`
 use case, which deletes both in one unit of work; the adapters only delete their own records.
@@ -163,11 +165,41 @@ send each request to the adapter of the Provider Kind its Connected Account belo
 calendars may belong to different providers (ADR 0022). The use cases receive the routers and
 never name a provider.
 
-The test fake, the router, and every new adapter pass the Calendar Provider contract in
-`tests/contracts/calendar_provider.py` before being composed. The contract states, through the
-ports alone, the ownership, idempotency, and listing guarantees the use cases rely on. The Google
-adapter predates the contract and does not run the suite; it is covered by
-`tests/adapters/test_google_provider.py` instead.
+The test fake, the router, and every adapter pass the Calendar Provider contract in
+`tests/contracts/calendar_provider.py` before being composed: the fake and the router in
+`tests/adapters/test_calendar_provider_contract.py`, and each adapter, through a fake of its
+provider's API, in its own test package, such as `tests/adapters/google/`. The contract states,
+through the ports alone, the ownership, idempotency, and listing guarantees the use cases rely on.
+
+## Provider descriptors
+
+Each provider's package describes itself to bootstrap with one `ProviderDescriptor`
+(`application/provider_descriptors.py`), and nothing outside that package knows anything else about
+the provider ([ADR 0022](adr/0022-route-calendar-requests-by-provider.md), amended):
+
+- its `ProviderGuide`: the Provider Kind, the slug its connection flow lives under
+  (`/api/v1/oauth/{slug}/`), its display and calendar names, the troubleshooting section for each
+  Cause it can raise, and any Installation Hint only it explains;
+- whether the installation configured it, its OAuth flow (`AccountAuthorization`) and redirect URI;
+- its calendar roles: `AccountCalendars` and `CalendarProvider`.
+
+`calendar_providers` in `bootstrap/container.py` composes the descriptors into a
+`ProviderDirectory`. Routing builds its adapter map from it, Installation Hints read the guides, and
+the Web API lists the connectable providers at `GET /api/v1/providers` and runs their flows. Without
+the installation master key, a descriptor offers only its guide.
+
+Only a Provider Kind names a provider in the domain, application, and interfaces, and no module
+outside a provider's package names a Provider Kind member: `tests/test_provider_neutrality.py`
+fails otherwise. Its one exception is `interfaces/api/routes/compatibility.py`, which keeps
+`GET /api/v1/google/configuration` for earlier clients. Import-linter keeps each provider's SDK in
+its package, and the neutral infrastructure (`oauth`, `providers`, `provider_calls`,
+`retry_after`) from importing any provider's package.
+
+To add a provider: create `infrastructure/<provider>/` with its guide, adapter, OAuth flow, and
+Cause mapping; give it a test package under `tests/adapters/<provider>/` that runs the Calendar
+Provider contract through a fake of its API; add its Provider Kind and one line to
+`calendar_providers`; add its settings; and write its sections of `docs/troubleshooting.md` and its
+Web UI catalog entries.
 
 ## Logging
 

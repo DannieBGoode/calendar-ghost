@@ -56,6 +56,11 @@ from calendar_sync.application.ports import (
     RunKind,
     SchedulerProgress,
 )
+from calendar_sync.application.provider_descriptors import (
+    ProviderConnection,
+    ProviderDescriptor,
+    ProviderDirectory,
+)
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.bootstrap.config import Settings
@@ -85,6 +90,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TimedInterval,
 )
+from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteActivityQueries
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
@@ -434,7 +440,18 @@ def build_preview_container(
     )
     container = replace(
         composed,
-        authorization=cast(AccountAuthorization, google),
+        # Google's names and troubleshooting sections, with a flow that refuses to connect.
+        providers=ProviderDirectory(
+            (
+                ProviderDescriptor(
+                    GOOGLE,
+                    connection=ProviderConnection(
+                        cast(AccountAuthorization, google), settings.google_redirect_uri
+                    ),
+                    calendars=cast(AccountCalendars, google),
+                ),
+            )
+        ),
         account_calendars=cast(AccountCalendars, google),
         user_services=preview_services,
         installation_health=GetInstallationHealth(
@@ -443,6 +460,7 @@ def build_preview_container(
             None,
             preview_clock,
             _failure_causes(adapters),
+            (GOOGLE,),
         ),
         operator_overview=OperatorOverview(
             adapters.users, statuses, adapters.installation_units, preview_clock
@@ -563,8 +581,8 @@ def _seed_robin(adapters: Adapters, path: Path, now: datetime, cause: Cause | No
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, account_id, category, state, summary,
-                opened_at, updated_at, message_code, message_params, cause, user_id
-            ) VALUES (?, ?, NULL, ?, ?, 'open', ?, ?, ?, 'authorization_lapsed', ?, ?, ?)
+                opened_at, updated_at, message_code, message_params, cause, user_id, provider
+            ) VALUES (?, ?, NULL, ?, ?, 'open', ?, ?, ?, 'authorization_lapsed', ?, ?, ?, 'google')
             """,
             (
                 f"authorization:{ROBIN_PERSONAL.value}",
@@ -796,6 +814,7 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
                     failure_cause=_LAPSE_CAUSES.get(scenario, Cause.RATE_LIMITED)
                     if failure
                     else None,
+                    failure_provider=ProviderKind.GOOGLE if failure else None,
                 )
             )
         uow.commit()
@@ -815,8 +834,9 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
                 """
                 INSERT INTO incidents (
                     id, deduplication_key, rule_id, account_id, category, state, summary,
-                    opened_at, updated_at, message_code, message_params, cause, user_id
-                ) VALUES (?, ?, NULL, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)
+                    opened_at, updated_at, message_code, message_params, cause, user_id,
+                    provider
+                ) VALUES (?, ?, NULL, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, 'google')
                 """,
                 (
                     f"authorization:{PERSONAL_ACCOUNT.value}",
@@ -844,8 +864,8 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
-                message_code, message_params, cause, user_id
-            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, 'rate_limited', ?)
+                message_code, message_params, cause, user_id, provider
+            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, 'rate_limited', ?, 'google')
             """,
             [
                 (

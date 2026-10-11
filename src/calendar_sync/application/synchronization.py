@@ -30,6 +30,7 @@ from calendar_sync.application.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.resource_use import record_provider_calls
 from calendar_sync.application.run_log import UntalliedProviderCalls
 from calendar_sync.application.sync_run import (
@@ -161,16 +162,23 @@ class ExecuteSyncRule:
             raise
         except ProviderFailure as failure:
             log.failed(failure.kind.value)
-            self._record_failure(rule_id, full, failure.kind.value, failure.provider_cause)
+            self._record_failure(
+                rule_id, full, failure.kind.value, failure.provider_cause, failure.provider
+            )
             raise
         except Exception:
             log.failed(ProviderFailureKind.INFRASTRUCTURE.value)
             # A local failure: no provider refused, so it has no Cause.
-            self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE.value, None)
+            self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE.value)
             raise
 
     def _record_failure(
-        self, rule_id: SyncRuleId, full: bool, kind: str, cause: Cause | None
+        self,
+        rule_id: SyncRuleId,
+        full: bool,
+        kind: str,
+        cause: Cause | None = None,
+        provider: ProviderKind | None = None,
     ) -> None:
         # Recording evidence must never replace the failure the scheduler classifies.
         with suppress(Exception), self.unit_of_work() as uow:
@@ -184,6 +192,7 @@ class ExecuteSyncRule:
                         full,
                         failure_kind=kind,
                         failure_cause=cause,
+                        failure_provider=provider,
                     )
                 )
                 uow.commit()
@@ -674,7 +683,7 @@ class ExecuteSyncRule:
             # A listed projection is used once; any later decision this run reads it fresh.
             listed = run.listed_destinations.pop(mapping.destination, None)
             fetched = listed if listed is not None else self.provider.get_event(mapping.destination)
-            # Google keeps deleted events as metadata-less cancellations; treat them as missing.
+            # A provider may keep deleted events as metadata-less cancellations: they are missing.
             actual = None if fetched is None or fetched.status is EventStatus.CANCELLED else fetched
         decision = self.decisions.decide(
             rule, source_event, mapping, actual, window_start=run.window_start
@@ -685,7 +694,7 @@ class ExecuteSyncRule:
                 rule.id, source_event.reference, source_event.revision, SyncAction.CREATE
             ),
         ):
-            # Google acknowledged this create before an interrupted run could record its
+            # The provider acknowledged this create before an interrupted run could record its
             # mapping; complete it idempotently instead of orphaning the projection.
             decision = self.decisions.decide(rule, source_event, mapping, actual)
         if (
@@ -790,7 +799,7 @@ class ExecuteSyncRule:
     def _acknowledged_series(
         self, run: SyncRunContext, source_event: CalendarEvent
     ) -> tuple[EventMapping | None, CalendarEvent | None]:
-        """Find a series Google created before an interrupted run could record its mapping.
+        """Find a series the provider created before an interrupted run could record its mapping.
 
         Its ownership is then verified like any mapped projection before it is removed.
         """

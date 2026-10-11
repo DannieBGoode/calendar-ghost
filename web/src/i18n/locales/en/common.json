@@ -42,7 +42,7 @@
     "activity_entry_not_found": "This Activity entry no longer exists. It may have been cleared.",
     "activity_rule_removed": "This entry's rule was removed, so its events cannot be looked up.",
     "administrator_required": "Only an administrator of this Calendar Ghost can do that.",
-    "authorization_failed": "Google did not authorize the account. Try connecting it again.",
+    "authorization_failed": "The provider did not authorize the account. Try connecting it again.",
     "authorization_not_configured": "This calendar provider is not configured on this installation.",
     "bad_request": "The request could not be completed.",
     "conflict": "That change conflicts with the current state. Reload and try again.",
@@ -79,11 +79,12 @@
     "method_not_allowed": "This page is out of date. Reload it and try again.",
     "not_a_calendar_change": "The calendars are unchanged. To change what the rule does, edit its settings instead.",
     "not_found": "That item no longer exists. Reload to see the current state.",
-    "oauth_result_missing": "Google did not return a sign-in result. Try connecting the account again.",
+    "oauth_result_missing": "The provider did not return a sign-in result. Try connecting the account again.",
     "only_me_needs_one_user": "Only Me works only while you are the only person here. Delete the other people first.",
     "password_policy": "Choose a password of at least 12 characters.",
     "provider_failed": "{Provider} reported a problem. Try again shortly.",
     "provider_not_configured": "No calendar provider is configured on this installation.",
+    "provider_not_found": "No calendar provider connects through this address.",
     "registration_closed": "Nobody can join while this Calendar Ghost is set to Only Me. Choose Invitation Only first.",
     "removal_interrupted": "Removal stopped after {processed} of {total} projections because {provider} reported a problem. Retry to continue.",
     "removal_requires_authorization": "Reauthorize the destination account before deleting projections, or keep them as detached events.",
@@ -111,6 +112,15 @@
     "google": "Google Calendar",
     "unknown": "the calendar provider",
     "unknownStart": "The calendar provider"
+  },
+  "providerName": {
+    "google": "Google",
+    "unknown": "the calendar provider"
+  },
+  "providerAccount": {
+    "google": "Google account",
+    "named": "{name} account",
+    "unknown": "calendar account"
   },
   "incident": {
     "failure": {

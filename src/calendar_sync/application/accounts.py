@@ -48,7 +48,7 @@ class ListConnectedAccounts:
 
 @dataclass(slots=True)
 class DiscoverCalendars:
-    """List an account's calendars in Google, remembering their names for its rules to show."""
+    """List an account's calendars in its provider, remembering their names for its rules."""
 
     calendars: AccountCalendars
     unit_of_work: UnitOfWorkFactory
@@ -61,7 +61,7 @@ class DiscoverCalendars:
                     f"connected account {account_id.value} does not exist"
                 )
         discovered = tuple(self.calendars.calendars(account_id))
-        # Recorded after Google answered, so no write lock is held across the request.
+        # Recorded after the provider answered, so no write lock is held across the request.
         with self.unit_of_work() as uow:
             uow.calendar_names.remember(account_id, discovered)
             uow.commit()
@@ -145,10 +145,11 @@ class DeleteConnectedAccount:
     """Permanently delete a Disconnected Account with every rule that uses it.
 
     The rules go with their mappings, cursors, incidents, and audit activity. Their Managed
-    Projections stay in Google, no longer managed. Every affected rule is locked first, as Rule
-    Removal locks its rule, so no run, write, or lifecycle change of those rules is in flight
-    while their records are deleted. The state check, the rules it selects, and every deletion
-    commit in one transaction, so a reauthorization or a new rule cannot interleave with them.
+    Projections stay in their calendars, no longer managed. Every affected rule is locked first,
+    as Rule Removal locks its rule, so no run, write, or lifecycle change of those rules is in
+    flight while their records are deleted. The state check, the rules it selects, and every
+    deletion commit in one transaction, so a reauthorization or a new rule cannot interleave with
+    them.
     """
 
     unit_of_work: UnitOfWorkFactory

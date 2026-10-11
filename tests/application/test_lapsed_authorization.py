@@ -24,7 +24,11 @@ from tests.users import USER
 PERSONAL = ConnectedAccountId("personal-account")
 WORK = ConnectedAccountId("work-account")
 EXPIRED = ProviderFailure(
-    ProviderFailureKind.AUTHENTICATION, "expired", account_id=WORK, provider=ProviderKind.GOOGLE
+    ProviderFailureKind.AUTHENTICATION,
+    "expired",
+    account_id=WORK,
+    provider=ProviderKind.GOOGLE,
+    provider_label="Example Calendar",
 )
 
 
@@ -68,7 +72,8 @@ def test_a_lapse_marks_the_account_and_opens_one_incident_for_it() -> None:
         None,
         WORK,
     )
-    assert incident.summary == "Authorization for Google Calendar expired"
+    assert incident.summary == "Authorization for Example Calendar expired"
+    assert incident.provider is ProviderKind.GOOGLE
     assert incident.message is not None
     assert incident.message.code == "authorization_lapsed"
 

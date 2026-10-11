@@ -127,9 +127,10 @@ class SqliteIncidentRepository:
                 """
                 INSERT INTO incidents (
                     id, deduplication_key, rule_id, account_id, category, state,
-                    summary, opened_at, updated_at, message_code, message_params, cause, user_id
+                    summary, opened_at, updated_at, message_code, message_params, cause,
+                    provider, user_id
                 )
-                SELECT ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?
+                SELECT ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?
                 WHERE ? IS NULL OR EXISTS (
                     SELECT 1 FROM connected_accounts
                     WHERE id = ? AND user_id = ? AND authorization_lapsed_at IS NOT NULL
@@ -145,7 +146,8 @@ class SqliteIncidentRepository:
                     resolution = NULL,
                     message_code = excluded.message_code,
                     message_params = excluded.message_params,
-                    cause = excluded.cause
+                    cause = excluded.cause,
+                    provider = excluded.provider
                 """,
                 (
                     self._ids.new(),
@@ -161,6 +163,7 @@ class SqliteIncidentRepository:
                     if incident.message
                     else None,
                     incident.cause.value if incident.cause else NO_CAUSE,
+                    incident.provider.value if incident.provider and incident.cause else None,
                     self._user,
                     account_only.value if account_only else None,
                     account_only.value if account_only else None,

@@ -38,6 +38,7 @@ from calendar_sync.application.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.application.preview import PreviewSyncRule
+from calendar_sync.application.provider_descriptors import ProviderDescriptor, ProviderDirectory
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
@@ -52,6 +53,7 @@ from calendar_sync.bootstrap.container import (
     build_container,
     compose,
 )
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -78,9 +80,11 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, discovered_calendar
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.accounts import SqliteUserConnectedAccounts
+from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.providers.routing import RoutingAccountCalendars
 from calendar_sync.infrastructure.security import CredentialCipher
@@ -113,8 +117,10 @@ from tests.users import (
 
 def _google(adapters: Adapters) -> GoogleOAuthService:
     """The installation's Google OAuth service, for replacing its calls to Google."""
-    assert isinstance(adapters.authorization, GoogleOAuthService)
-    return adapters.authorization
+    descriptor = adapters.providers.of(ProviderKind.GOOGLE)
+    assert descriptor is not None
+    assert isinstance(descriptor.calendars, GoogleOAuthService)
+    return descriptor.calendars
 
 
 def _account_store(adapters: Adapters) -> SqliteUserConnectedAccounts:
@@ -409,6 +415,74 @@ def test_google_configuration_reports_redirect_uri_to_administrators(tmp_path: P
         "configured": True,
         "redirect_uri": "http://localhost:18000/api/v1/oauth/google/callback",
     }
+
+
+def test_providers_lists_each_configured_provider_and_how_to_connect_it(tmp_path: Path) -> None:
+    configured = Settings(
+        tmp_path / "configured.db",
+        master_key=CredentialCipher.generate_key(),
+        google_client_id="synthetic-client",
+        google_client_secret="synthetic-secret",
+        google_redirect_uri="http://localhost:18000/api/v1/oauth/google/callback",
+    )
+    without_client = Settings(tmp_path / "plain.db", master_key=CredentialCipher.generate_key())
+
+    with TestClient(create_app(build_container(configured))) as client:
+        anonymous = client.get("/api/v1/providers")
+        sign_in(client)
+        providers = client.get("/api/v1/providers").json()
+    with TestClient(create_app(build_container(without_client))) as client:
+        sign_in(client)
+        none = client.get("/api/v1/providers").json()
+
+    assert anonymous.status_code == 401
+    assert providers == [
+        {
+            "kind": "google",
+            "display_name": "Google",
+            "connect_url": "/api/v1/oauth/google/start",
+            "redirect_uri": "http://localhost:18000/api/v1/oauth/google/callback",
+            "cause_anchors": {
+                "api_disabled": "the-google-calendar-api-is-turned-off",
+                "quota_exceeded": "the-google-cloud-projects-daily-quota-is-used-up",
+                "oauth_client_invalid": "google-no-longer-accepts-the-oauth-client",
+                "access_revoked": "google-no-longer-accepts-your-google-account",
+                "calendar_forbidden": "your-google-account-may-not-change-the-calendar",
+                "calendar_not_found": "the-calendar-no-longer-exists",
+                "rate_limited": "google-is-slowing-calendar-ghost-down",
+                "temporary": "google-is-slowing-calendar-ghost-down",
+                "unknown": "google-refused-for-a-reason-calendar-ghost-does-not-recognize",
+            },
+        }
+    ]
+    assert none == []
+
+
+def test_a_connection_flow_no_provider_offers_is_not_found(tmp_path: Path) -> None:
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+
+    with TestClient(app) as client:
+        sign_in(client)
+        start = client.get("/api/v1/oauth/unknown/start", follow_redirects=False)
+        callback = client.get(
+            "/api/v1/oauth/unknown/callback?state=s&code=c", follow_redirects=False
+        )
+
+    assert (start.status_code, start.json()["code"]) == (404, "provider_not_found")
+    assert (callback.status_code, callback.json()["code"]) == (404, "provider_not_found")
+
+
+def test_starting_an_unconfigured_providers_flow_says_it_is_not_configured(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    app = create_app(build_container(settings))
+
+    with TestClient(app) as client:
+        sign_in(client)
+        start = client.get("/api/v1/oauth/google/start", follow_redirects=False)
+
+    assert (start.status_code, start.json()["code"]) == (503, "authorization_not_configured")
 
 
 def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> None:
@@ -1049,10 +1123,15 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
 
     assert response.status_code == 303
     assert response.headers["location"] == (
-        f"/settings/connections?google=connected&account={account.id.value}&resumed=0"
+        f"/settings/connections?oauth=connected&provider=google&account={account.id.value}&resumed=0"
     )
     # The signed-in User completes only a flow they began.
     complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
+
+
+def _begin(tmp_path: Path, owner: UserId) -> None:
+    """Begin a flow for `owner` under the state the callbacks below return with."""
+    SqliteAuthorizationStates(tmp_path / "test.db").store("synthetic-state", owner)
 
 
 def _refuse_code_exchange(google: GoogleOAuthService, monkeypatch: pytest.MonkeyPatch) -> Mock:
@@ -1063,7 +1142,8 @@ def _refuse_code_exchange(google: GoogleOAuthService, monkeypatch: pytest.Monkey
 
 
 CALLBACK = "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code"
-AUTHORIZATION_FAILED = "/settings/connections?google=authorization_failed"
+AUTHORIZATION_FAILED = "/settings/connections?oauth=authorization_failed&provider=google"
+PERMISSION_REQUIRED = "/settings/connections?oauth=calendar_permission_required&provider=google"
 
 
 def test_google_oauth_callback_without_a_session_exchanges_nothing(
@@ -1074,7 +1154,7 @@ def test_google_oauth_callback_without_a_session_exchanges_nothing(
     )
     google = _google(adapters)
     owner = administrator(adapters)
-    google._states.store("synthetic-state", owner)
+    _begin(tmp_path, owner)
     flow = _refuse_code_exchange(google, monkeypatch)
 
     with TestClient(create_app(container)) as client:
@@ -1097,7 +1177,7 @@ def test_google_oauth_callback_refuses_a_browser_signed_in_as_another_user(
     google = _google(adapters)
     victim = administrator(adapters)
     attacker = add_user(database, OTHER_USER, role="user")
-    google._states.store("synthetic-state", attacker)
+    _begin(tmp_path, attacker)
     flow = _refuse_code_exchange(google, monkeypatch)
 
     with TestClient(create_app(container)) as client:
@@ -1111,7 +1191,7 @@ def test_google_oauth_callback_refuses_a_browser_signed_in_as_another_user(
     assert adapters.accounts(attacker).list() == ()
     assert adapters.accounts(victim).list() == ()
     # The state is used up, so its User cannot finish the flow with the code later.
-    assert google._states.consume("synthetic-state") is None
+    assert SqliteAuthorizationStates(tmp_path / "test.db").consume("synthetic-state") is None
 
 
 def test_google_oauth_callback_refuses_a_disabled_user(
@@ -1124,7 +1204,7 @@ def test_google_oauth_callback_refuses_a_disabled_user(
     google = _google(adapters)
     administrator(adapters)
     owner = add_user(database, OTHER_USER, role="user")
-    google._states.store("synthetic-state", owner)
+    _begin(tmp_path, owner)
     session = session_for(database, owner)
     with sqlite3.connect(database) as connection:
         connection.execute("UPDATE users SET state = 'disabled' WHERE id = ?", (owner.value,))
@@ -1220,8 +1300,7 @@ def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Pa
     container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    google = _google(adapters)
-    google._states.store("synthetic-state", administrator(adapters))
+    _begin(tmp_path, administrator(adapters))
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -1237,7 +1316,8 @@ def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Pa
 
     assert response.status_code == 303
     assert (
-        response.headers["location"] == "/settings/connections?google=calendar_permission_required"
+        response.headers["location"]
+        == "/settings/connections?oauth=calendar_permission_required&provider=google"
     )
     assert repeated.status_code == 400
 
@@ -1246,8 +1326,7 @@ def test_google_oauth_non_permission_error_returns_to_settings(tmp_path: Path) -
     container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    google = _google(adapters)
-    google._states.store("synthetic-state", administrator(adapters))
+    _begin(tmp_path, administrator(adapters))
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -1258,7 +1337,10 @@ def test_google_oauth_non_permission_error_returns_to_settings(tmp_path: Path) -
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings/connections?google=authorization_failed"
+    assert (
+        response.headers["location"]
+        == "/settings/connections?oauth=authorization_failed&provider=google"
+    )
 
 
 def test_google_oauth_callback_requires_an_authorization_result(tmp_path: Path) -> None:
@@ -1299,7 +1381,8 @@ def test_google_oauth_missing_calendar_permission_returns_to_settings(
 
     assert response.status_code == 303
     assert (
-        response.headers["location"] == "/settings/connections?google=calendar_permission_required"
+        response.headers["location"]
+        == "/settings/connections?oauth=calendar_permission_required&provider=google"
     )
     complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
 
@@ -1323,7 +1406,10 @@ def test_google_oauth_completion_failure_returns_to_settings(
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings/connections?google=authorization_failed"
+    assert (
+        response.headers["location"]
+        == "/settings/connections?oauth=authorization_failed&provider=google"
+    )
     complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
 
 
@@ -3028,7 +3114,13 @@ def test_calendars_of_a_provider_this_installation_has_not_configured_are_unavai
     settings = Settings(database, master_key=CredentialCipher.generate_key())
     _, adapters = _installation(settings)
     store = _account_store(adapters)
-    unconfigured = replace(adapters, account_calendars=RoutingAccountCalendars(store, {}))
+    # The provider's descriptor names it, though it offers no adapters.
+    unconfigured = replace(
+        adapters,
+        account_calendars=RoutingAccountCalendars.of(
+            store, ProviderDirectory((ProviderDescriptor(GOOGLE),))
+        ),
+    )
     container = replace(compose(settings, unconfigured), scheduler=None)
     _connect_accounts(database, "account-1")
 

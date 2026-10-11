@@ -28,6 +28,44 @@
         "title": "AcceptInvitationRequest",
         "type": "object"
       },
+      "AccountAccessResponse": {
+        "properties": {
+          "calendar_api": {
+            "title": "Calendar Api",
+            "type": "boolean"
+          },
+          "calendar_list_access": {
+            "title": "Calendar List Access",
+            "type": "boolean"
+          },
+          "calendars_visible": {
+            "title": "Calendars Visible",
+            "type": "integer"
+          },
+          "event_access": {
+            "title": "Event Access",
+            "type": "boolean"
+          },
+          "rules_resumed": {
+            "title": "Rules Resumed",
+            "type": "integer"
+          },
+          "writable_calendars": {
+            "title": "Writable Calendars",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "calendar_api",
+          "calendar_list_access",
+          "event_access",
+          "calendars_visible",
+          "writable_calendars",
+          "rules_resumed"
+        ],
+        "title": "AccountAccessResponse",
+        "type": "object"
+      },
       "ActivityEventResponse": {
         "properties": {
           "destination": {
@@ -774,69 +812,6 @@
         "title": "FieldChangeResponse",
         "type": "object"
       },
-      "GoogleAccountAccessResponse": {
-        "properties": {
-          "calendar_api": {
-            "title": "Calendar Api",
-            "type": "boolean"
-          },
-          "calendar_list_access": {
-            "title": "Calendar List Access",
-            "type": "boolean"
-          },
-          "calendars_visible": {
-            "title": "Calendars Visible",
-            "type": "integer"
-          },
-          "event_access": {
-            "title": "Event Access",
-            "type": "boolean"
-          },
-          "rules_resumed": {
-            "title": "Rules Resumed",
-            "type": "integer"
-          },
-          "writable_calendars": {
-            "title": "Writable Calendars",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "calendar_api",
-          "calendar_list_access",
-          "event_access",
-          "calendars_visible",
-          "writable_calendars",
-          "rules_resumed"
-        ],
-        "title": "GoogleAccountAccessResponse",
-        "type": "object"
-      },
-      "GoogleConfigurationResponse": {
-        "properties": {
-          "configured": {
-            "title": "Configured",
-            "type": "boolean"
-          },
-          "redirect_uri": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Redirect Uri"
-          }
-        },
-        "required": [
-          "configured",
-          "redirect_uri"
-        ],
-        "title": "GoogleConfigurationResponse",
-        "type": "object"
-      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1116,6 +1091,17 @@
             "title": "Kind",
             "type": "string"
           },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
           "users": {
             "title": "Users",
             "type": "integer"
@@ -1125,7 +1111,8 @@
           "kind",
           "cause",
           "users",
-          "anchor"
+          "anchor",
+          "provider"
         ],
         "title": "InstallationHintResponse",
         "type": "object"
@@ -1708,6 +1695,17 @@
               }
             ]
           },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
           "rule_id": {
             "anyOf": [
               {
@@ -1742,7 +1740,8 @@
           "since",
           "message",
           "cause",
-          "last_tried_at"
+          "last_tried_at",
+          "provider"
         ],
         "title": "ProblemResponse",
         "type": "object"
@@ -1773,6 +1772,81 @@
           "failed"
         ],
         "title": "ProviderCallsResponse",
+        "type": "object"
+      },
+      "ProviderConfigurationResponse": {
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Uri"
+          }
+        },
+        "required": [
+          "configured",
+          "redirect_uri"
+        ],
+        "title": "ProviderConfigurationResponse",
+        "type": "object"
+      },
+      "ProviderResponse": {
+        "description": "A calendar provider Users of this installation can connect, and how.",
+        "properties": {
+          "cause_anchors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "enum": [
+                "api_disabled",
+                "quota_exceeded",
+                "oauth_client_invalid",
+                "access_revoked",
+                "calendar_forbidden",
+                "calendar_not_found",
+                "rate_limited",
+                "temporary",
+                "unknown"
+              ]
+            },
+            "title": "Cause Anchors",
+            "type": "object"
+          },
+          "connect_url": {
+            "title": "Connect Url",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "redirect_uri": {
+            "title": "Redirect Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "display_name",
+          "connect_url",
+          "redirect_uri",
+          "cause_anchors"
+        ],
+        "title": "ProviderResponse",
         "type": "object"
       },
       "RecentChangeResponse": {
@@ -4045,7 +4119,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GoogleAccountAccessResponse"
+                  "$ref": "#/components/schemas/AccountAccessResponse"
                 }
               }
             },
@@ -4415,6 +4489,7 @@
     },
     "/api/v1/google/configuration": {
       "get": {
+        "description": "Whether Google can be connected, and the redirect URI to register with it.",
         "operationId": "google_configuration_api_v1_google_configuration_get",
         "parameters": [
           {
@@ -4439,7 +4514,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GoogleConfigurationResponse"
+                  "$ref": "#/components/schemas/ProviderConfigurationResponse"
                 }
               }
             },
@@ -4942,11 +5017,20 @@
         "summary": "Revoke Invitation"
       }
     },
-    "/api/v1/oauth/google/start": {
+    "/api/v1/oauth/{slug}/start": {
       "get": {
-        "description": "Start Google's consent for the signed-in User; reauthorizing a known `account` suggests\nits email to Google.",
-        "operationId": "start_google_oauth_api_v1_oauth_google_start_get",
+        "description": "Start the provider's consent for the signed-in User; reauthorizing a known `account`\nsuggests its email to the provider.",
+        "operationId": "start_oauth_api_v1_oauth__slug__start_get",
         "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
           {
             "in": "query",
             "name": "account",
@@ -5000,7 +5084,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Start Google Oauth"
+        "summary": "Start Oauth"
       }
     },
     "/api/v1/password-resets": {
@@ -5070,6 +5154,57 @@
           }
         },
         "summary": "Check Password Reset"
+      }
+    },
+    "/api/v1/providers": {
+      "get": {
+        "description": "The calendar providers this installation configured, and how to connect each.",
+        "operationId": "list_providers_api_v1_providers_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderResponse"
+                  },
+                  "title": "Response List Providers Api V1 Providers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Providers"
       }
     },
     "/api/v1/recent-changes": {

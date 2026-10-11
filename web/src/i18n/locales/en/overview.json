@@ -149,7 +149,7 @@
   },
   "onboarding": {
     "title": "Getting started",
-    "intro": "Nothing is written to Google until a rule passes preview and you start it.",
+    "intro": "Nothing is written to your calendars until a rule passes preview and you start it.",
     "stepProgress": "Step {current} of 3",
     "doneSr": "Done: ",
     "steps": {
@@ -158,10 +158,10 @@
         "body": "Its access was removed or expired. Renew it in Settings before creating a rule."
       },
       "connect": {
-        "title": "Connect a Google account",
-        "body": "Authorize calendar discovery and event access for one Google account.",
-        "action": "Connect Google account",
-        "configurationNote": "Add the master key and Google OAuth credentials in <code>.env</code>, then restart."
+        "title": "Connect a calendar account",
+        "body": "Authorize calendar discovery and event access for one account.",
+        "action": "Connect {account}",
+        "configurationNote": "Add the master key and a calendar provider's OAuth credentials in <code>.env</code>, then restart."
       },
       "createRule": {
         "title": "Create a rule",

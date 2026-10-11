@@ -105,6 +105,7 @@ _FORWARD_MIGRATIONS = (
     (24, "0024_rule_creation_order.sql"),
     (25, "0025_provider_calls.sql"),
     (26, "0026_failure_causes.sql"),
+    (27, "0027_failure_providers.sql"),
 )
 _CHECKED_FROM = 21
 """Migrations from here on prove every reference before committing. Earlier ones ran before
@@ -701,8 +702,8 @@ class SqliteRuleRunOutcomeRepository:
             INSERT INTO rule_run_outcomes (
                 rule_id, kind, completed_at, succeeded, full_run, created, updated,
                 deleted, conflicts, checked_mappings, drift, failure_kind, failure_cause,
-                last_succeeded_at, last_full_succeeded_at, user_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                failure_provider, last_succeeded_at, last_full_succeeded_at, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rule_id, kind) DO UPDATE SET
                 last_succeeded_at = CASE WHEN excluded.succeeded
                     THEN excluded.completed_at ELSE rule_run_outcomes.last_succeeded_at END,
@@ -718,7 +719,8 @@ class SqliteRuleRunOutcomeRepository:
                 checked_mappings = excluded.checked_mappings,
                 drift = excluded.drift,
                 failure_kind = excluded.failure_kind,
-                failure_cause = excluded.failure_cause
+                failure_cause = excluded.failure_cause,
+                failure_provider = excluded.failure_provider
             WHERE rule_run_outcomes.user_id = excluded.user_id
             """,
             (
@@ -739,6 +741,9 @@ class SqliteRuleRunOutcomeRepository:
                 else outcome.failure_cause.value
                 if outcome.failure_cause
                 else NO_CAUSE,
+                outcome.failure_provider.value
+                if outcome.failure_provider and _caused(outcome)
+                else None,
                 outcome.completed_at.isoformat() if outcome.succeeded else None,
                 outcome.completed_at.isoformat()
                 if outcome.succeeded and outcome.full_run
@@ -754,6 +759,11 @@ class SqliteRuleRunOutcomeRepository:
             (rule_id.value, kind.value, self._user),
         ).fetchone()
         return _outcome_from_row(row) if row is not None else None
+
+
+def _caused(outcome: RuleRunOutcome) -> bool:
+    """Whether a provider's answer explains the outcome: a failure that is not local."""
+    return not outcome.succeeded and outcome.failure_kind not in WITHOUT_CAUSE
 
 
 def _outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
@@ -773,6 +783,7 @@ def _outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
         failure_cause=None
         if row["succeeded"] or row["failure_kind"] in WITHOUT_CAUSE
         else Cause.recorded(row["failure_cause"]),
+        failure_provider=ProviderKind.recorded(row["failure_provider"]),
         last_succeeded_at=_optional_time(row["last_succeeded_at"]),
         last_full_succeeded_at=_optional_time(row["last_full_succeeded_at"]),
     )
@@ -787,6 +798,7 @@ def _cause_sighting(row: sqlite3.Row) -> CauseSighting:
         datetime.fromisoformat(str(row["at"])),
         bool(row["open"]),
         lived,
+        provider=ProviderKind.recorded(row["provider"]),
     )
 
 
@@ -895,7 +907,7 @@ class SqliteCalendarNameRepository:
             WHERE name != excluded.name
             """,
             [
-                (calendar.id, calendar.summary, now, account_id.value, self._user)
+                (calendar.id, calendar.name, now, account_id.value, self._user)
                 for calendar in calendars
             ],
         )
@@ -1105,14 +1117,15 @@ class SqliteInstallationUnitOfWork:
         rows = self._connection.execute(
             """
             SELECT user_id, failure_cause AS cause, completed_at AS at, 0 AS open,
-                NULL AS opened_at, NULL AS authorized_at
+                NULL AS opened_at, NULL AS authorized_at, failure_provider AS provider
             FROM rule_run_outcomes
             WHERE succeeded = 0 AND failure_cause IS NOT NULL AND failure_cause != 'none'
                 AND completed_at >= ?
                 AND failure_kind NOT IN ('infrastructure', 'conflict')
             UNION ALL
             SELECT incident.user_id, incident.cause, incident.updated_at,
-                incident.state = 'open', incident.opened_at, account.updated_at
+                incident.state = 'open', incident.opened_at, account.updated_at,
+                incident.provider
             FROM incidents incident
             LEFT JOIN connected_accounts account
                 ON incident.rule_id IS NULL

@@ -137,7 +137,7 @@ class RemoveSyncRule:
                 try:
                     self._delete_with_retry(mapping)
                 except ProjectionOwnershipMismatch:
-                    # Unproven ownership blocks this event only; it stays in Google untouched.
+                    # Unproven ownership blocks this event only; it stays in its calendar untouched.
                     owned = False
                     conflicts += 1
                 except ProviderFailure as failure:

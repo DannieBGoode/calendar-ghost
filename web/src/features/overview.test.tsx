@@ -79,6 +79,7 @@ const providerFailure: ServerProblem = {
   message: { code: "provider_failure", params: { kind: "authorization", provider: "google" } },
   cause: null,
   last_tried_at: null,
+  provider: null,
 }
 // Other problems have no code yet, so their English summaries are data.
 const overdue: ServerProblem = {
@@ -89,6 +90,7 @@ const overdue: ServerProblem = {
   message: null,
   cause: null,
   last_tried_at: null,
+  provider: null,
 }
 const stalled: ServerProblem = {
   kind: "stalled",
@@ -98,6 +100,7 @@ const stalled: ServerProblem = {
   message: null,
   cause: null,
   last_tried_at: null,
+  provider: null,
 }
 const SERVER_TEXT = [overdue.summary, stalled.summary]
 
@@ -177,7 +180,7 @@ function mockFetch(scenario: Scenario) {
     "/api/v1/dashboard": scenario.dashboard,
     "/api/v1/rules": scenario.rules,
     "/api/v1/accounts": [accountA, accountB],
-    "/api/v1/google/configuration": { configured: false, redirect_uri: null },
+    "/api/v1/providers": [],
     "/api/v1/recent-changes": scenario.recentChanges,
   }
   vi.stubGlobal("fetch", vi.fn((input: string | URL) => Promise.resolve(respond(String(input)))))

@@ -9,7 +9,8 @@ from google.oauth2.credentials import Credentials
 
 from calendar_sync.application.errors import AccountAccessCheckFailed, ConnectedAccountDisconnected
 from calendar_sync.application.providers import ProviderKind
-from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
+from calendar_sync.infrastructure.google.oauth import GoogleOAuthService
+from calendar_sync.infrastructure.oauth import OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,

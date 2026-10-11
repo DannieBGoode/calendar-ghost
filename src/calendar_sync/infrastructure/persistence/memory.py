@@ -63,6 +63,8 @@ from calendar_sync.domain.model import (
 @dataclass(slots=True)
 class MemoryState:
     accounts: dict[ConnectedAccountId, ConnectedAccountState] = field(default_factory=dict)
+    providers: dict[ConnectedAccountId, ProviderKind] = field(default_factory=dict)
+    """Each account's Provider Kind, where a test recorded one."""
     lapsed: dict[ConnectedAccountId, datetime] = field(default_factory=dict)
     authorized_at: dict[ConnectedAccountId, datetime] = field(default_factory=dict)
     """When each account was last authorized; one missing was authorized before any request."""
@@ -437,6 +439,9 @@ class InMemoryRuleRunOutcomeRepository:
             failure_cause=None
             if outcome.succeeded or outcome.failure_kind in WITHOUT_CAUSE
             else outcome.failure_cause,
+            failure_provider=None
+            if outcome.succeeded or outcome.failure_kind in WITHOUT_CAUSE
+            else outcome.failure_provider,
             last_succeeded_at=succeeded_at,
             last_full_succeeded_at=full_at,
         )
@@ -468,7 +473,7 @@ class InMemoryCalendarNameRepository:
             return
         for calendar in calendars:
             endpoint = CalendarEndpoint(account_id, CalendarId(calendar.id))
-            self._state.calendar_names[endpoint] = calendar.summary
+            self._state.calendar_names[endpoint] = calendar.name
 
     def names(self, endpoints: Collection[CalendarEndpoint]) -> dict[CalendarEndpoint, str]:
         return {
@@ -669,7 +674,13 @@ class InMemoryInstallationUnitOfWork:
         """Failed runs since `since`; this store keeps no Incidents."""
         return sorted(
             (
-                CauseSighting(owner, outcome.failure_cause, outcome.completed_at, False)
+                CauseSighting(
+                    owner,
+                    outcome.failure_cause,
+                    outcome.completed_at,
+                    False,
+                    provider=outcome.failure_provider,
+                )
                 for owner, state in self._database.partitions.items()
                 for outcome in state.outcomes.values()
                 if not outcome.succeeded
@@ -705,13 +716,13 @@ def _resource_use(state: MemoryState | None, since: date) -> ResourceUse:
 
 def _status_records(state: MemoryState | None) -> StatusRecords:
     """A User's records as Installation Status reads them. This store keeps no Incidents or
-    Activity blocks, and every account it records is a Google account."""
+    Activity blocks; an account's provider is empty unless a test recorded one."""
     state = state or MemoryState()
     accounts = tuple(
         AccountStanding(
             account.value,
             standing.value,
-            ProviderKind.GOOGLE.value,
+            state.providers[account].value if account in state.providers else "",
             lapsed=standing is ConnectedAccountState.CONNECTED and account in state.lapsed,
         )
         for account, standing in sorted(state.accounts.items(), key=lambda item: item[0].value)

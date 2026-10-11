@@ -1,5 +1,5 @@
 import type { I18n } from "@/i18n/translator"
-import type { InstallationHint, ServerProblem } from "@/lib/api"
+import type { CalendarProvider, InstallationHint, ServerProblem } from "@/lib/api"
 import { HELP_URL } from "@/lib/brand"
 
 /** Why a provider call failed (ADR 0031), as the server names it. */
@@ -18,15 +18,10 @@ const CAUSES: readonly Cause[] = [
 ]
 
 /**
- * The administrator's Causes, by the section of docs/troubleshooting.md that explains each fix.
- * The anchors follow the guide's headings, as `installation_hints.CAUSE_ANCHORS` does; a test
- * checks both against the guide.
+ * The Causes only the installation's administrator can fix, as `causes.ADMINISTRATOR_CAUSES` names
+ * them. Each provider says where its troubleshooting guide explains them (GET /api/v1/providers).
  */
-const ADMINISTRATOR_ANCHORS: Partial<Record<Cause, string>> = {
-  api_disabled: "the-google-calendar-api-is-turned-off",
-  quota_exceeded: "the-google-cloud-projects-daily-quota-is-used-up",
-  oauth_client_invalid: "google-no-longer-accepts-the-oauth-client",
-}
+const ADMINISTRATOR_CAUSES: ReadonlySet<Cause> = new Set(["api_disabled", "quota_exceeded", "oauth_client_invalid"])
 
 /** Causes the User has nothing to do about: Calendar Ghost tries again by itself. */
 const FIXES_ITSELF: ReadonlySet<Cause> = new Set(["rate_limited", "temporary"])
@@ -39,9 +34,9 @@ export function causeOf(problem: Pick<ServerProblem, "cause">): Cause | null {
   return CAUSES.includes(cause) ? cause : "unknown"
 }
 
-/** Whether only the installation's Google Cloud project, so its administrator, can fix it. */
+/** Whether only the installation's registration with its provider, so its administrator, can fix it. */
 export function isAdministratorCause(cause: Cause | null): boolean {
-  return cause !== null && cause in ADMINISTRATOR_ANCHORS
+  return cause !== null && ADMINISTRATOR_CAUSES.has(cause)
 }
 
 /** Whether Calendar Ghost tries again by itself, with nothing for anyone to do. */
@@ -54,9 +49,14 @@ export function causeText(i18n: I18n, cause: Cause): string {
   return i18n.t("people.cause.label", { cause: i18n.t(`people.cause.${cause}`) })
 }
 
-/** The troubleshooting section for an administrator's Cause; none for a User's own. */
-export function howToFixUrl(cause: Cause | null): string | null {
-  const anchor = cause === null ? undefined : ADMINISTRATOR_ANCHORS[cause]
+/**
+ * The troubleshooting section for an administrator's Cause, where the provider that raised it says;
+ * none for a User's own Cause, or when that provider is not configured here.
+ */
+export function howToFixUrl(cause: Cause | null, provider: CalendarProvider | null): string | null {
+  if (!isAdministratorCause(cause) || cause === null || !provider) return null
+  const anchors: Partial<Record<Cause, string>> = provider.cause_anchors
+  const anchor = anchors[cause]
   return anchor === undefined ? null : troubleshootingUrl(anchor)
 }
 
@@ -90,7 +90,7 @@ export function hintText(i18n: I18n, hint: InstallationHint): string {
   }
 }
 
-/** Causes the problem's own words already state: a lapsed grant, or Google limiting requests. */
+/** Causes the problem's own words already state: a lapsed grant, or a provider limiting requests. */
 const STATED_BY_PROBLEM: ReadonlySet<Cause> = new Set(["access_revoked", "rate_limited", "temporary"])
 
 /** Whether "Likely cause" tells the reader something the problem does not already say. */

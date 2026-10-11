@@ -1,15 +1,10 @@
 from __future__ import annotations
 
 import base64
-import hashlib
-import hmac
 import json
 import logging
 import os
-import secrets
 from collections.abc import Mapping
-from dataclasses import dataclass
-from threading import Lock
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -26,9 +21,7 @@ from calendar_sync.application.errors import (
     CalendarPermissionRequired,
     ConnectedAccountDisconnected,
     ConnectedAccountNotFound,
-    InvalidAuthorizationState,
     ProviderFailureKind,
-    UserDisabled,
 )
 from calendar_sync.application.ports import (
     AccountAccess,
@@ -40,6 +33,13 @@ from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.causes import cause_of
+from calendar_sync.infrastructure.oauth import (
+    OAuthClientConfig,
+    OAuthStates,
+    RefreshLocks,
+    connect_account,
+    pkce_verifier,
+)
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
@@ -68,20 +68,11 @@ A missing or unknown role maps to `READER`: conservative, because it is never wr
 # scopes). oauthlib rejects any difference unless relaxed; complete() enforces Calendar scopes.
 os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
+# What each flow's PKCE verifier is derived for; it never changes, so a flow begun before an
+# upgrade still completes after it.
+PKCE_PURPOSE = b"google-calendar-sync/oauth-pkce/v1"
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class OAuthClientConfig:
-    """The installation's Google OAuth client, as registered in Google Cloud."""
-
-    client_id: str
-    client_secret: str
-    redirect_uri: str
-
-    @property
-    def complete(self) -> bool:
-        return bool(self.client_id and self.client_secret and self.redirect_uri)
 
 
 class GoogleOAuthService:
@@ -96,16 +87,14 @@ class GoogleOAuthService:
     ) -> None:
         self._client = client
         self._accounts = accounts
-        self._states = states
+        self._states = OAuthStates(states, ProviderKind.GOOGLE)
         # The Installation Master Key, from which each state's PKCE verifier is derived.
         self._verifier_key = verifier_key
-        self._refresh_locks: dict[ConnectedAccountId, Lock] = {}
-        self._refresh_guard = Lock()
+        self._refresh_locks = RefreshLocks()
 
     def authorization_url(self, owner: UserId, login_hint: str | None = None) -> str:
         self._require_client_configuration()
-        state = secrets.token_urlsafe(32)
-        self._states.store(state, owner)
+        state = self._states.begin(owner)
         flow = self._flow(state)
         hint = {"login_hint": login_hint} if login_hint else {}
         url, _ = flow.authorization_url(
@@ -117,11 +106,8 @@ class GoogleOAuthService:
         return str(url)
 
     def complete(self, state: str, code: str, user: UserId) -> AuthorizedAccount:
-        owner = self._consume_state(state)
-        if owner != user:
-            # Someone else's consent link: the state is used up and the code never exchanged,
-            # so nobody can connect a Google account into another User's installation.
-            raise AuthorizationFailed("Google authorization was begun by another User")
+        # Someone else's consent link uses the state up before the code is ever exchanged.
+        owner = self._states.claim(state, user)
         flow = self._flow(state)
         try:
             flow.fetch_token(code=code)
@@ -152,20 +138,18 @@ class GoogleOAuthService:
             raise AuthorizationFailed("Google primary calendar did not expose an identity")
         profile = _profile_claims(getattr(credentials, "id_token", None))
         display_name = _optional_text(profile.get("name")) or str(primary.get("summary") or email)
-        try:
-            account = self._accounts.for_user(owner).save(
-                display_name,
-                email,
-                credentials.to_json(),
-                provider=ProviderKind.GOOGLE,
-                avatar_url=_https_url(profile.get("picture")),
-            )
-        except UserDisabled as error:
-            raise AuthorizationFailed("the User was disabled during authorization") from error
-        return AuthorizedAccount(owner, account)
+        return connect_account(
+            self._accounts,
+            owner,
+            display_name=display_name,
+            email=email,
+            credentials=credentials.to_json(),
+            provider=ProviderKind.GOOGLE,
+            avatar_url=_https_url(profile.get("picture")),
+        )
 
     def cancel(self, state: str) -> None:
-        self._consume_state(state)
+        self._states.cancel(state)
 
     def calendars(self, account_id: ConnectedAccountId) -> tuple[DiscoveredCalendar, ...]:
         credentials = self._credentials(account_id)
@@ -250,7 +234,7 @@ class GoogleOAuthService:
 
         Without keeping it, every request after the first hour would refresh again first.
         """
-        with self._refresh_lock(account_id):
+        with self._refresh_locks.of(account_id):
             stored = self._accounts.credential_json(account_id)
             credentials = cast(
                 Credentials,
@@ -269,11 +253,6 @@ class GoogleOAuthService:
                     "yes" if kept else "no",
                 )
             return credentials
-
-    def _refresh_lock(self, account_id: ConnectedAccountId) -> Lock:
-        # One refresh per account at a time, so concurrent requests reuse its new token.
-        with self._refresh_guard:
-            return self._refresh_locks.setdefault(account_id, Lock())
 
     def _flow(self, state: str) -> Flow:
         client_config = {
@@ -295,14 +274,7 @@ class GoogleOAuthService:
         )
 
     def _code_verifier(self, state: str) -> str:
-        # Derivation keeps the verifier recoverable after a restart without persisting
-        # another OAuth secret alongside the hashed state.
-        digest = hmac.new(
-            self._verifier_key.encode(),
-            b"google-calendar-sync/oauth-pkce/v1\0" + state.encode(),
-            hashlib.sha256,
-        ).digest()
-        return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+        return pkce_verifier(self._verifier_key, PKCE_PURPOSE, state)
 
     @staticmethod
     def _calendar_items(service: Any) -> list[dict[str, Any]]:
@@ -321,20 +293,18 @@ class GoogleOAuthService:
                 "configure the Google OAuth client ID, secret, and redirect URI"
             )
 
-    def _consume_state(self, state: str) -> UserId:
-        owner = self._states.consume(state)
-        if owner is None:
-            raise InvalidAuthorizationState("OAuth state is missing, expired, or already used")
-        return owner
-
 
 def discovered_calendar(item: Mapping[str, Any]) -> DiscoveredCalendar:
     """One Google calendar list entry, without Google's access-role vocabulary."""
+    summary = item.get("summary")
+    named = isinstance(summary, str) and bool(summary.strip())
     return DiscoveredCalendar(
         id=str(item["id"]),
-        summary=str(item.get("summary") or item["id"]),
+        # Google lists a calendar without a summary by its id, which is no name to show.
+        summary=str(summary) if named else str(item["id"]),
         access=_google_access(item.get("accessRole")),
         primary=bool(item.get("primary")),
+        named=named,
     )
 
 

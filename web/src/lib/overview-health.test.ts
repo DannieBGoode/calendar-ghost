@@ -35,7 +35,7 @@ const problem = (
   rule_id: string | null,
   summary: string,
   since: string | null = "2026-09-28T11:00:00Z",
-): ServerProblem => ({ kind, rule_id, summary, since, message: null, cause: null, last_tried_at: null })
+): ServerProblem => ({ kind, rule_id, summary, since, message: null, cause: null, last_tried_at: null, provider: null })
 
 describe("overviewHealth", () => {
   it("reports the last successful sync when everything is quiet", () => {

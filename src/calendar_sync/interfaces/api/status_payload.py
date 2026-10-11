@@ -47,6 +47,7 @@ def problem_response(problem: Problem) -> ProblemResponse:
         message=message_response(problem.message),
         cause=problem.cause.value if problem.cause else None,
         last_tried_at=problem.last_tried_at.isoformat() if problem.last_tried_at else None,
+        provider=problem.provider.value if problem.provider else None,
     )
 
 
@@ -147,7 +148,11 @@ def installation_health_response(health: InstallationHealth) -> InstallationHeal
         checked_at=health.checked_at.isoformat(),
         hints=[
             InstallationHintResponse(
-                kind=hint.kind.value, cause=hint.cause.value, users=hint.users, anchor=hint.anchor
+                kind=hint.kind.value,
+                cause=hint.cause.value,
+                users=hint.users,
+                anchor=hint.anchor,
+                provider=hint.provider.value if hint.provider else None,
             )
             for hint in health.hints
         ],

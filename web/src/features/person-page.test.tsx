@@ -46,7 +46,7 @@ const robin: UserOverview = {
       disconnected_accounts: 0,
       lapsed_accounts: 0,
     },
-    problems: [{ kind: "blocked", rule_id: "rule-1", summary: "3 events couldn't be synced", since: null, message: null, cause: null, last_tried_at: null }],
+    problems: [{ kind: "blocked", rule_id: "rule-1", summary: "3 events couldn't be synced", since: null, message: null, cause: null, last_tried_at: null, provider: null }],
     rules: [
       {
         id: "rule-1",
@@ -241,9 +241,21 @@ describe("A person's page", () => {
       message: { code: "authorization_lapsed", params: { provider: "google" } },
       cause: "api_disabled" as const,
       last_tried_at: justNow,
+      provider: "google",
     }
     const stopped = { ...robin, status: { ...robin.status, status: "stopped" as const, problems: [lapsed] } }
-    await renderPerson(testI18n(), "user-robin", { "GET /api/v1/users/user-robin/overview": jsonResponse(stopped) })
+    // Where the guide explains it is the provider's to say.
+    const google = {
+      kind: "google",
+      display_name: "Google",
+      connect_url: "/api/v1/oauth/google/start",
+      redirect_uri: "http://localhost:8000/api/v1/oauth/google/callback",
+      cause_anchors: { api_disabled: "the-google-calendar-api-is-turned-off" },
+    }
+    await renderPerson(testI18n(), "user-robin", {
+      "GET /api/v1/users/user-robin/overview": jsonResponse(stopped),
+      "GET /api/v1/providers": jsonResponse([google]),
+    })
 
     const text = container.textContent
     expect(text).toContain("Likely cause: the Google Calendar API is turned off for this installation.")

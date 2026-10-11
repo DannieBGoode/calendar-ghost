@@ -392,7 +392,7 @@ diagnostics keep the glossary terms above.
 | Rule Preview, then enable | "Preview rule", then "Start syncing" |
 | Degraded Rule | "Stopped", with the cause and its one next step: "Reauthorize account" when an account it uses has Lapsed Authorization, otherwise "Preview to restart" |
 | Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote from the starting point onward and reports any that still differ; never "repaired" for what the check only reported |
-| Connected Account | "Google account" |
+| Connected Account | named by its Provider Kind: "Google account"; "calendar account" where no one provider is meant |
 | Lapsed Authorization | "Needs reauthorization", naming the account; its action is "Reauthorize account" |
 | Initial Sync Window | "Starting point: includes events from the past 30 days onward" |
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |

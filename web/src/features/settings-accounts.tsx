@@ -11,12 +11,13 @@ import { useI18n } from "@/i18n/provider"
 import { codeTag, rich } from "@/i18n/rich"
 import type { MessageKey } from "@/i18n/types"
 import { accountSummary, needsReauthorization } from "@/lib/account-summary"
-import { type ConnectedAccount, api } from "@/lib/api"
+import { type CalendarProvider, type ConnectedAccount, api } from "@/lib/api"
 import { recordAuthorizationStart } from "@/lib/oauth-redirect"
+import { accountNoun, connectUrl, providerOf } from "@/lib/providers"
 import { type AccountCommands, useAccountCommands } from "@/lib/use-account-commands"
-import type { GoogleReturn } from "@/lib/use-google-return"
+import type { OAuthReturn } from "@/lib/use-oauth-return"
 import { AccountRow } from "@/features/settings-account-row"
-import { GoogleReturnNote, GoogleReturnStep } from "@/features/settings-google-return"
+import { OAuthReturnNote, OAuthReturnStep } from "@/features/settings-oauth-return"
 
 const CONNECTION_STEPS: { title: MessageKey; body: MessageKey }[] = [
   { title: "settings.connectionGuide.connect.title", body: "settings.connectionGuide.connect.body" },
@@ -24,7 +25,7 @@ const CONNECTION_STEPS: { title: MessageKey; body: MessageKey }[] = [
   { title: "settings.connectionGuide.preview.title", body: "settings.connectionGuide.preview.body" },
 ]
 
-function ConnectionGuide({ googleConfigured }: { googleConfigured: boolean }) {
+function ConnectionGuide({ configured }: { configured: boolean }) {
   const { t } = useI18n()
   return (
     <details className="inline-help connection-guide">
@@ -42,7 +43,7 @@ function ConnectionGuide({ googleConfigured }: { googleConfigured: boolean }) {
             </li>
           ))}
         </ol>
-        {googleConfigured ? (
+        {configured ? (
           <p className="connection-guide-note">{t("settings.connectionGuide.ready")}</p>
         ) : (
           <p className="connection-guide-note">{rich(t("settings.connectionGuide.notConfigured"), { code: codeTag })}</p>
@@ -53,16 +54,17 @@ function ConnectionGuide({ googleConfigured }: { googleConfigured: boolean }) {
 }
 
 export function AccountsSection({
-  googleConfigured,
+  providers,
   justConnected,
   focusAccountId,
   returnHelp,
 }: {
-  googleConfigured: boolean
+  /** The providers Users can connect here. */
+  providers: CalendarProvider[]
   justConnected: boolean
-  /** The account a stopped rule or Google's return pointed to, shown open and in view. */
+  /** The account a stopped rule or a provider's return pointed to, shown open and in view. */
   focusAccountId: string | null
-  returnHelp: GoogleReturn
+  returnHelp: OAuthReturn
 }) {
   const { t } = useI18n()
   const [accountsChoice, setAccountsChoice] = useState<boolean | null>(null)
@@ -71,15 +73,15 @@ export function AccountsSection({
 
   return (
     <section className="settings-section" aria-labelledby="accounts-title">
-      <AccountsHeading googleConfigured={googleConfigured} hasAccounts={Boolean(accounts.data?.length)} />
+      <AccountsHeading providers={providers} hasAccounts={Boolean(accounts.data?.length)} />
 
-      {!googleConfigured && (
+      {providers.length === 0 && (
         <p className="settings-note" role="status">
           {rich(t("settings.accounts.notConfiguredNote"), { code: codeTag })}
         </p>
       )}
-      <GoogleReturnStep help={returnHelp} />
-      <ConnectionGuide googleConfigured={googleConfigured} />
+      <OAuthReturnStep help={returnHelp} />
+      <ConnectionGuide configured={providers.length > 0} />
       {accounts.isPending && (
         <div className="account-list-loading" aria-label={t("settings.accounts.loading")}>
           <Skeleton className="h-20 w-full" />
@@ -98,7 +100,7 @@ export function AccountsSection({
           onChoose={setAccountsChoice}
           justConnected={justConnected}
           focusAccountId={focusAccountId}
-          googleConfigured={googleConfigured}
+          providers={providers}
           returnHelp={returnHelp}
           commands={commands}
         />
@@ -108,7 +110,7 @@ export function AccountsSection({
   )
 }
 
-function AccountsHeading({ googleConfigured, hasAccounts }: { googleConfigured: boolean; hasAccounts: boolean }) {
+function AccountsHeading({ providers, hasAccounts }: { providers: CalendarProvider[]; hasAccounts: boolean }) {
   const { t } = useI18n()
   return (
     <div className="section-heading">
@@ -116,17 +118,28 @@ function AccountsHeading({ googleConfigured, hasAccounts }: { googleConfigured: 
         <h2 id="accounts-title">{t("settings.accounts.title")}</h2>
         <p>{t("settings.accounts.intro")}</p>
       </div>
-      {googleConfigured ? (
-        // The next step only while nothing is connected; otherwise a routine addition.
-        <Button variant={hasAccounts ? "outline" : "default"} asChild>
-          <a href="/api/v1/oauth/google/start" onClick={() => recordAuthorizationStart()}>
-            <Plus aria-hidden="true" /> {t("settings.accounts.connect")}
-          </a>
-        </Button>
+      {providers.length > 0 ? (
+        <div className="connect-actions">
+          {providers.map((provider) => (
+            <ConnectButton key={provider.kind} provider={provider} primary={!hasAccounts} />
+          ))}
+        </div>
       ) : (
         <Badge variant="attention"><ShieldAlert aria-hidden="true" /> {t("settings.accounts.notConfigured")}</Badge>
       )}
     </div>
+  )
+}
+
+/** Starts connecting an account of one provider; the next step only while nothing is connected. */
+function ConnectButton({ provider, primary }: { provider: CalendarProvider; primary: boolean }) {
+  const i18n = useI18n()
+  return (
+    <Button variant={primary ? "default" : "outline"} asChild>
+      <a href={connectUrl(provider)} onClick={() => recordAuthorizationStart(provider.kind)}>
+        <Plus aria-hidden="true" /> {i18n.t("settings.accounts.connect", { account: accountNoun(i18n, provider.kind, [provider]) })}
+      </a>
+    </Button>
   )
 }
 
@@ -136,7 +149,7 @@ function AccountGroup({
   onChoose,
   justConnected,
   focusAccountId,
-  googleConfigured,
+  providers,
   returnHelp,
   commands,
 }: {
@@ -145,8 +158,8 @@ function AccountGroup({
   onChoose: (open: boolean) => void
   justConnected: boolean
   focusAccountId: string | null
-  googleConfigured: boolean
-  returnHelp: GoogleReturn
+  providers: CalendarProvider[]
+  returnHelp: OAuthReturn
   commands: AccountCommands
 }) {
   const i18n = useI18n()
@@ -184,13 +197,13 @@ function AccountGroup({
             <AccountList
               accounts={accounts}
               focusAccountId={focusAccountId}
-              googleConfigured={googleConfigured}
+              providers={providers}
               commands={commands}
             />
           )}
         </>
       )}
-      <GoogleReturnNote help={returnHelp} className="account-group-footer" />
+      <OAuthReturnNote help={returnHelp} className="account-group-footer" />
     </div>
   )
 }
@@ -259,12 +272,12 @@ function AccountSummaryToggle({
 function AccountList({
   accounts,
   focusAccountId,
-  googleConfigured,
+  providers,
   commands,
 }: {
   accounts: ConnectedAccount[]
   focusAccountId: string | null
-  googleConfigured: boolean
+  providers: CalendarProvider[]
   commands: AccountCommands
 }) {
   const names = accounts.map((account) => account.display_name)
@@ -278,7 +291,7 @@ function AccountList({
           key={account.id}
           account={account}
           sharedName={sharedNames.has(account.display_name)}
-          googleConfigured={googleConfigured}
+          provider={providerOf(providers, account.provider)}
           focused={account.id === focusAccountId}
           commands={commands}
         />

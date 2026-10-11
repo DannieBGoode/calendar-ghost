@@ -24,6 +24,15 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- `GET /api/v1/providers` lists each calendar provider people can connect on this installation:
+  its Provider Kind, name, connect address, redirect URI, and the troubleshooting section for each
+  Cause it can raise ([ADR 0022](docs/adr/0022-route-calendar-requests-by-provider.md), amended).
+  Connection flows live at `/api/v1/oauth/{provider}/start` and `/api/v1/oauth/{provider}/callback`.
+  Google's addresses, including the redirect URI every installation registered with Google, are
+  unchanged, and `GET /api/v1/google/configuration` keeps answering as before for earlier clients.
+- Installation Hints and every problem in Installation Status, the dashboard, and the Operator
+  Overview carry `provider`, the Provider Kind whose answer explains them. Migration 27 records the
+  provider with each Cause; every Cause recorded before names Google. Rolling back is safe.
 - Several people can share one installation, each with private Google accounts, rules, Activity,
   incidents, and tokens ([ADR 0029](docs/adr/0029-isolate-users-in-one-sqlite-database.md),
   [ADR 0030](docs/adr/0030-users-administrators-and-registration.md)). People sign in with email and
@@ -108,6 +117,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Settings and the Overview offer one Connect button per configured calendar provider, and each
+  account's **Reauthorize account** goes to its own provider. A connection returns to Settings as
+  `?oauth=<outcome>&provider=<kind>` instead of `?google=<outcome>`.
+- The OpenAPI schemas `GoogleConfigurationResponse` and `GoogleAccountAccessResponse` are now
+  `ProviderConfigurationResponse` and `AccountAccessResponse`; their JSON is unchanged.
 - Form fields have borders with enough contrast again: a global reset no longer overrides them.
   Midnight's primary color is calmer, so a red status draws the eye first.
 - Settings groups share the border, fill, radius, and padding of the app's other cards. "Your

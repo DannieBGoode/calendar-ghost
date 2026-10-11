@@ -94,7 +94,7 @@ function Hints({ hints }: { hints: InstallationHint[] }) {
         {hints.map((hint) => {
           const text = hintText(i18n, hint)
           return (
-            <li key={`${hint.kind}:${hint.cause}`} className="installation-hint">
+            <li key={`${hint.provider}:${hint.kind}:${hint.cause}`} className="installation-hint">
               <Lightbulb aria-hidden="true" />
               <div>
                 <p>{text}</p>

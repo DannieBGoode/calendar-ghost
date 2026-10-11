@@ -3,6 +3,8 @@ import { useI18n } from "@/i18n/provider"
 import type { ServerProblem, UserOverview } from "@/lib/api"
 import { causeAddsToProblem, causeOf, causeText, howToFixUrl, isAdministratorCause, retryTiming } from "@/lib/causes"
 import { nextStep, ownStepTarget, problemText, supportHint, type Audience } from "@/lib/operator-overview"
+import { providerOf } from "@/lib/providers"
+import { useProviders } from "@/lib/use-providers"
 
 type Status = UserOverview["status"]
 
@@ -57,7 +59,8 @@ export function ProblemDetail({
 /** Who takes the next step and how; an administrator's Cause adds the guide's fix. */
 function ProblemStep({ problem, options }: { problem: ServerProblem; options: ProblemOptions }) {
   const i18n = useI18n()
-  const fix = howToFixUrl(causeOf(problem))
+  const providers = useProviders()
+  const fix = howToFixUrl(causeOf(problem), providerOf(providers, problem.provider))
   return (
     <p className="user-overview-next">
       {nextStep(i18n, problem, options.audience)}

@@ -10,6 +10,7 @@ import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
 import {
+  type CalendarProvider,
   api,
   type ConnectedAccount,
   type IntegrationToken,
@@ -127,6 +128,7 @@ type Scenario = {
   tab?: SettingsTab
   configured?: boolean
   redirectUri?: string | null
+  providers?: CalendarProvider[]
   accounts?: ConnectedAccount[]
   storage?: StorageUsage
   clearable?: Response
@@ -134,11 +136,23 @@ type Scenario = {
   tokens?: IntegrationToken[]
 }
 
+/** Google as GET /api/v1/providers describes it once configured. */
+function googleProvider(redirectUri: string | null): CalendarProvider {
+  return {
+    kind: "google",
+    display_name: "Google",
+    connect_url: "/api/v1/oauth/google/start",
+    redirect_uri: redirectUri ?? REDIRECT_URI,
+    cause_anchors: {},
+  }
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
 }
 
 function mockFetch({
+  providers,
   configured = true,
   redirectUri = REDIRECT_URI,
   accounts = [connected, disconnected],
@@ -148,7 +162,7 @@ function mockFetch({
   tokens = [kuma, homepage],
 }: Scenario) {
   const responses: Record<string, Response> = {
-    "/api/v1/google/configuration": jsonResponse({ configured, redirect_uri: redirectUri }),
+    "/api/v1/providers": jsonResponse(providers ?? (configured ? [googleProvider(redirectUri)] : [])),
     "/api/v1/accounts": jsonResponse(accounts),
     "/api/v1/storage": jsonResponse(storage),
     "/api/v1/storage/activity": clearable ?? jsonResponse({ older_than_days: 90, entries: 41880 }),
@@ -271,8 +285,35 @@ describe("SettingsPage", () => {
     expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
   })
 
+  it("offers to connect an account of each provider the installation configured", async () => {
+    // A provider this version has no words for is named by what the server calls it.
+    const example: CalendarProvider = {
+      ...googleProvider(REDIRECT_URI),
+      kind: "example",
+      display_name: "Example",
+      connect_url: "/api/v1/oauth/example/start",
+    }
+    await renderSettings(testI18n(), { providers: [googleProvider(REDIRECT_URI), example] })
+
+    const connect = [...container.querySelectorAll<HTMLAnchorElement>(".connect-actions a")]
+    expect(connect.map((link) => [link.textContent.trim(), link.getAttribute("href")])).toEqual([
+      ["Connect Google account", "/api/v1/oauth/google/start"],
+      ["Connect Example account", "/api/v1/oauth/example/start"],
+    ])
+  })
+
+  it("keeps an account's reauthorization unavailable while its provider is not configured", async () => {
+    const lapsed = { ...connected, id: "acct-l", provider: "example", authorization_lapsed_at: justNow }
+    await renderSettings(testI18n(), { accounts: [lapsed] })
+
+    const reauthorize = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (item) => item.textContent.trim() === "Reauthorize account",
+    )
+    expect(reauthorize?.disabled).toBe(true)
+  })
+
   it("ignores an unknown connection outcome", async () => {
-    window.history.replaceState(null, "", "/settings?google=surprise")
+    window.history.replaceState(null, "", "/settings?oauth=surprise&provider=google")
     await renderSettings(testI18n())
     expect(container.querySelector(".oauth-feedback h2")).toBeNull()
   })
@@ -299,7 +340,7 @@ describe("SettingsPage", () => {
   })
 
   it("says how many rules restarted when Google returns after reauthorization", async () => {
-    window.history.replaceState(null, "", "/settings?google=connected&account=acct-a&resumed=2")
+    window.history.replaceState(null, "", "/settings?oauth=connected&provider=google&account=acct-a&resumed=2")
     await renderSettings(testI18n())
     expect(container.querySelector(".oauth-feedback p")?.textContent).toBe(
       "Access is restored. 2 rules restarted and catch up on changes made while they were stopped.",
@@ -307,7 +348,7 @@ describe("SettingsPage", () => {
   })
 
   it("keeps the English copy", async () => {
-    window.history.replaceState(null, "", "/settings?google=connected")
+    window.history.replaceState(null, "", "/settings?oauth=connected&provider=google")
     await renderSettings(testI18n())
     expect(container.querySelector(".oauth-feedback h2")?.textContent).toBe("Google account connected")
     const rows = [...container.querySelectorAll(".account-copy span")].map((span) => span.textContent)
@@ -324,7 +365,7 @@ describe("SettingsPage", () => {
     )
     await click(button("Delete account"))
     expect(container.querySelector("#delete-acct-b p")?.textContent).toBe(
-      "This cannot be undone. The account record and 1 affected Directional Sync Rule, including their mappings, cursors, incidents, and audit activity, will be removed. Existing Managed Projections in Google Calendar will not be deleted and will no longer be managed.",
+      "This cannot be undone. The account record and 1 affected Directional Sync Rule, including their mappings, cursors, incidents, and audit activity, will be removed. Existing Managed Projections in their calendars will not be deleted and will no longer be managed.",
     )
     // Disconnecting is a rare, disruptive choice, so it waits in the row's menu.
     expect([...container.querySelectorAll("button")].some((item) => item.textContent.trim() === "Disconnect account")).toBe(
@@ -336,7 +377,7 @@ describe("SettingsPage", () => {
     )!
     await click(disconnect)
     expect(container.querySelector("#disconnect-acct-a p")?.textContent).toBe(
-      "Stored Google credentials will be removed. 2 affected rules will require reauthorization before they can run.",
+      "Its stored credentials will be removed. 2 affected rules will require reauthorization before they can run.",
     )
   })
 
@@ -422,7 +463,7 @@ describe("Settings tabs", () => {
   })
 
   it("shows a connection outcome only on Connections", async () => {
-    window.history.replaceState(null, "", "/settings?google=connected")
+    window.history.replaceState(null, "", "/settings?oauth=connected&provider=google")
     await renderSettings(testI18n(), { tab: "account" })
     expect(container.querySelector(".oauth-feedback")).toBeNull()
   })

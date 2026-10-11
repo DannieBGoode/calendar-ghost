@@ -288,7 +288,7 @@ def _observe(run: SyncRunContext, event: CalendarEvent, at: datetime) -> SourceC
     if previous is not None and previous.revision == current.revision:
         return None
     if previous is not None:
-        # A list Google did not return in full keeps the last complete one, so a guest removed
+        # A list the provider did not return in full keeps the last complete one, so a guest removed
         # before the next complete list is still reported.
         current = replace(
             current,

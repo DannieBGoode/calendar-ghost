@@ -97,3 +97,37 @@ What the planned providers expose, as of this decision:
 | iCloud, Fastmail | CalDAV, app-specific passwords | One CalDAV adapter. Needs the connection-method ADR. Metadata lookups scan rather than filter. |
 | Proton, Tuta | No public calendar API | At most Source Calendars through published feeds. Needs Provider Capabilities. |
 | Notion | No calendar API; Notion Calendar sits on Google or Outlook | Not a Calendar Provider. |
+
+## Amendment: provider descriptors (2026-10-11)
+
+Preparing Outlook showed Google knowledge still in the core: the Google Cloud wording of
+administrator Causes, the troubleshooting anchors and the Testing-mode pattern of Installation
+Hints, the calendar name Google gives an unnamed calendar, Google's OAuth routes in the Web API,
+and "Google account" in the Web UI. Each would have needed a branch on the Provider Kind once a
+second provider existed.
+
+- **One descriptor per provider.** Each provider's package gives bootstrap one
+  `ProviderDescriptor` (`application/provider_descriptors.py`): its `ProviderGuide` (Provider
+  Kind, the slug its connection flow lives under, its display and calendar names, the
+  troubleshooting section for each Cause it can raise, and any Installation Hint only it explains,
+  such as Google's 7-day grants in Testing mode), whether the installation configured it, its OAuth
+  flow, and its calendar roles. `bootstrap/container.py` composes the descriptors in one place;
+  routing, Installation Hints, and the Web API read them. Adding a provider adds its package and
+  one line there.
+- **Only Provider Kinds name providers in the core.** The domain, application, and interfaces name
+  no provider, and nothing outside a provider's package names a Provider Kind member;
+  `tests/test_provider_neutrality.py` fails otherwise. `ProviderKind` no longer carries a name:
+  adapters label their failures with their calendar name for English summaries, and the Web UI
+  names providers from its catalogs by Provider Kind. `GET /api/v1/google/configuration` stays as
+  a compatibility alias, the one other place that names Google.
+- **Shared mechanics are neutral infrastructure.** OAuth states bound to the signed-in User and
+  PKCE (`infrastructure/oauth.py`), call tallying (`provider_calls.py`), Retry-After parsing
+  (`retry_after.py`), and credential encryption (`security.py`) belong to no provider's package,
+  and an import-linter contract keeps them from importing one.
+- **Provider-parameterized connection.** `GET /api/v1/providers` lists the providers Users can
+  connect and how. Flows run at `/api/v1/oauth/{slug}/start` and `/callback`, which keeps every
+  Google address unchanged. Failures record the provider beside their Cause (migration 27), so
+  hints and problems name it and link its own troubleshooting section.
+- **Adapters report unnamed calendars.** A discovered calendar says whether its provider gave it a
+  name of its own; one without is remembered without a name, instead of the core recognizing
+  Google's habit of naming it by its identifier.

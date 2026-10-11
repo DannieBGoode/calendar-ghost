@@ -26,6 +26,7 @@ from calendar_sync.application.ports import (
     SchedulerProgress,
     UserDirectory,
 )
+from calendar_sync.application.provider_descriptors import ProviderGuide
 from calendar_sync.application.status import NEEDS_ATTENTION, StatusVerdict, stalled_since
 from calendar_sync.domain.access import UserId, UserState
 
@@ -100,6 +101,8 @@ class GetInstallationHealth:
     clock: Clock
     sightings: Callable[[datetime], Sequence[CauseSighting]] = lambda _since: ()
     """Every User's failures with a Cause from a time on, read at once."""
+    guides: Sequence[ProviderGuide] = ()
+    """Each provider's troubleshooting sections and patterns, which hints link to."""
 
     def execute(self) -> InstallationHealth:
         now = self.clock.now()
@@ -121,5 +124,5 @@ class GetInstallationHealth:
             users=dict(counts),
             disabled_users=len(everyone) - len(active),
             checked_at=now,
-            hints=installation_hints(seen, now),
+            hints=installation_hints(seen, now, self.guides),
         )
