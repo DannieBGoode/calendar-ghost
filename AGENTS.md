@@ -210,7 +210,9 @@ change under `web/`, run the frontend build and include the regenerated static a
 commit.
 
 User-visible Web UI text lives in `web/src/i18n/locales/en/` and renders through `t()`; dates and
-numbers go through `i18n.format`. Server text the UI shows carries a stable code: raise API errors
+numbers go through `i18n.format`. `web/src/i18n/catalog.test.ts` fails on an English key no source
+file names: delete a key with the code that used it, and give a key built from a template, such as
+`people.overview.next.${step}.self`, its known values in that test's `TEMPLATE_VALUES`. Server text the UI shows carries a stable code: raise API errors
 through `interfaces/api/problems.py` and give Incidents a message (ADR 0026). Never use em dashes.
 
 ## Testing

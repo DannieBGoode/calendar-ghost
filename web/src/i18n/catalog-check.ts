@@ -74,3 +74,61 @@ export function catalogProblems(english: Catalog, other: Catalog, locale: string
   for (const key of target.keys()) if (!source.has(key)) problems.push(`${key}: not in English`)
   return [...new Set(problems)]
 }
+
+/**
+ * The values each key template takes, keyed by the template with each `${...}` written as `*`,
+ * such as `people.overview.next.*.self`. "server" marks a template the server's codes complete,
+ * so every key it matches counts as named.
+ */
+export type TemplateValues = Readonly<Record<string, readonly string[] | "server">>
+
+const QUOTED = /(["'`])([A-Za-z]\w*(?:\.\w+)+)\1/g
+const TEMPLATE_LITERAL = /`([^`]*\$\{[^`]*)`/g
+const EXPRESSION = /\$\{[^}]*\}/g
+
+/** Each `*` of `template` replaced by each of `values`, in every combination. */
+function expand(template: string, values: readonly string[]): string[] {
+  if (!template.includes("*")) return [template]
+  return values.flatMap((value) => expand(template.replace("*", value), values))
+}
+
+function matcher(template: string): RegExp {
+  return new RegExp(`^${template.replaceAll(".", "\\.").replaceAll("*", "[^.]+")}$`)
+}
+
+/** The key templates the sources build, such as `people.cause.*`, within the catalog's namespaces. */
+function keyTemplates(sources: readonly string[], namespaces: Set<string>): Set<string> {
+  const found = new Set<string>()
+  for (const source of sources) {
+    for (const [, text = ""] of source.matchAll(TEMPLATE_LITERAL)) {
+      const template = text.replace(EXPRESSION, "*")
+      if (/^[\w.*]+$/.test(template) && namespaces.has(template.split(".")[0] ?? "")) found.add(template)
+    }
+  }
+  return found
+}
+
+/** What the sources name: their literal keys and every key a template's values complete. */
+function namedKeys(keys: string[], sources: readonly string[], templates: Set<string>, values: TemplateValues): Set<string> {
+  const named = new Set(sources.flatMap((source) => [...source.matchAll(QUOTED)].map((match) => match[2] ?? "")))
+  for (const template of templates) {
+    const known = values[template]
+    if (known === "server") for (const key of keys.filter((each) => matcher(template).test(each))) named.add(key)
+    else for (const key of expand(template, known ?? [])) named.add(key)
+  }
+  return named
+}
+
+/** English keys no source names, and key templates whose values are unknown or unused. */
+export function unusedKeys(english: Catalog, sources: readonly string[], values: TemplateValues): string[] {
+  const keys = [...messages(english).keys()]
+  const templates = keyTemplates(sources, new Set(Object.keys(english)))
+  const named = namedKeys(keys, sources, templates, values)
+  return [
+    ...keys.filter((key) => !named.has(key)).map((key) => `${key}: unused`),
+    ...[...templates].filter((template) => !(template in values)).map((template) => `${template}: a key template without known values`),
+    ...Object.keys(values)
+      .filter((template) => !templates.has(template))
+      .map((template) => `${template}: known values for a key template no source builds`),
+  ]
+}

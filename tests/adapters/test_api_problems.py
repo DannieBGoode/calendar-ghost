@@ -245,15 +245,42 @@ def _constant(path: Path, name: str) -> str | None:
     return None
 
 
-def test_every_code_the_server_sends_has_an_english_message() -> None:
-    """The Web UI translates `common.apiError.<code>`; a code without one shows only English."""
-    sent = (
+def _sent_codes() -> set[str]:
+    return (
         set(problems._CODES.values())
         | set(problems._STATUS_CODES.values())
         | {problems._UNLISTED_STATUS}
         | {code for path in INTERFACES.rglob("*.py") for code in _literal_codes(path)}
     )
-    messages = json.loads(ENGLISH_COMMON.read_text(encoding="utf-8"))["apiError"]
+
+
+def _english_error_messages() -> set[str]:
+    return set(json.loads(ENGLISH_COMMON.read_text(encoding="utf-8"))["apiError"])
+
+
+# Messages the Web UI shows when no error body arrives: a failed request, an unreadable response,
+# or an unexpected error.
+_CLIENT_MESSAGES = {"generic", "network", "unreadableResponse"}
+
+
+def test_every_code_the_server_sends_has_an_english_message() -> None:
+    """The Web UI translates `common.apiError.<code>`; a code without one shows only English."""
+    sent = _sent_codes()
 
     assert {"rule_execution_unavailable", "integration_token_not_found"} <= sent
-    assert sorted(sent - set(messages)) == []
+    assert sorted(sent - _english_error_messages()) == []
+
+
+def test_every_english_error_message_names_a_code_the_server_sends() -> None:
+    """The Web UI's catalog test counts every `common.apiError` message as used; this checks it.
+
+    A message is a code, or `<code>_<reason>` for a code its `reason` param refines.
+    """
+    sent = _sent_codes()
+    unsent = {
+        message
+        for message in _english_error_messages() - _CLIENT_MESSAGES
+        if message not in sent and not any(message.startswith(f"{code}_") for code in sent)
+    }
+
+    assert sorted(unsent) == []
