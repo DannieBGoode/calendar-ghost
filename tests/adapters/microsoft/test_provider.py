@@ -321,15 +321,25 @@ def test_a_series_whose_zone_outlook_cannot_keep_until_its_last_end_writes_nothi
     assert [method for method, _, _ in graph.events.writes] == []
 
 
-def test_a_series_that_ends_before_its_zone_changes_is_written() -> None:
+@pytest.mark.parametrize(
+    ("ends", "rule"),
+    [
+        # Until Saturday 27 March at 09:00.
+        (datetime(1976, 3, 27, 8, 0, tzinfo=UTC), "COUNT=1"),
+        # A range that ends after the change, though its only occurrence ends before it.
+        (datetime(1976, 3, 27, 8, 0, tzinfo=UTC), "UNTIL=19760328T215959Z"),
+    ],
+    ids=["morning", "until"],
+)
+def test_a_series_that_ends_before_its_zone_changes_is_written(ends: datetime, rule: str) -> None:
     provider, graph = outlook()
-    # Once, from Thursday 25 to Saturday 27 March 1976 at 09:00 in Madrid, which ends before
-    # Madrid moved to summer time on the 28th; until then Berlin's zone keeps its offsets.
+    # Once, from Thursday 25 March 1976 at 09:00 in Madrid until a time on the 27th that is
+    # before Madrid moved to summer time on the 28th; until then Berlin's zone keeps its offsets.
     starts = datetime(1976, 3, 25, 8, 0, tzinfo=UTC)
     projection = EventProjection(
-        TimedInterval(starts, datetime(1976, 3, 27, 8, 0, tzinfo=UTC), "Europe/Madrid"),
+        TimedInterval(starts, ends, "Europe/Madrid"),
         "Busy",
-        recurrence=Recurrence(("RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=TH;COUNT=1",)),
+        recurrence=Recurrence((f"RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=TH;{rule}",)),
     )
 
     provider.create_projection(DESTINATION, _ref("google-series"), RULE, projection, "key-1")

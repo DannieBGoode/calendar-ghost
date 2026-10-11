@@ -620,12 +620,11 @@ def _lifetime(
     endless series to the year its zone's rules repeat unchanged, or two years after it starts if
     that is later."""
     first = start if isinstance(start, date) and not isinstance(start, datetime) else start.date()
-    if rule.range.end is not None:
-        last: date | None = rule.range.end
-    elif rule.range.count:
-        last = deque(occurrence_dates(rule), maxlen=1)[0]
-    else:
-        last = None
+    last: date | None = None
+    if rule.range.end is not None or rule.range.count:
+        # The last occurrence, which may fall well before the date its range ends.
+        dates = deque(occurrence_dates(rule), maxlen=1)
+        last = dates[0] if dates else first
     local = ZoneInfo(zone)
     begins = datetime.combine(first, datetime.min.time(), tzinfo=local).astimezone(UTC)
     if last is None:
