@@ -6,9 +6,12 @@ import type { ConnectedAccount, Incident } from "@/lib/api"
 import {
   accessRenewedSince,
   incidentClosedAt,
+  incidentDetail,
+  incidentDuration,
   incidentGuidance,
   incidentResolution,
-  splitIncidents,
+  openIncidentCount,
+  resolvedFollowUp,
 } from "@/lib/incidents"
 
 const i18n = testI18n()
@@ -172,9 +175,36 @@ describe("resolved incidents", () => {
     expect(incidentClosedAt(incident({ resolved_at: "2026-09-29T08:00:00Z" }))).toBe("2026-09-29T08:00:00Z")
   })
 
-  it("keeps resolved incidents apart from the open ones that lead Activity", () => {
+  it("counts only the incidents still open, as the Incidents tab shows", () => {
     const open = incident({ id: "open" })
     const resolved = incident({ id: "resolved", state: "resolved", resolution: "rule_removed" })
-    expect(splitIncidents([open, resolved])).toEqual({ open: [open], resolved: [resolved] })
+    expect(openIncidentCount([open, resolved])).toBe(1)
+  })
+
+  it("says how long a resolved incident stayed open, to the nearest unit", () => {
+    const closedAfter = (resolvedAt: string) => incidentDuration(incident({ state: "resolved", resolved_at: resolvedAt }))
+    expect(incidentDuration(incident())).toBeNull()
+    expect(closedAfter("2026-09-28T18:00:40Z")).toEqual({ unit: "moment", count: 0 })
+    expect(closedAfter("2026-09-28T18:45:00Z")).toEqual({ unit: "minute", count: 45 })
+    expect(closedAfter("2026-09-28T20:40:00Z")).toEqual({ unit: "hour", count: 3 })
+    expect(closedAfter("2026-10-01T06:00:00Z")).toEqual({ unit: "day", count: 3 })
+  })
+
+  it("offers a resolved incident's rule history only while the rule exists", () => {
+    const resolved = incident({ state: "resolved", resolved_at: "2026-09-28T19:00:00Z" })
+    expect(resolvedFollowUp(i18n, resolved, NOT_RENEWED)).toEqual({
+      kind: "history",
+      ruleId: "rule-1",
+      label: "See what the rule did",
+    })
+    expect(resolvedFollowUp(i18n, resolved, null)).toBeNull()
+    expect(resolvedFollowUp(i18n, incident(), NOT_RENEWED)).toBeNull()
+  })
+
+  it("leaves out a cause Calendar Ghost does not recognise", () => {
+    const unknown = incident({ cause: "unknown" })
+    const limited = incident({ cause: "rate_limited" })
+    expect(incidentDetail(i18n, unknown, NOT_RENEWED).cause).toBeNull()
+    expect(incidentDetail(i18n, limited, NOT_RENEWED).cause).toBe("rate_limited")
   })
 })

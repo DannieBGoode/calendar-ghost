@@ -1392,7 +1392,8 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
-.page-tab.active .page-tab-count {
+/* A count to act on keeps its Attention Ochre on the active tab. */
+.page-tab.active .page-tab-count:not([data-tone="attention"]) {
   background: var(--primary-soft);
   color: var(--foreground);
 }
@@ -4311,51 +4312,248 @@ thead + .activity-day th {
   color: var(--muted-foreground);
 }
 
-.incident-row {
-  gap: 0.5rem;
+/* Incidents read like Activity's history: one quiet table, grouped like its days, open ones first.
+   Selecting a row opens the incident beside the table, as History opens an entry. */
+.incidents-list {
+  container: incidents-list / inline-size;
 }
 
-.incident-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-}
-
-.incident-row .activity-run-meta {
-  margin-top: 0;
-}
-
-.incident-detail {
-  max-width: 68ch;
-  margin: 0;
+.incidents-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
   font-size: 0.875rem;
-  line-height: 1.55;
+  line-height: 1.45;
 }
 
-.incident-row .incident-detail + div {
-  margin-top: 0.25rem;
-}
-
-.resolved-incidents {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-
-.resolved-incidents .rule-list {
-  align-self: stretch;
-}
-
-.resolved-incidents .incident-row strong {
+.incidents-table thead th {
+  padding: 0 0.75rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
   font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.incidents-table td {
+  padding: 0.75rem;
+  border-top: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
+  vertical-align: top;
+}
+
+.incidents-table thead th:first-child,
+.incidents-table td:first-child {
+  padding-left: 0.5rem;
+}
+
+.incidents-table .col-opened,
+.incidents-table .col-closed {
+  width: 11rem;
+}
+
+.incidents-table .col-rule {
+  width: 26%;
+}
+
+/* Each group opens with its state and count, as Activity's history opens each day. */
+.incident-group th {
+  padding: 1.5rem 0.5rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.incident-group tr:nth-child(2) td {
+  border-top: 0;
+}
+
+.incident-group:first-of-type th,
+thead + .incident-group th {
+  padding-top: 0.75rem;
+}
+
+.incident-row {
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+/* The card is Quiet Surface already, so hover takes the muted fill; the open incident, Lantern's. */
+.incident-row:hover td {
+  background: color-mix(in oklch, var(--muted) 70%, transparent);
+}
+
+.incident-row[data-selected="true"] td {
+  background: var(--primary-soft);
+}
+
+/* The chip's padding would push its words below the row's other text, so it sits up by as much. */
+.incident-still-open {
+  margin-block: -0.25rem;
+}
+
+/* Both groups open with the same heading: its icon and count, ochre while incidents are open. */
+.incident-group-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.incident-group-label svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.incident-group[data-state="open"] th {
+  color: var(--warning-foreground);
+}
+
+.incident-link {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  border-radius: 0.25rem;
+  color: var(--foreground);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.incident-link:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.incident-state-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  margin-top: 0.12rem;
+}
+
+.incident-group[data-state="open"] .incident-state-icon {
+  color: var(--warning-foreground);
+}
+
+.incident-group[data-state="resolved"] .incident-state-icon {
   color: var(--muted-foreground);
 }
 
-/* Aligns the label, not the hover surface, with the page text. */
-.resolved-incidents-toggle {
-  margin-inline-start: -0.75rem;
+/* Resolved incidents are evidence: their names step back, still above the AA contrast floor. */
+.incident-group[data-state="resolved"] .incident-link {
+  font-weight: 500;
+}
+
+.incident-col-rule {
+  overflow-wrap: anywhere;
+}
+
+.incident-rule-names {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.35rem;
+}
+
+.incident-rule-names svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  flex: none;
+  color: var(--muted-foreground);
+}
+
+.incident-muted,
+.incident-col-time {
+  color: var(--muted-foreground);
+}
+
+.incident-col-time {
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.incident-closed-at,
+.incident-lasted {
+  display: block;
+}
+
+.incident-lasted {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.incident-explanation {
+  max-width: 68ch;
+  margin: 0;
+}
+
+.incident-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+/* When the list is narrow each incident becomes a card that labels its values. The column
+   headings stay for screen readers, so each cell keeps its column's name. */
+@container incidents-list (max-width: 40rem) {
+  .incidents-table,
+  .incidents-table tbody,
+  .incidents-table tr,
+  .incidents-table td,
+  .incident-group th {
+    display: block;
+  }
+
+  .incidents-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .incidents-table tr.incident-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.6rem 1rem;
+    padding: 0.85rem 0.5rem;
+    border-top: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
+  }
+
+  .incidents-table td,
+  .incidents-table td:first-child {
+    padding: 0;
+    border: 0;
+  }
+
+  .incident-row:hover td,
+  .incident-row[data-selected="true"] td {
+    background: transparent;
+  }
+
+  .incident-row[data-selected="true"] {
+    background: var(--primary-soft);
+  }
+
+  .incident-col-what {
+    grid-row: 1;
+    grid-column: 1 / -1;
+  }
+
+  .incident-col-rule {
+    grid-column: 1 / -1;
+  }
+
+  .incidents-table td[data-label]::before {
+    display: block;
+    color: var(--muted-foreground);
+    content: attr(data-label);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
 }
 
 .empty-actions {

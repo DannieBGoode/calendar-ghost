@@ -9,7 +9,7 @@ import { ActivityView } from "./activity"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { ViewChange } from "@/lib/navigation"
+import type { ActivityTab, ViewChange } from "@/lib/navigation"
 import type {
   api,
   AuditEntry,
@@ -287,9 +287,15 @@ async function settle(times = 8) {
 
 let viewChange = vi.fn<ViewChange>()
 
-async function renderActivity(i18n: I18n, scenario: Scenario = {}, search = "") {
+/** Where Activity opens: History, the Incidents tab, or one Incident beside it. */
+type Opened = ActivityTab | { incidentId: string }
+
+async function renderActivity(i18n: I18n, scenario: Scenario = {}, search = "", opened: Opened = "history") {
+  const tab = typeof opened === "string" ? opened : "incidents"
+  const incidentId = typeof opened === "string" ? undefined : opened.incidentId
   viewChange = vi.fn<ViewChange>()
-  window.history.replaceState(null, "", `/activity${search}`)
+  const path = incidentId ? `/activity/incidents/${incidentId}` : tab === "incidents" ? "/activity/incidents" : "/activity"
+  window.history.replaceState(null, "", `${path}${search}`)
   mockFetch(scenario)
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -297,7 +303,7 @@ async function renderActivity(i18n: I18n, scenario: Scenario = {}, search = "") 
     root?.render(
       <StaticI18nProvider i18n={i18n}>
         <QueryClientProvider client={queryClient}>
-          <ActivityView onViewChange={viewChange} onOpenRule={() => undefined} />
+          <ActivityView tab={tab} incidentId={incidentId} onViewChange={viewChange} onOpenRule={() => undefined} />
         </QueryClientProvider>
       </StaticI18nProvider>,
     )
@@ -316,7 +322,7 @@ async function click(element: Element | null) {
 
 describe("ActivityView", () => {
   it("sends an authorization incident to the failed account under Settings → Connections", async () => {
-    await renderActivity(testI18n())
+    await renderActivity(testI18n(), {}, "", { incidentId: "open-auth" })
     const reauthorize = [...container.querySelectorAll("button")].find((item) => item.textContent === "Reauthorize in Settings")
     await click(reauthorize ?? null)
     expect(viewChange).toHaveBeenCalledWith("settings", {
@@ -325,19 +331,90 @@ describe("ActivityView", () => {
     })
   })
 
-  it("shows what each Incident says and what each entry did", async () => {
-    await renderActivity(testI18n())
-    await click(container.querySelector(".resolved-incidents-toggle"))
+  it("lists every Incident in its own tab, open ones first, with what each says", async () => {
+    await renderActivity(testI18n(), {}, "", "incidents")
+    const groups = [...container.querySelectorAll(".incident-group")]
+    expect(groups.map((group) => group.querySelector("th")?.textContent)).toEqual(["3 open", "2 resolved"])
     const text = container.textContent
-    expect(container.querySelector("h1")?.textContent).toBe("What your rules did")
+    expect(container.querySelector("h1")?.textContent).toBe("What needed attention")
+    // Each open row carries the tab's ochre count as a chip.
+    const stillOpen = [...container.querySelectorAll('.incident-row [class*="warning"]')]
+    expect(stillOpen.map((chip) => chip.textContent)).toEqual(["Still open", "Still open", "Still open"])
     expect(text).toContain("Access to Google Calendar was denied")
     expect(text).toContain("2 events could not be synced and were still blocked at the daily check.")
     expect(text).toContain("Local synchronization infrastructure failed")
     expect(text).toContain("Google Calendar is temporarily unavailable")
     expect(text).toContain(LEGACY_SUMMARY)
     expect(text).not.toContain("Stored summary")
-    expect(text).toContain("Hide resolved incidents")
-    expect(text).toContain("Resolved by a successful sync.")
+    // A resolved incident says how long it lasted.
+    expect(text).toContain("after 2 days")
+    expect(container.querySelector(".incidents-table thead th")?.textContent).toBe("Opened")
+    expect(container.querySelector(".activity-detail")).toBeNull()
+    expect(container.querySelector(".activity-table")).toBeNull()
+    expect(document.title).toBe("Incidents – Activity – Calendar Ghost")
+  })
+
+  it("opens a resolved Incident at its own address with how it closed and its rule's history", async () => {
+    await renderActivity(testI18n(), {}, "", { incidentId: "resolved-sync" })
+    const detail = container.querySelector(".activity-detail")
+    expect(detail?.querySelector("h2")?.textContent).toBe("Google Calendar is temporarily unavailable")
+    expect(detail?.textContent).toContain("Resolved by a successful sync.")
+    expect([...(detail?.querySelectorAll("button") ?? [])].some((item) => item.textContent === "See what the rule did")).toBe(true)
+    expect(container.querySelector('[data-incident-link="resolved-sync"]')?.getAttribute("aria-current")).toBe("true")
+  })
+
+  it("counts open Incidents on their tab and moves between tabs at their own addresses", async () => {
+    await renderActivity(testI18n(), {}, "?rule=rule-a")
+    const tab = container.querySelector<HTMLAnchorElement>('.page-tab[href="/activity/incidents"]')
+    expect(tab?.querySelector('.page-tab-count [aria-hidden="true"]')?.textContent).toBe("3")
+    expect(tab?.querySelector(".page-tab-count .sr-only")?.textContent).toBe("3 open")
+    expect(tab?.querySelector(".page-tab-count")?.getAttribute("data-tone")).toBe("attention")
+    expect(container.querySelector(".incidents-table")).toBeNull()
+    await click(tab)
+    expect(window.location.pathname).toBe("/activity/incidents")
+    expect(container.querySelector(".incidents-table")).not.toBeNull()
+    await click(container.querySelector('.page-tab[href="/activity"]'))
+    expect(`${window.location.pathname}${window.location.search}`).toBe("/activity?rule=rule-a")
+  })
+
+  it("shows History without tabs when there is no Incident", async () => {
+    await renderActivity(testI18n(), { incidents: [] })
+    expect(container.querySelector(".page-tabs")).toBeNull()
+    expect(container.querySelector(".activity-table")).not.toBeNull()
+  })
+
+  it("says there are none at the Incidents address when there is no Incident", async () => {
+    await renderActivity(testI18n(), { incidents: [] }, "", "incidents")
+    expect(container.querySelector(".page-tab-count")).toBeNull()
+    expect(container.textContent).toContain("No incidents")
+  })
+
+  it("opens an Incident beside the table from anywhere on its row, and closes it", async () => {
+    await renderActivity(testI18n(), {}, "", "incidents")
+    await click(container.querySelector(".incident-row .incident-col-rule"))
+    expect(window.location.pathname).toBe("/activity/incidents/open-auth")
+    expect(container.querySelector(".activity-detail h2")?.textContent).toBe("Access to Google Calendar was denied")
+    // The details name the rule, so the table makes room for them.
+    expect(container.querySelector(".incident-col-rule")).toBeNull()
+    await click(container.querySelector('.activity-detail [aria-label="Next incident"]'))
+    expect(window.location.pathname).toBe("/activity/incidents/open-conflict")
+    await click([...container.querySelectorAll(".activity-detail button")].find((item) => item.textContent.includes("Close")) ?? null)
+    expect(window.location.pathname).toBe("/activity/incidents")
+    expect(container.querySelector(".activity-detail")).toBeNull()
+  })
+
+  it("opens a blocked Incident's events in History", async () => {
+    await renderActivity(testI18n(), {}, "", { incidentId: "open-conflict" })
+    const seeBlocked = [...container.querySelectorAll("button")].find((item) => item.textContent === "See blocked events")
+    await click(seeBlocked ?? null)
+    expect(`${window.location.pathname}${window.location.search}`).toBe(`/activity?rule=${rule.id}&show=blocked`)
+    expect(container.querySelector(".incidents-table")).toBeNull()
+  })
+
+  it("shows what each entry did", async () => {
+    await renderActivity(testI18n())
+    const text = container.textContent
+    expect(container.querySelector("h1")?.textContent).toBe("What your rules did")
     expect(text).toContain("Title and description changed in Family, so updated in Work")
     expect(text).toContain("Missing from Work, so put back again")
     expect(text).toContain("Something happened")
@@ -371,8 +448,13 @@ describe("ActivityView", () => {
   })
 
   it("has no untranslated text in Incidents, the history table, and the rule picker", async () => {
-    await renderActivity(pseudoI18n())
-    await click(container.querySelector(".resolved-incidents-toggle"))
+    await renderActivity(pseudoI18n(), {}, "", "incidents")
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+    for (const link of container.querySelectorAll("[data-incident-link]")) {
+      await click(link)
+      expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+    }
+    await click(container.querySelector('.page-tab[href="/activity"]'))
     await click(container.querySelector('[role="combobox"]'))
     expect(container.querySelectorAll('[role="option"]').length).toBeGreaterThan(2)
     expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])

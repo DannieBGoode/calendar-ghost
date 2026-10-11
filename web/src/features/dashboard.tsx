@@ -57,7 +57,17 @@ export function Dashboard({
     )
   }
   // Remounted on every arrival so its filters always match the address it was opened at.
-  if (view === "activity") return <ActivityView key={visit} onViewChange={onViewChange} onOpenRule={onOpenRule} />
+  if (view === "activity") {
+    return (
+      <ActivityView
+        key={visit}
+        tab={location.activityTab}
+        incidentId={location.incidentId}
+        onViewChange={onViewChange}
+        onOpenRule={onOpenRule}
+      />
+    )
+  }
   if (view === "people") {
     return (
       <PeopleRoute
