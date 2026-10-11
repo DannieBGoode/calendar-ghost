@@ -169,8 +169,12 @@ Projections never carry attendees, an online meeting, or a response request
 (`responseRequested: false`, `allowNewTimeProposals: false`); they show as busy and with normal
 sensitivity, and set no reminder. The adapter never calls `/cancel`, `/forward`, `/accept`,
 `/decline`, or `/tentativelyAccept`. Deleting a projection or an occurrence uses `DELETE`, which
-sends a cancellation only for a meeting with attendees, which a projection never is. A change that
-could email anyone is release-blocking, as for Google.
+sends a cancellation only for a meeting with attendees, which a projection never is. Someone may
+still invite guests to a projection, or to one occurrence of a projected series, in Outlook. Such an
+event is never updated, deleted, or cancelled again, and its guests are never cleared, since each of
+those emails them: the write is refused as a Conflict (`projection_unsupported`), the event is left
+as it is, and Rule Removal leaves it too. A change that could email anyone is release-blocking, as
+for Google.
 
 ### Reading source events
 

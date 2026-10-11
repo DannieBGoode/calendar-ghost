@@ -80,6 +80,9 @@ class FakeCalendars:
     """Sources whose projections, as created or updated, this destination cannot hold."""
     unsupported_occurrences: set[OccurrenceStart] = field(default_factory=set)
     """Occurrences this destination cannot write, such as one it cannot restore."""
+    undeletable: set[EventRef] = field(default_factory=set)
+    """Projections this destination cannot delete without notifying anyone, such as one someone
+    invited guests to."""
     exception_listings: list[EventRef] = field(default_factory=list)
     listings: list[CalendarEndpoint] = field(default_factory=list)
     """Calendars listed in full by `list_events`, in order."""
@@ -303,6 +306,8 @@ class FakeCalendars:
             return
         if not _owned(existing.managed_origin, rule_id, source):
             raise _denied()
+        if destination in self.undeletable:
+            raise UnsupportedProjection("this destination cannot delete the projection quietly")
         for instance in self.instances_of(destination):
             del self.events[instance.reference]
         del self.events[destination]

@@ -363,6 +363,7 @@ class OutlookCalendarProvider:
                 provider=ProviderKind.OUTLOOK,
                 provider_label=MICROSOFT.calendar_name,
             )
+        _refuse_guests(existing)
         body = projection_body(projection, rule_id, source, operation_key)
         if projection.recurrence is None and existing.recurrence is not None:
             body["recurrence"] = None
@@ -394,6 +395,7 @@ class OutlookCalendarProvider:
                 provider=ProviderKind.OUTLOOK,
                 provider_label=MICROSOFT.calendar_name,
             )
+        _refuse_guests(existing)
         self._delete(destination.calendar, destination.event_id.value)
 
     def _delete(self, calendar: CalendarEndpoint, event_id: str) -> None:
@@ -646,6 +648,9 @@ class OutlookCalendarProvider:
                 provider=ProviderKind.OUTLOOK,
                 provider_label=MICROSOFT.calendar_name,
             )
+        if instance.status is not EventStatus.CANCELLED:
+            _refuse_guests(master)
+            _refuse_guests(instance)
         return instance
 
     # Failures --------------------------------------------------------------------------------
@@ -757,6 +762,13 @@ def _written(
         {**answer, "singleValueExtendedProperties": body["singleValueExtendedProperties"]},
         calendar,
     )
+
+
+def _refuse_guests(event: CalendarEvent | None) -> None:
+    """Refuse to change an event someone invited guests to: Outlook emails them about any update
+    or deletion, and would about clearing them too. The event is left as it is (ADR 0034)."""
+    if event is not None and event.guests:
+        raise UnsupportedProjection("Outlook would notify the guests of this event")
 
 
 def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) -> bool:

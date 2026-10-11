@@ -7,7 +7,13 @@ since a round's token, and removals as `@removed`. Every read answers in UTC. On
 tests use are expanded: daily, weekly, and absolute monthly.
 
 Anything that would send mail (attendees, `/cancel`, `/forward`, responses) is recorded in
-`mail`, which tests keep empty.
+`mail`, which tests keep empty. So is a PATCH or DELETE of an event, or of an occurrence, that has
+attendees: Outlook sends the organizer's update or cancellation to them. See "Delete event"
+(https://learn.microsoft.com/en-us/graph/api/event-delete?view=graph-rest-1.0): "If the event is a
+meeting, deleting the event on the organizer's calendar sends a cancellation message to the meeting
+attendees", and "Update event"
+(https://learn.microsoft.com/en-us/graph/api/event-update?view=graph-rest-1.0), whose changes an
+organizer's meeting sends to its attendees.
 """
 
 from __future__ import annotations
@@ -194,6 +200,8 @@ class FakeGraphEvents:
     def _patch(self, mailbox: str, calendar: str, event_id: str, body: Json) -> httpx.Response:
         self._mail_check("update", body)
         self.writes.append(("PATCH", event_id, body))
+        if self._has_attendees(mailbox, calendar, event_id):
+            self.mail.append(f"update to attendees {event_id}")
         event = self._event(mailbox, calendar, event_id)
         if event is not None:
             for key, value in body.items():
@@ -219,9 +227,9 @@ class FakeGraphEvents:
     def _delete(self, mailbox: str, calendar: str, event_id: str) -> httpx.Response:
         event = self._event(mailbox, calendar, event_id)
         self.writes.append(("DELETE", event_id, {}))
+        if self._has_attendees(mailbox, calendar, event_id):
+            self.mail.append(f"cancellation {event_id}")
         if event is not None:
-            if event.fields.get("attendees"):
-                self.mail.append(f"cancellation {event_id}")
             del self.stored[event_id]
             self._changed(mailbox, calendar, event_id, removed=True)
             return httpx.Response(204)
@@ -324,6 +332,8 @@ class FakeGraphEvents:
             "body": override.get("body", series.fields.get("body")),
             "location": override.get("location", series.fields.get("location")),
             "responseStatus": series.fields.get("responseStatus"),
+            # An occurrence has its series' attendees, unless an exception changed them.
+            "attendees": override.get("attendees", series.fields.get("attendees", [])),
             "start": _answer_instant(own_start, False),
             "end": _answer_instant(own_end, False),
         }
@@ -390,6 +400,17 @@ class FakeGraphEvents:
         if event is None or (event.mailbox, event.calendar) != (mailbox, calendar):
             return None
         return event
+
+    def _has_attendees(self, mailbox: str, calendar: str, event_id: str) -> bool:
+        """Whether a write to this event or occurrence reaches attendees."""
+        event = self._event(mailbox, calendar, event_id)
+        if event is not None:
+            return bool(event.fields.get("attendees"))
+        found = self._occurrence(mailbox, calendar, event_id)
+        if found is None:
+            return False
+        series, day = found
+        return bool(self._instance(series, day, expand=False).get("attendees"))
 
     def _mail_check(self, action: str, body: Mapping[str, Any]) -> None:
         if body.get("attendees") or body.get("isOnlineMeeting"):
