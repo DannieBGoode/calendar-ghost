@@ -150,6 +150,34 @@ def test_a_series_with_an_exception_someone_invited_guests_to_is_never_updated_o
     assert graph.events.mail == []
 
 
+def test_a_series_with_an_exception_nobody_was_invited_to_is_updated_and_deleted() -> None:
+    provider, graph = outlook()
+    destination, source = _series(provider)
+    # The second Monday's occurrence moved, so it is an exception, but nobody was invited to it.
+    series = graph.events.stored[destination.event_id.value]
+    moved_start = MONDAY + timedelta(days=7, hours=2)
+    series.exceptions[date(2026, 10, 19)] = {
+        "start": {"dateTime": moved_start.strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": "UTC"},
+        "end": {
+            "dateTime": (moved_start + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S"),
+            "timeZone": "UTC",
+        },
+    }
+    later = MONDAY + timedelta(hours=2)
+    moved = EventProjection(
+        TimedInterval(later, later + timedelta(minutes=30), "Europe/Madrid"),
+        "Busy",
+        recurrence=Recurrence(("RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=MO",)),
+    )
+
+    provider.update_projection(destination, source, RULE, moved, "key-2")
+    provider.delete_projection(destination, source, RULE, "key-3")
+
+    assert _writes(graph) == ["POST", "PATCH", "DELETE"]
+    assert destination.event_id.value not in graph.events.stored
+    assert graph.events.mail == []
+
+
 def test_a_series_whose_exceptions_outlook_did_not_list_is_not_deleted_now() -> None:
     provider, graph = outlook()
     destination, source = _series(provider)

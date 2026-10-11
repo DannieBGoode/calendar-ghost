@@ -224,20 +224,25 @@ class FakeGraphEvents:
         event = self._event(mailbox, calendar, event_id)
         if event is not None:
             answer = self._serve(event, expand=expand)
-            if (
-                "exceptionOccurrences" in params.get("$expand", "")
-                and "exceptionOccurrences" in params.get("$select", "")
-                and event.is_series
-            ):
+            expanded = params.get("$expand", "")
+            if "exceptionOccurrences" in expanded and event.is_series:
                 # "exceptionOccurrences: ... the event instances that are exceptions in a
                 # recurring series. Exceptions can differ from other occurrences in a recurring
                 # series, such as the subject, start or end times, or attendees. Exceptions don't
-                # include canceled occurrences. Returned only on $select and $expand in a GET
-                # operation that specifies the ID of a series master event"
+                # include canceled occurrences"
                 # (https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0).
-                answer["exceptionOccurrences"] = [
+                exceptions = [
                     self._instance(event, day, expand=False) for day in sorted(event.exceptions)
                 ]
+                if "$select" in params or "(" in expanded:
+                    # As Graph v1.0 answered a personal account on 2026-10-11: with any $select,
+                    # on the master or nested in the expansion, each exception carries only its
+                    # id and etag, whatever fields were selected.
+                    exceptions = [
+                        {"@odata.etag": each["@odata.etag"], "id": each["id"]}
+                        for each in exceptions
+                    ]
+                answer["exceptionOccurrences"] = exceptions
             return httpx.Response(200, json=answer)
         found = self._occurrence(mailbox, calendar, event_id)
         if found is None:
