@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
+from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import (
@@ -103,6 +104,7 @@ def _installation(*rules: SyncRule) -> Installation:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        RuleLocks(),
     )
     return Installation(google, graph, factory, sync)
 

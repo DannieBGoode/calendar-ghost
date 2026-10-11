@@ -52,7 +52,7 @@ class ReconcileSyncRule:
     reconciliation: ReconciliationService
     clock: Clock
     run_ids: RunIdGenerator
-    locks: RuleLocks = field(default_factory=RuleLocks)
+    locks: RuleLocks
     call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
 
     def execute(

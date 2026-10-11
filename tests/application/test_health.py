@@ -13,6 +13,7 @@ from calendar_sync.application.sync.health import (
     RuleHealthPolicy,
 )
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import (
@@ -237,7 +238,14 @@ def test_rule_health_times_everything_by_its_clock_and_notifies_only_new_inciden
     unit_of_work = memory_units()
     unit_of_work.state.rules[RULE] = rule()
     records, incidents, notifications = Records(), Incidents(), Notifications()
-    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), notifications=notifications)
+    health = RuleHealth(
+        unit_of_work,
+        records,
+        incidents,
+        FixedClock(),
+        notifications=notifications,
+        locks=RuleLocks(),
+    )
     denied = _failure(ProviderFailureKind.AUTHORIZATION)
 
     health.record_failure(rule(), denied)
@@ -266,7 +274,14 @@ def test_recovery_lapses_the_account_still_unauthorized() -> None:
     unit_of_work.state.rules[RULE] = rule(state=SyncRuleState.DEGRADED)
     unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     records, incidents, notifications = Records(), Incidents(), Notifications()
-    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), notifications=notifications)
+    health = RuleHealth(
+        unit_of_work,
+        records,
+        incidents,
+        FixedClock(),
+        notifications=notifications,
+        locks=RuleLocks(),
+    )
     failure = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
 
     health.recovery_blocked(RULE, failure, attempted_at=NOW)
@@ -283,7 +298,7 @@ def test_recovery_without_the_account_refreshes_the_rules_incident() -> None:
     unit_of_work = memory_units()
     records, incidents = Records(), Incidents()
     incidents.open_keys.add("provider:rule-1")
-    health = RuleHealth(unit_of_work, records, incidents, FixedClock())
+    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), locks=RuleLocks())
 
     health.recovery_blocked(RULE, _failure(ProviderFailureKind.AUTHENTICATION), attempted_at=NOW)
 
@@ -296,7 +311,14 @@ def test_a_refused_account_stops_its_rule_until_reauthorization() -> None:
     unit_of_work.state.rules[RULE] = rule()
     unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     records, incidents, notifications = Records(), Incidents(), Notifications()
-    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), notifications=notifications)
+    health = RuleHealth(
+        unit_of_work,
+        records,
+        incidents,
+        FixedClock(),
+        notifications=notifications,
+        locks=RuleLocks(),
+    )
     expired = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
 
     health.record_failure(rule(), expired)
@@ -318,7 +340,12 @@ def test_a_refusal_of_credentials_reauthorization_replaced_stops_nothing() -> No
     unit_of_work.state.authorized_at[ACCOUNT] = NOW
     incidents, notifications = Incidents(), Notifications()
     health = RuleHealth(
-        unit_of_work, Records(), incidents, FixedClock(), notifications=notifications
+        unit_of_work,
+        Records(),
+        incidents,
+        FixedClock(),
+        notifications=notifications,
+        locks=RuleLocks(),
     )
     expired = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
 
@@ -344,8 +371,10 @@ def test_a_rule_whose_account_was_restored_before_it_stopped_keeps_running() -> 
     unit_of_work = memory_units()
     unit_of_work.state.rules[RULE] = rule()
     unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
-    health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock())
-    health.lapses = RestoredRightAfterLapsing(unit_of_work, Incidents(), FixedClock())
+    health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock(), locks=RuleLocks())
+    health.lapses = RestoredRightAfterLapsing(
+        unit_of_work, Incidents(), FixedClock(), locks=RuleLocks()
+    )
     expired = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
 
     health.record_failure(rule(), expired)
@@ -357,7 +386,7 @@ def test_a_rule_whose_account_was_restored_before_it_stopped_keeps_running() -> 
 def test_a_permanent_failure_stops_its_rule_for_a_preview() -> None:
     unit_of_work = memory_units()
     unit_of_work.state.rules[RULE] = rule()
-    health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock())
+    health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock(), locks=RuleLocks())
 
     health.record_failure(
         rule(), replace(_failure(ProviderFailureKind.PERMANENT), account_id=ACCOUNT)
@@ -397,7 +426,7 @@ def test_a_refusal_of_a_request_made_after_reauthorization_lapses_its_account() 
     unit_of_work.state.rules[RULE] = rule()
     unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     unit_of_work.state.authorized_at[ACCOUNT] = NOW
-    health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock())
+    health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock(), locks=RuleLocks())
     expired = replace(
         _failure(ProviderFailureKind.AUTHENTICATION),
         account_id=ACCOUNT,

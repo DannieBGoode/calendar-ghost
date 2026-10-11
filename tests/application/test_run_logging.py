@@ -126,6 +126,7 @@ def use_case(
         clock or SteppedClock(),
         UuidRunIdGenerator(),
         call_stats=calls or UntalliedProviderCalls(),
+        locks=RuleLocks(),
     )
 
 
@@ -333,6 +334,7 @@ def reconcile_use_case(
         SteppedClock(),
         UuidRunIdGenerator(),
         call_stats=calls or UntalliedProviderCalls(),
+        locks=RuleLocks(),
     )
 
 

@@ -117,7 +117,7 @@ class ChangeSyncRulePolicy:
 
     unit_of_work: UnitOfWorkFactory
     clock: Clock
-    locks: RuleLocks = field(default_factory=RuleLocks)
+    locks: RuleLocks
 
     def execute(
         self,
@@ -211,7 +211,7 @@ class SyncRuleDetails:
 @dataclass(slots=True)
 class GetSyncRuleDetails:
     unit_of_work: UnitOfWorkFactory
-    locks: RuleLocks = field(default_factory=RuleLocks)
+    locks: RuleLocks
 
     def execute(self, rule_id: SyncRuleId) -> SyncRuleDetails:
         with self.unit_of_work() as uow:

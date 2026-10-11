@@ -376,7 +376,9 @@ def test_checking_access_of_another_users_account_asks_no_provider() -> None:
     check = CheckAccountAccess(
         calendars,
         RecordingAccounts(),
-        LapsedAuthorizations(units, cast(IncidentRepository, None), FixedClock()),
+        LapsedAuthorizations(
+            units, cast(IncidentRepository, None), FixedClock(), locks=RuleLocks()
+        ),
     )
 
     with pytest.raises(ConnectedAccountNotFound):
@@ -421,7 +423,9 @@ def test_a_refused_access_check_records_why_the_provider_refused() -> None:
     check = CheckAccountAccess(
         RefusingCalendars(),
         RecordingAccounts(account),
-        LapsedAuthorizations(units, cast(IncidentRepository, incidents), FixedClock()),
+        LapsedAuthorizations(
+            units, cast(IncidentRepository, incidents), FixedClock(), locks=RuleLocks()
+        ),
     )
 
     with pytest.raises(AccountAccessCheckFailed):

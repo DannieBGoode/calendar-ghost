@@ -244,6 +244,7 @@ def test_complete_create_use_case_persists_mapping_cursor_and_audit() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -273,6 +274,7 @@ def test_full_reconciliation_does_not_use_incremental_cursor() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     use_case.execute(rule().id, full=True)
@@ -311,6 +313,7 @@ def test_destination_drift_is_updated_and_mapping_revision_advances() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -356,6 +359,7 @@ def test_destination_only_edit_is_repaired_on_the_next_incremental_sync() -> Non
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -398,6 +402,7 @@ def test_destination_only_deletion_restores_projection_with_same_mapping_identit
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -439,6 +444,7 @@ def test_destination_change_does_not_delete_when_source_cannot_be_verified() -> 
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -477,6 +483,7 @@ def test_cancelled_source_deletes_only_its_owned_mapping() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -502,6 +509,7 @@ def test_managed_source_is_ignored_without_destination_write() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -526,6 +534,7 @@ def test_each_run_groups_its_audit_entries() -> None:
         fingerprinter,
         FixedClock(),
         ScriptedRunIds(iter(("run-1", "run-2"))),
+        locks=RuleLocks(),
     )
 
     first = use_case.execute(rule().id)
@@ -568,6 +577,7 @@ def test_non_enabled_rule_is_rejected(state: SyncRuleState) -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     with pytest.raises(RuleNotExecutable, match="not enabled"):
@@ -585,6 +595,7 @@ def test_a_missing_rule_is_rejected_without_reading_or_recording() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     with pytest.raises(RuleNotExecutable, match="does not exist"):
@@ -608,6 +619,7 @@ def test_provider_failure_does_not_advance_cursor_or_write_audit() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     with pytest.raises(ProviderFailure, match="outage"):
@@ -629,6 +641,7 @@ def test_concurrent_requests_for_the_same_rule_are_serialized() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
     failures: list[BaseException] = []
 
@@ -661,6 +674,7 @@ def _use_case(unit_of_work: UnitOfWorkFactory, provider: FakeCalendarProvider) -
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
 
@@ -911,6 +925,7 @@ def test_a_user_disabled_while_the_projection_is_read_gets_no_write() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     with pytest.raises(RuleNotExecutable):

@@ -63,6 +63,7 @@ def _reconcile_now(
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
     return ReconcileNow(sync_use_case(unit_of_work, calendars), reconcile, full_passes), calendars
 
@@ -126,6 +127,7 @@ def test_reconcile_now_leaves_events_that_ended_before_the_sync_window_unread() 
         fingerprinter,
         _EarlierClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     ).execute(rule().id)
     destination = factory.state.mappings[(rule().id, old.reference)].destination
     calendars.put(replace(calendars.events[destination], title="Edited"))
