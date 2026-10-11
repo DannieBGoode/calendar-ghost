@@ -142,7 +142,16 @@ class GraphHttp:
             )
         if status >= 400:
             raise graph_refusal(response)
-        return _json(response) if status != 204 else {}
+        if status == 204:
+            return {}
+        try:
+            answer = response.json()
+        except ValueError as error:
+            # A success without the JSON Graph documents is no answer, so it is tried again.
+            raise GraphRefusal(None) from error
+        if not isinstance(answer, dict):
+            raise GraphRefusal(None)
+        return answer
 
     def pages(
         self, operation: str, url: str, token: str, *, params: Mapping[str, str] | None = None

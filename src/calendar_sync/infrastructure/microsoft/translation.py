@@ -34,6 +34,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
     occurrence_start,
 )
+from calendar_sync.infrastructure.microsoft.graph import GraphRefusal
 from calendar_sync.infrastructure.microsoft.recurrence import (
     SeriesRule,
     UnsupportedRecurrence,
@@ -594,7 +595,9 @@ def instances_window(after: datetime, before: datetime) -> dict[str, str]:
 
 
 def items_of(page: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
+    """A listing page's items. A page without a list in `value` is no answer, never an empty
+    one, so it fails for now and proves nothing absent."""
     values = page.get("value")
-    return (
-        [item for item in values if isinstance(item, Mapping)] if isinstance(values, list) else []
-    )
+    if not isinstance(values, list):
+        raise GraphRefusal(None)
+    return [item for item in values if isinstance(item, Mapping)]
