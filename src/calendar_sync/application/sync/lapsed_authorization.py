@@ -11,10 +11,11 @@ from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
     IncidentNotifications,
     IncidentRepository,
+    UnitOfWork,
     UnitOfWorkFactory,
 )
 from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
-from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 
 
 def authorization_key(account_id: ConnectedAccountId) -> str:
@@ -97,6 +98,37 @@ class LapsedAuthorizations:
             # Every rule of the account, not only those already stopped: a run may stop one
             # until its write lock is released, and `_resume` decides under that lock.
             waiting = tuple(rule.id for rule in uow.rules.list() if rule.uses_account(account_id))
+        self._resolve(account_id)
+        return sum(self._resume(rule_id) for rule_id in waiting)
+
+    def resume_restored(self) -> int:
+        """Finish restorations an interruption left; how many rules resumed.
+
+        Reauthorizing clears a lapse with the new credentials, and `restored` then commits each
+        step on its own, so a stop or failure between them leaves rules the lapse alone stopped
+        while their accounts are authorized again. Each scheduler pass calls this, so they resume
+        and their accounts' Incidents resolve without another Reauthorization (ADR 0027).
+        """
+        with self.unit_of_work() as uow:
+            waiting = tuple(
+                rule
+                for rule in uow.rules.list()
+                if rule.state is SyncRuleState.DEGRADED and rule.awaiting_reauthorization
+            )
+            accounts = {
+                account
+                for rule in waiting
+                for account in (
+                    rule.source.connected_account_id,
+                    rule.destination.connected_account_id,
+                )
+            }
+            authorized = {account for account in accounts if uow.accounts.authorized(account)}
+        for account_id in sorted(authorized, key=lambda account: account.value):
+            self._resolve(account_id)
+        return sum(self._resume(rule.id) for rule in waiting)
+
+    def _resolve(self, account_id: ConnectedAccountId) -> None:
         # A newer lapse recorded since keeps its reopened Incident open.
         self.incidents.resolve(
             authorization_key(account_id),
@@ -104,7 +136,6 @@ class LapsedAuthorizations:
             IncidentResolution.ACCESS_RESTORED,
             while_authorized=account_id,
         )
-        return sum(self._resume(rule_id) for rule_id in waiting)
 
     def _stop(self, rule_id: SyncRuleId, account_id: ConnectedAccountId) -> None:
         """Stop an enabled rule until the account is authorized again; waits for any write."""
@@ -127,10 +158,20 @@ class LapsedAuthorizations:
                 rule is None
                 or rule.state is not SyncRuleState.DEGRADED
                 or not rule.awaiting_reauthorization
-                or not uow.accounts.authorized(rule.source.connected_account_id)
-                or not uow.accounts.authorized(rule.destination.connected_account_id)
+                or not _both_authorized(uow, rule)
             ):
                 return False
             uow.rules.save(rule.resume_after_reauthorization())
+            # Recording a lapse takes no rule lock, so check again inside the write the save
+            # began, which holds off other writers: a lapse committed before this check keeps
+            # the rule stopped, and one committed after it finds the rule enabled and stops it.
+            if not _both_authorized(uow, rule):
+                return False
             uow.commit()
         return True
+
+
+def _both_authorized(uow: UnitOfWork, rule: SyncRule) -> bool:
+    return uow.accounts.authorized(rule.source.connected_account_id) and uow.accounts.authorized(
+        rule.destination.connected_account_id
+    )

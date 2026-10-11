@@ -544,6 +544,31 @@ class PersistenceContract:
         # Only who and why: never which rule, calendar, or account.
         assert list(seen) == [CauseSighting(USER, Cause.API_DISABLED, NOW, False)]
 
+    def test_users_awaiting_reauthorization_have_a_rule_a_lapse_alone_stopped(
+        self, harness: PersistenceHarness
+    ) -> None:
+        theirs = replace(
+            RULE, id=SyncRuleId("their-rule"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
+        )
+        for account in (THEIR_SOURCE, THEIR_DESTINATION):
+            harness.connect_account(account.connected_account_id, OTHER_USER)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE.degrade(awaiting_reauthorization=True))
+            uow.rules.add(OTHER_RULE)
+            uow.commit()
+        with harness.units(OTHER_USER)() as uow:
+            # Stopped for another reason, so recovering needs a preview, not an account.
+            uow.rules.add(theirs.degrade())
+            uow.commit()
+
+        with harness.installation() as installation:
+            awaiting = list(installation.users_awaiting_reauthorization())
+        harness.disable(USER)
+        with harness.installation() as installation:
+            while_disabled = list(installation.users_awaiting_reauthorization())
+
+        assert (awaiting, while_disabled) == ([USER], [])
+
     def test_a_local_failure_has_no_cause_and_suggests_nothing(
         self, harness: PersistenceHarness
     ) -> None:
