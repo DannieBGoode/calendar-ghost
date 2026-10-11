@@ -64,8 +64,10 @@ SELECT = (
     "start,end,subject,body,location,recurrence,responseStatus,attendees,isOnlineMeeting,"
     "onlineMeeting,onlineMeetingUrl,webLink,lastModifiedDateTime"
 )
-EXCEPTION_ATTENDEES = "exceptionOccurrences($select=id,attendees)"
-"""What a series master is read with to learn whether any of its exceptions has attendees."""
+EXCEPTION_ATTENDEES = "exceptionOccurrences"
+"""What a series master is read with to learn whether any of its exceptions has attendees. It is
+expanded whole and the read selects nothing: with any $select, Graph lists each exception with
+only its id (ADR 0034)."""
 OCCURRENCE_TYPES = frozenset({"occurrence", "exception"})
 # Marks the identifier of an occurrence Outlook cancelled, which has no event of its own.
 CANCELLED_MARKER = "~cancelled~"

@@ -200,7 +200,12 @@ those emails them: the write is refused as a Conflict (`projection_unsupported`)
 as it is, and Rule Removal leaves it too. Updating or deleting a series also reaches the guests of
 each of its exceptions, so before either the adapter reads the series' `exceptionOccurrences` with
 their attendees: if any has guests, the write is a Conflict as well, and if Graph does not list them
-all, or lists one without its attendee list, the series is not changed until it does. Someone may invite guests between that read and the
+all, or lists one without its attendee list, the series is not changed until it does. The master is
+read with `$expand=exceptionOccurrences` and no `$select`: on 2026-10-11 Graph answered a personal
+account's master read with any `$select`, on the master or nested in the expansion, with each
+exception's `id` and etag only, so no attendee list could ever prove a series free of guests.
+Expanded whole, every exception came with its `attendees` (`[]` without guests), 150 of them in one
+answer. Someone may invite guests between that read and the
 write, so every `PATCH` and `DELETE` carries `If-Match` with the `changeKey` read
 (`W/"<changeKey>"`, as Graph's `@odata.etag`). Graph refuses a write naming an older version with
 412 (`ErrorIrresolvableConflict`); that failure is temporary, and the next run reads the guests and
@@ -278,10 +283,11 @@ release that enables the provider:
     `originalStart`, and whether the adapter names each occurrence as Outlook does.
 14. Which spelling of the calendar access refusal, `ErrorAccessDenied` or `accessDenied`, a
     personal account and a work account each return.
-15. That a series master read with `$select=id,exceptionOccurrences` and
-    `$expand=exceptionOccurrences($select=id,attendees)` lists every exception with its attendees,
-    an empty list for one without guests, how a long list continues, and that deleting or updating a series
-    emails the guests of an exception that has them.
+15. That a series master read with `$expand=exceptionOccurrences` lists every exception with its
+    attendees, an empty list for one without guests, how a long list continues, and that deleting or
+    updating a series emails the guests of an exception that has them. A personal account answered
+    the first two on 2026-10-11, with 150 exceptions in one answer; a read with any `$select` listed
+    ids only.
 16. That `PATCH` and `DELETE` on an event and on an occurrence honor `If-Match: W/"<changeKey>"`,
     refusing an older version with 412, and that inviting guests to a series changes the
     `changeKey` of each of its occurrences.
