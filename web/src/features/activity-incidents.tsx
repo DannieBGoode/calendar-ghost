@@ -3,12 +3,12 @@ import { useRef, type MouseEvent } from "react"
 
 import { GhostMark } from "@/components/ghost-mark"
 import { Badge } from "@/components/ui/badge"
-import { IncidentDetail } from "@/features/activity-incident-details"
+import { IncidentClosedTime, IncidentDetail } from "@/features/activity-incident-details"
 import { incidentText } from "@/i18n/incident-text"
 import { formatRunTime } from "@/lib/activity"
 import { ruleNames, type RuleContext } from "@/lib/activity-rule-context"
 import type { Incident } from "@/lib/api"
-import { incidentClosedAt, incidentDuration, type IncidentAction } from "@/lib/incidents"
+import type { IncidentStep } from "@/lib/incidents"
 import { appPathForIncident, isPlainLeftClick } from "@/lib/navigation"
 
 type IncidentProps = { incident: Incident; context: RuleContext }
@@ -23,13 +23,13 @@ export function IncidentsSection({
   selectedId,
   context,
   onSelect,
-  onAction,
+  onStep,
 }: {
   incidents: Incident[]
   selectedId: string | null
   context: RuleContext
   onSelect: OnSelect
-  onAction: (action: IncidentAction) => void
+  onStep: (step: IncidentStep) => void
 }) {
   const { t } = context.i18n
   const focusDetail = useRef(false)
@@ -86,7 +86,7 @@ export function IncidentsSection({
             context={context}
             focusRef={focusDetail}
             onClose={close}
-            onAction={onAction}
+            onStep={onStep}
             onPrevious={index > 0 ? () => step(ordered[index - 1]) : undefined}
             onNext={index >= 0 && index < ordered.length - 1 ? () => step(ordered[index + 1]) : undefined}
           />
@@ -213,18 +213,13 @@ function IncidentRow({
   )
 }
 
-/** When it closed and how long it lasted; "Still open" until then. */
+/** When it closed and how long it lasted; the tab's ochre count, repeated, while it is open. */
 function IncidentClosed({ incident, context }: IncidentProps) {
-  const { i18n } = context
-  const { t } = i18n
-  const duration = incidentDuration(incident)
-  // The tab's ochre count, repeated on each row it counts.
-  if (!duration) return <Badge variant="attention" className="incident-still-open">{t("activity.incidents.stillOpen")}</Badge>
+  if (incident.state !== "open") return <IncidentClosedTime incident={incident} context={context} />
   return (
-    <>
-      <span className="incident-closed-at">{formatRunTime(i18n, incidentClosedAt(incident))}</span>
-      <span className="incident-lasted">{t(`activity.incidents.lasted.${duration.unit}`, { count: duration.count })}</span>
-    </>
+    <Badge variant="attention" className="incident-still-open">
+      {context.i18n.t("activity.incidents.stillOpen")}
+    </Badge>
   )
 }
 

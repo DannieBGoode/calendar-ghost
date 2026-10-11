@@ -4,34 +4,28 @@ import {
   useInfiniteQuery,
   useQueries,
   useQuery,
-  type InfiniteData,
-  type UseInfiniteQueryResult,
 } from "@tanstack/react-query"
 import { RefreshCw, ShieldAlert } from "lucide-react"
 import { useEffect, useRef, useState, type RefObject } from "react"
 
-import { GhostMark } from "@/components/ghost-mark"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { PageTabs } from "@/components/page-tabs"
 import { Button } from "@/components/ui/button"
-import { ActivityDetail } from "@/features/activity-entry-details"
-import { ActivityFilters } from "@/features/activity-filters"
+import { HistorySection, type ActivityFeed, type UpdateLocation } from "@/features/activity-history"
 import { IncidentsSection } from "@/features/activity-incidents"
-import { ActivityTable } from "@/features/activity-table"
 import { useI18n } from "@/i18n/provider"
-import { activityDayGroups, activityRows, groupRuns, showCategories } from "@/lib/activity"
+import { showCategories } from "@/lib/activity"
 import {
   activityFailure,
   activityFailureActions,
   activityFailureMessages,
   activityFailureRequiresReload,
 } from "@/lib/activity-failure"
-import { emptyHistoryCopy, entrySteps, historyStatus, type HistoryFilters } from "@/lib/activity-history"
 import { activitySearch, activityStateFromSearch, type ActivityLocationState } from "@/lib/activity-location"
 import type { RuleContext } from "@/lib/activity-rule-context"
 import { ACTIVITY_PAGE_SIZE, api, type AuditEntry, type Incident } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
-import { openIncidentCount, type IncidentAction } from "@/lib/incidents"
+import { openIncidentCount, type IncidentStep } from "@/lib/incidents"
 import {
   accountSearch,
   appPathForActivityTab,
@@ -42,8 +36,6 @@ import {
   type ViewChange,
 } from "@/lib/navigation"
 
-type UpdateLocation = (next: Partial<ActivityLocationState>, history: "push" | "replace") => void
-type ActivityFeed = UseInfiniteQueryResult<InfiniteData<AuditEntry[]>>
 /** Opens a tab of Activity; History can open with its filters changed, such as to one rule's blocks. */
 type OpenActivityTab = (tab: ActivityTab, filters?: Partial<ActivityLocationState>) => void
 /** Opens one Incident beside the table, or closes it with null. */
@@ -284,16 +276,32 @@ function ActivityPage({
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
-  function followIncident(action: IncidentAction) {
-    if (action.kind === "settings") {
-      const search = action.accountId ? { search: accountSearch(action.accountId) } : {}
-      onViewChange("settings", { settingsTab: "connections", ...search })
-    }
-    else if (action.kind === "rule") onOpenRule(action.ruleId)
-    else {
-      const show = action.kind === "blocked" ? "blocked" : ""
-      onOpenTab("history", { ruleId: action.ruleId, show, query: "", entryId: null })
-      requestAnimationFrame(() => document.getElementById("activity-feed-title")?.scrollIntoView({ block: "start" }))
+  function showHistory(ruleId: string, show: "blocked" | "") {
+    onOpenTab("history", { ruleId, show, query: "", entryId: null })
+    requestAnimationFrame(() => document.getElementById("activity-feed-title")?.scrollIntoView({ block: "start" }))
+  }
+
+  // Every kind of step is handled here; a new one fails to compile until it is.
+  function followStep(step: IncidentStep) {
+    switch (step.kind) {
+      case "settings": {
+        const search = step.accountId ? { search: accountSearch(step.accountId) } : {}
+        onViewChange("settings", { settingsTab: "connections", ...search })
+        return
+      }
+      case "rule":
+        onOpenRule(step.ruleId)
+        return
+      case "blocked":
+        showHistory(step.ruleId, "blocked")
+        return
+      case "history":
+        showHistory(step.ruleId, "")
+        return
+      default: {
+        const unhandled: never = step
+        return unhandled
+      }
     }
   }
 
@@ -310,7 +318,7 @@ function ActivityPage({
           selectedId={incidentId}
           context={context}
           onSelect={onSelectIncident}
-          onAction={followIncident}
+          onStep={followStep}
         />
       ) : (
         <HistorySection
@@ -359,132 +367,6 @@ function ActivityTabs({
   )
 }
 
-function HistorySection({
-  state,
-  query,
-  update,
-  feed,
-  entries,
-  context,
-  selection,
-  focusDetailRef,
-  onOpenRule,
-}: {
-  state: ActivityLocationState
-  query: string
-  update: UpdateLocation
-  feed: ActivityFeed
-  entries: AuditEntry[]
-  context: RuleContext
-  selection: { entry: AuditEntry | undefined; loading: boolean }
-  focusDetailRef: RefObject<boolean>
-  onOpenRule: OpenRule
-}) {
-  const i18n = useI18n()
-  const { t } = i18n
-  const { ruleId, show, entryId } = state
-  const runs = groupRuns(entries)
-  const groups = activityRows(i18n, runs)
-  const days = activityDayGroups(groups)
-  const visibleEntries = runs.flatMap((run) => run.entries)
-  const { newer, older } = entrySteps(visibleEntries, selection.entry)
-  const updating = feed.isPlaceholderData
-  const detailOpen = entryId !== null
-
-  function select(entry: AuditEntry | undefined, history: "push" | "replace") {
-    if (entry) update({ entryId: entry.id }, history)
-  }
-
-  function openEntry(entry: AuditEntry) {
-    focusDetailRef.current = true
-    select(entry, entryId === null ? "push" : "replace")
-  }
-
-  function closeDetail() {
-    const closing = entryId
-    update({ entryId: null }, "push")
-    // Return focus to the row the details described.
-    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-row-link="${closing}"]`)?.focus())
-  }
-
-  function changeFilters(next: Partial<ActivityLocationState>) {
-    update({ ...next, entryId: null }, "replace")
-  }
-
-  function stepTo(rowLink: string | undefined) {
-    // With details open, the arrow keys step through entries without leaving the table.
-    if (detailOpen) select(visibleEntries.find((item) => String(item.id) === rowLink), "replace")
-  }
-
-  // A selected rule is named above the table, and the detail pane names the rule of its entry.
-  const showRuleColumn = !ruleId && !detailOpen
-
-  return (
-    <section className="workflow activity-section page-card" aria-labelledby="activity-feed-title">
-      <div className="section-heading activity-feed-heading">
-        <div>
-          <h2 id="activity-feed-title">{t("activity.history.title")}</h2>
-          <p>{t("activity.history.intro")}</p>
-        </div>
-      </div>
-      <ActivityFilters
-        query={query}
-        ruleId={ruleId}
-        show={show}
-        entries={entries}
-        context={context}
-        onChange={changeFilters}
-      />
-      <p className="sr-only" role="status">
-        {historyStatus(i18n, { updating, query, more: feed.hasNextPage, count: visibleEntries.length })}
-      </p>
-
-      {/* A linked entry the filters hide still opens beside an empty table. */}
-      <div className="activity-layout" data-detail={detailOpen}>
-        <div className="activity-table-wrap" aria-busy={updating} data-updating={updating}>
-          {groups.length === 0 ? (
-            <EmptyActivity
-              filters={{ ruleId, show, query }}
-              onShowAll={() => changeFilters({ show: "all" })}
-              onAllRules={() => changeFilters({ ruleId: "" })}
-              onClearSearch={() => changeFilters({ query: "" })}
-            />
-          ) : (
-            <>
-              <ActivityTable
-                days={days}
-                context={context}
-                state={state}
-                showRuleColumn={showRuleColumn}
-                onOpen={openEntry}
-                onFilterRule={(value) => changeFilters({ ruleId: value })}
-                onStep={stepTo}
-              />
-              {feed.hasNextPage && (
-                <Button variant="outline" className="activity-more" onClick={() => void feed.fetchNextPage()} disabled={feed.isFetchingNextPage}>
-                  {feed.isFetchingNextPage ? t("activity.history.loadingOlder") : t("activity.history.loadOlder")}
-                </Button>
-              )}
-            </>
-          )}
-        </div>
-        {detailOpen && (
-          <ActivityDetail
-            entry={selection.entry}
-            loading={selection.loading}
-            context={context}
-            focusRef={focusDetailRef}
-            onClose={closeDetail}
-            onOpenRule={onOpenRule}
-            onNewer={newer && (() => select(newer, "replace"))}
-            onOlder={older && (() => select(older, "replace"))}
-          />
-        )}
-      </div>
-    </section>
-  )
-}
-
 /** The page names what its tab shows: what the rules did, or what needed attention. */
 function ActivityHeading({ tab = "history" }: { tab?: ActivityTab }) {
   const { t } = useI18n()
@@ -492,38 +374,6 @@ function ActivityHeading({ tab = "history" }: { tab?: ActivityTab }) {
     <div>
       <h1>{tab === "incidents" ? t("activity.page.incidentsTitle") : t("activity.page.title")}</h1>
       <p className="page-intro">{tab === "incidents" ? t("activity.page.incidentsIntro") : t("activity.page.intro")}</p>
-    </div>
-  )
-}
-
-function EmptyActivity({
-  filters,
-  onShowAll,
-  onAllRules,
-  onClearSearch,
-}: {
-  filters: HistoryFilters
-  onShowAll: () => void
-  onAllRules: () => void
-  onClearSearch: () => void
-}) {
-  const i18n = useI18n()
-  const { t } = i18n
-  const { ruleId, show, query } = filters
-  const copy = emptyHistoryCopy(i18n, filters)
-  const filtered = Boolean(ruleId) || show !== "all" || Boolean(query)
-  return (
-    <div className="empty-panel">
-      <GhostMark className="empty-ghost" />
-      <h2>{copy.title}</h2>
-      <p>{copy.body}</p>
-      {filtered && (
-        <div className="empty-actions">
-          {query && <Button variant="outline" onClick={onClearSearch}>{t("activity.search.clear")}</Button>}
-          {show !== "all" && <Button variant="outline" onClick={onShowAll}>{t("activity.filters.showAll")}</Button>}
-          {ruleId && <Button variant="outline" onClick={onAllRules}>{t("activity.filters.showAllRules")}</Button>}
-        </div>
-      )}
     </div>
   )
 }

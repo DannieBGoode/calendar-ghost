@@ -11,7 +11,7 @@ import { formatRunTime } from "@/lib/activity"
 import { incidentRuleState, type RuleContext } from "@/lib/activity-rule-context"
 import type { Incident } from "@/lib/api"
 import { causeText } from "@/lib/causes"
-import { incidentClosedAt, incidentDetail, incidentDuration, type IncidentAction } from "@/lib/incidents"
+import { incidentClosedAt, incidentDetail, incidentDuration, type IncidentStep } from "@/lib/incidents"
 
 type IncidentProps = { incident: Incident; context: RuleContext }
 
@@ -24,7 +24,7 @@ export function IncidentDetail({
   context,
   focusRef,
   onClose,
-  onAction,
+  onStep,
   onPrevious,
   onNext,
 }: {
@@ -32,7 +32,7 @@ export function IncidentDetail({
   context: RuleContext
   focusRef: RefObject<boolean>
   onClose: () => void
-  onAction: (action: IncidentAction) => void
+  onStep: (step: IncidentStep) => void
   onPrevious?: (() => void) | undefined
   onNext?: (() => void) | undefined
 }) {
@@ -63,7 +63,7 @@ export function IncidentDetail({
   return (
     <aside className="activity-detail" aria-labelledby="incident-detail-title" onKeyDown={close}>
       {toolbar}
-      <IncidentSummary incident={incident} context={context} focusRef={focusRef} onAction={onAction} />
+      <IncidentSummary incident={incident} context={context} focusRef={focusRef} onStep={onStep} />
       <IncidentFacts incident={incident} context={context} />
     </aside>
   )
@@ -73,8 +73,8 @@ function IncidentSummary({
   incident,
   context,
   focusRef,
-  onAction,
-}: IncidentProps & { focusRef: RefObject<boolean>; onAction: (action: IncidentAction) => void }) {
+  onStep,
+}: IncidentProps & { focusRef: RefObject<boolean>; onStep: (step: IncidentStep) => void }) {
   const headingRef = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
     if (!focusRef.current) return
@@ -84,7 +84,7 @@ function IncidentSummary({
   const { i18n } = context
   const { t } = i18n
   const open = incident.state === "open"
-  const { explanation, cause, action, fixUrl } = incidentDetail(i18n, incident, incidentRuleState(incident, context))
+  const { explanation, cause, step, fixUrl } = incidentDetail(i18n, incident, incidentRuleState(incident, context))
   return (
     <div className="activity-detail-heading">
       <Badge variant={open ? "attention" : "neutral"}>
@@ -96,11 +96,11 @@ function IncidentSummary({
       </h2>
       {explanation && <p className="incident-explanation">{explanation}</p>}
       {cause && <p className="activity-explanation">{causeText(i18n, cause)}</p>}
-      {(action ?? fixUrl) && (
+      {(step ?? fixUrl) && (
         <div className="incident-actions">
-          {action && (
-            <Button variant="outline" size="sm" onClick={() => onAction(action)}>
-              {action.label}
+          {step && (
+            <Button variant="outline" size="sm" onClick={() => onStep(step)}>
+              {step.label}
               <ArrowRight aria-hidden="true" />
             </Button>
           )}
@@ -111,12 +111,27 @@ function IncidentSummary({
   )
 }
 
+/** When a resolved incident closed and how long it lasted, as its row and its details both say. */
+export function IncidentClosedTime({ incident, context }: IncidentProps) {
+  const { i18n } = context
+  const duration = incidentDuration(incident)
+  if (!duration) return null
+  return (
+    <>
+      <span className="incident-closed-at">{formatRunTime(i18n, incidentClosedAt(incident))}</span>
+      <span className="incident-lasted">
+        {i18n.t(`activity.incidents.lasted.${duration.unit}`, { count: duration.count })}
+      </span>
+    </>
+  )
+}
+
 /** When it opened, was last seen or closed, and the rule or account it is about. */
 function IncidentFacts({ incident, context }: IncidentProps) {
   const { i18n } = context
   const { t } = i18n
-  const duration = incidentDuration(incident)
-  const lastSeen = incident.state === "open" && incident.updated_at !== incident.opened_at
+  const open = incident.state === "open"
+  const lastSeen = open && incident.updated_at !== incident.opened_at
   return (
     <dl className="activity-detail-facts">
       <div>
@@ -129,13 +144,10 @@ function IncidentFacts({ incident, context }: IncidentProps) {
           <dd>{formatRunTime(i18n, incident.updated_at)}</dd>
         </div>
       )}
-      {duration && (
+      {!open && (
         <div>
           <dt>{t("activity.incidents.detail.closed")}</dt>
-          <dd>
-            <span>{formatRunTime(i18n, incidentClosedAt(incident))}</span>
-            <span className="incident-lasted">{t(`activity.incidents.lasted.${duration.unit}`, { count: duration.count })}</span>
-          </dd>
+          <dd><IncidentClosedTime incident={incident} context={context} /></dd>
         </div>
       )}
       <IncidentSubjectFact incident={incident} context={context} />
