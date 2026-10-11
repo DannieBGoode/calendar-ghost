@@ -305,6 +305,21 @@ def test_an_all_day_projection_is_written_midnight_to_midnight() -> None:
     assert body["end"] == {"dateTime": "2026-10-13T00:00:00", "timeZone": "UTC"}
 
 
+def test_a_yearly_all_day_series_on_the_30th_is_written_as_it_repeats() -> None:
+    # A birthday Google keeps since 1989: every November has a 30th, so Outlook moves no year.
+    projection = EventProjection(
+        AllDayRange(date(1989, 11, 30), date(1989, 12, 1)),
+        "Busy",
+        recurrence=Recurrence(("RRULE:FREQ=YEARLY",)),
+    )
+
+    body = projection_body(projection, RULE, SOURCE, "key-1")
+
+    pattern = body["recurrence"]["pattern"]
+    assert (pattern["type"], pattern["month"], pattern["dayOfMonth"]) == ("absoluteYearly", 11, 30)
+    assert body["start"] == {"dateTime": "1989-11-30T00:00:00", "timeZone": "UTC"}
+
+
 def _series_projection(lines: tuple[str, ...], zone: str = "Europe/Madrid") -> EventProjection:
     return EventProjection(
         TimedInterval(NINE_UTC, NINE_UTC + timedelta(hours=1), zone),

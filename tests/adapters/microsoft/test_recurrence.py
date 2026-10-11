@@ -210,6 +210,48 @@ def test_what_outlook_cannot_repeat_exactly_is_never_approximated(lines: tuple[s
         from_ical(lines, start)
 
 
+@pytest.mark.parametrize(
+    ("lines", "start", "month", "day"),
+    [
+        # A birthday on November 30, as Google keeps it: every November has a 30th.
+        (("RRULE:FREQ=YEARLY",), date(1989, 11, 30), 11, 30),
+        (("RRULE:FREQ=YEARLY;BYMONTH=11;BYMONTHDAY=30",), date(1989, 11, 30), 11, 30),
+        (("RRULE:FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=31",), date(2026, 12, 31), 12, 31),
+        (("RRULE:FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=29",), date(2027, 1, 29), 1, 29),
+    ],
+)
+def test_a_yearly_rule_repeats_on_any_day_its_month_always_has(
+    lines: tuple[str, ...], start: date, month: int, day: int
+) -> None:
+    rule = from_ical(lines, start)
+
+    assert (rule.pattern.kind, rule.pattern.month, rule.pattern.day_of_month) == (
+        "absoluteYearly",
+        month,
+        day,
+    )
+    assert _dates(lines[0], start, 4) == [start.replace(year=start.year + n) for n in range(4)]
+
+
+@pytest.mark.parametrize(
+    ("lines", "start"),
+    [
+        # Outlook would fill a common year's February 29 with the 28th.
+        (("RRULE:FREQ=YEARLY",), date(2028, 2, 29)),
+        (("RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=29",), date(2028, 2, 29)),
+        # No April has a 31st, which Outlook would fill with the 30th.
+        (("RRULE:FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31",), date(2026, 3, 1)),
+        # A monthly rule still needs a day every month has.
+        (("RRULE:FREQ=MONTHLY;BYMONTHDAY=30",), date(2026, 11, 30)),
+    ],
+)
+def test_a_day_its_month_sometimes_lacks_is_never_approximated(
+    lines: tuple[str, ...], start: date
+) -> None:
+    with pytest.raises(UnsupportedRecurrence):
+        from_ical(lines, start)
+
+
 def test_a_yearly_rule_without_a_month_repeats_on_its_first_date() -> None:
     # Without BYMONTH or a day, it repeats on the month and day it starts (RFC 5545).
     rule = from_ical(("RRULE:FREQ=YEARLY",), START)
