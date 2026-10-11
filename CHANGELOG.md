@@ -108,6 +108,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- The Sync Run's code is split by responsibility, with no change in behavior: `ExecuteSyncRule`
+  composes `ChangeFeedCursors`, `SynchronizeEvents`, and `ExceptionReplays`, and
+  `SyncDecisionService.decide_occurrence` takes one `OccurrenceSituation` and no longer needs a
+  complexity exception.
 - Activity has a History tab and an Incidents tab, each at its own address (`/activity` and
   `/activity/incidents`), while any Incident is kept; the Incidents tab counts the open ones.
   Incidents list in one table, open first, each with when it opened, the rule or account, and when
