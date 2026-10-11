@@ -94,6 +94,11 @@ class InstallationUnitOfWork(Protocol):
         """Every enabled rule of a User who is not disabled, by User and then by rule."""
         ...
 
+    def users_awaiting_reauthorization(self) -> Sequence[UserId]:
+        """Every User who is not disabled with a rule a Lapsed Authorization alone stopped, by
+        identifier, so the scheduler can resume those whose accounts are authorized again."""
+        ...
+
     def forget_change_values(self, before: datetime) -> None:
         """Discard every User's Source Change values recorded before `before` (ADR 0017)."""
         ...

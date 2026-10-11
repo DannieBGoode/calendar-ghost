@@ -652,6 +652,19 @@ class InMemoryInstallationUnitOfWork:
             if rule.state is SyncRuleState.ENABLED
         )
 
+    def users_awaiting_reauthorization(self) -> tuple[UserId, ...]:
+        return tuple(
+            owner
+            for owner, state in sorted(
+                self._database.partitions.items(), key=lambda item: item[0].value
+            )
+            if owner not in self._database.disabled
+            and any(
+                rule.state is SyncRuleState.DEGRADED and rule.awaiting_reauthorization
+                for rule in state.rules.values()
+            )
+        )
+
     def forget_change_values(self, before: datetime) -> None:
         for state in self._database.partitions.values():
             state.change_values_forgotten_before = before

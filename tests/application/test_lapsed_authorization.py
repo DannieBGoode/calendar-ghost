@@ -186,3 +186,50 @@ def test_a_lapse_records_why_the_provider_refused() -> None:
 
     (incident,) = incidents.opened
     assert incident.cause is Cause.OAUTH_CLIENT_INVALID
+
+
+def test_rules_an_interrupted_restoration_left_stopped_resume_at_the_next_check() -> None:
+    # Reauthorization cleared the lapse, then the process stopped before any rule resumed.
+    unit_of_work, incidents, lapses = _installation()
+    awaiting = rule().degrade(awaiting_reauthorization=True)
+    needs_preview = replace(
+        rule().degrade(), id=SyncRuleId("rule-2"), source=endpoint("work-account", "other")
+    )
+    unit_of_work.state.rules = {awaiting.id: awaiting, needs_preview.id: needs_preview}
+    lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
+    del unit_of_work.state.lapsed[WORK]
+
+    assert lapses.resume_restored() == 1
+    assert unit_of_work.state.rules[awaiting.id].state is SyncRuleState.ENABLED
+    assert unit_of_work.state.rules[needs_preview.id].state is SyncRuleState.DEGRADED
+    # Resolving names each authorized account; one with no open Incident has nothing to resolve.
+    assert incidents.resolved == [
+        ("authorization:personal-account", IncidentResolution.ACCESS_RESTORED),
+        ("authorization:work-account", IncidentResolution.ACCESS_RESTORED),
+    ]
+    assert lapses.resume_restored() == 0
+
+
+def test_the_check_leaves_a_rule_whose_other_account_is_still_lapsed() -> None:
+    unit_of_work, incidents, lapses = _installation()
+    awaiting = rule().degrade(awaiting_reauthorization=True)
+    unit_of_work.state.rules = {awaiting.id: awaiting}
+    lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
+    lapses.lapsed(PERSONAL, replace(EXPIRED, account_id=PERSONAL), attempted_at=NOW)
+    del unit_of_work.state.lapsed[WORK]
+
+    assert lapses.resume_restored() == 0
+    assert unit_of_work.state.rules[awaiting.id].state is SyncRuleState.DEGRADED
+    # Only the authorized account's Incident resolves; the other stays open.
+    assert incidents.resolved == [
+        ("authorization:work-account", IncidentResolution.ACCESS_RESTORED)
+    ]
+
+
+def test_the_check_does_nothing_while_no_rule_awaits_reauthorization() -> None:
+    unit_of_work, incidents, lapses = _installation()
+    unit_of_work.state.rules = {rule().id: rule()}
+
+    assert lapses.resume_restored() == 0
+    assert unit_of_work.state.rules[rule().id] == rule()
+    assert incidents.resolved == []
