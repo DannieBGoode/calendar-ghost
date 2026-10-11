@@ -611,6 +611,23 @@ class SyncDecision:
     projection: EventProjection | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class OccurrenceSituation:
+    """The evidence one occurrence decision weighs; `None` means no such event or mapping exists."""
+
+    source_series: CalendarEvent
+    series_mapping: EventMapping | None
+    original_start: OccurrenceStart
+    source_occurrence: CalendarEvent | None
+    occurrence_mapping: OccurrenceMapping | None
+    destination_series: CalendarEvent | None
+    destination_occurrence: CalendarEvent | None
+    destination_reported: bool = False
+    """The destination feed reported this occurrence, so a difference is drift."""
+    has_live_occurrences: bool = True
+    """The source series still has an occurrence this rule projects."""
+
+
 class DriftKind(StrEnum):
     """How a mapped projection differs from what its source calls for; content, never identity."""
 

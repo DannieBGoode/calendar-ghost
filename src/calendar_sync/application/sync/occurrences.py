@@ -23,6 +23,7 @@ from calendar_sync.domain.model import (
     EventStatus,
     OccurrenceMapping,
     OccurrenceMappingId,
+    OccurrenceSituation,
     OccurrenceStart,
     OccurrenceState,
     ProjectionFingerprint,
@@ -303,15 +304,17 @@ class SynchronizeOccurrences:
                 )
         decision = self.decisions.decide_occurrence(
             run.rule,
-            source_series,
-            series_mapping,
-            occurrence.original_start,
-            occurrence.source,
-            occurrence.recorded,
-            destination_series,
-            destination,
-            destination_reported=occurrence.destination_reported,
-            has_live_occurrences=has_live_occurrences,
+            OccurrenceSituation(
+                source_series,
+                series_mapping,
+                occurrence.original_start,
+                occurrence.source,
+                occurrence.recorded,
+                destination_series,
+                destination,
+                destination_reported=occurrence.destination_reported,
+                has_live_occurrences=has_live_occurrences,
+            ),
         )
         return decision, destination
 

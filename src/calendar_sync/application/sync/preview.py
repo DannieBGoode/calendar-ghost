@@ -19,6 +19,7 @@ from calendar_sync.domain.model import (
     CalendarEvent,
     EventRef,
     EventStatus,
+    OccurrenceSituation,
     SyncAction,
     SyncRule,
     SyncRuleId,
@@ -213,8 +214,7 @@ class PreviewSyncRule:
                 and destination_series.status is EventStatus.CONFIRMED
                 else None
             )
-            action = self.decisions.decide_occurrence(
-                rule,
+            situation = OccurrenceSituation(
                 parent,
                 series_mapping,
                 start,
@@ -222,7 +222,8 @@ class PreviewSyncRule:
                 uow.occurrences.get(series_mapping.id, start),
                 destination_series,
                 destination,
-            ).action
+            )
+            action = self.decisions.decide_occurrence(rule, situation).action
         return PreviewItem(
             event.reference.event_id.value, title, event.is_all_day, "occurrence", action
         )
