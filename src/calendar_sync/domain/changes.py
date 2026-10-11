@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from calendar_sync.domain.model import (
@@ -75,6 +75,15 @@ class SourceObservation:
             guests=event.guests,
             conferencing=event.conferencing,
             response=event.response,
+        )
+
+    def completed_by(self, previous: SourceObservation) -> SourceObservation:
+        """This observation, keeping `previous`'s guests or conferencing where this one has no
+        complete list, so a guest removed before the next complete list is still reported."""
+        return replace(
+            self,
+            guests=previous.guests if self.guests is None else self.guests,
+            conferencing=previous.conferencing if self.conferencing is None else self.conferencing,
         )
 
 
