@@ -35,11 +35,15 @@ from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.scheduling import SchedulerWatch, SystemClock
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
+from tests.adapters.microsoft.test_calendar_provider_contract import outlook
 from tests.adapters.test_notifications import RecordingSmtp
+from tests.fake_microsoft_graph_api import Refusal
 from tests.helpers import endpoint, rule
 from tests.users import OTHER_USER, add_user, administrator, session_for, sqlite_units
 
 MEMBER_EMAIL = "member@example.test"
+OUTLOOK_EMAIL = "outlook-person@example.test"
+OUTLOOK_USER = UserId("user-outlook")
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +52,7 @@ class Person:
 
     user: UserId
     marker: str
+    provider: ProviderKind = ProviderKind.GOOGLE
 
     @property
     def accounts(self) -> tuple[str, str]:
@@ -62,6 +67,11 @@ class Person:
             f"{self.marker}-event-title",
             self.google_message,
         )
+
+    @property
+    def microsoft_message(self) -> str:
+        """What Microsoft's own message might say, quoting the request: never repeated."""
+        return f"{self.marker}-microsoft-message about {self.marker}-calendar-id"
 
     @property
     def google_message(self) -> str:
@@ -79,8 +89,9 @@ def _seed(database: Path, person: Person) -> None:
     with transaction(database) as connection:
         for account in person.accounts:
             connection.execute(
-                "UPDATE connected_accounts SET email = ?, display_name = ? WHERE id = ?",
-                (person.email(account), person.marker, account),
+                "UPDATE connected_accounts SET email = ?, display_name = ?, provider = ? "
+                "WHERE id = ?",
+                (person.email(account), person.marker, person.provider.value, account),
             )
     calendar = f"{person.marker}-calendar-id"
     source, destination = (endpoint(account, calendar) for account in person.accounts)
@@ -127,22 +138,40 @@ def _seed(database: Path, person: Person) -> None:
 
 
 def _fail(container: Container, person: Person) -> None:
-    """Google refused the person's work account because the Calendar API is turned off, with a
-    message that quotes their calendar."""
+    """The provider refused the person's work account, with a message that quotes their calendar:
+    Google because the Calendar API is turned off, and Microsoft, answering the Outlook adapter
+    itself, because the calendar is closed to the account."""
     services = container.for_user(person.user)
     with services.rule_health.unit_of_work() as uow:
         stopped = uow.rules.get(SyncRuleId(f"{person.marker}-other-rule"))
     assert stopped is not None
-    services.rule_health.record_failure(
-        stopped,
-        ProviderFailure(
+    account = ConnectedAccountId(person.accounts[1])
+    if person.provider is ProviderKind.OUTLOOK:
+        failure = replace(_outlook_refusal(person), account_id=account)
+    else:
+        failure = ProviderFailure(
             ProviderFailureKind.AUTHORIZATION,
             f"<HttpError 403 returned {person.google_message!r}>",
-            account_id=ConnectedAccountId(person.accounts[1]),
+            account_id=account,
             provider=ProviderKind.GOOGLE,
             cause=Cause.API_DISABLED,
-        ),
+        )
+    services.rule_health.record_failure(stopped, failure)
+
+
+def _outlook_refusal(person: Person) -> ProviderFailure:
+    provider, graph = outlook()
+    graph.refuse(
+        Refusal(
+            403,
+            {"error": {"code": "ErrorAccessDenied", "message": person.microsoft_message}},
+        )
     )
+    try:
+        provider.list_events(endpoint("work-account", "work-calendar"), datetime.now(UTC))
+    except ProviderFailure as failure:
+        return failure
+    raise AssertionError("the fake was told to refuse")
 
 
 @dataclass
@@ -166,6 +195,8 @@ class Installation:
     admin: Person
     member: Person
     client: TestClient
+    outlook: Person
+    """Someone whose accounts are Microsoft accounts."""
 
     def as_member(self) -> None:
         self.client.cookies.set(SESSION_COOKIE, session_for(self.database, self.member.user))
@@ -189,13 +220,15 @@ def installation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[In
     adapters = build_adapters(settings)
     admin = Person(administrator(adapters), "alpha")
     member = Person(add_user(database, OTHER_USER, role="user", email=MEMBER_EMAIL), "bravo")
-    for person in (admin, member):
+    outlook_user = add_user(database, OUTLOOK_USER, role="user", email=OUTLOOK_EMAIL)
+    outlook_person = Person(outlook_user, "charlie", ProviderKind.OUTLOOK)
+    for person in (admin, member, outlook_person):
         _seed(database, person)
     container = compose(settings, adapters)
-    for person in (admin, member):
+    for person in (admin, member, outlook_person):
         _fail(container, person)
     with TestClient(create_app(container)) as client:
-        yielded = Installation(database, admin, member, client)
+        yielded = Installation(database, admin, member, client, outlook_person)
         yielded.as_admin()
         yield yielded
 
@@ -233,9 +266,10 @@ def test_people_filter_and_sort_by_verdict(installation: Installation) -> None:
     healthy = client.get("/api/v1/users", params={"verdict": "healthy"}).json()
     sorted_page = client.get("/api/v1/users", params={"sort": "verdict", "page_size": 1}).json()
 
-    assert stopped["total"] == 2
+    # Everyone's rules stopped: two people's at Google, one person's at Outlook.
+    assert stopped["total"] == 3
     assert (healthy["total"], healthy["users"]) == (0, [])
-    assert (sorted_page["total"], len(sorted_page["users"])) == (2, 1)
+    assert (sorted_page["total"], len(sorted_page["users"])) == (3, 1)
 
 
 def test_an_administrator_sees_each_calendar_only_by_its_number(
@@ -297,6 +331,7 @@ def test_no_calendar_account_or_event_reaches_the_overview_health_notifications_
         client.get(f"/api/v1/users/{installation.admin.user.value}/overview").text,
         client.get(f"/api/v1/users/{installation.member.user.value}/overview").text,
         client.get("/api/v1/installation/health").text,
+        client.get(f"/api/v1/users/{installation.outlook.user.value}/overview").text,
     ]
     installation.as_member()
     # A User's own status names their own calendars, but never repeats what Google said.
@@ -309,13 +344,20 @@ def test_no_calendar_account_or_event_reaches_the_overview_health_notifications_
     shown.extend(emails)
 
     assert notifications.sent
-    for marker in (*installation.admin.markers, *installation.member.markers):
+    people = (installation.admin, installation.member, installation.outlook)
+    for marker in (
+        *(m for person in people for m in person.markers),
+        installation.outlook.microsoft_message,
+    ):
         for text in shown:
             assert marker not in text
     assert MEMBER_EMAIL in shown[0]
     # Each person heard of their own lapse, with a link to their dashboard and nothing more.
-    assert len(emails) == 2
+    assert len(emails) == 3
     assert all("What to do next: https://ghost.example.test/" in email for email in emails)
+    # The Outlook person's problem is theirs: its Cause, from the adapter, says so.
+    assert '"cause":"calendar_forbidden"' in shown[5]
+    assert '"provider":"outlook"' in shown[5]
     for text in own:
         assert installation.member.google_message not in text
         assert '"cause":"api_disabled"' in text

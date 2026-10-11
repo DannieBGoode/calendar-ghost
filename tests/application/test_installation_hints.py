@@ -236,3 +236,25 @@ def test_hints_come_in_a_stable_order() -> None:
         (HintKind.TESTING_MODE, Cause.ACCESS_REVOKED),
         (HintKind.UNRECOGNIZED, Cause.UNKNOWN),
     ]
+
+
+def test_each_provider_hints_its_own_causes_with_its_own_sections() -> None:
+    other = ProviderGuide(
+        ProviderKind.OUTLOOK,
+        "other",
+        "Other",
+        "Other Calendar",
+        {Cause.OAUTH_CLIENT_INVALID: "the-other-client-is-refused"},
+    )
+    sightings = [
+        seen(ROBIN, Cause.OAUTH_CLIENT_INVALID),
+        seen(SAM, Cause.OAUTH_CLIENT_INVALID, provider=ProviderKind.OUTLOOK),
+        seen(ALEX, Cause.OAUTH_CLIENT_INVALID, provider=ProviderKind.OUTLOOK),
+    ]
+
+    hints = installation_hints(sightings, NOW, (GUIDE, other))
+
+    assert [(hint.provider, hint.users, hint.anchor) for hint in hints] == [
+        (PROVIDER, 1, "the-client-is-refused"),
+        (ProviderKind.OUTLOOK, 2, "the-other-client-is-refused"),
+    ]
