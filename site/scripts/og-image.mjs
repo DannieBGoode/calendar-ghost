@@ -1,4 +1,4 @@
-// Writes public/og.png from the running preview's hero. Run `npm run preview` first; set
+// Writes public/og.png from the running preview's hero. Run `pnpm run preview` first; set
 // PREVIEW_PORT when the preview runs on a port other than 4321.
 import { chromium } from "@playwright/test"
 

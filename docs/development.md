@@ -4,6 +4,7 @@
 
 - Python 3.12
 - Node.js 22 or later
+- pnpm 12. With Node.js 22 to 24, `corepack enable` provides the version `package.json` names.
 - Docker with Compose for container validation
 
 ## Setup
@@ -11,7 +12,7 @@
 ```sh
 python3.12 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-cd web && npm ci
+cd web && pnpm install --frozen-lockfile
 ```
 
 Run FastAPI on port 8000 and Vite on port 5173. Vite proxies `/api` and `/health` to FastAPI.
@@ -24,7 +25,7 @@ release tag URL for the source being built:
 
 ```sh
 CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/calendar-ghost/tree/<commit-or-tag> \
-  npm --prefix web run build
+  pnpm --dir web run build
 ```
 
 Docker Compose passes the same variable as a build argument. Downstream forks can point the link at
@@ -88,13 +89,13 @@ cross providers. Robin's Personal account is Google's and their Work account is 
 The landing page in `site/` has its own toolchain:
 
 ```sh
-npm ci --prefix site
-npm --prefix site run dev          # http://localhost:4321
-npm --prefix site run check        # astro check
-npm --prefix site test             # unit tests
-npm --prefix site run build && npm --prefix site run audit:dist
-npm --prefix site run e2e          # Playwright; run `npx playwright install chromium` once
-npm --prefix site run og-image     # regenerate public/og.png from a running `npm --prefix site run preview`
+pnpm --dir site install --frozen-lockfile
+pnpm --dir site run dev          # http://localhost:4321
+pnpm --dir site run check        # astro check
+pnpm --dir site test             # unit tests
+pnpm --dir site run build && pnpm --dir site run audit:dist
+pnpm --dir site run e2e          # Playwright; run `pnpm --dir site exec playwright install chromium` once
+pnpm --dir site run og-image     # regenerate public/og.png from a running `pnpm --dir site run preview`
 ```
 
 Cloudflare Workers Builds deploys it from `main`; other branches get preview URLs. The site also
@@ -113,7 +114,7 @@ paths).
    lists for that language. English only needs `one` and `other`; other languages may need more.
 3. Register the language in `web/src/i18n/locales/index.ts`:
    `{ tag, load: () => import("./<tag>").then((module) => module.default) }`.
-4. Run the frontend gate (`npm --prefix web run typecheck && npm --prefix web run lint && npm --prefix web run test`).
+4. Run the frontend gate (`pnpm --dir web run typecheck && pnpm --dir web run lint && pnpm --dir web run test`).
 5. Open the app with `?locale=pseudo` in dev to check layouts take the longer pseudo-text, then
    open it with the new language and read every screen.
 
@@ -130,7 +131,7 @@ and plain, the same register as the English copy.
 .venv/bin/mypy
 .venv/bin/lint-imports
 .venv/bin/pytest --cov
-cd web && npm audit --audit-level=high && npm run api:check && npm run typecheck && npm run lint && npm run doctor && npm run knip && npm run test && npm run build
+cd web && pnpm audit --audit-level=high && pnpm run api:check && pnpm run typecheck && pnpm run lint && pnpm run doctor && pnpm run knip && pnpm run test && pnpm run build
 ```
 
 CI also scans each pull request's commits, and each push to `main`, for secrets with
@@ -142,7 +143,7 @@ After changing an API response or request model, regenerate the frontend types i
 
 ```sh
 .venv/bin/python scripts/export_openapi.py
-npm --prefix web run api:types
+pnpm --dir web run api:types
 ```
 
 Fixtures in `tests/fixtures` are synthetic. Never copy provider responses from a personal account into the repository; make them synthetic first ([Live provider checks](#live-provider-checks)).

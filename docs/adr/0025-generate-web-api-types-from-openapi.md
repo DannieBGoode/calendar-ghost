@@ -26,7 +26,7 @@ definition directly.
   requires, and the body it returns. A call cannot leave out a required input, send one the route
   does not declare, or expect another route's body.
 - Both files are committed. `tests/test_openapi_contract.py` fails when `web/openapi.json` differs
-  from the routes, and `npm run api:check` fails when `api-schema.ts` differs from the schema. A
+  from the routes, and `pnpm run api:check` fails when `api-schema.ts` differs from the schema. A
   changed response model therefore fails the frontend type check until the UI handles it.
 
 ## Alternatives considered
@@ -41,7 +41,7 @@ definition directly.
 ## Consequences
 
 A change to a response model is a two-command update (`scripts/export_openapi.py`, then
-`npm --prefix web run api:types`) in the same commit. The schema also documents the HTTP API, which
+`pnpm --dir web run api:types`) in the same commit. The schema also documents the HTTP API, which
 is a compatibility surface, so an accidental payload change shows up in review as a diff to
 `web/openapi.json`. Request bodies with a closed set of values are validated by Pydantic, so an
 unknown `privacy_policy` is rejected with FastAPI's standard 422 validation detail, whose messages

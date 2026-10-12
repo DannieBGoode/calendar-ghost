@@ -1,14 +1,16 @@
 # The Web UI bundle is plain JavaScript and CSS, the same for every target platform, so it is built
-# once on the build machine's own platform. Emulating npm for arm64 is slow and can stall.
+# once on the build machine's own platform. Emulating Node for arm64 is slow and can stall.
 FROM --platform=$BUILDPLATFORM node:22-alpine AS web-builder
 
 WORKDIR /web
-COPY web/package.json web/package-lock.json ./
-RUN npm ci
+# Corepack installs the pnpm version web/package.json names; pnpm-workspace.yaml holds its rules.
+RUN corepack enable
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY web ./
 ARG CALENDAR_GHOST_SOURCE_URL
 ENV CALENDAR_GHOST_SOURCE_URL=${CALENDAR_GHOST_SOURCE_URL}
-RUN npm run build:bundle
+RUN pnpm run build:bundle
 
 FROM python:3.12-slim AS runtime
 
