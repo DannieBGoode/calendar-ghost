@@ -246,6 +246,7 @@ class Live:
         """Delete every event: series first, then whatever single events remain, such as
         exceptions a deleted series left behind, which only a listing of single events shows."""
         self._google_owned(calendar)
+        failed: Exception | None = None
         for single_events in (False, True, True):
             for item in self.google_items(calendar, single_events=single_events):
                 try:
@@ -254,8 +255,12 @@ class Live:
                     ).execute()
                 except Exception as error:
                     status = getattr(getattr(error, "resp", None), "status", None)
-                    if status not in (404, 410):  # Gone already, with its series.
-                        print(f"could not delete a Google test event: {error!r}", file=sys.stderr)
+                    if status not in (404, 410):  # 404 and 410: gone already, with its series.
+                        failed = error
+        # Whatever went wrong, the calendar is empty or the cleanup fails.
+        left = self.google_items(calendar, single_events=True)
+        if left:
+            raise RuntimeError(f"{len(left)} Google test events left; last error {failed!r}")
 
     def _google_owned(self, calendar: str) -> None:
         summary = self.google.calendarList().get(calendarId=calendar).execute()["summary"]
