@@ -410,6 +410,7 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET` | For Outlook | Client secret value; it expires on the date chosen when it was created |
 | `CALENDAR_SYNC_MICROSOFT_REDIRECT_URI` | For Outlook | Exact registered redirect URI; defaults to `http://localhost:8000/api/v1/oauth/microsoft/callback` |
 | `CALENDAR_SYNC_MICROSOFT_TENANT` | No | Which Microsoft accounts may connect: `common` (default, personal and work or school), `organizations`, `consumers`, or a tenant ID |
+| `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES` | No | The client secret's **Expires** date from Entra, such as `2027-04-12`; Installation Health warns from 30 days before it |
 | `CALENDAR_SYNC_SECURE_COOKIES` | No | Set `true` when serving the app over HTTPS |
 | `CALENDAR_SYNC_LOG_LEVEL` | No | Application log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); defaults to `INFO` |
 | `CALENDAR_SYNC_LOG_DIR` | No | Directory for rotating log files; unset defaults to `logs` beside the database (`/data/logs` in Compose). Empty turns file logging off |

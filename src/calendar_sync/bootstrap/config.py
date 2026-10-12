@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 
@@ -20,6 +21,9 @@ class Settings:
     microsoft_redirect_uri: str = "http://localhost:8000/api/v1/oauth/microsoft/callback"
     microsoft_tenant: str = "common"
     """Which Microsoft accounts may connect; "common" admits personal and work or school ones."""
+    microsoft_client_secret_expires: date | None = None
+    """When the Microsoft client secret expires, copied from Entra, so Installation Health warns
+    before it does; Calendar Ghost cannot read the date itself."""
     incident_webhook_url: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
@@ -60,6 +64,9 @@ class Settings:
                 "http://localhost:8000/api/v1/oauth/microsoft/callback",
             ),
             microsoft_tenant=os.environ.get("CALENDAR_SYNC_MICROSOFT_TENANT", "") or "common",
+            microsoft_client_secret_expires=_optional_date(
+                "CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES"
+            ),
             incident_webhook_url=os.environ.get("CALENDAR_SYNC_INCIDENT_WEBHOOK_URL", ""),
             smtp_host=os.environ.get("CALENDAR_SYNC_SMTP_HOST", ""),
             smtp_port=int(os.environ.get("CALENDAR_SYNC_SMTP_PORT", "587")),
@@ -71,3 +78,14 @@ class Settings:
             in {"1", "true", "yes"},
             public_url=os.environ.get("CALENDAR_SYNC_PUBLIC_URL", ""),
         )
+
+
+def _optional_date(variable: str) -> date | None:
+    """An ISO date such as 2027-04-12, or None where the variable is unset or blank."""
+    value = os.environ.get(variable, "").strip()
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"{variable} must be a date such as 2027-04-12, not {value!r}") from error

@@ -1,16 +1,16 @@
 """Installation Health: the one verdict on the whole installation (ADR 0030).
 
 Installation Administrators and their monitors read it: incidents about the installation itself,
-how many Users are in each Installation Status verdict, and Installation Hints (ADR 0031). It
-names no rule, calendar, or User.
+such as a stalled scheduler or an OAuth client secret about to expire, how many Users are in each
+Installation Status verdict, and Installation Hints (ADR 0031). It names no rule, calendar, or User.
 """
 
 from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, time, timedelta
 from enum import StrEnum
 from typing import Protocol
 
@@ -31,8 +31,9 @@ from calendar_sync.application.operations.status import (
     stalled_since,
 )
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.provider_descriptors import ProviderGuide
+from calendar_sync.application.sync.provider_descriptors import ClientSecretExpiry, ProviderGuide
 from calendar_sync.domain.access import UserId, UserState
+from calendar_sync.domain.accounts import ProviderKind
 
 # Most urgent first. Nothing needing attention reads healthy before paused, and paused before
 # setup, so one User's working rules are not hidden by another who has not set up yet.
@@ -47,8 +48,15 @@ _PRECEDENCE = (
 )
 
 
+SECRET_WARNING = timedelta(days=30)
+"""How long before an OAuth client secret expires Installation Health warns about it."""
+
+
 class InstallationIncidentKind(StrEnum):
     SCHEDULER_STALLED = "scheduler_stalled"
+    CLIENT_SECRET_EXPIRING = "client_secret_expiring"  # noqa: S105
+    """An OAuth client secret expires soon, or has expired: every account of its provider then
+    stops at once, until the administrator puts a new secret in place."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,17 +65,54 @@ class InstallationIncident:
 
     kind: InstallationIncidentKind
     since: datetime
+    secret: ClientSecretExpiry | None = None
+    """For an expiring client secret, which one and when it expires."""
 
 
 def installation_incidents(
-    scheduler: SchedulerProgress | None, now: datetime
+    scheduler: SchedulerProgress | None,
+    now: datetime,
+    secrets: Sequence[ClientSecretExpiry] = (),
 ) -> tuple[InstallationIncident, ...]:
-    """What is wrong with the installation itself: today, a scheduler that stopped completing
-    passes. Without a scheduler, as without a master key, nothing can synchronize or stall."""
+    """What is wrong with the installation itself: a scheduler that stopped completing passes,
+    and each client secret that expires within SECRET_WARNING or already has. Without a
+    scheduler, as without a master key, nothing can synchronize or stall."""
+    incidents = [
+        InstallationIncident(
+            InstallationIncidentKind.CLIENT_SECRET_EXPIRING,
+            datetime.combine(secret.expires - SECRET_WARNING, time(), UTC),
+            secret=secret,
+        )
+        for secret in secrets
+        if now.astimezone(UTC).date() >= secret.expires - SECRET_WARNING
+    ]
     since = stalled_since(scheduler, now) if scheduler is not None else None
-    if since is None:
-        return ()
-    return (InstallationIncident(InstallationIncidentKind.SCHEDULER_STALLED, since),)
+    if since is not None:
+        incidents.insert(0, InstallationIncident(InstallationIncidentKind.SCHEDULER_STALLED, since))
+    return tuple(incidents)
+
+
+@dataclass(slots=True)
+class InstallationIncidentWatch:
+    """Which installation incidents opened since the last look, so each is reported once."""
+
+    secrets: Sequence[ClientSecretExpiry] = ()
+    _open: frozenset[tuple[InstallationIncidentKind, ProviderKind | None]] = field(
+        default_factory=frozenset
+    )
+
+    def opened(
+        self, scheduler: SchedulerProgress | None, now: datetime
+    ) -> tuple[InstallationIncident, ...]:
+        incidents = installation_incidents(scheduler, now, self.secrets)
+        opened = tuple(incident for incident in incidents if _key(incident) not in self._open)
+        self._open = frozenset(_key(incident) for incident in incidents)
+        return opened
+
+
+def _key(incident: InstallationIncident) -> tuple[InstallationIncidentKind, ProviderKind | None]:
+    """One incident per kind, and per provider for a client secret."""
+    return incident.kind, incident.secret.provider if incident.secret is not None else None
 
 
 class InstallationNotifications(Protocol):
@@ -91,9 +136,10 @@ class InstallationHealth:
 
     @property
     def needs_attention(self) -> bool:
-        """Whether someone must act: a verdict that needs it, or a hint only the administrator
-        can act on, such as a used-up quota while every rule merely waits (ADR 0031)."""
-        return self.status in NEEDS_ATTENTION or bool(self.hints)
+        """Whether someone must act: a verdict that needs it, an installation incident, or a hint
+        only the administrator can act on, such as a used-up quota while every rule merely waits
+        (ADR 0031)."""
+        return self.status in NEEDS_ATTENTION or bool(self.incidents) or bool(self.hints)
 
 
 @dataclass(slots=True)
@@ -107,6 +153,8 @@ class GetInstallationHealth:
     """Every User's failures with a Cause from a time on, read at once."""
     guides: Sequence[ProviderGuide] = ()
     """Each provider's troubleshooting sections and patterns, which hints link to."""
+    secrets: Sequence[ClientSecretExpiry] = ()
+    """When each configured provider's client secret expires, where the administrator said."""
 
     def execute(self) -> InstallationHealth:
         now = self.clock.now()
@@ -114,9 +162,10 @@ class GetInstallationHealth:
         active = [user for user in everyone if user.state is UserState.ACTIVE]
         counts = Counter(self.verdicts([user.id for user in active]).values())
         incidents = installation_incidents(
-            self.scheduler.progress() if self.scheduler is not None else None, now
+            self.scheduler.progress() if self.scheduler is not None else None, now, self.secrets
         )
-        present = {*counts, *(StatusVerdict.STALLED for _ in incidents)}
+        stalled = any(i.kind is InstallationIncidentKind.SCHEDULER_STALLED for i in incidents)
+        present = {*counts, *((StatusVerdict.STALLED,) if stalled else ())}
         status = next(
             (verdict for verdict in _PRECEDENCE if verdict in present), StatusVerdict.SETUP
         )

@@ -2,19 +2,20 @@
 
 from collections.abc import Sequence
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from calendar_sync.application.operations.installation_health import (
     GetInstallationHealth,
     InstallationHealth,
     InstallationIncident,
     InstallationIncidentKind,
+    InstallationIncidentWatch,
     installation_incidents,
 )
 from calendar_sync.application.operations.installation_hints import HINT_WINDOW
 from calendar_sync.application.operations.ports import CauseSighting, SchedulerProgress
 from calendar_sync.application.operations.status import StatusVerdict
-from calendar_sync.application.sync.provider_descriptors import ProviderGuide
+from calendar_sync.application.sync.provider_descriptors import ClientSecretExpiry, ProviderGuide
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
@@ -224,3 +225,62 @@ def test_a_hint_needs_attention_whatever_the_verdicts() -> None:
 
     assert health.status is StatusVerdict.WAITING
     assert health.needs_attention
+
+
+def secret(expires: date) -> ClientSecretExpiry:
+    return ClientSecretExpiry(PROVIDER, "Example", expires)
+
+
+def test_a_client_secret_warns_from_thirty_days_before_it_expires() -> None:
+    thirty_days_on = date(2026, 11, 8)
+
+    assert installation_incidents(TICKING, NOW, (secret(date(2026, 11, 9)),)) == ()
+    assert installation_incidents(TICKING, NOW, (secret(thirty_days_on),)) == (
+        InstallationIncident(
+            InstallationIncidentKind.CLIENT_SECRET_EXPIRING,
+            datetime(2026, 10, 9, tzinfo=UTC),
+            secret=secret(thirty_days_on),
+        ),
+    )
+
+
+def test_a_client_secret_that_expired_stays_an_incident_until_its_date_moves() -> None:
+    expired = secret(date(2026, 10, 1))
+
+    (incident,) = installation_incidents(TICKING, NOW, (expired,))
+
+    assert incident.kind is InstallationIncidentKind.CLIENT_SECRET_EXPIRING
+    assert incident.secret == expired
+
+
+def test_an_expiring_client_secret_needs_the_administrator_but_stalls_nothing() -> None:
+    users = _users(("healthy", UserState.ACTIVE))
+
+    health = GetInstallationHealth(
+        users,
+        lambda ids: dict.fromkeys(ids, StatusVerdict.HEALTHY),
+        Heartbeat(TICKING),
+        Clock(),
+        secrets=(secret(date(2026, 10, 20)),),
+    ).execute()
+
+    assert health.status is StatusVerdict.HEALTHY
+    assert health.needs_attention
+    assert [incident.kind for incident in health.incidents] == [
+        InstallationIncidentKind.CLIENT_SECRET_EXPIRING
+    ]
+
+
+def test_the_watch_reports_each_installation_incident_once_while_it_stays_open() -> None:
+    watch = InstallationIncidentWatch((secret(date(2026, 10, 20)),))
+
+    first = watch.opened(TICKING, NOW)
+    again = watch.opened(TICKING, NOW)
+    stalled = watch.opened(STALLED, NOW)
+
+    assert [incident.kind for incident in first] == [
+        InstallationIncidentKind.CLIENT_SECRET_EXPIRING
+    ]
+    assert again == ()
+    # A stalled scheduler opens apart from the secret, which stays open and is not repeated.
+    assert [incident.kind for incident in stalled] == [InstallationIncidentKind.SCHEDULER_STALLED]

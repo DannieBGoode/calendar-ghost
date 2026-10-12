@@ -417,6 +417,35 @@ describe("People page", () => {
     expect(summary.textContent).toContain("Scheduled synchronization stopped running just now.")
   })
 
+  it("warns that a client secret expires, which only the administrator can fix", async () => {
+    const expiring = {
+      ...health,
+      needs_attention: true,
+      incidents: [{ kind: "client_secret_expiring", since: justNow, provider: "outlook", expires_on: "2099-04-12" }],
+    }
+    await renderPeople(testI18n(), { answers: { "GET /api/v1/installation/health": jsonResponse(expiring) } })
+    const summary = container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+
+    expect(summary.querySelector(".installation-health-lead")?.textContent).toBe(
+      "Needs youOnly you can fix what is below.",
+    )
+    expect(summary.textContent).toContain(
+      "The Microsoft client secret expires on April 12, 2099. Put a new one in place before then, or every Microsoft account stops.",
+    )
+  })
+
+  it("says when a client secret already expired", async () => {
+    const expired = {
+      ...health,
+      needs_attention: true,
+      incidents: [{ kind: "client_secret_expiring", since: justNow, provider: "outlook", expires_on: "2000-01-31" }],
+    }
+    await renderPeople(testI18n(), { answers: { "GET /api/v1/installation/health": jsonResponse(expired) } })
+    const summary = container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+
+    expect(summary.textContent).toContain("The Microsoft client secret expired on January 31, 2000.")
+  })
+
   it("suggests each likely cause people share, with how to fix it", async () => {
     const hinted = {
       ...health,

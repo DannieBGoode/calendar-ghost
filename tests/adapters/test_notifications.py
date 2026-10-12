@@ -1,4 +1,5 @@
 from dataclasses import replace
+from datetime import date
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, ClassVar
@@ -9,9 +10,11 @@ from calendar_sync.application.operations.installation_health import (
     InstallationIncident,
     InstallationIncidentKind,
 )
+from calendar_sync.application.sync.provider_descriptors import ClientSecretExpiry
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose, public_address
 from calendar_sync.domain.access import Role, User, UserId, UserState
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentCategory, IncidentReport
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
@@ -155,6 +158,28 @@ def test_the_installation_channels_hear_of_a_stalled_scheduler() -> None:
             category="scheduler_stalled",
             summary="Scheduled synchronization stopped running",
             occurred_at=NOW.isoformat(),
+        )
+    ]
+
+
+def test_the_installation_channels_hear_of_an_expiring_client_secret() -> None:
+    heard: list[IncidentNotification] = []
+
+    class Recording(NotificationChannel):
+        def send(self, incident: IncidentNotification) -> None:
+            heard.append(incident)
+
+    expiring = InstallationIncident(
+        InstallationIncidentKind.CLIENT_SECRET_EXPIRING,
+        NOW,
+        secret=ClientSecretExpiry(ProviderKind.GOOGLE, "Example", date(2027, 4, 12)),
+    )
+    IncidentNotifier([Recording()]).installation_incident_opened(expiring)
+
+    assert [(each.category, each.summary) for each in heard] == [
+        (
+            "client_secret_expiring",
+            "The Example client secret expires on 2027-04-12; put a new one in place before then",
         )
     ]
 

@@ -47,7 +47,7 @@ class IncidentNotifier:
             IncidentNotification(
                 None,
                 incident.kind.value,
-                _INSTALLATION_SUMMARIES[incident.kind],
+                _installation_summary(incident),
                 incident.since.isoformat(),
             )
         )
@@ -60,9 +60,14 @@ class IncidentNotifier:
                 logger.exception("Incident notification delivery failed")
 
 
-_INSTALLATION_SUMMARIES = {
-    InstallationIncidentKind.SCHEDULER_STALLED: "Scheduled synchronization stopped running",
-}
+def _installation_summary(incident: InstallationIncident) -> str:
+    secret = incident.secret
+    if incident.kind is InstallationIncidentKind.CLIENT_SECRET_EXPIRING and secret is not None:
+        return (
+            f"The {secret.name} client secret expires on {secret.expires.isoformat()}; "
+            "put a new one in place before then"
+        )
+    return "Scheduled synchronization stopped running"
 
 
 class OwnerNotifier:

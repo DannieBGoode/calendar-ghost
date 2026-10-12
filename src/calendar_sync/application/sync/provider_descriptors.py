@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import date, timedelta
 
 from calendar_sync.application.sync.ports import (
     AccountAuthorization,
@@ -56,6 +56,20 @@ class ProviderGuide:
 
 
 @dataclass(frozen=True, slots=True)
+class ClientSecretExpiry:
+    """When an installation's OAuth client secret expires, as its administrator recorded it.
+
+    The provider does not say: reading it would need an application permission no calendar sync
+    should ask for, so the administrator copies the date into the installation's settings.
+    """
+
+    provider: ProviderKind
+    name: str
+    """How English messages name the provider, such as "Example"."""
+    expires: date
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderConnection:
     """How a User connects an account of the provider: its OAuth flow, which returns the browser
     to `redirect_uri`."""
@@ -79,6 +93,9 @@ class ProviderDescriptor:
     connection: ProviderConnection | None = None
     calendars: AccountCalendars | None = None
     provider: CalendarProvider | None = None
+    secret_expires: date | None = None
+    """When the installation's OAuth client secret expires, where the administrator recorded it,
+    so Installation Health warns before every account of the provider stops at once."""
 
     @property
     def kind(self) -> ProviderKind:
@@ -104,6 +121,15 @@ class ProviderDirectory:
     def connectable(self) -> tuple[ProviderDescriptor, ...]:
         """The providers a User can connect an account of now."""
         return tuple(descriptor for descriptor in self.descriptors if descriptor.connectable)
+
+    @property
+    def client_secrets(self) -> tuple[ClientSecretExpiry, ...]:
+        """When each configured provider's client secret expires, where the administrator said."""
+        return tuple(
+            ClientSecretExpiry(d.kind, d.guide.display_name, d.secret_expires)
+            for d in self.descriptors
+            if d.configured and d.secret_expires is not None
+        )
 
     def of(self, kind: ProviderKind) -> ProviderDescriptor | None:
         return next((d for d in self.descriptors if d.kind is kind), None)

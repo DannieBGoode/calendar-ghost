@@ -8,9 +8,8 @@ import logging
 from datetime import datetime, timedelta
 
 from calendar_sync.application.operations.installation_health import (
-    InstallationIncidentKind,
+    InstallationIncidentWatch,
     InstallationNotifications,
-    installation_incidents,
 )
 from calendar_sync.application.operations.ports import SchedulerHeartbeat, SchedulerProgress
 from calendar_sync.application.operations.scheduled_pass import ScheduledPass, ScheduledRun
@@ -94,8 +93,9 @@ class SyncScheduler:
 
 
 class SchedulerWatch:
-    """Watches the scheduler from outside its loop, so a scheduler that stops completing passes
-    is reported to the installation's channels once, when it stalls (ADR 0030)."""
+    """Watches the scheduler from outside its loop, so each installation incident, such as a
+    scheduler that stops completing passes, is reported to the installation's channels once,
+    when it opens (ADR 0030)."""
 
     def __init__(
         self,
@@ -103,12 +103,13 @@ class SchedulerWatch:
         notifications: InstallationNotifications,
         clock: Clock,
         interval_seconds: int = 60,
+        incidents: InstallationIncidentWatch | None = None,
     ) -> None:
         self._heartbeat = heartbeat
         self._notifications = notifications
         self._clock = clock
         self._interval_seconds = interval_seconds
-        self._open: frozenset[InstallationIncidentKind] = frozenset()
+        self._incidents = incidents or InstallationIncidentWatch()
 
     async def run_forever(self) -> None:
         while True:
@@ -120,8 +121,5 @@ class SchedulerWatch:
 
     def check(self) -> None:
         """Notify each installation incident that has opened since the last check."""
-        incidents = installation_incidents(self._heartbeat.progress(), self._clock.now())
-        opened = [incident for incident in incidents if incident.kind not in self._open]
-        self._open = frozenset(incident.kind for incident in incidents)
-        for incident in opened:
+        for incident in self._incidents.opened(self._heartbeat.progress(), self._clock.now()):
             self._notifications.installation_incident_opened(incident)

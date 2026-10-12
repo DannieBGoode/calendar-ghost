@@ -1,5 +1,6 @@
 """The installation's settings, read from the environment the README and deployment guide list."""
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ MICROSOFT_VARIABLES = (
     "CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET",
     "CALENDAR_SYNC_MICROSOFT_REDIRECT_URI",
     "CALENDAR_SYNC_MICROSOFT_TENANT",
+    "CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES",
 )
 
 
@@ -57,3 +59,25 @@ def test_every_microsoft_setting_is_documented_where_operators_look(document: st
     text = (Path(__file__).resolve().parents[2] / document).read_text()
 
     assert [variable for variable in MICROSOFT_VARIABLES if variable not in text] == []
+
+
+def test_the_microsoft_client_secrets_expiry_is_an_optional_date(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES", raising=False)
+    assert Settings.from_environment().microsoft_client_secret_expires is None
+
+    monkeypatch.setenv("CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES", " ")
+    assert Settings.from_environment().microsoft_client_secret_expires is None
+
+    monkeypatch.setenv("CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES", "2027-04-12")
+    assert Settings.from_environment().microsoft_client_secret_expires == date(2027, 4, 12)
+
+
+def test_an_unreadable_client_secret_expiry_names_its_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES", "12/04/2027")
+
+    with pytest.raises(ValueError, match="CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES"):
+        Settings.from_environment()

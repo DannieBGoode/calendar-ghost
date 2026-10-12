@@ -11,6 +11,7 @@ import type { I18n } from "@/i18n/translator"
 import { api, type InstallationHealthReport, type InstallationHint, type PeopleQuery } from "@/lib/api"
 import { hintText, troubleshootingUrl } from "@/lib/causes"
 import { VERDICTS } from "@/lib/operator-overview"
+import { providerDisplayName } from "@/lib/providers"
 
 const REFRESH_INTERVAL = 60_000
 
@@ -67,13 +68,12 @@ function HealthReport({
   onFilter: (next: HealthFilter) => void
 }) {
   const i18n = useI18n()
-  const { t } = i18n
   return (
     <>
       <HealthLead report={report} />
       {report.incidents.map((incident) => (
-        <p key={incident.kind} className="user-overview-muted">
-          {t("people.health.schedulerStalled", { relative: i18n.format.relative(incident.since, now) })}
+        <p key={`${incident.kind}:${incident.provider ?? ""}`} className="user-overview-muted">
+          {incidentText(i18n, incident, now)}
         </p>
       ))}
       <Hints hints={report.hints} />
@@ -81,6 +81,24 @@ function HealthReport({
       <StatusMeanings />
     </>
   )
+}
+
+type InstallationIncident = InstallationHealthReport["incidents"][number]
+
+/** What an incident about the installation itself says: a stalled scheduler, or a client secret
+ * that expires soon or has expired, which stops every account of its provider at once. */
+function incidentText(i18n: I18n, incident: InstallationIncident, now: number): string {
+  if (incident.kind === "client_secret_expiring" && incident.expires_on) {
+    const words = {
+      provider: providerDisplayName(i18n, incident.provider),
+      date: i18n.format.date(incident.expires_on, { dateStyle: "long", timeZone: "UTC" }),
+    }
+    const today = new Date(now).toISOString().slice(0, 10)
+    return incident.expires_on < today
+      ? i18n.t("people.health.secretExpired", words)
+      : i18n.t("people.health.secretExpiring", words)
+  }
+  return i18n.t("people.health.schedulerStalled", { relative: i18n.format.relative(incident.since, now) })
 }
 
 /** Likely causes from patterns across people, each with the guide's section on its fix. */
@@ -112,8 +130,8 @@ function Hints({ hints }: { hints: InstallationHint[] }) {
 }
 
 /**
- * What the administrator must do, first. A stalled scheduler, or a likely cause only they can fix,
- * needs them; people's own problems do not, so they are one quiet line: each person sees their
+ * What the administrator must do, first. A stalled scheduler, an installation incident such as an
+ * expiring client secret, or a likely cause only they can fix, needs them; people's own problems do not, so they are one quiet line: each person sees their
  * own step on their dashboard, and the administrator finds it on their page if they ask.
  */
 function HealthLead({ report }: { report: InstallationHealthReport }) {
@@ -127,7 +145,7 @@ function HealthLead({ report }: { report: InstallationHealthReport }) {
       </div>
     )
   }
-  if (report.hints.length > 0) {
+  if (report.hints.length > 0 || report.incidents.length > 0) {
     return (
       <div className="user-overview-verdict installation-health-lead">
         <Badge variant="stopped">

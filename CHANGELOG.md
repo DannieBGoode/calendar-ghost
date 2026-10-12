@@ -4,6 +4,14 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Added
+
+- Installation Health warns before the Microsoft client secret expires. Copy the secret's
+  **Expires** date from Entra into `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES`: from 30 days
+  before it, an installation Incident needs the administrator on People and in
+  `GET /api/v1/installation/health`, and goes to the installation's email and webhook. Calendar
+  Ghost cannot read the date from Microsoft, so without the setting nothing changes.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added

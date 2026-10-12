@@ -1,5 +1,6 @@
 """Installation Health over the status API and MCP, for Installation Administrators only."""
 
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -135,3 +136,24 @@ def test_mcp_offers_installation_health_to_installation_read_tokens_only(tmp_pat
     assert health["structuredContent"]["users"] == {"setup": 1}
     assert refused["isError"] is True
     assert "installation:read" in refused["content"][0]["text"]
+
+
+def test_installation_health_warns_of_a_microsoft_client_secret_about_to_expire(
+    tmp_path: Path,
+) -> None:
+    expires = date.today() + timedelta(days=5)
+    settings = Settings(
+        tmp_path / "test.db",
+        microsoft_client_id="synthetic-client",
+        microsoft_client_secret="synthetic-secret",
+        microsoft_client_secret_expires=expires,
+    )
+    with TestClient(create_app(build_container(settings))) as admin:
+        admin.post("/api/v1/setup/admin", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
+        body = admin.get("/api/v1/installation/health").json()
+
+    assert body["needs_attention"] is True
+    assert [
+        (incident["kind"], incident["provider"], incident["expires_on"])
+        for incident in body["incidents"]
+    ] == [("client_secret_expiring", "outlook", expires.isoformat())]
