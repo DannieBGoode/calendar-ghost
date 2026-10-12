@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from calendar_sync.application.sync.errors import (
-    AUTHORIZATION_FAILURES,
     AccountAccessCheckFailed,
     ConnectedAccountMustBeDisconnected,
     ConnectedAccountNotFound,
@@ -23,6 +22,7 @@ from calendar_sync.application.sync.ports import (
 )
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId
+from calendar_sync.domain.providers import AUTHORIZATION_FAILURES
 
 
 @dataclass(frozen=True, slots=True)

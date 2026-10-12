@@ -143,6 +143,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- The rule health policy, which decides when a failed run stops its rule and when it opens an
+  Incident, moves into the domain (`domain/health.py`), with the failure kinds that need
+  reauthorization or a retry (`domain/providers.py`). Behavior is unchanged (#104).
 - Connecting or reauthorizing an account opens the provider's consent in a new tab when its
   redirect URI is at another address than the one Calendar Ghost is open at, such as `localhost`
   while Calendar Ghost runs on a LAN host. The tab you started from stays on Calendar Ghost and

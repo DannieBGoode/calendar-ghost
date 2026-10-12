@@ -9,7 +9,11 @@ from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId
-from calendar_sync.domain.providers import ProviderFailureKind
+from calendar_sync.domain.providers import (
+    AUTHORIZATION_FAILURES,
+    TRANSIENT_FAILURES,
+    ProviderFailureKind,
+)
 
 
 class RuleNotExecutable(ApplicationError):
@@ -52,14 +56,6 @@ class RemovalRequiresProvider(ApplicationError):
 
 class RemovalRequiresAuthorization(ApplicationError):
     """Deleting projections needs an authorized destination account."""
-
-
-# Failures that only reauthorizing the Connected Account can resolve.
-AUTHORIZATION_FAILURES = frozenset(
-    {ProviderFailureKind.AUTHENTICATION, ProviderFailureKind.AUTHORIZATION}
-)
-# Failures a later attempt can resolve, so they are retried with backoff.
-TRANSIENT_FAILURES = frozenset({ProviderFailureKind.RATE_LIMIT, ProviderFailureKind.TEMPORARY})
 
 
 _FAILURE_SUMMARIES = {

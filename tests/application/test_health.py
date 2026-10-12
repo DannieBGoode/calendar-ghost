@@ -6,16 +6,16 @@ from datetime import datetime, timedelta
 import pytest
 
 from calendar_sync.application.sync.errors import ProviderFailure
-from calendar_sync.application.sync.health import (
-    PROVIDER_INCIDENT_THRESHOLD,
-    FailureResponse,
-    RuleHealth,
-    RuleHealthPolicy,
-)
+from calendar_sync.application.sync.health import RuleHealth
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.health import (
+    PROVIDER_INCIDENT_THRESHOLD,
+    FailureResponse,
+    RuleHealthPolicy,
+)
 from calendar_sync.domain.incidents import (
     IncidentCategory,
     IncidentMessage,
