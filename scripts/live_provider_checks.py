@@ -5,9 +5,11 @@ It needs a running local installation with exactly one Outlook and one Google ac
 and two empty Google calendars the operator creates, named `CG live source` and
 `CG live destination` unless `CALENDAR_GHOST_GOOGLE_SOURCE` and `CALENDAR_GHOST_GOOGLE_DESTINATION`
 name others: the installation's Google grant may not create calendars. Each Outlook
-calendar it needs it creates, named `CG live ...`. It writes only to those, invites only the Google
-test calendars' own addresses, compares every occurrence, and deletes what it made whatever the
-outcome. See docs/development.md, Live provider checks.
+calendar it needs it creates, named `CG live ...`. It writes only to those, notifies nobody (it
+imports invitations rather than sending them, and every other write asks for no notification),
+compares every occurrence, fails on any error answer rather than reading it as an empty calendar,
+and deletes what it made whatever the outcome. Its events fall in the year after the run. See
+docs/development.md, Live provider checks.
 
     set -a; . ./.env; set +a
     CALENDAR_GHOST_URL=http://127.0.0.1:8000 CALENDAR_GHOST_EMAIL=you@example.test \\
@@ -25,7 +27,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
 
 import httpx
@@ -43,7 +45,11 @@ GRAPH = "https://graph.microsoft.com/v1.0"
 PREFIX = "CG live"
 GOOGLE_SOURCE = os.environ.get("CALENDAR_GHOST_GOOGLE_SOURCE", f"{PREFIX} source")
 GOOGLE_DESTINATION = os.environ.get("CALENDAR_GHOST_GOOGLE_DESTINATION", f"{PREFIX} destination")
-WINDOW = ("2026-01-01T00:00:00Z", "2030-01-01T00:00:00Z")
+# Every event falls in the year after the run, so none ages out of a new rule's first window.
+YEAR = date.today().year + 1
+# The last Sunday of October that year, when Madrid's clocks go back: the fold.
+FOLD = max(date(YEAR, 10, day) for day in range(25, 32) if date(YEAR, 10, day).weekday() == 6)
+WINDOW = (f"{YEAR}-01-01T00:00:00Z", f"{YEAR + 2}-01-01T00:00:00Z")
 MADRID, WINDOWS_MADRID = "Europe/Madrid", "W. Europe Standard Time"
 PROPERTY = "String {8EF42533-0AD0-4C67-A411-7FD5CF9F109E} Name CalendarGhostOperation"
 Json = dict[str, Any]
@@ -71,14 +77,21 @@ class Live:
 
     # Outlook -----------------------------------------------------------------------------
 
-    def graph(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+    def graph(
+        self, method: str, path: str, *, allow: tuple[int, ...] = (), **kwargs: Any
+    ) -> httpx.Response:
+        """One Graph request; an error answer raises, unless a probe `allow`s its status, so a
+        refused read can never pass for an empty calendar."""
         url = path if path.startswith("https://") else f"{GRAPH}{path}"
         headers = {
             "Authorization": f"Bearer {self.outlook_token()}",
             "Prefer": 'outlook.timezone="UTC", outlook.body-content-type="text"',
             **kwargs.pop("headers", {}),
         }
-        return httpx.request(method, url, headers=headers, timeout=60, **kwargs)
+        answer = httpx.request(method, url, headers=headers, timeout=60, **kwargs)
+        if answer.status_code >= 400 and answer.status_code not in allow:
+            answer.raise_for_status()
+        return answer
 
     def outlook_calendar(self, name: str) -> str:
         calendar = self.graph("POST", "/me/calendars", json={"name": f"{PREFIX} {name}"})
@@ -113,7 +126,7 @@ class Live:
                     e["subject"],
                     e["isAllDay"],
                 )
-                for e in page.get("value", [])
+                for e in page["value"]
             ]
             url = page.get("@odata.nextLink")
         return sorted(rows)
@@ -142,11 +155,28 @@ class Live:
             raise SystemExit(f"Create one empty Google calendar named {name!r} first.")
         return str(found[0])
 
-    def google_event(self, calendar: str, body: Json, *, deliver: bool = False) -> Json:
+    def google_event(self, calendar: str, body: Json) -> Json:
         self._google_owned(calendar)
-        updates = "all" if deliver else "none"
-        made = self.google.events().insert(calendarId=calendar, body=body, sendUpdates=updates)
+        made = self.google.events().insert(calendarId=calendar, body=body, sendUpdates="none")
         return dict(made.execute())
+
+    def google_invitation(self, calendar: str, title: str, answer: str, when: str) -> Json:
+        """An event the calendar was invited to and answered `answer`, imported as such: an
+        import notifies nobody, and the organizer is a placeholder address."""
+        self._google_owned(calendar)
+        organizer = "organizer@example.test"
+        body = {
+            "summary": title,
+            "iCalUID": f"calendar-ghost-live-{uuid.uuid4().hex}@example.test",
+            "start": google_time(f"{when}T10:00:00"),
+            "end": google_time(f"{when}T11:00:00"),
+            "organizer": {"email": organizer},
+            "attendees": [
+                {"email": calendar, "responseStatus": answer},
+                {"email": organizer, "organizer": True, "responseStatus": "accepted"},
+            ],
+        }
+        return dict(self.google.events().import_(calendarId=calendar, body=body).execute())
 
     def google_patch(self, calendar: str, event_id: str, body: Json) -> None:
         self._google_owned(calendar)
@@ -254,8 +284,11 @@ class Live:
         return rule_id
 
     def sync(self, rule_id: str) -> Json:
+        """One Sync now; a failed run raises, so it can never pass for a run that wrote nothing."""
         answer = self.api.post(f"/api/v1/rules/{rule_id}/sync")
-        return dict(answer.json()) if answer.status_code == 200 else {"status": answer.status_code}
+        if answer.status_code != 200:
+            raise RuntimeError(f"Sync now answered {answer.status_code}: {answer.text[:200]}")
+        return dict(answer.json())
 
     def settle(self, rule_id: str, runs: int = 3) -> Json:
         """Sync until a run writes nothing; the last run's counts."""
@@ -293,7 +326,8 @@ class Live:
 
     def remove(self, rule_id: str, projections: str = "delete") -> Json:
         answer = self.api.delete(f"/api/v1/rules/{rule_id}", params={"projections": projections})
-        if rule_id in self.created_rules and answer.status_code == 200:
+        answer.raise_for_status()
+        if rule_id in self.created_rules:
             self.created_rules.remove(rule_id)
         return dict(answer.json()) if answer.content else {}
 
@@ -312,6 +346,12 @@ def matches(
 
 def writes(counts: Json) -> int:
     return sum(int(counts.get(k) or 0) for k in ("created", "updated", "deleted"))
+
+
+def day_of(instance: Json) -> date:
+    """The day an occurrence Graph listed starts on, in UTC, which is Madrid's day for morning
+    and afternoon occurrences."""
+    return date.fromisoformat(str(instance["start"]["dateTime"])[:10])
 
 
 def outlook_time(local: str, zone: str = WINDOWS_MADRID) -> Json:
@@ -338,67 +378,67 @@ def outlook_kinds(live: Live, calendar: str) -> dict[str, Json]:
     kinds: dict[str, Json] = {
         "single": {
             "subject": "CG single",
-            "start": outlook_time("2027-01-12T10:00:00"),
-            "end": outlook_time("2027-01-12T11:00:00"),
+            "start": outlook_time(f"{YEAR}-01-12T10:00:00"),
+            "end": outlook_time(f"{YEAR}-01-12T11:00:00"),
         },
         "all-day": {
             "subject": "CG all-day",
             "isAllDay": True,
-            "start": outlook_time("2027-01-13T00:00:00"),
-            "end": outlook_time("2027-01-14T00:00:00"),
+            "start": outlook_time(f"{YEAR}-01-13T00:00:00"),
+            "end": outlook_time(f"{YEAR}-01-14T00:00:00"),
         },
         "multi-day": {
             "subject": "CG three days",
             "isAllDay": True,
-            "start": outlook_time("2027-01-14T00:00:00"),
-            "end": outlook_time("2027-01-17T00:00:00"),
+            "start": outlook_time(f"{YEAR}-01-14T00:00:00"),
+            "end": outlook_time(f"{YEAR}-01-17T00:00:00"),
         },
         "zero-length": {
             "subject": "CG reminder",
-            "start": outlook_time("2027-01-15T09:00:00"),
-            "end": outlook_time("2027-01-15T09:00:00"),
+            "start": outlook_time(f"{YEAR}-01-15T09:00:00"),
+            "end": outlook_time(f"{YEAR}-01-15T09:00:00"),
         },
         "unicode": {
             "subject": "CG café 🎉 漢字",
             "location": {"displayName": "Sala ñ"},
-            "start": outlook_time("2027-01-15T12:00:00"),
-            "end": outlook_time("2027-01-15T13:00:00"),
+            "start": outlook_time(f"{YEAR}-01-15T12:00:00"),
+            "end": outlook_time(f"{YEAR}-01-15T13:00:00"),
         },
         "DST fold": {
             "subject": "CG fold",
-            "start": outlook_time("2027-10-31T02:30:00"),
-            "end": outlook_time("2027-10-31T03:00:00"),
+            "start": outlook_time(f"{FOLD}T02:30:00"),
+            "end": outlook_time(f"{FOLD}T03:00:00"),
         },
         "weekly": {
             "subject": "CG weekly",
-            "start": outlook_time("2027-01-04T09:00:00"),
-            "end": outlook_time("2027-01-04T09:30:00"),
-            "recurrence": weekly("monday", "2027-01-04"),
+            "start": outlook_time(f"{YEAR}-01-04T09:00:00"),
+            "end": outlook_time(f"{YEAR}-01-04T09:30:00"),
+            "recurrence": weekly("monday", f"{YEAR}-01-04"),
         },
         "New York daily": {
             "subject": "CG New York",
-            "start": outlook_time("2027-03-08T08:00:00", "Eastern Standard Time"),
-            "end": outlook_time("2027-03-08T08:30:00", "Eastern Standard Time"),
+            "start": outlook_time(f"{YEAR}-03-08T08:00:00", "Eastern Standard Time"),
+            "end": outlook_time(f"{YEAR}-03-08T08:30:00", "Eastern Standard Time"),
             "recurrence": {
                 "pattern": {"type": "daily", "interval": 1},
                 "range": {
                     "type": "numbered",
                     "numberOfOccurrences": 10,
-                    "startDate": "2027-03-08",
+                    "startDate": f"{YEAR}-03-08",
                     "recurrenceTimeZone": "Eastern Standard Time",
                 },
             },
         },
         "day 31": {
             "subject": "CG day 31",
-            "start": outlook_time("2027-01-31T12:00:00"),
-            "end": outlook_time("2027-01-31T12:30:00"),
+            "start": outlook_time(f"{YEAR}-01-31T12:00:00"),
+            "end": outlook_time(f"{YEAR}-01-31T12:30:00"),
             "recurrence": {
                 "pattern": {"type": "absoluteMonthly", "interval": 1, "dayOfMonth": 31},
                 "range": {
                     "type": "numbered",
                     "numberOfOccurrences": 6,
-                    "startDate": "2027-01-31",
+                    "startDate": f"{YEAR}-01-31",
                     "recurrenceTimeZone": WINDOWS_MADRID,
                 },
             },
@@ -413,9 +453,10 @@ def outlook_changes(live: Live, made: dict[str, Json]) -> None:
     live.graph(
         "PATCH",
         f"/me/events/{weekly_series[1]['id']}",
+        # To the next day: an occurrence never moves to or past its neighbour's day.
         json={
-            "start": outlook_time("2027-01-12T15:00:00"),
-            "end": outlook_time("2027-01-12T15:30:00"),
+            "start": outlook_time(f"{day_of(weekly_series[1]) + timedelta(days=1)}T15:00:00"),
+            "end": outlook_time(f"{day_of(weekly_series[1]) + timedelta(days=1)}T15:30:00"),
         },
     )
     live.graph("DELETE", f"/me/events/{weekly_series[2]['id']}")
@@ -423,8 +464,8 @@ def outlook_changes(live: Live, made: dict[str, Json]) -> None:
         "PATCH",
         f"/me/events/{made['weekly']['id']}",
         json={
-            "start": outlook_time("2027-01-04T10:00:00"),
-            "end": outlook_time("2027-01-04T10:30:00"),
+            "start": outlook_time(f"{YEAR}-01-04T10:00:00"),
+            "end": outlook_time(f"{YEAR}-01-04T10:30:00"),
         },
     )
     live.graph(
@@ -436,7 +477,7 @@ def outlook_changes(live: Live, made: dict[str, Json]) -> None:
                 "range": {
                     "type": "numbered",
                     "numberOfOccurrences": 4,
-                    "startDate": "2027-03-08",
+                    "startDate": f"{YEAR}-03-08",
                     "recurrenceTimeZone": "Eastern Standard Time",
                 },
             }
@@ -489,70 +530,45 @@ def outlook_to_outlook(live: Live) -> None:
     )
 
 
-def google_to_outlook(live: Live, google_source: str, google_destination: str) -> None:
+def google_to_outlook(live: Live, google_source: str) -> None:
     scenario = "Google to Outlook"
     destination = live.outlook_calendar("G destination")
-
-    def make(body: Json, *, deliver: bool = False) -> Json:
-        return live.google_event(google_source, body, deliver=deliver)
-
-    make(
+    live.google_event(
+        google_source,
         {
             "summary": "CG single",
-            "start": google_time("2027-02-02T10:00:00"),
-            "end": google_time("2027-02-02T11:00:00"),
-        }
+            "start": google_time(f"{YEAR}-02-02T10:00:00"),
+            "end": google_time(f"{YEAR}-02-02T11:00:00"),
+        },
     )
-    make({"summary": "CG all-day", "start": {"date": "2027-02-03"}, "end": {"date": "2027-02-04"}})
-    weekly_series = make(
+    live.google_event(
+        google_source,
+        {
+            "summary": "CG all-day",
+            "start": {"date": f"{YEAR}-02-03"},
+            "end": {"date": f"{YEAR}-02-04"},
+        },
+    )
+    weekly_series = live.google_event(
+        google_source,
         {
             "summary": "CG weekly",
-            "start": google_time("2027-02-01T09:00:00"),
-            "end": google_time("2027-02-01T09:30:00"),
+            "start": google_time(f"{YEAR}-02-01T09:00:00"),
+            "end": google_time(f"{YEAR}-02-01T09:30:00"),
             "recurrence": ["RRULE:FREQ=WEEKLY;COUNT=6"],
-        }
+        },
     )
-    make(
+    live.google_event(
+        google_source,
         {
             "summary": "CG 5th Monday",
-            "start": google_time("2027-03-29T10:00:00"),
-            "end": google_time("2027-03-29T10:30:00"),
+            "start": google_time(f"{YEAR}-03-29T10:00:00"),
+            "end": google_time(f"{YEAR}-03-29T10:30:00"),
             "recurrence": ["RRULE:FREQ=MONTHLY;BYDAY=5MO"],
-        }
+        },
     )
-    # Invitations from the destination test calendar to the source one, answered by the source.
     for answer in ("accepted", "tentative", "declined", "needsAction"):
-        live.google_event(
-            google_destination,
-            {
-                "summary": f"CG invite {answer}",
-                "start": google_time("2027-02-04T10:00:00"),
-                "end": google_time("2027-02-04T11:00:00"),
-                "attendees": [{"email": google_source}],
-            },
-            deliver=True,
-        )
-    for _ in range(24):
-        invited = {
-            i["summary"]: i
-            for i in live.google_items(google_source)
-            if i.get("summary", "").startswith("CG invite")
-        }
-        if len(invited) == 4:
-            break
-        time.sleep(5)
-    for answer in ("accepted", "tentative", "declined"):
-        item = invited[f"CG invite {answer}"]
-        live.google_patch(
-            google_source,
-            item["id"],
-            {
-                "attendees": [
-                    dict(a, responseStatus=answer) if a.get("self") else a
-                    for a in item["attendees"]
-                ]
-            },
-        )
+        live.google_invitation(google_source, f"CG invite {answer}", answer, f"{YEAR}-02-04")
     rule = live.rule((live.google_account, google_source), (live.outlook_account, destination))
     live.settle(rule)
     titles = {row[2] for row in live.outlook_view(destination)}
@@ -582,10 +598,12 @@ def google_to_outlook(live: Live, google_source: str, google_destination: str) -
         .instances(calendarId=google_source, eventId=weekly_series["id"])
         .execute()["items"]
     )
+    # The second occurrence, moved to the day after the third: past its neighbour.
+    past = datetime.fromisoformat(occurrences[2]["start"]["dateTime"]).date() + timedelta(days=1)
     live.google_patch(
         google_source,
         occurrences[1]["id"],
-        {"start": google_time("2027-02-16T09:00:00"), "end": google_time("2027-02-16T09:30:00")},
+        {"start": google_time(f"{past}T09:00:00"), "end": google_time(f"{past}T09:30:00")},
     )
     live.sync(rule)
     live.check(
@@ -596,13 +614,21 @@ def google_to_outlook(live: Live, google_source: str, google_destination: str) -
     )
     live.policy(rule, privacy_policy="busy_only", sync_all_day_events=False)
     live.settle(rule)
-    titles = {row[2] for row in live.outlook_view(destination)}
+    rows = live.outlook_view(destination)
+    # Every timed event the rule projects, each still there: the blocked occurrence keeps its old
+    # time, and neither the declined invitation nor the series Outlook cannot repeat is shown.
+    timed = [
+        r
+        for r in live.google_view(google_source)
+        if not r[3] and "5th Monday" not in r[2] and "declined" not in r[2]
+    ]
     live.check(
         scenario,
         "Busy-Only and all-day off rewrite every projection",
-        titles <= {"Busy", "Busy (tentative)"}
-        and not any(row[3] for row in live.outlook_view(destination)),
-        sorted(titles),
+        len(rows) == len(timed) > 0
+        and {r[2] for r in rows} <= {"Busy", "Busy (tentative)"}
+        and not any(r[3] for r in rows),
+        f"{len(rows)} projected, {len(timed)} expected, titles {sorted({r[2] for r in rows})}",
     )
     idle = live.sync(rule)
     live.check(scenario, "an idle run writes nothing", writes(idle) == 0, idle)
@@ -654,9 +680,9 @@ def graph_answers(live: Live) -> None:
         calendar,
         {
             "subject": "CG probe",
-            "start": outlook_time("2027-04-05T09:00:00"),
-            "end": outlook_time("2027-04-05T09:30:00"),
-            "recurrence": weekly("monday", "2027-04-05", count=5),
+            "start": outlook_time(f"{YEAR}-04-05T09:00:00"),
+            "end": outlook_time(f"{YEAR}-04-05T09:30:00"),
+            "recurrence": weekly("monday", f"{YEAR}-04-05", count=5),
         },
     )
     occurrences = live.instances(series["id"])
@@ -664,8 +690,8 @@ def graph_answers(live: Live) -> None:
         "PATCH",
         f"/me/events/{occurrences[1]['id']}",
         json={
-            "start": outlook_time("2027-04-12T14:00:00"),
-            "end": outlook_time("2027-04-12T14:30:00"),
+            "start": outlook_time(f"{day_of(occurrences[1])}T14:00:00"),
+            "end": outlook_time(f"{day_of(occurrences[1])}T14:30:00"),
         },
     )
     whole = live.graph(
@@ -709,6 +735,7 @@ def graph_answers(live: Live) -> None:
         f"/me/events/{series['id']}",
         json={"subject": "CG probe v3"},
         headers={"If-Match": f'W/"{stale}"'},
+        allow=(412,),
     )
     live.check(
         scenario,
@@ -720,8 +747,8 @@ def graph_answers(live: Live) -> None:
     body = {
         "subject": "CG probe key",
         "transactionId": key,
-        "start": outlook_time("2027-04-20T09:00:00"),
-        "end": outlook_time("2027-04-20T09:15:00"),
+        "start": outlook_time(f"{YEAR}-04-20T09:00:00"),
+        "end": outlook_time(f"{YEAR}-04-20T09:15:00"),
         "singleValueExtendedProperties": [{"id": PROPERTY, "value": key}],
     }
     first, second = (live.outlook_event(calendar, body) for _ in range(2))
@@ -844,7 +871,7 @@ def main() -> int:
         runs: list[Callable[[], None]] = [
             lambda: graph_answers(live),
             lambda: outlook_to_outlook(live),
-            lambda: google_to_outlook(live, google_source, google_destination),
+            lambda: google_to_outlook(live, google_source),
             lambda: outlook_to_google(live, google_destination),
         ]
         for run in runs:

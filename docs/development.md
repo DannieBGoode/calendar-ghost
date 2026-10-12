@@ -178,8 +178,11 @@ CALENDAR_GHOST_PASSWORD=... .venv/bin/python scripts/live_provider_checks.py
 ```
 
 It creates its own Outlook calendars, named `CG live ...`, writes only to those and the two Google
-calendars, invites only the Google test calendars' own addresses, so nobody is emailed, and deletes
-everything it made, whatever the outcome. In about five minutes it prints one Markdown table:
+calendars, and notifies nobody: invitations are imported with their answers rather than sent, and
+every other write asks for no notification. Its events fall in the year after the run, so the
+checks never age. Any error answer fails the check rather than reading as an empty calendar, and
+it deletes everything it made, whatever the outcome, warning about anything it could not delete.
+In about five minutes it prints one Markdown table:
 
 - Graph v1.0: the behaviors ADR 0034 relies on, such as exceptions listed with their attendees,
   `If-Match` on PATCH, a repeated `transactionId`, and the extended-property filter.
