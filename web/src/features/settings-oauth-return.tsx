@@ -27,7 +27,7 @@ export function OAuthReturnStep({ help }: { help: OAuthReturn }) {
       <div>
         <h3 id={headingId}>{t("settings.oauthReturn.step.title", names)}</h3>
         <p>{rich(t("settings.oauthReturn.step.body", { ...names, origin: redirectOrigin }), { code: codeTag })}</p>
-        <OAuthReturnForm redirectUri={mismatch.redirectUri} provider={names.provider} />
+        <OAuthReturnForm mismatches={[mismatch]} />
       </div>
       <Button variant="ghost" onClick={help.dismiss}>
         {t("settings.oauthReturn.step.dismiss")}
@@ -36,52 +36,47 @@ export function OAuthReturnStep({ help }: { help: OAuthReturn }) {
   )
 }
 
-/** Mismatches by the address they return to, in the order their providers are listed. */
-function byOrigin(mismatches: readonly OAuthMismatch[]): OAuthMismatch[][] {
-  const groups = new Map<string, OAuthMismatch[]>()
-  for (const mismatch of mismatches) {
-    groups.set(mismatch.redirectOrigin, [...(groups.get(mismatch.redirectOrigin) ?? []), mismatch])
-  }
-  return [...groups.values()]
-}
-
 /**
- * A quiet note for each address providers return to instead of this one, naming every provider
- * that does, with a way to finish for each and the permanent fix.
+ * One quiet note for every provider that returns somewhere other than this address: where each
+ * returns, one field that finishes any of them, and the permanent fix.
  */
 export function OAuthReturnNote({ help, className }: { help: OAuthReturn; className?: string }) {
-  if (help.awaiting) return null
-  return (
-    <>
-      {byOrigin(help.mismatches).map((group) => (
-        <OAuthReturnGroup key={group[0]?.redirectOrigin} group={group} className={className} />
-      ))}
-    </>
-  )
-}
-
-function OAuthReturnGroup({ group, className }: { group: OAuthMismatch[]; className?: string | undefined }) {
   const i18n = useI18n()
   const { t } = i18n
-  const origin = group[0]?.redirectOrigin ?? ""
-  const named = group.map((mismatch) => ({
+  const { mismatches } = help
+  const [first] = mismatches
+  if (help.awaiting || !first) return null
+  const named = mismatches.map((mismatch) => ({
     mismatch,
     name: providerDisplayName(i18n, mismatch.provider.kind, [mismatch.provider]),
   }))
-  const words = { origin, count: group.length, provider: i18n.format.list(named.map(({ name }) => name)) }
+  // One installation usually answers at one address, so providers that disagree deserve a look.
+  const apart = mismatches.some((mismatch) => mismatch.redirectOrigin !== first.redirectOrigin)
+  const words = {
+    origin: first.redirectOrigin,
+    count: mismatches.length,
+    provider: i18n.format.list(named.map(({ name }) => name)),
+  }
   return (
     <details className={cn("inline-help", className)}>
       <summary>
         <Info aria-hidden="true" />
-        <span>{rich(t("settings.oauthReturn.note.summary", words), { code: codeTag })}</span>
+        <span>{rich(t(apart ? "settings.oauthReturn.note.summaryApart" : "settings.oauthReturn.note.summary", words), { code: codeTag })}</span>
         <ChevronDown className="inline-help-chevron" aria-hidden="true" />
       </summary>
       <div className="inline-help-body">
-        <p>{t("settings.oauthReturn.note.body", { count: group.length })}</p>
-        {named.map(({ mismatch, name }) => (
-          <OAuthReturnForm key={mismatch.provider.kind} redirectUri={mismatch.redirectUri} provider={name} />
-        ))}
-        <p>{rich(t("settings.oauthReturn.note.fix", words), { code: codeTag })}</p>
+        {apart && (
+          <ul className="oauth-return-origins">
+            {named.map(({ mismatch, name }) => (
+              <li key={mismatch.provider.kind}>
+                {rich(t("settings.oauthReturn.note.origin", { provider: name, origin: mismatch.redirectOrigin }), { code: codeTag })}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p>{t("settings.oauthReturn.note.body")}</p>
+        <OAuthReturnForm mismatches={mismatches} />
+        <p>{rich(t(apart ? "settings.oauthReturn.note.fixApart" : "settings.oauthReturn.note.fix", words), { code: codeTag })}</p>
       </div>
     </details>
   )
@@ -97,22 +92,30 @@ export function OAuthReturnHelp({ providers }: { providers: readonly CalendarPro
   )
 }
 
-function OAuthReturnForm({ redirectUri, provider }: { redirectUri: string; provider: string }) {
-  const { t } = useI18n()
+/** The field that finishes a connection from the address a provider returned to; the address names its provider. */
+function OAuthReturnForm({ mismatches }: { mismatches: readonly OAuthMismatch[] }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const fieldId = useId()
   const [pasted, setPasted] = useState("")
   const [invalid, setInvalid] = useState(false)
+  const [only] = mismatches
+  const words = {
+    count: mismatches.length,
+    provider: only ? providerDisplayName(i18n, only.provider.kind, [only.provider]) : "",
+    start: `${only?.redirectUri ?? ""}?`,
+  }
   return (
     <form
       className="oauth-return-form"
       onSubmit={(event) => {
         event.preventDefault()
-        const target = oauthReturnAtCurrentOrigin(pasted, redirectUri, window.location.origin)
+        const target = firstReturn(pasted, mismatches, window.location.origin)
         setInvalid(target === null)
         if (target) window.location.assign(target)
       }}
     >
-      <Label htmlFor={fieldId}>{t("settings.oauthReturn.form.label", { provider })}</Label>
+      <Label htmlFor={fieldId}>{t("settings.oauthReturn.form.label", words)}</Label>
       <div className="oauth-return-row">
         <Input
           id={fieldId}
@@ -121,7 +124,6 @@ function OAuthReturnForm({ redirectUri, provider }: { redirectUri: string; provi
             setPasted(event.target.value)
             setInvalid(false)
           }}
-          placeholder={t("settings.oauthReturn.form.placeholder", { redirectUri })}
           aria-invalid={invalid}
           aria-describedby={invalid ? `${fieldId}-error` : undefined}
           autoComplete="off"
@@ -134,9 +136,18 @@ function OAuthReturnForm({ redirectUri, provider }: { redirectUri: string; provi
       </div>
       {invalid && (
         <p id={`${fieldId}-error`} className="field-error" role="alert">
-          {rich(t("settings.oauthReturn.form.invalid", { provider, start: `${redirectUri}?` }), { code: codeTag })}
+          {rich(t("settings.oauthReturn.form.invalid", words), { code: codeTag })}
         </p>
       )}
     </form>
   )
+}
+
+/** The pasted address moved to this origin, for whichever provider it returned from. */
+function firstReturn(pasted: string, mismatches: readonly OAuthMismatch[], currentOrigin: string): string | null {
+  for (const { redirectUri } of mismatches) {
+    const target = oauthReturnAtCurrentOrigin(pasted, redirectUri, currentOrigin)
+    if (target) return target
+  }
+  return null
 }
