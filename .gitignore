@@ -26,3 +26,6 @@ site/.astro/
 site/.wrangler/
 site/test-results/
 site/playwright-report/
+
+# Local design-tool state; DESIGN.md is the design system.
+.impeccable/
