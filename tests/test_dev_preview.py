@@ -80,7 +80,7 @@ def test_preview_seeds_only_its_own_database_with_a_read_only_calendar(tmp_path:
         rules = connection.execute(
             "SELECT COUNT(*) FROM sync_rules WHERE user_id = ?", (preview_user(database).value,)
         ).fetchone()[0]
-        # Sam's three rules; Robin keeps his own.
+        # Sam's three rules; Robin keeps their own.
         assert rules == 3
 
 
@@ -172,7 +172,7 @@ def test_preview_people_show_each_users_own_verdict(tmp_path: Path, scenario: Sc
         health = client.get("/api/v1/installation/health").json()["users"]
 
     assert overview == own == scenario.value
-    # Robin is here too, healthy unless the scenario breaks his rule.
+    # Robin is here too, healthy unless the scenario breaks their rule.
     expected = {scenario.value: 1, "healthy": 1}
     expected[scenario.value] = 2 if scenario is Scenario.HEALTHY else 1
     assert health == expected
@@ -215,15 +215,38 @@ def test_preview_incidents_carry_messages_and_one_keeps_only_its_summary(tmp_pat
     }
 
 
+def test_preview_offers_both_providers_and_a_mixed_rule(tmp_path: Path) -> None:
+    container = build_preview_container(tmp_path / "dev-preview.db", NOW)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
+        providers = client.get("/api/v1/providers").json()
+        accounts = client.get("/api/v1/accounts").json()
+        rules = client.get("/api/v1/rules").json()
+        connect = client.get("/api/v1/oauth/microsoft/start", follow_redirects=False)
+
+    assert [provider["kind"] for provider in providers] == ["google", "outlook"]
+    # Connecting stays in the preview: it returns to Settings and connects nothing.
+    assert (connect.status_code, connect.headers["location"]) == (302, "/settings/connections")
+    kinds = {account["id"]: account["provider"] for account in accounts}
+    assert sorted(kinds.values()) == ["google", "google", "outlook"]
+    mixed = next(rule for rule in rules if rule["id"] == "preview-personal-work")
+    assert [kinds[mixed[end]["connected_account_id"]] for end in ("source", "destination")] == [
+        "google",
+        "outlook",
+    ]
+
+
 @pytest.mark.parametrize(
-    ("scenario", "cause", "hint"),
+    ("scenario", "cause", "hint", "provider"),
     [
-        (Scenario.API_DISABLED, "api_disabled", "shared_cause"),
-        (Scenario.ACCESS_REVOKED, "access_revoked", "testing_mode"),
+        (Scenario.API_DISABLED, "api_disabled", "shared_cause", "google"),
+        (Scenario.ACCESS_REVOKED, "access_revoked", "testing_mode", "google"),
+        (Scenario.OUTLOOK_CLIENT, "oauth_client_invalid", "shared_cause", "outlook"),
     ],
 )
 def test_preview_shows_a_cause_two_people_share(
-    tmp_path: Path, scenario: Scenario, cause: str, hint: str
+    tmp_path: Path, scenario: Scenario, cause: str, hint: str, provider: str
 ) -> None:
     container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=scenario)
 
@@ -234,11 +257,12 @@ def test_preview_shows_a_cause_two_people_share(
         client.post("/api/v1/session", json={"email": ROBIN_EMAIL, "password": PREVIEW_PASSWORD})
         robins = client.get("/api/v1/status").json()
 
-    assert [(each["kind"], each["cause"], each["users"]) for each in health["hints"]] == [
-        (hint, cause, 2)
-    ]
+    assert [
+        (each["kind"], each["cause"], each["users"], each["provider"]) for each in health["hints"]
+    ] == [(hint, cause, 2, provider)]
     assert people["total"] == 2
-    assert {p["cause"] for p in robins["problems"] if p["kind"] == "stopped"} == {cause}
+    stopped = [p for p in robins["problems"] if p["kind"] == "stopped"]
+    assert {(p["cause"], p["provider"]) for p in stopped} == {(cause, provider)}
 
 
 def test_preview_signs_in_with_a_simple_local_login(tmp_path: Path) -> None:
@@ -268,7 +292,7 @@ def test_robin_signs_in_to_every_scenario_but_a_new_installation(
         robins = client.get("/api/v1/status").json()["status"]
 
     assert signed_in.status_code == 200
-    shared = scenario in {Scenario.API_DISABLED, Scenario.ACCESS_REVOKED}
+    shared = scenario in {Scenario.API_DISABLED, Scenario.ACCESS_REVOKED, Scenario.OUTLOOK_CLIENT}
     assert robins == ("stopped" if shared else "healthy")
 
 

@@ -5,7 +5,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Thread
-from typing import Any, cast, get_args
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
@@ -31,6 +31,10 @@ from calendar_sync.application.sync.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.application.sync.preview import PreviewSyncRule
+from calendar_sync.application.sync.provider_descriptors import (
+    ProviderDescriptor,
+    ProviderDirectory,
+)
 from calendar_sync.application.sync.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncRunResult
@@ -43,9 +47,10 @@ from calendar_sync.bootstrap.container import (
     build_container,
     compose,
 )
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
-from calendar_sync.domain.incidents import IncidentCategory, IncidentReport, IncidentStep
+from calendar_sync.domain.incidents import IncidentCategory, IncidentReport
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -74,16 +79,17 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, discovered_calendar
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence import activity_queries
 from calendar_sync.infrastructure.persistence.accounts import SqliteUserConnectedAccounts
+from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.providers.routing import RoutingAccountCalendars
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
-from calendar_sync.interfaces.api.schemas import IncidentCategoryValue, IncidentStepValue
 from tests.fake_calendar import FakeCalendars, FixedClock
 from tests.helpers import (
     RecentSchedulerHeartbeat,
@@ -111,8 +117,10 @@ from tests.users import (
 
 def _google(adapters: Adapters) -> GoogleOAuthService:
     """The installation's Google OAuth service, for replacing its calls to Google."""
-    assert isinstance(adapters.authorization, GoogleOAuthService)
-    return adapters.authorization
+    descriptor = adapters.providers.of(ProviderKind.GOOGLE)
+    assert descriptor is not None
+    assert isinstance(descriptor.calendars, GoogleOAuthService)
+    return descriptor.calendars
 
 
 def _account_store(adapters: Adapters) -> SqliteUserConnectedAccounts:
@@ -150,6 +158,7 @@ def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
             "lapsed_accounts": 0,
             "sync_rules": 0,
             "enabled_rules": 0,
+            "running_rules": 0,
             "stopped_rules": 0,
             "open_incidents": 0,
             "last_synced_at": None,
@@ -316,11 +325,20 @@ def test_incidents_page_on_and_open_one_at_a_time_with_their_next_step(
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
-                cause, user_id
-            ) VALUES (?, ?, NULL, ?, 'open', 'Synthetic', ?, ?, ?, ?)
+                cause, user_id, provider
+            ) VALUES (?, ?, NULL, ?, 'open', 'Synthetic', ?, ?, ?, ?, ?)
             """,
             [
-                ("waiting", "k1", "rate_limit", "2026-09-02", "2026-09-02", "rate_limited", owner),
+                (
+                    "waiting",
+                    "k1",
+                    "rate_limit",
+                    "2026-09-02",
+                    "2026-09-02",
+                    "rate_limited",
+                    owner,
+                    "outlook",
+                ),
                 (
                     "revoked",
                     "k2",
@@ -329,6 +347,7 @@ def test_incidents_page_on_and_open_one_at_a_time_with_their_next_step(
                     "2026-09-01",
                     "access_revoked",
                     owner,
+                    "google",
                 ),
             ],
         )
@@ -340,19 +359,15 @@ def test_incidents_page_on_and_open_one_at_a_time_with_their_next_step(
         one = client.get("/api/v1/incidents/revoked")
         missing = client.get("/api/v1/incidents/missing")
 
-    assert (first["id"], first["step"]) == ("waiting", "wait")
-    assert (second["id"], second["step"]) == ("revoked", "reauthorize")
+    assert (first["id"], first["step"], first["provider"]) == ("waiting", "wait", "outlook")
+    assert (second["id"], second["step"], second["provider"]) == (
+        "revoked",
+        "reauthorize",
+        "google",
+    )
     assert one.json()["step"] == "reauthorize"
     assert missing.status_code == 404
     assert missing.json()["code"] == "incident_not_found"
-
-
-def test_the_api_offers_every_next_step_the_domain_decides() -> None:
-    assert set(get_args(IncidentStepValue)) == {step.value for step in IncidentStep}
-
-
-def test_the_api_names_every_incident_category_the_domain_knows() -> None:
-    assert set(get_args(IncidentCategoryValue)) == {category.value for category in IncidentCategory}
 
 
 def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: Path) -> None:
@@ -496,6 +511,91 @@ def test_google_configuration_reports_redirect_uri_to_administrators(tmp_path: P
         "configured": True,
         "redirect_uri": "http://localhost:18000/api/v1/oauth/google/callback",
     }
+
+
+def test_providers_lists_each_configured_provider_and_how_to_connect_it(tmp_path: Path) -> None:
+    configured = Settings(
+        tmp_path / "configured.db",
+        master_key=CredentialCipher.generate_key(),
+        google_client_id="synthetic-client",
+        google_client_secret="synthetic-secret",
+        google_redirect_uri="http://localhost:18000/api/v1/oauth/google/callback",
+    )
+    without_client = Settings(tmp_path / "plain.db", master_key=CredentialCipher.generate_key())
+
+    with TestClient(create_app(build_container(configured))) as client:
+        anonymous = client.get("/api/v1/providers")
+        sign_in(client)
+        providers = client.get("/api/v1/providers").json()
+    with TestClient(create_app(build_container(without_client))) as client:
+        sign_in(client)
+        none = client.get("/api/v1/providers").json()
+
+    assert anonymous.status_code == 401
+    assert providers == [
+        {
+            "kind": "google",
+            "display_name": "Google",
+            "connect_url": "/api/v1/oauth/google/start",
+            "redirect_uri": "http://localhost:18000/api/v1/oauth/google/callback",
+            "cause_anchors": {
+                "api_disabled": "the-google-calendar-api-is-turned-off",
+                "quota_exceeded": "the-google-cloud-projects-daily-quota-is-used-up",
+                "oauth_client_invalid": "google-no-longer-accepts-the-oauth-client",
+                "access_revoked": "google-no-longer-accepts-your-google-account",
+                "calendar_forbidden": "your-google-account-may-not-change-the-calendar",
+                "calendar_not_found": "the-calendar-no-longer-exists",
+                "rate_limited": "google-is-slowing-calendar-ghost-down",
+                "temporary": "google-is-slowing-calendar-ghost-down",
+                "unknown": "google-refused-for-a-reason-calendar-ghost-does-not-recognize",
+            },
+        }
+    ]
+    assert none == []
+
+
+def test_without_microsoft_settings_no_microsoft_provider_is_listed(tmp_path: Path) -> None:
+    settings = Settings(
+        tmp_path / "test.db",
+        master_key=CredentialCipher.generate_key(),
+        google_client_id="synthetic-client",
+        google_client_secret="synthetic-secret",
+    )
+
+    with TestClient(create_app(build_container(settings))) as client:
+        sign_in(client)
+        listed = client.get("/api/v1/providers").json()
+        start = client.get("/api/v1/oauth/microsoft/start", follow_redirects=False)
+
+    assert [provider["kind"] for provider in listed] == ["google"]
+    assert (start.status_code, start.json()["code"]) == (503, "authorization_not_configured")
+
+
+def test_a_connection_flow_no_provider_offers_is_not_found(tmp_path: Path) -> None:
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+
+    with TestClient(app) as client:
+        sign_in(client)
+        start = client.get("/api/v1/oauth/unknown/start", follow_redirects=False)
+        callback = client.get(
+            "/api/v1/oauth/unknown/callback?state=s&code=c", follow_redirects=False
+        )
+
+    assert (start.status_code, start.json()["code"]) == (404, "provider_not_found")
+    assert (callback.status_code, callback.json()["code"]) == (404, "provider_not_found")
+
+
+def test_starting_an_unconfigured_providers_flow_says_it_is_not_configured(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    app = create_app(build_container(settings))
+
+    with TestClient(app) as client:
+        sign_in(client)
+        start = client.get("/api/v1/oauth/google/start", follow_redirects=False)
+
+    assert (start.status_code, start.json()["code"]) == (503, "authorization_not_configured")
 
 
 def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> None:
@@ -925,7 +1025,7 @@ def test_an_access_check_google_refuses_lapses_the_account_and_one_it_passes_res
     assert failed.status_code == 424
     assert (failed.json()["code"], failed.json()["params"]) == (
         "account_access_check_failed",
-        {"reason": "authentication"},
+        {"reason": "authentication", "provider": "google"},
     )
     assert [item["authorization_lapsed_at"] is not None for item in lapsed] == [False, True]
     assert passed.json()["rules_resumed"] == 1
@@ -1082,6 +1182,32 @@ def test_discovered_calendars_report_googles_original_access_role(
     ]
 
 
+def test_a_calendar_listing_the_provider_refuses_asks_to_reauthorize(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    google = _google(adapters)
+    _connect_accounts(tmp_path / "test.db", "account-1")
+    refused = AccountAccessCheckFailed(
+        "Google authorization has expired; reauthorize this account",
+        ProviderFailureKind.AUTHENTICATION,
+    )
+    monkeypatch.setattr(google, "calendars", Mock(side_effect=refused))
+
+    with TestClient(create_app(container)) as client:
+        sign_in(client)
+        response = client.get("/api/v1/accounts/account-1/calendars")
+        accounts = client.get("/api/v1/accounts").json()
+
+    # Not a server error: the account lapses and the answer says to reauthorize it.
+    assert response.status_code == 424
+    assert response.json()["code"] == "account_access_check_failed"
+    assert response.json()["params"] == {"reason": "authentication", "provider": "google"}
+    assert [item["authorization_lapsed_at"] is not None for item in accounts] == [True]
+
+
 @pytest.mark.parametrize(
     ("failure", "expected_status", "expected_code"),
     [
@@ -1136,10 +1262,17 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
 
     assert response.status_code == 303
     assert response.headers["location"] == (
-        f"/settings/connections?google=connected&account={account.id.value}&resumed=0"
+        f"/settings/connections?oauth=connected&provider=google&account={account.id.value}&resumed=0"
     )
     # The signed-in User completes only a flow they began.
     complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
+
+
+def _begin(tmp_path: Path, owner: UserId) -> None:
+    """Begin a flow for `owner` under the state the callbacks below return with."""
+    SqliteAuthorizationStates(tmp_path / "test.db").store(
+        "synthetic-state", owner, ProviderKind.GOOGLE
+    )
 
 
 def _refuse_code_exchange(google: GoogleOAuthService, monkeypatch: pytest.MonkeyPatch) -> Mock:
@@ -1150,7 +1283,8 @@ def _refuse_code_exchange(google: GoogleOAuthService, monkeypatch: pytest.Monkey
 
 
 CALLBACK = "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code"
-AUTHORIZATION_FAILED = "/settings/connections?google=authorization_failed"
+AUTHORIZATION_FAILED = "/settings/connections?oauth=authorization_failed&provider=google"
+PERMISSION_REQUIRED = "/settings/connections?oauth=calendar_permission_required&provider=google"
 
 
 def test_google_oauth_callback_without_a_session_exchanges_nothing(
@@ -1161,7 +1295,7 @@ def test_google_oauth_callback_without_a_session_exchanges_nothing(
     )
     google = _google(adapters)
     owner = administrator(adapters)
-    google._states.store("synthetic-state", owner)
+    _begin(tmp_path, owner)
     flow = _refuse_code_exchange(google, monkeypatch)
 
     with TestClient(create_app(container)) as client:
@@ -1184,7 +1318,7 @@ def test_google_oauth_callback_refuses_a_browser_signed_in_as_another_user(
     google = _google(adapters)
     victim = administrator(adapters)
     attacker = add_user(database, OTHER_USER, role="user")
-    google._states.store("synthetic-state", attacker)
+    _begin(tmp_path, attacker)
     flow = _refuse_code_exchange(google, monkeypatch)
 
     with TestClient(create_app(container)) as client:
@@ -1198,7 +1332,12 @@ def test_google_oauth_callback_refuses_a_browser_signed_in_as_another_user(
     assert adapters.accounts(attacker).list() == ()
     assert adapters.accounts(victim).list() == ()
     # The state is used up, so its User cannot finish the flow with the code later.
-    assert google._states.consume("synthetic-state") is None
+    assert (
+        SqliteAuthorizationStates(tmp_path / "test.db").consume(
+            "synthetic-state", ProviderKind.GOOGLE
+        )
+        is None
+    )
 
 
 def test_google_oauth_callback_refuses_a_disabled_user(
@@ -1211,7 +1350,7 @@ def test_google_oauth_callback_refuses_a_disabled_user(
     google = _google(adapters)
     administrator(adapters)
     owner = add_user(database, OTHER_USER, role="user")
-    google._states.store("synthetic-state", owner)
+    _begin(tmp_path, owner)
     session = session_for(database, owner)
     with sqlite3.connect(database) as connection:
         connection.execute("UPDATE users SET state = 'disabled' WHERE id = ?", (owner.value,))
@@ -1307,8 +1446,7 @@ def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Pa
     container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    google = _google(adapters)
-    google._states.store("synthetic-state", administrator(adapters))
+    _begin(tmp_path, administrator(adapters))
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -1324,7 +1462,8 @@ def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Pa
 
     assert response.status_code == 303
     assert (
-        response.headers["location"] == "/settings/connections?google=calendar_permission_required"
+        response.headers["location"]
+        == "/settings/connections?oauth=calendar_permission_required&provider=google"
     )
     assert repeated.status_code == 400
 
@@ -1333,8 +1472,7 @@ def test_google_oauth_non_permission_error_returns_to_settings(tmp_path: Path) -
     container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    google = _google(adapters)
-    google._states.store("synthetic-state", administrator(adapters))
+    _begin(tmp_path, administrator(adapters))
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -1345,7 +1483,10 @@ def test_google_oauth_non_permission_error_returns_to_settings(tmp_path: Path) -
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings/connections?google=authorization_failed"
+    assert (
+        response.headers["location"]
+        == "/settings/connections?oauth=authorization_failed&provider=google"
+    )
 
 
 def test_google_oauth_callback_requires_an_authorization_result(tmp_path: Path) -> None:
@@ -1386,7 +1527,8 @@ def test_google_oauth_missing_calendar_permission_returns_to_settings(
 
     assert response.status_code == 303
     assert (
-        response.headers["location"] == "/settings/connections?google=calendar_permission_required"
+        response.headers["location"]
+        == "/settings/connections?oauth=calendar_permission_required&provider=google"
     )
     complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
 
@@ -1410,7 +1552,10 @@ def test_google_oauth_completion_failure_returns_to_settings(
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings/connections?google=authorization_failed"
+    assert (
+        response.headers["location"]
+        == "/settings/connections?oauth=authorization_failed&provider=google"
+    )
     complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
 
 
@@ -1805,6 +1950,42 @@ def test_sync_and_reconcile_now_report_a_rule_that_is_not_enabled(tmp_path: Path
     assert reconciled.status_code == 409
 
 
+def test_sync_and_reconcile_now_answer_a_failed_run_as_the_providers_failure(
+    tmp_path: Path,
+) -> None:
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    with _units(adapters)() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        uow.commit()
+    failure = ProviderFailure(
+        ProviderFailureKind.TEMPORARY, "Outlook did not list the exceptions of a series"
+    )
+
+    def failed_run(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> None:
+        raise failure
+
+    container = _with_services(
+        container,
+        execute_sync_rule=Mock(execute=Mock(side_effect=failure)),
+        reconcile_now=replace(
+            _reconcile_now(container),
+            synchronize=cast(ExecuteSyncRule, _sync_stand_in(failed_run)),
+        ),
+    )
+
+    with TestClient(create_app(container)) as client:
+        sign_in(client)
+        synced = client.post("/api/v1/rules/rule-1/sync")
+        reconciled = client.post("/api/v1/rules/rule-1/reconcile")
+
+    for answer in (synced, reconciled):
+        assert answer.status_code == 424
+        assert answer.json()["code"] == "provider_failed"
+        assert answer.json()["params"]["kind"] == "temporary"
+
+
 def _sync_stand_in(execute: object) -> Mock:
     """A full pass for Reconcile Now, with the locks and clock it reports its work through."""
     return Mock(execute=execute, locks=RuleLocks(), clock=FixedClock())
@@ -1865,6 +2046,7 @@ def test_reconcile_now_reports_conflicts_apart_from_drift_and_lists_them_as_bloc
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=adapters.locks,
     )
     synchronize.execute(rule().id)
     # The source is gone for good, so the full pass blocks its projection; the check that
@@ -1883,6 +2065,7 @@ def test_reconcile_now_reports_conflicts_apart_from_drift_and_lists_them_as_bloc
         ReconciliationService(fingerprinter),
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=adapters.locks,
     )
     container = _with_services(container, reconcile_now=ReconcileNow(synchronize, reconcile))
 
@@ -1976,9 +2159,10 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
         ),
     )
 
-    with TestClient(create_app(container), raise_server_exceptions=False) as client:
+    with TestClient(create_app(container)) as client:
         sign_in(client)
-        assert client.post("/api/v1/rules/rule-1/reconcile").status_code >= 500
+        # The provider's failure is answered as such, never as a server error.
+        assert client.post("/api/v1/rules/rule-1/reconcile").status_code == 424
         incidents = client.get("/api/v1/incidents").json()
 
     assert [(item["rule_id"], item["state"]) for item in incidents] == [("rule-1", "open")]
@@ -2012,6 +2196,7 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
                 datetime(2026, 9, 28, 10, 0, tzinfo=UTC),
                 succeeded=False,
                 failure_kind=ProviderFailureKind.RATE_LIMIT,
+                failure_provider=ProviderKind.OUTLOOK,
             )
         )
         uow.commit()
@@ -2031,6 +2216,8 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
     assert dashboard["needs_attention"] is False
     assert rules["rule-1"]["last_sync"]["created"] == 2
     assert rules["rule-2"]["last_sync"]["failure_kind"] == "rate_limit"
+    assert rules["rule-2"]["last_sync"]["failure_provider"] == "outlook"
+    assert rules["rule-1"]["last_sync"]["failure_provider"] is None
 
 
 def test_rules_report_work_running_for_them_so_a_reloaded_page_can_show_it(
@@ -2991,6 +3178,7 @@ def test_preview_reports_recurring_series_and_planned_actions(tmp_path: Path) ->
         EventProjector(),
         FixedClock(),
         SyncDecisionService(EventProjector(), fingerprinter),
+        locks=adapters.locks,
     )
 
     with TestClient(create_app(_with_services(container, preview_sync_rule=preview))) as client:
@@ -3115,7 +3303,13 @@ def test_calendars_of_a_provider_this_installation_has_not_configured_are_unavai
     settings = Settings(database, master_key=CredentialCipher.generate_key())
     _, adapters = _installation(settings)
     store = _account_store(adapters)
-    unconfigured = replace(adapters, account_calendars=RoutingAccountCalendars(store, {}))
+    # The provider's descriptor names it, though it offers no adapters.
+    unconfigured = replace(
+        adapters,
+        account_calendars=RoutingAccountCalendars.of(
+            store, ProviderDirectory((ProviderDescriptor(GOOGLE),))
+        ),
+    )
     container = replace(compose(settings, unconfigured), scheduler=None)
     _connect_accounts(database, "account-1")
 

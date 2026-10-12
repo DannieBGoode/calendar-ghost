@@ -63,5 +63,6 @@ def _incident_response(incident: IncidentSummary) -> IncidentResponse:
         message=message_response(incident.message),
         cause=incident.cause.value if incident.cause else None,
         step=step.value if step else None,
+        provider=incident.provider.value if incident.provider else None,
         cursor=incident.cursor,
     )

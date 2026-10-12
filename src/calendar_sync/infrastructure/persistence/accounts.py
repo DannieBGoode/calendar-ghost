@@ -13,9 +13,9 @@ from calendar_sync.application.sync.errors import (
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.connections import transaction
-from calendar_sync.infrastructure.scheduling import SystemClock
 from calendar_sync.infrastructure.security import CredentialCipher
 
 _ACCOUNT_COLUMNS = (

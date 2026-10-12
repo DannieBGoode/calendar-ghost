@@ -232,6 +232,11 @@ class SyncRuleState(StrEnum):
     REMOVING = "disabled"
 
 
+_PREVIEWABLE = frozenset({SyncRuleState.DRAFT, SyncRuleState.PAUSED, SyncRuleState.DEGRADED})
+# States that could still write, or be enabled, without a disconnected account's authorization.
+_DEGRADED_ON_DISCONNECT = frozenset({SyncRuleState.PREVIEWED, SyncRuleState.ENABLED})
+
+
 @dataclass(frozen=True, slots=True)
 class TransformationPolicy:
     content: ProjectionContent = ProjectionContent.BUSY_ONLY
@@ -406,12 +411,31 @@ class SyncRule:
     def material_signature(self) -> tuple[object, ...]:
         return (self.source, self.destination, self.transformation, self.initial_lookback_days)
 
+    @property
+    def synchronizes(self) -> bool:
+        """Whether Sync Runs may execute the rule; only an Enabled Rule synchronizes."""
+        return self.state is SyncRuleState.ENABLED
+
+    @property
+    def can_preview(self) -> bool:
+        """Whether a Rule Preview may validate the rule in its current state."""
+        return self.state in _PREVIEWABLE
+
+    @property
+    def stopped_by_lapsed_authorization(self) -> bool:
+        """Degraded only by Lapsed Authorization, so it resumes without a preview (ADR 0027)."""
+        return self.state is SyncRuleState.DEGRADED and self.awaiting_reauthorization
+
+    def eligible(self, event: CalendarEvent) -> bool:
+        """Whether the rule projects a source event: a Native Event, not cancelled, that its
+        Transformation Policy does not exclude.
+
+        A Sync Run makes the same decision in `SyncDecisionService.decide`, which also says why.
+        """
+        return event.managed_origin is None and self.transformation.projects(event)
+
     def mark_previewed(self) -> Self:
-        if self.state not in {
-            SyncRuleState.DRAFT,
-            SyncRuleState.PAUSED,
-            SyncRuleState.DEGRADED,
-        }:
+        if not self.can_preview:
             raise InvalidStateTransition(f"cannot validate a rule in state {self.state}")
         return replace(self, state=SyncRuleState.PREVIEWED, awaiting_reauthorization=False)
 
@@ -435,7 +459,7 @@ class SyncRule:
 
     def resume_after_reauthorization(self) -> Self:
         """Return a rule stopped only by Lapsed Authorization to scheduled synchronization."""
-        if self.state is not SyncRuleState.DEGRADED or not self.awaiting_reauthorization:
+        if not self.stopped_by_lapsed_authorization:
             raise InvalidStateTransition(
                 "only a rule stopped by lapsed authorization resumes without a preview"
             )
@@ -444,6 +468,18 @@ class SyncRule:
     def require_preview(self) -> Self:
         """A stopped rule whose recovery now needs a preview, whatever stopped it first."""
         return replace(self, awaiting_reauthorization=False)
+
+    def on_account_disconnected(self) -> Self:
+        """The rule once one of its Connected Accounts is disconnected; itself if unchanged.
+
+        A rule that could still write, or be enabled, stops. Disconnecting is a deliberate stop,
+        so a rule stopped by Lapsed Authorization needs a preview to recover.
+        """
+        if self.state in _DEGRADED_ON_DISCONNECT:
+            return self.degrade()
+        if self.awaiting_reauthorization:
+            return self.require_preview()
+        return self
 
     def change_policy(self, transformation: TransformationPolicy) -> Self:
         """Apply a Material Rule Change; the rule must pass a new Rule Preview afterwards."""
@@ -591,6 +627,17 @@ class SyncReason(StrEnum):
     SERIES_WITHOUT_OCCURRENCES = "series_without_occurrences"
     SERIES_WITHOUT_OCCURRENCES_REMOVED = "series_without_occurrences_removed"
     PROJECTION_UNMAPPED = "projection_unmapped"
+    PROJECTION_UNSUPPORTED = "projection_unsupported"
+    """The destination's provider cannot repeat the projection exactly, such as its recurrence or
+    time zone, so nothing was written."""
+    OCCURRENCE_PAST_NEIGHBOUR = "occurrence_past_neighbour"
+    """The destination cannot move an occurrence to or past a neighbouring occurrence's day."""
+    OCCURRENCE_NOT_RESTORABLE = "occurrence_not_restorable"
+    """The destination cannot bring back an occurrence deleted in it, nor rebuild its series."""
+    PROJECTION_HAS_GUESTS = "projection_has_guests"
+    """Someone invited guests to the projection in the destination; writing it would email them."""
+    SERIES_REBUILT = "series_rebuilt"
+    """The destination series was written again to bring back an occurrence deleted in it."""
 
 
 _EXCLUSION_REASONS = {

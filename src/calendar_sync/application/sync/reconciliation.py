@@ -52,7 +52,7 @@ class ReconcileSyncRule:
     reconciliation: ReconciliationService
     clock: Clock
     run_ids: RunIdGenerator
-    locks: RuleLocks = field(default_factory=RuleLocks)
+    locks: RuleLocks
     call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
 
     def execute(
@@ -145,6 +145,7 @@ class ReconcileSyncRule:
                     full_run=True,
                     failure_kind=failure.kind,
                     failure_cause=failure.provider_cause,
+                    failure_provider=failure.provider,
                 )
             )
             raise
@@ -243,7 +244,7 @@ class ReconcileSyncRule:
     ) -> EventProjection | NoProjectionExpected:
         if source.managed_origin is not None:
             return NoProjectionExpected.MANAGED_SOURCE
-        if not _eligible(source, rule):
+        if not rule.eligible(source):
             return NoProjectionExpected.INELIGIBLE
         return self.projector.project(source, rule)
 
@@ -279,7 +280,7 @@ class ReconcileSyncRule:
                         occurrence,
                         mapping.destination,
                         self.projector.project(source, rule)
-                        if source is not None and _eligible(source, rule)
+                        if source is not None and rule.eligible(source)
                         else None,
                         # A missing destination series is already reported for its mapping.
                         self.provider.get_occurrence(mapping.destination, start)
@@ -344,14 +345,6 @@ def _exceptions(
         for event in events
         if event.occurrence is not None
     }
-
-
-def _eligible(source: CalendarEvent, rule: SyncRule) -> bool:
-    return (
-        source.status is EventStatus.CONFIRMED
-        and source.managed_origin is None
-        and rule.transformation.exclusion(source) is None
-    )
 
 
 @dataclass(frozen=True, slots=True)

@@ -17,12 +17,23 @@ function providerNameStart(i18n: I18n, provider: string | number | null | undefi
   return typeof provider === "string" && i18n.has(key) ? i18n.t(key) : i18n.t("common.provider.unknownStart")
 }
 
+/** How a message names an account of the provider, such as "Google account" (CONTEXT.md). */
+function accountName(i18n: I18n, provider: string | number | null | undefined): string {
+  const key = `common.providerAccount.${String(provider)}`
+  return typeof provider === "string" && i18n.has(key) ? i18n.t(key) : i18n.t("common.providerAccount.unknown")
+}
+
 /** Server params ready for a translated message, with display names for the provider. */
 export function messageParams(i18n: I18n, params: ServerParams): MessageParams {
   const present = Object.fromEntries(
     Object.entries(params).filter((entry): entry is [string, string | number] => entry[1] !== null),
   )
-  return { ...present, provider: providerName(i18n, params.provider), Provider: providerNameStart(i18n, params.provider) }
+  return {
+    ...present,
+    provider: providerName(i18n, params.provider),
+    Provider: providerNameStart(i18n, params.provider),
+    account: accountName(i18n, params.provider),
+  }
 }
 
 /** A server-coded message, or null when there is none or the server left out one of its params. */

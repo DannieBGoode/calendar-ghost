@@ -23,8 +23,9 @@ def is_own_write(
         and destination.status is EventStatus.CONFIRMED
         and origin is not None
         and origin.owns(run.rule, mapping.source)
-        and fingerprinter.fingerprint(SyncDecisionService.as_projection(destination))
-        == mapping.projection_fingerprint
+        and fingerprinter.matches(
+            SyncDecisionService.as_projection(destination), mapping.projection_fingerprint
+        )
     )
 
 
@@ -47,6 +48,7 @@ def is_own_occurrence_write(
         destination.status is EventStatus.CONFIRMED
         and origin is not None
         and origin.owns(run.rule, series_mapping.source)
-        and fingerprinter.fingerprint(SyncDecisionService.as_projection(destination))
-        == recorded.projection_fingerprint
+        and fingerprinter.matches(
+            SyncDecisionService.as_projection(destination), recorded.projection_fingerprint
+        )
     )

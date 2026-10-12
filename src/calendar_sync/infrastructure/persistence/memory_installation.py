@@ -11,7 +11,9 @@ from typing import Self
 from calendar_sync.application.operations.ports import (
     AccountStanding,
     CauseSighting,
+    IncidentSummary,
     InstallationUnitOfWork,
+    OpenBlock,
     OperationsOverview,
     ProviderCallUse,
     RecordedRule,
@@ -21,11 +23,15 @@ from calendar_sync.application.operations.ports import (
 from calendar_sync.application.sync.ports import ProviderCallCounts, ScheduledRule
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
-from calendar_sync.domain.model import SyncRuleId, SyncRuleState
+from calendar_sync.domain.audit import AuditAction, AuditEntry
+from calendar_sync.domain.causes import WITHOUT_CAUSE
+from calendar_sync.domain.incidents import AccountAuthorization
+from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId, SyncRuleState
 from calendar_sync.domain.runs import RunKind
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryIncidentRepository,
     MemoryDatabase,
+    MemoryIncident,
     MemoryState,
 )
 
@@ -82,21 +88,32 @@ class InMemoryInstallationUnitOfWork:
             }
 
     def failure_causes(self, since: datetime) -> list[CauseSighting]:
-        """Failed runs since `since`; Incidents are not read here."""
-        return sorted(
-            (
-                CauseSighting(owner, outcome.failure_cause, outcome.completed_at, False)
-                for owner, state in self._database.partitions.items()
-                for outcome in state.outcomes.values()
-                if not outcome.succeeded
-                and outcome.failure_cause is not None
-                and outcome.completed_at >= since
-            ),
-            key=lambda seen: (seen.user.value, seen.at),
+        runs = (
+            CauseSighting(
+                owner,
+                outcome.failure_cause,
+                outcome.completed_at,
+                False,
+                provider=outcome.failure_provider,
+            )
+            for owner, state in self._database.partitions.items()
+            for outcome in state.outcomes.values()
+            if not outcome.succeeded
+            and outcome.failure_cause is not None
+            and outcome.completed_at >= since
         )
+        incidents = (
+            _incident_sighting(owner, incident, self._database.state_of(owner))
+            for owner, kept in self._database.incidents.items()
+            for incident in kept.values()
+            if incident.report.cause is not None
+            and incident.report.category not in WITHOUT_CAUSE
+            and (incident.open or incident.updated_at >= since)
+        )
+        return sorted((*runs, *incidents), key=lambda seen: (seen.user.value, seen.at))
 
     def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
-        return {user: _status_records(self._database.partitions.get(user)) for user in users}
+        return {user: _status_records(self._database, user) for user in users}
 
 
 def _unfinished(database: MemoryDatabase, owner: UserId, state: MemoryState) -> bool:
@@ -143,19 +160,53 @@ def _resource_use(state: MemoryState | None, since: date) -> ResourceUse:
     )
 
 
-def _status_records(state: MemoryState | None) -> StatusRecords:
-    """A User's records as Installation Status reads them. This store reads no Incidents here,
-    keeps no Activity blocks, and records every account as a Google account."""
-    state = state or MemoryState()
+def _incident_sighting(
+    owner: UserId, incident: MemoryIncident, state: MemoryState
+) -> CauseSighting:
+    """A provider failure's Incident, as SQLite reads it; for a lapsed account's own one still
+    open, with how long after the account was last authorized it opened."""
+    report = incident.report
+    assert report.cause is not None
+    account = report.account_id if report.rule_id is None else None
+    authorized = (
+        state.authorized_at.get(account)
+        if account is not None
+        and state.accounts.get(account) is ConnectedAccountState.CONNECTED
+        and account in state.lapsed
+        else None
+    )
+    lived = incident.opened_at - authorized if incident.open and authorized else None
+    return CauseSighting(
+        owner, report.cause, incident.updated_at, incident.open, lived, provider=report.provider
+    )
+
+
+def _status_records(database: MemoryDatabase, user: UserId) -> StatusRecords:
+    """A User's records as Installation Status reads them. This store keeps no daily block
+    checks, so every block still the latest decision about its event is open. It knows an
+    account's provider only when a test recorded one, so an account without one counts but has no
+    standing."""
+    state = database.partitions.get(user) or MemoryState()
+    incidents = sorted(
+        (
+            _incident_summary(key, incident, state)
+            for key, incident in database.incidents.get(user, {}).items()
+            if incident.open
+        ),
+        key=lambda summary: (summary.updated_at, summary.id),
+        reverse=True,
+    )
     accounts = tuple(
         AccountStanding(
             account.value,
             standing,
-            ProviderKind.GOOGLE,
+            state.providers[account],
             lapsed=standing is ConnectedAccountState.CONNECTED and account in state.lapsed,
         )
         for account, standing in sorted(state.accounts.items(), key=lambda item: item[0].value)
+        if account in state.providers
     )
+    standings = state.accounts.values()
     succeeded = [
         outcome.last_succeeded_at
         for (_, kind), outcome in state.outcomes.items()
@@ -170,16 +221,72 @@ def _status_records(state: MemoryState | None) -> StatusRecords:
             for rule in state.rules.values()
         ),
         overview=OperationsOverview(
-            connected_accounts=sum(a.state is ConnectedAccountState.CONNECTED for a in accounts),
-            disconnected_accounts=sum(
-                a.state is ConnectedAccountState.DISCONNECTED for a in accounts
-            ),
-            open_incidents=0,
+            connected_accounts=sum(s is ConnectedAccountState.CONNECTED for s in standings),
+            disconnected_accounts=sum(s is ConnectedAccountState.DISCONNECTED for s in standings),
+            open_incidents=len(incidents),
             last_synced_at=max(succeeded) if succeeded else None,
-            open_blocks=(),
+            open_blocks=_open_blocks(state),
             accounts=accounts,
         ),
-        incidents=(),
+        incidents=tuple(incidents),
+    )
+
+
+def _open_blocks(state: MemoryState) -> tuple[OpenBlock, ...]:
+    """Events of existing rules whose latest decision was a block, newest first. An entry's place
+    in its User's Activity, from 1, stands for the identifier SQLite gives it."""
+    latest: dict[tuple[SyncRuleId, str], tuple[int, AuditEntry]] = {}
+    for number, entry in enumerate(state.audit, start=1):
+        if entry.source_event_id is not None:
+            latest[(entry.rule_id, entry.source_event_id)] = (number, entry)
+    return tuple(
+        OpenBlock(number, entry.rule_id.value)
+        for number, entry in sorted(latest.values(), key=lambda item: item[0], reverse=True)
+        if entry.rule_id in state.rules and _blocks(entry)
+    )
+
+
+def _blocks(entry: AuditEntry) -> bool:
+    """A synchronization block. Recurring exclusions were recorded as conflicts before reason
+    codes existed; they are skips."""
+    return entry.action is AuditAction.CONFLICT and entry.reason != SyncReason.RECURRING_UNSUPPORTED
+
+
+def _incident_summary(key: str, incident: MemoryIncident, state: MemoryState) -> IncidentSummary:
+    """An Incident with its rule and the rule's accounts as they are now. This store names an
+    Incident by its key."""
+    report = incident.report
+    rule = state.rules.get(report.rule_id) if report.rule_id is not None else None
+    ends = (rule.source, rule.destination) if rule is not None else ()
+    return IncidentSummary(
+        id=key,
+        rule_id=report.rule_id.value if report.rule_id else None,
+        category=report.category,
+        state="open" if incident.open else "resolved",
+        summary=report.summary,
+        opened_at=incident.opened_at,
+        updated_at=incident.updated_at,
+        resolved_at=incident.resolved_at,
+        resolution=incident.resolution.value if incident.resolution else None,
+        account_id=report.account_id.value if report.account_id else None,
+        message=report.message,
+        cause=None if report.category in WITHOUT_CAUSE else report.cause,
+        provider=None
+        if report.category in WITHOUT_CAUSE or report.cause is None
+        else report.provider,
+        rule_exists=rule is not None,
+        rule_accounts=tuple(
+            _authorization(state, end.connected_account_id)
+            for end in ends
+            if end.connected_account_id in state.accounts
+        ),
+    )
+
+
+def _authorization(state: MemoryState, account: ConnectedAccountId) -> AccountAuthorization:
+    connected = state.accounts.get(account) is ConnectedAccountState.CONNECTED
+    return AccountAuthorization(
+        account, connected, state.authorized_at.get(account) if connected else None
     )
 
 

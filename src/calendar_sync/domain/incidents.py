@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause, CauseOwner
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 
@@ -61,6 +62,8 @@ class IncidentReport:
     """The summary as a code and parameters; the English `summary` stays for email and logs."""
     cause: Cause | None = None
     """Why the provider failure behind it happened, when one did (ADR 0031)."""
+    provider: ProviderKind | None = None
+    """The provider whose failure it reports, when one did."""
 
 
 class IncidentResolution(StrEnum):
@@ -77,7 +80,7 @@ class IncidentStep(StrEnum):
     """The one next step an Incident offers its owner, in the Web UI and in its email."""
 
     REAUTHORIZE = "reauthorize"
-    """Google stopped accepting the account: reauthorize it in Settings."""
+    """The provider stopped accepting the account: reauthorize it in Settings."""
     RECOVER_RULE = "recover_rule"
     """Access is renewed, but the rule stays stopped until it is recovered."""
     REVIEW_RULE = "review_rule"
@@ -87,7 +90,7 @@ class IncidentStep(StrEnum):
     WAIT = "wait"
     """Nothing to do: Calendar Ghost tries again and closes it after the next successful sync."""
     ADMINISTRATOR = "administrator"
-    """Only the installation's Google Cloud project, so its administrator, can fix it."""
+    """Only the installation's registration with its provider, so its administrator, can fix it."""
     SEE_HISTORY = "see_history"
     """Resolved: the rule's Activity shows the runs around it."""
 

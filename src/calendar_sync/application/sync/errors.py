@@ -8,7 +8,7 @@ from datetime import datetime
 from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
+from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId
 from calendar_sync.domain.providers import ProviderFailureKind
 
 
@@ -20,8 +20,26 @@ class RuleNotFound(RuleNotExecutable):
     """The requested Directional Sync Rule does not exist, or is another User's (ADR 0029)."""
 
 
-class DuplicateDirectionalRelationship(ApplicationError):
+class RecordRefused(ApplicationError):
+    """A unit of work refused a write that would break what its records must keep true.
+
+    Every store raises one of these subclasses, at the write or when the unit commits, so a use
+    case can handle a refusal without knowing which store refused it.
+    """
+
+
+class DuplicateDirectionalRelationship(RecordRefused):
     """The same source-to-destination relationship already exists."""
+
+
+class IdentityCollision(RecordRefused):
+    """An identifier, or another key only one record may hold, already names a different record,
+    which may be another User's."""
+
+
+class MissingReference(RecordRefused):
+    """A record names a rule, Event Mapping, or Connected Account that does not exist, or that is
+    another User's (ADR 0029)."""
 
 
 class NotACalendarChange(ApplicationError):
@@ -70,6 +88,9 @@ class ProviderFailure(ApplicationError):
     """Why the provider refused, from its reason code, so its owner can be told (ADR 0031); set
     only from a provider's answer, so a failure an adapter or Calendar Ghost raises itself has
     none."""
+    provider_label: str | None = None
+    """How English messages name the provider's calendar service, from its descriptor; the
+    adapter that names `provider` sets it (ADR 0022)."""
 
     @property
     def provider_cause(self) -> Cause | None:
@@ -87,8 +108,8 @@ class ProviderFailure(ApplicationError):
 
     @property
     def provider_name(self) -> str:
-        """How messages name the failed provider: "Google Calendar", or a neutral phrase."""
-        return self.provider.calendar_name if self.provider else "the calendar provider"
+        """How messages name the failed provider: its calendar service, or a neutral phrase."""
+        return self.provider_label or "the calendar provider"
 
     @property
     def summary(self) -> str:
@@ -105,8 +126,29 @@ class ProviderFailure(ApplicationError):
 class ProjectionOwnershipMismatch(ProviderFailure):
     """A destination event exists, but its Managed Origin metadata does not prove ownership."""
 
-    def __init__(self, detail: str, *, provider: ProviderKind | None = None) -> None:
-        super().__init__(ProviderFailureKind.PERMANENT, detail, provider=provider)
+    def __init__(
+        self,
+        detail: str,
+        *,
+        provider: ProviderKind | None = None,
+        provider_label: str | None = None,
+    ) -> None:
+        super().__init__(
+            ProviderFailureKind.PERMANENT, detail, provider=provider, provider_label=provider_label
+        )
+
+
+class UnsupportedProjection(ApplicationError):
+    """The destination's provider cannot hold this projection exactly, such as a recurrence it
+    cannot repeat or an occurrence it cannot restore. It is never approximated: the run blocks
+    that one event as a Conflict and keeps synchronizing the rest (ADR 0034)."""
+
+    def __init__(
+        self, message: str, reason: SyncReason = SyncReason.PROJECTION_UNSUPPORTED
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
+        """Why, as the Conflict records it."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,9 +222,12 @@ class AccountAccessCheckFailed(ApplicationError):
         detail: str,
         kind: ProviderFailureKind = ProviderFailureKind.PERMANENT,
         cause: Cause | None = None,
+        provider: ProviderKind | None = None,
     ) -> None:
         super().__init__(detail)
         self.kind = kind
         """How the provider refused, so an authorization refusal can lapse the account."""
         self.cause = cause
         """Why the provider refused, so the lapse it records says who fixes it (ADR 0031)."""
+        self.provider = provider
+        """Which provider refused, so a message can name it; the router sets it."""

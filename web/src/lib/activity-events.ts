@@ -23,6 +23,8 @@ const OCCURRENCE_REASONS = new Set([
   "occurrence_retired",
   "series_not_synchronized",
   "destination_occurrence_missing",
+  "occurrence_past_neighbour",
+  "occurrence_not_restorable",
 ])
 
 const EITHER_SCOPE_REASONS = new Set([
@@ -36,6 +38,8 @@ const EITHER_SCOPE_REASONS = new Set([
   "destination_ownership_inconsistent",
   "source_unverifiable",
   "projection_unmapped",
+  "projection_unsupported",
+  "projection_has_guests",
 ])
 
 function eventScope(reason: string | null | undefined, recurring: boolean): EventScope {

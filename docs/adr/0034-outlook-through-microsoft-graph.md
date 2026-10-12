@@ -1,0 +1,343 @@
+# Connect Outlook through Microsoft Graph v1.0
+
+Builds on [ADR 0011](0011-recurring-event-synchronization.md),
+[ADR 0018](0018-project-by-invitation-response.md),
+[ADR 0022](0022-route-calendar-requests-by-provider.md) (amended with provider descriptors), and
+[ADR 0031](0031-keep-the-providers-reason-as-a-cause.md).
+
+## Context
+
+Outlook (Microsoft 365 work or school accounts, and personal Outlook.com accounts) is the second
+calendar provider. Its calendars must serve as the source or destination of a Directional Sync
+Rule, alone or beside Google, with every product invariant holding as it does for Google: series
+project as series, writes notify nobody, a Managed Projection carries private Managed Origin
+metadata and can be found again by it, and nothing is deleted on unproven evidence.
+
+Microsoft Graph is the only supported API for these calendars. Its v1.0 documentation was read on
+2026-10-11, and each finding below links the page it comes from. Graph `beta` is not supported for
+production use ("Use of these APIs in production applications is not supported"), so only v1.0 is
+used.
+
+What Graph v1.0 offers, and what it does not:
+
+- **Changes of one calendar.** v1.0 has only `calendarView/delta`
+  ([event: delta](https://learn.microsoft.com/en-us/graph/api/event-delta?view=graph-rest-1.0)).
+  It needs a fixed `startDateTime` and `endDateTime`, which its tokens keep; it returns single
+  events, occurrences, and exceptions, but never a series master; it supports no `$select`,
+  `$filter`, or `$expand`, so it carries no extended properties; deletions, and changes to events
+  outside the window, arrive as `@removed` with only an id. The delta that returns series masters
+  unexpanded (`/calendars/{id}/events/delta`) is "currently available only in the beta version".
+- **Series.** `GET /me/calendars/{id}/events` lists single events and series masters, with
+  OData query parameters. A master read by its id can return `recurrence`, `cancelledOccurrences`
+  (`$select`), and `exceptionOccurrences` (`$expand`). `GET /events/{id}/instances` lists a
+  series' occurrences and exceptions within a window, but not the cancelled ones.
+- **Recurrence.** `patternedRecurrence` has six pattern types (daily, weekly, absolute and relative
+  monthly, absolute and relative yearly), each with single values: one day of the month, one
+  month, one week index. It has no hourly rules, no lists of positions, and no RDATE or EXDATE.
+  An exception cannot be moved to or past the day of a neighbouring occurrence
+  (`ErrorOccurrenceCrossingBoundary`).
+- **Private metadata.** Single-value extended properties named in our own GUID namespace
+  (`String {guid} Name x`) are written with the event, expanded when read, and filtered on
+  ([extended properties](https://learn.microsoft.com/en-us/graph/api/singlevaluelegacyextendedproperty-get?view=graph-rest-1.0)).
+  Open extensions are "not filterable", so projections could not be found again by them.
+- **Mail.** Graph sends invitations when an event has attendees, and a cancellation when a meeting
+  is deleted on its organizer's calendar or `/cancel` is called. An event without attendees is an
+  appointment.
+- **Errors.** Graph errors carry `error.code` and nested `innererror.code`, which clients should
+  code against, never `message`. The identity platform's token errors carry the RFC 6749 `error`
+  field "to react to errors" and AADSTS numbers in `error_codes`, which are "for diagnostics" and
+  "subject to change". Throttling answers 429, or 503, with `Retry-After` in seconds.
+
+## Decision
+
+### Provider Kind, names, and settings
+
+The Provider Kind is `outlook`. Its descriptor names the account "Microsoft account" and the
+calendar service "Outlook", and its connection flow lives under `/api/v1/oauth/microsoft/`. The
+installation registers one Microsoft Entra application and configures
+`CALENDAR_SYNC_MICROSOFT_CLIENT_ID`, `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`,
+`CALENDAR_SYNC_MICROSOFT_REDIRECT_URI` (default
+`http://localhost:8000/api/v1/oauth/microsoft/callback`), and `CALENDAR_SYNC_MICROSOFT_TENANT`
+(default `common`). Without them nothing changes and `GET /api/v1/providers` lists no Microsoft
+provider.
+
+### Authorization and identity
+
+- The authorization code flow with PKCE (S256) runs against
+  `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/`, `common` by default, so personal and
+  work or school accounts both connect. It uses the neutral OAuth mechanics: a single-use state
+  bound to the signed-in, active User and to this provider, and nothing connects for a User
+  disabled during the flow.
+- Delegated scopes are least-privilege: `openid`, `email`, `offline_access`, `User.Read`, and
+  `Calendars.ReadWrite`; none needs an administrator's consent. Calendars shared into another
+  person's mailbox need `Calendars.ReadWrite.Shared` and are not requested: only calendars listed
+  in the account's own mailbox are offered.
+- The Connected Account's email is Graph's `/me` `mail`, else `userPrincipalName`, else the ID
+  token's `email` or `preferred_username`. Microsoft documents these as mutable display values;
+  reauthorization finds an account by Provider Kind and email, as it does for Google.
+- Every token refresh stores the rotated refresh token Microsoft returns.
+
+### Private metadata
+
+Every write carries three single-value String extended properties in the Calendar Ghost namespace
+`{8EF42533-0AD0-4C67-A411-7FD5CF9F109E}`: `CalendarGhostRule` (the rule), `CalendarGhostOperation`
+(the Operation Key), and `CalendarGhostOrigin` (the source account, calendar, and event, and for
+an occurrence its original start). Rule and Operation Key are separate so they can be filtered on:
+`managed_events` filters on the rule and `find_projection` on the Operation Key. Every read
+expands the three properties, so an event carrying them is a Managed Projection and is never a
+source, exactly as Google's private extended properties work (ADR 0006).
+
+`find_projection` reads every page of its filter. More than one live event carrying one Operation
+Key, or one whose Managed Origin is not the rule and source creating it, raises
+`ProjectionOwnershipMismatch` and is never adopted. Every create also sends `transactionId`, derived
+from the Operation Key, which Graph documents as the identifier that keeps a retried POST from
+creating the event twice
+([event resource](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0)).
+A create whose answer timed out after Graph stored the event is then retried safely, even before the
+property filter can see it. The event a POST answers with may be one stored long before and changed
+since, so it is read back with its properties, and adopted only if its Managed Origin is still the
+rule and source creating it; otherwise it is a `ProjectionOwnershipMismatch` too.
+
+### Change feed: rebuilding series from v1.0
+
+The adapter keeps series as series without beta, from three documented reads:
+
+1. **Full listing** (`cursor` absent, as on a rule's first run, the daily pass, or reprojection).
+   It first starts a `calendarView/delta` round and follows it to its delta link, so no change made
+   while listing is lost. It then lists `GET /me/calendars/{id}/events`: every single event and
+   series master, with their Managed Origins. For each master whose occurrences reach the sync
+   window, it reads the master's occurrences in the window with `instances` and reports every
+   exception: an occurrence that differs from the master's regular one, and an occurrence the
+   pattern defines that `instances` no longer returns, which is cancelled. The listing is
+   complete.
+2. **Incremental changes** (`cursor` present). The cursor keeps the delta link and when the last
+   run began. The adapter lists the single events and masters changed since then
+   (`lastModifiedDateTime`, with a margin), reports them, and rebuilds every listed master's
+   exceptions as above. It follows the delta link and reads every reported id it has not already
+   read: an event still there is reported (an occurrence or exception rebuilds its series); one
+   answered not found is reported as cancelled, as Google reports a deleted event. A delta link
+   Graph rejects (410, `syncStateNotFound`) is answered with a full listing.
+3. **Cancelled occurrences.** Graph lists no cancelled instances and documents no format for a
+   cancelled occurrence's identifier, so the adapter expands the master's own pattern, in the
+   series' time zone, and an occurrence the pattern defines that `instances` does not return is
+   cancelled. Exceptions cannot move to or past a neighbouring occurrence's day, so looking for an
+   occurrence between its neighbouring slots finds it however it was moved. A series' first or
+   last occurrence has a neighbour on one side only and may move any distance the other way, so on
+   that side it is looked for across every date Outlook keeps, 1601 to 4500; the series has no
+   other occurrence there, so that answer is short. It is cancelled only when that answer is
+   complete and does not list it. For the same reason, whether a series that ends still has a
+   live occurrence is asked of every date Outlook keeps, not only of its first to last slot.
+
+What this cannot do, and what follows:
+
+- An occurrence cancelled in Outlook may reach the destination only at the next daily full pass,
+  if Outlook did not change its master's `lastModifiedDateTime` when it was cancelled.
+- Exceptions are listed up to 730 days past the sync window's start, as Google's listing stops at
+  a page limit: an exception of an endless series further ahead is applied once it comes within
+  that horizon.
+- A series whose time zone cannot be recognized (Outlook's legacy custom zones), timed or
+  all-day, cannot be expanded: an all-day occurrence is named by its date in that zone, which is
+  unknown, so it is never guessed in UTC, nor in the zone the occurrence says it was created in
+  (`originalStartTimeZone`), which need not be its series' zone. It counts as live, its exceptions are applied only as Graph reports them, and looking
+  up one of its occurrences that `instances` does not return is a temporary failure, never proof of
+  absence. As a source it reads in UTC, which can move its projected occurrences by an hour across
+  daylight saving; the service logs a warning naming the event when it reads one.
+
+### Recurrence
+
+The adapter translates `patternedRecurrence` to iCalendar lines and back, exactly or not at all:
+
+| Graph | iCalendar |
+| --- | --- |
+| `daily`, interval n | `FREQ=DAILY;INTERVAL=n` |
+| `weekly`, interval n, days, first day of week | `FREQ=WEEKLY;INTERVAL=n;BYDAY=...;WKST=...`; `FREQ=DAILY;BYDAY=...` reads as every week |
+| `absoluteMonthly`, day d up to 28 | `FREQ=MONTHLY;BYMONTHDAY=d` |
+| `absoluteMonthly`, day d from 29 | `FREQ=MONTHLY;BYMONTHDAY=28,...,d;BYSETPOS=-1`: Outlook moves day d to the month's last day when the month is shorter |
+| `relativeMonthly`, index, one day | `FREQ=MONTHLY;BYDAY=2MO` (or `-1MO` for last) |
+| `relativeMonthly`, index, several days | `FREQ=MONTHLY;BYDAY=MO,TU,...;BYSETPOS=n` |
+| `absoluteYearly`, `relativeYearly` | `FREQ=YEARLY;BYMONTH=m` with the monthly forms above; a yearly `BYMONTHDAY=d`, or a bare `FREQ=YEARLY` from day d, is written as `absoluteYearly` day d whenever month m has day d in every year, such as November 30, since Outlook then never moves it |
+| range `endDate`, `numbered`, `noEnd` | `UNTIL` (the end of that day in the series' zone), `COUNT`, neither; an `UNTIL` before the day's occurrence ends the range the day before |
+
+Anything else has no Graph equivalent and is never approximated: hourly or finer frequencies,
+`BYMONTHDAY` from 29 without the last-day form, unless the rule is yearly and its month has that
+day in every year, negative or several `BYMONTHDAY` values, several
+`BYMONTH` values, `BYYEARDAY`, `BYWEEKNO`, `BYHOUR` and finer, `BYSETPOS` lists, a fifth weekday
+(`5MO` or `-2MO`), `COUNT` with `UNTIL`, and `RDATE`, `EXDATE`, or `EXRULE` lines. Moving an
+exception past a neighbour has no Graph operation either. Each raises `UnsupportedProjection` with
+its own reason, and the Sync Run records a **Conflict** for that one event or occurrence, leaving
+the destination unchanged while the rest of the rule keeps synchronizing; a Conflict still there at
+the daily pass opens the rule's blocked Incident. The reason tells the User why and what to do:
+`projection_unsupported` for a recurrence or time zone Outlook cannot repeat,
+`occurrence_past_neighbour` for an occurrence moved to or past its neighbour's day, and
+`projection_has_guests` for guests invited in Outlook (below).
+
+Restoring an occurrence deleted in Outlook has no Graph operation, but the source still has it, and
+a direct deletion of a Managed Projection is repaired from the source. So the series is rebuilt:
+the run deletes the Outlook series, guarded as any deletion is, and writes it again from the source
+with its moved and cancelled occurrences, recording `series_rebuilt`. It is rebuilt at most once a
+run, and only while the Outlook series is as the source projects it now: a source series that
+changed is changed first as any series is, so one Outlook could not hold is never deleted and left
+unwritten. A projection written again after its destination lost it, rebuilt or deleted by hand,
+is created under an Operation Key that names the one it replaces, so its `transactionId` is new
+for each replacement and the same for each retry of it. A series Outlook would email someone about deleting is not rebuilt, and the occurrence stays a
+Conflict for that reason; one the run could not rebuild otherwise is `occurrence_not_restorable`,
+and the next run tries again. The rebuilt series has a new Outlook id. Every Graph pattern has an exact iCalendar form, so an Outlook source never needs this. A series
+projection keeps, in its private origin, the lines and zone it was written with, and reads back with
+them while Outlook still holds exactly that rule, so an equivalent rule written differently is never
+mistaken for Drift and rewritten on every run.
+
+### Time zones and all-day events
+
+Every read asks for UTC (`Prefer: outlook.timezone="UTC"`) and text bodies. A master's time zone
+comes from its `originalStartTimeZone`, translated from Windows to IANA names with the Unicode CLDR
+mapping, so series keep their local time across daylight saving. A series projection is written in
+the Windows zone CLDR maps its IANA zone to. Failing that, it uses the first Windows zone whose IANA
+zone keeps the same UTC offset at every moment of the series' lifetime: offsets compared twice a
+day, and each change matched to the minute, from its first day until its last occurrence ends,
+which for a multi-day occurrence is days after its last day begins, or for an endless series through
+2039, after which time zone data repeats each zone's yearly rule. A series no
+Windows zone keeps exactly is unsupported, a Conflict, rather than written in a zone or in UTC that
+would shift its occurrences. Single events and occurrences are written in UTC. An all-day event is
+read by its dates and written from midnight to midnight with `isAllDay`, so it stays all-day; an
+all-day occurrence is named by its date in its series' own zone.
+
+### No mail, ever
+
+Projections never carry attendees, an online meeting, or a response request
+(`responseRequested: false`, `allowNewTimeProposals: false`); they show as busy and with normal
+sensitivity, and set no reminder. The adapter never calls `/cancel`, `/forward`, `/accept`,
+`/decline`, or `/tentativelyAccept`. Deleting a projection or an occurrence uses `DELETE`, which
+sends a cancellation only for a meeting with attendees, which a projection never is. Someone may
+still invite guests to a projection, or to one occurrence of a projected series, in Outlook. Such an
+event is never updated, deleted, or cancelled again, and its guests are never cleared, since each of
+those emails them: the write is refused as a Conflict (`projection_has_guests`), the event is left
+as it is, and Rule Removal leaves it too. Updating or deleting a series also reaches the guests of
+each of its exceptions, so before either the adapter reads the series' `exceptionOccurrences` with
+their attendees: if any has guests, the write is a Conflict as well, and if Graph does not list them
+all, or lists one without its attendee list, the series is not changed until it does. The master is
+read with `$expand=exceptionOccurrences` and no `$select`: on 2026-10-11 Graph answered a personal
+account's master read with any `$select`, on the master or nested in the expansion, with each
+exception's `id` and etag only, so no attendee list could ever prove a series free of guests.
+Expanded whole, every exception came with its `attendees` (`[]` without guests), 150 of them in one
+answer. Someone may invite guests between that read and the
+write, so every `PATCH` and `DELETE` carries `If-Match` with the `changeKey` read
+(`W/"<changeKey>"`, as Graph's `@odata.etag`). Graph refuses a `PATCH` naming an older version with
+412 (`ErrorIrresolvableConflict`). The adapter then reads the item again, with every guest check,
+and writes that version once more, so one that now has guests is left as `projection_has_guests`.
+Outlook also changes a series by itself shortly after creating it, which a rebuild's first
+occurrence write met on 2026-10-12; the second read finds that version. A second 412 is temporary,
+and the next run tries again. On 2026-10-12 Graph ignored `If-Match` on `DELETE`, of an event and of an
+occurrence: a stale or invented version still deleted. A guest invited to a projection in the
+moment between the guest read and a `DELETE`, a fraction of a second, would therefore get Outlook's
+cancellation. No Graph operation closes that window, and only someone editing the projection by
+hand can open it, so the risk is accepted; `DELETE` still names the version read, in case Graph
+honors it later. Any other change that could email anyone is release-blocking, as for Google.
+
+### Reading source events
+
+`type` (`singleInstance`, `seriesMaster`, `occurrence`, `exception`), `seriesMasterId`, and
+`originalStart` give each event its series identity; `isCancelled` and `@removed` entries become
+cancellations. The Source Calendar's own answer is `responseStatus.response`: `accepted` and
+`organizer` are accepted, `tentativelyAccepted` is Maybe, `declined` is declined, `notResponded` is
+awaiting an answer, and `none` or anything unknown counts as accepted, as ADR 0018 decides. `showAs`
+and `sensitivity` are read as Google's transparency and visibility are, which is not at all: a rule
+projects an event the source shows as free, and a Details Projection copies a private event's title,
+as it does from Google. Attendee addresses and the online meeting's join address are read only to
+describe Source Changes, never projected. Outlook also writes an online meeting's join link, dial-in
+numbers, and conference ID into its body
+([online meetings](https://learn.microsoft.com/en-us/graph/outlook-calendar-online-meetings)), so an
+event that is an online meeting (`isOnlineMeeting`, `onlineMeeting`, or `onlineMeetingUrl`) reads
+with no description, and a Details Projection of it carries none.
+
+### Causes
+
+`infrastructure/microsoft/causes.py` maps Graph's `error.code` and `innererror.code`, and the token
+endpoint's `error` field, to the closed set of ADR 0031, citing Microsoft's documentation for each:
+
+- `oauth_client_invalid`, the administrator's: `invalid_client` (a wrong or expired client secret)
+  and `unauthorized_client` (an application deleted or not found in the directory).
+- `access_revoked`, the User's: `invalid_grant` (an expired or revoked grant, a password reset, or
+  a tenant whose administrator has not consented), `interaction_required`, `consent_required`, and
+  Graph's `InvalidAuthenticationToken` and `Authorization_RequestDenied`. Its step, Reauthorize account, explains that a work account
+  may need its organization's administrator to approve the application first.
+- `calendar_forbidden`: `ErrorAccessDenied` or `accessDenied` on a calendar; either spelling stops
+  only that calendar's rule and never lapses the account. `calendar_not_found`:
+  `ErrorItemNotFound` or `ErrorFolderNotFound` on a calendar. `rate_limited`: 429 and `TooManyRequests`,
+  `ApplicationThrottled`, `activityLimitReached`. `temporary`: 503, 504, and other 5xx answers, and
+  `temporarily_unavailable`.
+
+Graph's `Retry-After` is honored up to 60 seconds, the cap Google's hint has too
+(`infrastructure/retry_after.py`). Graph may ask for longer, but a retry waits in the process while
+it holds the rule's lock, so a longer wait would hold up that rule's other work, and the next
+scheduled pass, five minutes later, retries anyway. A longer hint is waited out for 60 seconds at
+most; if Graph still refuses after the last of the run's three attempts, the run fails as
+`rate_limited` and the rule waits for its next pass.
+
+AADSTS numbers are logged, as short tokens, only to help an administrator name a failure; no
+decision reads them, because Microsoft says they change. Microsoft's message text is never stored,
+logged, or returned. Nothing Graph answers maps to `api_disabled` or `quota_exceeded`.
+
+## Verify against a test tenant before release
+
+The documentation leaves these unconfirmed; each has a synthetic fixture that mirrors the documented
+shape, and each must be confirmed with a real personal account and a real work account before a
+release that enables the provider:
+
+1. `/me/calendars/{id}/calendarView/delta` on v1.0 (the v1.0 reference shows only the default
+   calendar's path), and that changes outside the window arrive as `@removed`.
+2. That cancelling one occurrence changes its master's `lastModifiedDateTime`.
+3. `$filter` on `lastModifiedDateTime` and on extended properties under `/me/calendars/{id}/events`,
+   and `$expand` of extended properties on `instances`.
+4. How an all-day event reads under `Prefer: outlook.timezone="UTC"`.
+5. That `PATCH` on an occurrence makes an exception and `DELETE` on one cancels only it.
+6. That an attendee-less event sends no message on create, update, or delete.
+7. Which `/me` field holds a personal account's address.
+8. The Graph `error.code` values above, which Graph's error reference no longer lists.
+9. That `instances` accepts a window from 1601 to 4500, and that Outlook keeps no calendar item
+   outside it, so a first or last occurrence it does not list there was cancelled.
+10. That a POST repeating an earlier `transactionId` answers with the event already stored.
+11. Whether an event is visible to the extended-property filter as soon as it is created, on a
+    personal account and on a work account, or only after a delay; `transactionId` covers a retried
+    create meanwhile, and nothing else assumes it.
+12. How a change to a master's recurrence or time affects its exceptions: which are kept, moved, or
+    dropped, and whether a dropped exception is reported as removed.
+13. Series in custom time zones, and occurrences that fall in a daylight saving gap or fold: their
+    `originalStart`, and whether the adapter names each occurrence as Outlook does.
+14. Which spelling of the calendar access refusal, `ErrorAccessDenied` or `accessDenied`, a
+    personal account and a work account each return.
+15. That a series master read with `$expand=exceptionOccurrences` lists every exception with its
+    attendees, an empty list for one without guests, how a long list continues, and that deleting or
+    updating a series emails the guests of an exception that has them. A personal account answered
+    the first two on 2026-10-11, with 150 exceptions in one answer; a read with any `$select` listed
+    ids only.
+16. That `PATCH` and `DELETE` on an event and on an occurrence honor `If-Match: W/"<changeKey>"`,
+    refusing an older version with 412, and that inviting guests to a series changes the
+    `changeKey` of each of its occurrences. A personal account on 2026-10-12: `PATCH` of a master
+    and of an occurrence answered 412 for an older version; `DELETE` ignored `If-Match`; changing
+    a master changed every occurrence's `changeKey`.
+
+## Alternatives considered
+
+- **Beta `events/delta`.** It returns masters unexpanded without a window, the shape the domain
+  wants, but beta is unsupported in production and may change without notice.
+- **Flattening series into single events.** It fits `calendarView/delta` directly, but contradicts
+  ADR 0011: it needs a horizon, multiplies writes, and loses series identity for Google
+  destinations.
+- **Parsing `cancelledOccurrences` identifiers.** Their format is documented only in beta, and
+  ADR 0011 already rejected constructing identifiers from undocumented formats.
+- **Open extensions for metadata.** Not filterable, so projections could not be found by rule or
+  Operation Key.
+- **The Microsoft Graph SDK or MSAL.** Two large dependencies for a handful of REST calls and one
+  token exchange; the adapter uses `httpx`, which import-linter keeps inside its package.
+- **Change notifications (webhooks).** They need a public address, which the Community Edition
+  does not require (CONTEXT.md, Scheduled Sync).
+
+## Consequences
+
+Outlook calendars synchronize with the guarantees Google calendars have, at the cost of reading a
+series' instances when its master changes and of expanding Outlook patterns in the adapter. The
+CLDR zone mapping, the pattern translation table, and the extended property names become
+compatibility surfaces. Occurrence cancellations made in Outlook may wait for the daily pass.
+Recurrences that only Google can express are blocked events rather than approximations, and an
+occurrence deleted in Outlook is brought back by rebuilding its series, which gives it a new id. `httpx` becomes a runtime dependency. The items above must be
+verified against a live tenant before release.

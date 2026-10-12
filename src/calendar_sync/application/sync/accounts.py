@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass
+from datetime import datetime
 
 from calendar_sync.application.sync.errors import (
     AUTHORIZATION_FAILURES,
@@ -21,10 +22,7 @@ from calendar_sync.application.sync.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState
-from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
-
-# States that could still write, or be enabled, without the account's authorization.
-_DEGRADED_ON_DISCONNECT = frozenset({SyncRuleState.PREVIEWED, SyncRuleState.ENABLED})
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,10 +45,12 @@ class ListConnectedAccounts:
 
 @dataclass(slots=True)
 class DiscoverCalendars:
-    """List an account's calendars in Google, remembering their names for its rules to show."""
+    """List an account's calendars in its provider, remembering their names for its rules."""
 
     calendars: AccountCalendars
     unit_of_work: UnitOfWorkFactory
+    accounts: ConnectedAccountRepository
+    lapses: LapsedAuthorizations
 
     def execute(self, account_id: ConnectedAccountId) -> tuple[DiscoveredCalendar, ...]:
         # The provider answers for any account, so only the User's own may be asked about.
@@ -59,8 +59,13 @@ class DiscoverCalendars:
                 raise ConnectedAccountNotFound(
                     f"connected account {account_id.value} does not exist"
                 )
-        discovered = tuple(self.calendars.calendars(account_id))
-        # Recorded after Google answered, so no write lock is held across the request.
+        started = self.lapses.clock.now()
+        try:
+            discovered = tuple(self.calendars.calendars(account_id))
+        except AccountAccessCheckFailed as error:
+            _lapse_if_refused(self.accounts, self.lapses, account_id, error, started)
+            raise
+        # Recorded after the provider answered, so no write lock is held across the request.
         with self.unit_of_work() as uow:
             uow.calendar_names.remember(account_id, discovered)
             uow.commit()
@@ -94,19 +99,30 @@ class CheckAccountAccess:
         try:
             access = self.calendars.verify_access(account_id)
         except AccountAccessCheckFailed as error:
-            if error.kind in AUTHORIZATION_FAILURES:
-                account = self.accounts.get(account_id)
-                provider = account.provider if account is not None else None
-                failure = ProviderFailure(
-                    error.kind,
-                    str(error),
-                    account_id=account_id,
-                    provider=provider,
-                    cause=error.cause,
-                )
-                self.lapses.lapsed(account_id, failure, attempted_at=started)
+            _lapse_if_refused(self.accounts, self.lapses, account_id, error, started)
             raise
         return AccessCheck(access, self.lapses.restored(account_id, accepted_at=started))
+
+
+def _lapse_if_refused(
+    accounts: ConnectedAccountRepository,
+    lapses: LapsedAuthorizations,
+    account_id: ConnectedAccountId,
+    error: AccountAccessCheckFailed,
+    started: datetime,
+) -> None:
+    """Lapse an account its provider refused for authentication or authorization (ADR 0027)."""
+    if error.kind not in AUTHORIZATION_FAILURES:
+        return
+    account = accounts.get(account_id)
+    failure = ProviderFailure(
+        error.kind,
+        str(error),
+        account_id=account_id,
+        provider=account.provider if account is not None else None,
+        cause=error.cause,
+    )
+    lapses.lapsed(account_id, failure, attempted_at=started)
 
 
 @dataclass(slots=True)
@@ -134,12 +150,9 @@ class DisconnectConnectedAccount:
             # Waiting for an in-flight write means none happens with the account once degraded.
             with self.locks.for_writes(rule_id), self.unit_of_work() as uow:
                 rule = uow.rules.get(rule_id)
-                if rule is not None and rule.state in _DEGRADED_ON_DISCONNECT:
-                    uow.rules.save(rule.degrade())
-                    uow.commit()
-                elif rule is not None and rule.awaiting_reauthorization:
-                    # Disconnecting is a deliberate stop, so recovering needs a preview.
-                    uow.rules.save(rule.require_preview())
+                stopped = rule.on_account_disconnected() if rule is not None else None
+                if stopped is not None and stopped != rule:
+                    uow.rules.save(stopped)
                     uow.commit()
         account = self.accounts.disconnect(account_id)
         with self.unit_of_work() as uow:
@@ -152,10 +165,11 @@ class DeleteConnectedAccount:
     """Permanently delete a Disconnected Account with every rule that uses it.
 
     The rules go with their mappings, cursors, incidents, and audit activity. Their Managed
-    Projections stay in Google, no longer managed. Every affected rule is locked first, as Rule
-    Removal locks its rule, so no run, write, or lifecycle change of those rules is in flight
-    while their records are deleted. The state check, the rules it selects, and every deletion
-    commit in one transaction, so a reauthorization or a new rule cannot interleave with them.
+    Projections stay in their calendars, no longer managed. Every affected rule is locked first,
+    as Rule Removal locks its rule, so no run, write, or lifecycle change of those rules is in
+    flight while their records are deleted. The state check, the rules it selects, and every
+    deletion commit in one transaction, so a reauthorization or a new rule cannot interleave with
+    them.
     """
 
     unit_of_work: UnitOfWorkFactory

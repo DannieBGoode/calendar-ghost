@@ -3,6 +3,7 @@ import { incidentText } from "@/i18n/incident-text"
 import type { I18n } from "@/i18n/translator"
 import type { ResourceUse, ServerProblem, UserOverview, Verdict } from "@/lib/api"
 import { causeOf, fixesItself, isAdministratorCause, type Cause } from "@/lib/causes"
+import { providerWords, type ProviderWords } from "@/lib/providers"
 
 /** Every Installation Status verdict, most urgent first, as CONTEXT.md lists them. */
 export const VERDICTS: readonly Verdict[] = ["stalled", "stopped", "review", "waiting", "paused", "setup", "healthy"]
@@ -131,8 +132,17 @@ export function callsMeaning(i18n: I18n, calls: readonly ProviderCalls[]): strin
   if (total === 0) return null
   const failed = calls.reduce((sum, each) => sum + each.failed, 0)
   const limited = calls.reduce((sum, each) => sum + each.rate_limited, 0)
-  if (failed / total > MANY_FAILED) return i18n.t("people.overview.callsMeaning.manyFailed")
-  return i18n.t(limited > 0 ? "people.overview.callsMeaning.limited" : "people.overview.callsMeaning.normal")
+  if (failed / total > MANY_FAILED) {
+    return i18n.t("people.overview.callsMeaning.manyFailed", onlyProvider(i18n, calls.filter((each) => each.failed > 0)))
+  }
+  if (limited === 0) return i18n.t("people.overview.callsMeaning.normal")
+  return i18n.t("people.overview.callsMeaning.limited", onlyProvider(i18n, calls.filter((each) => each.rate_limited > 0)))
+}
+
+/** The words for the one provider these calls went to; neutral ones when they went to several. */
+function onlyProvider(i18n: I18n, calls: readonly ProviderCalls[]): ProviderWords {
+  const providers = new Set(calls.map((each) => each.provider))
+  return providerWords(i18n, providers.size === 1 ? [...providers][0] : null)
 }
 
 /**
@@ -181,10 +191,11 @@ function step(problem: ServerProblem): Step {
 }
 
 /** The administrator's Cause: the reader's to fix, whoever's page it is on. */
-function administratorStep(i18n: I18n, audience: Audience): string {
+function administratorStep(i18n: I18n, problem: ServerProblem, audience: Audience): string {
+  const words = providerWords(i18n, problem.provider)
   return audience === "administrator"
-    ? i18n.t("people.overview.next.administrator.administrator")
-    : i18n.t("people.overview.next.administrator.person", { name: audience.name })
+    ? i18n.t("people.overview.next.administrator.administrator", words)
+    : i18n.t("people.overview.next.administrator.person", { ...words, name: audience.name })
 }
 
 /**
@@ -194,11 +205,11 @@ function administratorStep(i18n: I18n, audience: Audience): string {
 export function nextStep(i18n: I18n, problem: ServerProblem, audience: Audience): string {
   const next = step(problem)
   if (next === "waiting") return i18n.t("people.overview.next.waiting")
-  if (next === "administrator") return administratorStep(i18n, audience)
+  if (next === "administrator") return administratorStep(i18n, problem, audience)
   // Restarting Calendar Ghost is an administrator's, whoever's page it is on.
   if (next === "stalled") return i18n.t("people.overview.next.stalled")
   if (typeof audience === "object") return personStep(i18n, problem, audience.name)
-  return i18n.t(`people.overview.next.${next}.self`)
+  return i18n.t(`people.overview.next.${next}.self`, providerWords(i18n, problem.provider))
 }
 
 /**
@@ -231,5 +242,5 @@ const SUPPORT_STEPS = ["reauthorize", "preview", "activity", "overdue", "calenda
 export function supportHint(i18n: I18n, problem: ServerProblem): string | null {
   const next = step(problem)
   const known = SUPPORT_STEPS.find((each) => each === next)
-  return known ? i18n.t(`people.overview.ifTheyAsk.${known}`) : null
+  return known ? i18n.t(`people.overview.ifTheyAsk.${known}`, providerWords(i18n, problem.provider)) : null
 }

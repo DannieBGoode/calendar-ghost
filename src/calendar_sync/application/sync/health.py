@@ -22,7 +22,7 @@ from calendar_sync.domain.incidents import (
     IncidentReport,
     IncidentResolution,
 )
-from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId
 from calendar_sync.domain.providers import ProviderFailureKind
 
 PROVIDER_INCIDENT_THRESHOLD = 3
@@ -92,6 +92,7 @@ class RuleHealthPolicy:
             account_id=failure.account_id,
             message=_failure_message("provider_failure", failure),
             cause=failure.provider_cause,
+            provider=failure.provider,
         )
 
     def after_full_pass(self, rule_id: SyncRuleId, persisting: int) -> IncidentReport | None:
@@ -117,6 +118,7 @@ class RuleHealthPolicy:
             account_id=failure.account_id,
             message=_failure_message("removal_stopped", failure),
             cause=failure.provider_cause,
+            provider=failure.provider,
         )
 
 
@@ -150,7 +152,7 @@ class RuleHealth:
     records: RuleHealthRecords
     incidents: IncidentRepository
     clock: Clock
-    locks: RuleLocks = field(default_factory=RuleLocks)
+    locks: RuleLocks
     notifications: IncidentNotifications | None = None
     policy: RuleHealthPolicy = field(default_factory=RuleHealthPolicy)
     lapses: LapsedAuthorizations = field(init=False)
@@ -268,11 +270,11 @@ class RuleHealth:
             self._notify(incident, now)
 
     def _degrade(self, rule: SyncRule) -> None:
-        if rule.state is not SyncRuleState.ENABLED:
+        if not rule.synchronizes:
             return
         with self.locks.for_writes(rule.id), self.unit_of_work() as uow:
             current = uow.rules.get(rule.id)
-            if current is not None and current.state is SyncRuleState.ENABLED:
+            if current is not None and current.synchronizes:
                 uow.rules.save(current.degrade())
                 uow.commit()
 

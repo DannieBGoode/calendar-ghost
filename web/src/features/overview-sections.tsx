@@ -278,6 +278,7 @@ function OverviewEndpoint({ endpoint, accountId }: { endpoint: RuleEndpoints["so
         displayName={endpoint.account?.display_name ?? ""}
         email={endpoint.account?.email ?? accountId}
         avatarUrl={endpoint.account?.avatar_url}
+        provider={endpoint.account?.provider}
         compact
       />
       <span>{endpoint.name}</span>

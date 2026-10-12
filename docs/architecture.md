@@ -38,8 +38,8 @@ ports and errors its modules share
   error, the clock, and identifiers.
 
 Calendar Integration (provider authorization, discovery, change cursors, rate limits, and payload
-translation) is the provider adapters in `infrastructure/google` and `infrastructure/providers`,
-behind the Synchronization ports. Scheduling and notifications are infrastructure adapters too.
+translation) is the provider adapters in `infrastructure/google`, `infrastructure/microsoft`, and
+`infrastructure/providers`, behind the Synchronization ports. Scheduling and notifications are infrastructure adapters too.
 
 The contexts depend in one direction: `operations`, then `identity`, then `sync`, then `shared`.
 User Deletion removes a User's rules, so Identity uses Synchronization; the Operator Overview reads
@@ -59,8 +59,8 @@ React UI / FastAPI / Scheduler
    Synchronization domain
               ^
               |
- Google and SQLite adapters
- implement application ports
+ Google, Microsoft, and SQLite
+ adapters implement application ports
 ```
 
 The domain imports only Python's standard library and provider-neutral domain modules. Application services depend on protocols. The composition root constructs concrete adapters explicitly.
@@ -68,23 +68,29 @@ The domain imports only Python's standard library and provider-neutral domain mo
 
 Web API routes only parse input, call one use case or port, and map its result or application
 error to HTTP. `bootstrap/container.py` composes in two steps: `build_adapters` makes the SQLite and
-Google adapters from Settings, and `compose` wires the use cases from them into the `Container`
+provider adapters from Settings, and `compose` wires the use cases from them into the `Container`
 the routes call. The `Container` holds installation-wide services (identity, administration,
 Installation Health, the Operator Overview, the scheduler) and `for_user`, which composes one User's use cases from
 adapters made for that User: their unit of work, account store, Activity queries, incidents, and
 Incident Notifications. A route resolves the signed-in User from the session and calls only that
-User's use cases, so no use case can reach another User's records. The scheduler lists due rules
-through the installation-wide `InstallationUnitOfWork` and runs each with its owner's use cases,
-taking turns between Users. The `Container` holds no concrete adapter, unit of work, or rule
-locks. Tests and the development preview substitute adapters before `compose`, or use cases after
+User's use cases, so no use case can reach another User's records. A scheduled pass,
+`ScheduledPass` in `application/operations/scheduled_pass.py`, lists due rules through the
+installation-wide `InstallationUnitOfWork` and runs each with its owner's use cases, taking turns
+between Users. It also expires Source Change values and old provider call counts, finishes
+interrupted lapses, chooses which rules owe their daily full pass, retries, and records each run's
+outcome. `SyncScheduler` in `infrastructure/scheduling.py` decides only when a pass starts and how
+many rules run at once, in worker threads, and reports its progress; an import contract keeps it
+from importing the Synchronization context or the domain. The `Container` holds no concrete adapter,
+unit of work, or rule locks. Tests and the development preview substitute adapters before `compose`, or use cases after
 it. `Adapters` holds ports, or functions that make a User's port, rather than concrete classes, so a
 substitute needs only to honor the port. Use cases that need the installation master key are absent
 without it, and one route guard answers 503 for them.
 
-Time and identifiers come through ports too. `build_adapters` makes one `SystemClock`, one
+Time and identifiers come through ports too. `build_adapters` makes one `SystemClock`
+(`infrastructure/clock.py`), one
 `UuidIdGenerator`, and one `UuidRunIdGenerator`, and passes them to each adapter and use case that
 reads the time or makes an identifier: sessions, OAuth states, Connected Accounts, incidents, rule
-removal, Google's Retry-After dates, and Sync Run identifiers. Only the schema migration
+removal, providers' Retry-After dates, and Sync Run identifiers. Only the schema migration
 bookkeeping in `initialize_database` reads the system clock directly. Tests pass a fixed clock to
 check expiry and retry waits without sleeping.
 
@@ -104,10 +110,13 @@ to every other route to prove each one refuses it, walks every route that names 
 second User's session to prove each answers 404, and refuses a User who does not administer on
 every administrator route.
 
-Google authorization is split the same way. `infrastructure/google/oauth.py` holds the
-OAuth flow, protected by its state and by the session of the User who began it, Google credentials, and Google calendar discovery, configured by an
-`OAuthClientConfig` value that bootstrap builds from Settings. Connected Accounts and their
-credentials, encrypted by the `CredentialCipher` in
+Provider authorization is split the same way. Each provider's package holds its OAuth flow,
+credentials, and calendar discovery, configured by an `OAuthClientConfig` value that bootstrap
+builds from Settings, such as `infrastructure/google/oauth.py` and
+`infrastructure/microsoft/oauth.py`. The mechanics every flow shares live in
+`infrastructure/oauth.py`: single-use states bound to the session of the User who began the flow,
+PKCE, one token refresh per account at a time, and connecting only for a User still active.
+Connected Accounts and their credentials, encrypted by the `CredentialCipher` in
 `infrastructure/security.py`, live in `infrastructure/persistence/accounts.py`, which implements the
 `ConnectedAccountRepository` port. Deleting an account and its rules is the `DeleteConnectedAccount`
 use case, which deletes both in one unit of work; the adapters only delete their own records.
@@ -150,8 +159,10 @@ Installation Status follows the same direction ([ADR 0024](adr/0024-integration-
 `assess_installation` is a pure function of the rule summaries, the operations overview, open
 incidents, and the scheduler's `SchedulerProgress`, read through the `SchedulerHeartbeat` port that
 `SyncScheduler` implements in memory. Each User's Installation Status covers their rules and the
-installation problems that affect them. `application/operations/installation_health.py` sums every User's
-verdict into Installation Health for Installation Administrators, beside installation incidents,
+installation problems that affect them. `RuleCounts`, beside it, counts its rules once: a rule has
+stopped when it has a Stopped problem, and runs when it is enabled and has not stopped. The status
+API and the Overview's `Dashboard` both read these counts, so they cannot disagree.
+`application/operations/installation_health.py` sums every User's verdict into Installation Health for Installation Administrators, beside installation incidents,
 such as a scheduler that stalled; `SchedulerWatch` reports that one to the installation's own
 channels.
 
@@ -203,12 +214,73 @@ send each request to the adapter of the Provider Kind its Connected Account belo
 calendars may belong to different providers (ADR 0022). The use cases receive the routers and
 never name a provider.
 
-The test fake, the router, the Google adapter, and every new adapter pass the Calendar Provider
-contract in `tests/contracts/calendar_provider.py` before being composed
-(`tests/adapters/test_calendar_provider_contract.py`). The contract states, through the ports
-alone, the ownership, idempotency, and listing guarantees the use cases rely on. It does not yet
-state recurrence or change-feed behavior; `tests/adapters/test_google_provider.py` covers those for
-Google.
+The test fake, the router, and every adapter pass the Calendar Provider contract in
+`tests/contracts/calendar_provider.py` before being composed: the fake and the router in
+`tests/adapters/test_calendar_provider_contract.py`, and each adapter, through a fake of its
+provider's API, in its own test package: `tests/adapters/google/` against a fake Google Calendar API,
+and `tests/adapters/microsoft/` against a fake Microsoft Graph (`tests/fake_microsoft_graph_api.py`).
+Mechanics every provider shares are tested once, in `tests/adapters/shared/`, and
+`tests/adapters/test_mixed_providers.py` runs rules between a Google and an Outlook calendar, in
+both directions at once, to prove neither copies the other's projections. The contract states,
+through the ports alone, the ownership, idempotency, and listing guarantees the use cases rely on.
+It covers recurring series too (ADR 0011): each occurrence resolves by its original start, only the
+rule that owns a series, for the source series it projects, writes or cancels its occurrences, a
+series that cannot be read never proves an occurrence absent, and a series whose every occurrence is
+cancelled has none live. For change feeds, a cursor reports what was added and removed since it and
+not an event left alone well before it, and a refused cursor answers with a full listing. Each
+adapter's own tests cover what is particular to its provider
+(`tests/adapters/google/test_provider.py`, `tests/adapters/microsoft/test_provider.py`).
+
+## Provider descriptors
+
+Each provider's package describes itself to bootstrap with one `ProviderDescriptor`
+(`application/sync/provider_descriptors.py`), and nothing outside that package knows anything else
+about the provider ([ADR 0022](adr/0022-route-calendar-requests-by-provider.md), amended):
+
+- its `ProviderGuide`: the Provider Kind, the slug its connection flow lives under
+  (`/api/v1/oauth/{slug}/`), its display and calendar names, the troubleshooting section for each
+  Cause it can raise, and any Installation Hint only it explains;
+- whether the installation configured it, its OAuth flow (`AccountAuthorization`) and redirect URI;
+- its calendar roles: `AccountCalendars` and `CalendarProvider`.
+
+`calendar_providers` in `bootstrap/container.py` composes the descriptors into a
+`ProviderDirectory`. Routing builds its adapter map from it, Installation Hints read the guides, and
+the Web API lists the connectable providers at `GET /api/v1/providers` and runs their flows. Without
+the installation master key, a descriptor offers only its guide.
+
+Only a Provider Kind names a provider in the domain, application, and interfaces, and no module
+outside a provider's package names a Provider Kind member: `tests/test_provider_neutrality.py`
+fails otherwise. Its one exception is `interfaces/api/routes/compatibility.py`, which keeps
+`GET /api/v1/google/configuration` for earlier clients. Import-linter (`pyproject.toml`) enforces
+the rest, with no `ignore_imports` for any provider:
+
+- the domain and application import no provider package, SDK, or HTTP client;
+- the neutral infrastructure (`oauth`, `providers`, `provider_calls`, `retry_after`, persistence)
+  imports neither `infrastructure.google` nor `infrastructure.microsoft`;
+- `infrastructure.google` and `infrastructure.microsoft` never import each other;
+- the Google client libraries stay in `infrastructure.google`, and `httpx`, which reaches Microsoft
+  Graph, stays in `infrastructure.microsoft`.
+
+`tests/adapters/microsoft/` also proves no Microsoft answer leaks: Graph's `message` and the
+identity platform's `error_description` are never kept, logged, or returned. The privacy sentinels
+in `tests/adapters/test_operator_overview_api.py` include a person with Microsoft accounts, whose
+emails, calendars, events, and Microsoft's words never reach People, incidents, notifications, or
+logs.
+
+To add a provider:
+
+1. Write an ADR on how its API meets the Calendar Provider contract, as ADR 0034 does for Graph.
+2. Add its Provider Kind to `domain/accounts.py` and its settings to `bootstrap/config.py`.
+3. Create `infrastructure/<provider>/` with its guide, adapter, translation, OAuth flow on the
+   shared mechanics in `infrastructure/oauth.py`, Cause mapping, and `descriptor.py`.
+4. Add one line to `calendar_providers` in `bootstrap/container.py`, and import-linter contracts
+   that keep its SDK in its package and it independent of the other providers.
+5. Give it a test package under `tests/adapters/<provider>/` that runs the Calendar Provider
+   contract through a fake of its API, a table-driven Cause test, and a privacy leak test.
+6. Write its sections of `docs/troubleshooting.md` under the anchors its guide names
+   (`tests/test_troubleshooting_anchors.py` checks them), its setup in `docs/self-hosting.md`, and
+   its Web UI catalog entries in `common.json`: `provider`, `providerName`, `providerAccount`,
+   `providerApi`, `providerConsole`, and `providerStatus`.
 
 ## Logging
 
@@ -225,7 +297,7 @@ counts a renewed access token toward the current run. Use cases default to
 
 ## Transaction boundary
 
-Google and SQLite cannot share an atomic transaction. A Sync Run therefore uses stable operation
+A calendar provider and SQLite cannot share an atomic transaction. A Sync Run therefore uses stable operation
 keys, provider ownership metadata, and retry-safe writes. Acknowledged event operations commit
 individually to keep SQLite write locks away from later network calls; source and destination
 incremental cursors commit last, after both batches complete. If the process stops after a provider
@@ -252,17 +324,24 @@ refuses a record whose User differs from its parent's, and a rule's accounts mus
 Each repository of a User's unit of work adds that User to every statement, and an upsert that meets
 another User's record is refused rather than skipped. Deleting a User deletes everything they own
 through these references. `tests/adapters/test_user_isolation_schema.py` checks the schema, and that
-only the scheduler, the Operator Overview, the migrations, and the composition root reach
+only the scheduled pass, the Operator Overview, the migrations, and the composition root reach
 `InstallationUnitOfWork`.
 
 The in-memory unit of work that application tests use and the SQLite one both pass the persistence
 contract in `tests/contracts/persistence.py`. It states, through the ports alone, the behavior use
-cases rely on: writes are discarded until committed, rule removal takes a rule's records with it, a
-record without its rule or series is refused, identities stay unique, listings come back in a fixed
-order, and a second User with the same calendar and event identifiers reads, changes, and deletes
-nothing of the first User's. The in-memory store keeps each User's records in a partition of their
-own. It does not make the two interchangeable in every respect; when a use case starts
-relying on another storage behavior, add it to the contract.
+cases rely on: writes are discarded until committed, rule removal takes a rule's records with it
+and resolves its open Incidents, purging a rule or deleting an account deletes their Incidents, a
+record without its rule or series is refused, a rule's accounts must be its User's when the unit
+commits, identities stay unique, listings come back in a fixed order, Installation Status reads
+each User's open Incidents and blocks, and a second User with the same calendar and event
+identifiers reads, changes, and deletes nothing of the first User's. Both stores refuse a write
+with the same errors from `application/sync/errors.py`: `DuplicateDirectionalRelationship`,
+`IdentityCollision`, or `MissingReference`, each a `RecordRefused`. SQLite's constraint failures
+become these in `infrastructure/persistence/refusals.py`, including those raised at commit, so no
+use case catches `sqlite3.IntegrityError`. The in-memory store keeps each User's records in a
+partition of their own. It keeps no daily block checks, so every block that is still its event's
+latest decision is open there. It does not make the two interchangeable in every respect; when a
+use case starts relying on another storage behavior, add it to the contract.
 
 ## Public compatibility surfaces
 

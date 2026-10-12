@@ -20,7 +20,6 @@ from calendar_sync.domain.model import (
     SyncReason,
     SyncRule,
     SyncRuleId,
-    SyncRuleState,
 )
 
 logger = logging.getLogger(__name__)
@@ -117,11 +116,12 @@ class SyncRunLog:
             call_summary(self.calls),
         )
 
-    def failed(self, kind: str) -> None:
+    def failed(self, kind: str, site: str) -> None:
         logger.warning(
-            "run failed %s kind=%s after %s %s",
+            "run failed %s kind=%s at=%s after %s %s",
             self._names(),
             kind,
+            site,
             self._elapsed(),
             call_summary(self.calls),
         )
@@ -174,6 +174,8 @@ class SyncRunContext:
     """
     repaired: set[EventRef] = field(default_factory=set)
     """Source series already repaired this run, so a repair never recurses."""
+    rebuilt: set[EventRef] = field(default_factory=set)
+    """Source series whose destination series this run rebuilt, so each is rebuilt once."""
     live_series: dict[EventRef, bool] = field(default_factory=dict)
     """Whether each source series looked up this run still has an occurrence this rule projects."""
     blocked: set[EventRef] = field(default_factory=set)
@@ -200,6 +202,15 @@ class SyncRunContext:
         if action is SyncAction.CONFLICT:
             self.blocked.add(source)
         self._report_progress()
+
+    def uncount(self, counted: SyncAction) -> None:
+        """Take back a decision that will be made again, so it is counted once."""
+        self.counts[counted] -= 1
+
+    def recount(self, counted: SyncAction, action: SyncAction, source: EventRef) -> None:
+        """Count a decision as `action` instead of the `counted` one its write could not make."""
+        self.counts[counted] -= 1
+        self.count(action, source)
 
     def expect(self, items: int) -> None:
         """Add `items` the run will handle to its reported total, before handling any of them."""
@@ -252,7 +263,7 @@ def require_unchanged(run: SyncRunContext) -> None:
     current = run.uow.rules.get(run.rule.id)
     if (
         current is None
-        or current.state is not SyncRuleState.ENABLED
+        or not current.synchronizes
         or current.material_signature != run.rule.material_signature
         or not run.uow.user_active()
     ):
@@ -284,14 +295,6 @@ def _observe(run: SyncRunContext, event: CalendarEvent, at: datetime) -> SourceC
     if previous is not None and previous.revision == current.revision:
         return None
     if previous is not None:
-        # A list Google did not return in full keeps the last complete one, so a guest removed
-        # before the next complete list is still reported.
-        current = replace(
-            current,
-            guests=previous.guests if current.guests is None else current.guests,
-            conferencing=(
-                previous.conferencing if current.conferencing is None else current.conferencing
-            ),
-        )
+        current = current.completed_by(previous)
     observations.save(run.rule.id, event.reference, current, at)
     return SourceChange.between(previous, current) if previous is not None else None

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
@@ -12,17 +13,20 @@ from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleS
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryIncidentRepository,
-    InMemoryUnitOfWorkFactory,
     InMemoryUserUnitOfWorkFactory,
 )
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, endpoint, rule
-from tests.users import USER
+from tests.users import USER, memory_units
 
 PERSONAL = ConnectedAccountId("personal-account")
 WORK = ConnectedAccountId("work-account")
 EXPIRED = ProviderFailure(
-    ProviderFailureKind.AUTHENTICATION, "expired", account_id=WORK, provider=ProviderKind.GOOGLE
+    ProviderFailureKind.AUTHENTICATION,
+    "expired",
+    account_id=WORK,
+    provider=ProviderKind.GOOGLE,
+    provider_label="Example Calendar",
 )
 
 
@@ -70,20 +74,26 @@ def _stored(
     """Lapses over the store's own Incidents, as SQLite opens and resolves them."""
     for account in (PERSONAL, WORK):
         unit_of_work.state.accounts[account] = ConnectedAccountState.CONNECTED
+        unit_of_work.state.providers[account] = ProviderKind.GOOGLE
     incidents = InMemoryIncidentRepository(unit_of_work.database, USER)
     notifications = Notifications()
     lapses = LapsedAuthorizations(
-        unit_of_work, incidents, FixedClock(), notifications=notifications
+        unit_of_work, incidents, FixedClock(), notifications=notifications, locks=RuleLocks()
     )
     return incidents, notifications, lapses
 
 
 def _installation() -> tuple[InMemoryUserUnitOfWorkFactory, Incidents, LapsedAuthorizations]:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     for account in (PERSONAL, WORK):
         unit_of_work.state.accounts[account] = ConnectedAccountState.CONNECTED
+        unit_of_work.state.providers[account] = ProviderKind.GOOGLE
     incidents = Incidents()
-    return unit_of_work, incidents, LapsedAuthorizations(unit_of_work, incidents, FixedClock())
+    return (
+        unit_of_work,
+        incidents,
+        LapsedAuthorizations(unit_of_work, incidents, FixedClock(), locks=RuleLocks()),
+    )
 
 
 def test_a_lapse_marks_the_account_and_opens_one_incident_for_it() -> None:
@@ -98,7 +108,8 @@ def test_a_lapse_marks_the_account_and_opens_one_incident_for_it() -> None:
         None,
         WORK,
     )
-    assert incident.summary == "Authorization for Google Calendar expired"
+    assert incident.summary == "Authorization for Example Calendar expired"
+    assert incident.provider is ProviderKind.GOOGLE
     assert incident.message is not None
     assert incident.message.code == "authorization_lapsed"
 
@@ -185,6 +196,9 @@ def test_a_lapse_found_outside_a_sync_run_stops_the_accounts_enabled_rules() -> 
         destination=endpoint("other-account", "away"),
     )
     unit_of_work.state.rules = {r.id: r for r in (enabled, previewed, elsewhere)}
+    unit_of_work.state.accounts[ConnectedAccountId("other-account")] = (
+        ConnectedAccountState.CONNECTED
+    )
 
     lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
 
@@ -292,7 +306,7 @@ def test_the_check_leaves_the_incident_of_an_account_still_lapsed() -> None:
 def test_the_check_stops_the_rules_an_interrupted_lapse_left_enabled() -> None:
     # The lapse committed, then the process stopped before it stopped a rule or opened the
     # account's Incident.
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     incidents, notifications, lapses = _stored(unit_of_work)
     elsewhere = replace(
         rule(),
@@ -320,16 +334,17 @@ def test_the_check_stops_the_rules_an_interrupted_lapse_left_enabled() -> None:
     assert (sent.key, sent.category, sent.summary, sent.cause) == (
         "authorization:work-account",
         "authentication",
-        "Authorization for Google Calendar expired",
+        "Authorization for the calendar provider expired",
         None,
     )
+    # The core names no provider; the Web UI names it from the message's `provider`.
     assert sent.message is not None
     assert sent.message.params == {"kind": "authentication", "provider": "google"}
 
 
 def test_the_check_opens_the_incident_an_interrupted_lapse_left_unopened() -> None:
     # Every rule stopped before the process stopped.
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     incidents, notifications, lapses = _stored(unit_of_work)
     stopped = rule().degrade(awaiting_reauthorization=True)
     unit_of_work.state.rules = {stopped.id: stopped}
@@ -342,7 +357,7 @@ def test_the_check_opens_the_incident_an_interrupted_lapse_left_unopened() -> No
 
 
 def test_the_check_leaves_an_open_incident_as_its_lapse_opened_it() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     _, notifications, lapses = _stored(unit_of_work)
     refused = replace(EXPIRED, cause=Cause.OAUTH_CLIENT_INVALID)
     lapses.lapsed(WORK, refused, attempted_at=NOW)
@@ -353,4 +368,6 @@ def test_the_check_leaves_an_open_incident_as_its_lapse_opened_it() -> None:
 
     assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DEGRADED
     (sent,) = notifications.sent
-    assert unit_of_work.database.incidents[USER][sent.key].cause is Cause.OAUTH_CLIENT_INVALID
+    assert (
+        unit_of_work.database.incidents[USER][sent.key].report.cause is Cause.OAUTH_CLIENT_INVALID
+    )

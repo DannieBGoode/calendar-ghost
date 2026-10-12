@@ -28,6 +28,7 @@ export function RuleEndpoint({
         displayName={account?.display_name ?? ""}
         email={account?.email ?? endpoint.connected_account_id}
         avatarUrl={account?.avatar_url}
+        provider={account?.provider}
         compact
       />
       <span className="rule-endpoint-copy">

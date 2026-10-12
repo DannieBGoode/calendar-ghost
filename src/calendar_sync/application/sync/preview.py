@@ -23,7 +23,6 @@ from calendar_sync.domain.model import (
     SyncAction,
     SyncRule,
     SyncRuleId,
-    SyncRuleState,
 )
 from calendar_sync.domain.services import EventProjector, SyncDecisionService
 
@@ -52,14 +51,6 @@ class RulePreview:
     occurrence_changes: int = 0
 
 
-def _excluded(event: CalendarEvent, rule: SyncRule) -> bool:
-    return (
-        event.managed_origin is not None
-        or event.status is EventStatus.CANCELLED
-        or rule.transformation.exclusion(event) is not None
-    )
-
-
 @dataclass(slots=True)
 class _PreviewScope:
     """Source events a preview would project, each with its parent series if an occurrence."""
@@ -82,7 +73,7 @@ class PreviewSyncRule:
     projector: EventProjector
     clock: Clock
     decisions: SyncDecisionService
-    locks: RuleLocks = field(default_factory=RuleLocks)
+    locks: RuleLocks
     incidents: RecoveryIncidents | None = None
 
     def execute(self, rule_id: SyncRuleId) -> RulePreview:
@@ -141,11 +132,7 @@ class PreviewSyncRule:
             rule = uow.rules.get(rule_id)
         if rule is None:
             raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
-        if rule.state not in {
-            SyncRuleState.DRAFT,
-            SyncRuleState.PAUSED,
-            SyncRuleState.DEGRADED,
-        }:
+        if not rule.can_preview:
             raise RuleNotExecutable(f"sync rule cannot preview from state {rule.state}")
         return rule
 
@@ -155,7 +142,7 @@ class PreviewSyncRule:
         live: dict[EventRef, bool] = {}
 
         def skipped(master: CalendarEvent) -> bool:
-            if _excluded(master, rule):
+            if not rule.eligible(master):
                 return True
             if master.recurrence is None:
                 return False
@@ -201,11 +188,7 @@ class PreviewSyncRule:
         start = event.occurrence.original_start
         series_mapping = uow.mappings.for_source(rule.id, parent.reference)
         if series_mapping is None:
-            cancels = (
-                event.status is EventStatus.CANCELLED
-                or rule.transformation.exclusion(event) is not None
-            )
-            action = SyncAction.DELETE if cancels else SyncAction.UPDATE
+            action = SyncAction.UPDATE if rule.transformation.projects(event) else SyncAction.DELETE
         else:
             destination_series = self.provider.get_event(series_mapping.destination)
             destination = (

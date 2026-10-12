@@ -2,6 +2,7 @@ import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
 import type { ProjectionHandling, RemovalResult, RulePolicyPayload, RunOutcome } from "@/lib/api"
 import { responseConsequences } from "@/lib/invitation-responses"
+import { providerWords } from "@/lib/providers"
 
 export function policyChanged(current: RulePolicyPayload, next: RulePolicyPayload): boolean {
   return (
@@ -150,8 +151,10 @@ const FAILURE_LABELS: Record<ProviderFailureKind, MessageKey> = {
   infrastructure: "ruleDetails.failure.unknown",
 }
 
-export function failureLabel(i18n: I18n, failureKind: string | null): string {
-  return i18n.t(isFailureKind(failureKind) ? FAILURE_LABELS[failureKind] : "ruleDetails.failure.unknown")
+/** What failed in a run, naming the provider of the calendar that failed when the server says which. */
+export function failureLabel(i18n: I18n, outcome: Pick<RunOutcome, "failure_kind" | "failure_provider">): string {
+  const kind = outcome.failure_kind
+  return i18n.t(isFailureKind(kind) ? FAILURE_LABELS[kind] : "ruleDetails.failure.unknown", providerWords(i18n, outcome.failure_provider))
 }
 
 /** A reconciliation only reports; the sync before it made any repairs. */
@@ -177,7 +180,7 @@ export function runOutcomeSummary(
 ): string {
   if (outcome === null) return i18n.t("ruleDetails.outcome.notRun")
   if (!outcome.succeeded) {
-    return i18n.t("ruleDetails.outcome.failed", { reason: failureLabel(i18n, outcome.failure_kind) })
+    return i18n.t("ruleDetails.outcome.failed", { reason: failureLabel(i18n, outcome) })
   }
   if (kind === "reconciliation") return reconciliationSummary(i18n, outcome)
   const { created, updated, deleted, conflicts } = outcome

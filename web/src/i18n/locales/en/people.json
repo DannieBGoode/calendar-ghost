@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "People",
-    "intro": "The people who sign in here and whether their synchronization works. You see their email, role, sign-ins, and sync status, never their calendars, Google account emails, or events.",
+    "intro": "The people who sign in here and whether their synchronization works. You see their email, role, sign-ins, and sync status, never their calendars, connected account emails, or events.",
     "loading": "Loading people",
     "loadFailure": "People could not load",
     "listTitle": "Everyone here"
@@ -74,7 +74,7 @@
     "passwordReset": "Create password reset link",
     "passwordResetHint": "A link they use once to choose a new password.",
     "delete": "Delete",
-    "deleteHint": "Deletes their sign-in, rules, and Google connections, and the events their rules wrote. Their Google accounts and their own events stay."
+    "deleteHint": "Deletes their sign-in, rules, and calendar connections, and the events their rules wrote. Their calendar accounts and their own events stay."
   },
   "status": {
     "administrator": "{email} is now an administrator.",
@@ -93,7 +93,7 @@
   },
   "delete": {
     "title": "Delete {email} permanently?",
-    "body": "This deletes their sign-in, rules, Google connections, tokens, and Activity. The events their rules wrote are deleted from their calendars wherever Calendar Ghost can still reach them. Their own events and their Google accounts stay as they are. Backups taken before now keep their records until they rotate out. This cannot be undone.",
+    "body": "This deletes their sign-in, rules, calendar connections, tokens, and Activity. The events their rules wrote are deleted from their calendars wherever Calendar Ghost can still reach them. Their own events and their calendar accounts stay as they are. Backups taken before now keep their records until they rotate out. This cannot be undone.",
     "keep": "Keep this person",
     "confirm": "Delete permanently",
     "pending": "Deleting…"
@@ -127,7 +127,7 @@
     "stalled": "Not running",
     "stopped": "Stopped",
     "review": "Needs a look",
-    "waiting": "Waiting for Google",
+    "waiting": "Waiting for the provider",
     "paused": "Paused",
     "setup": "Not set up",
     "healthy": "Healthy"
@@ -137,7 +137,7 @@
       "stalled": "Calendar Ghost has not checked calendars recently, so nothing synchronizes until the service runs again.",
       "stopped": "A rule stopped syncing and writes nothing until it is fixed.",
       "review": "Rules keep running, but something kept happening or events could not be synced.",
-      "waiting": "Google is limiting or failing requests. Calendar Ghost retries by itself.",
+      "waiting": "A calendar provider is limiting or failing requests. Calendar Ghost retries by itself.",
       "paused": "Rules exist, but none is running.",
       "setup": "No rule is synchronizing yet.",
       "healthy": "Every rule is running and up to date."
@@ -155,8 +155,8 @@
         "other": "{count} rules"
       },
       "accounts": {
-        "one": "{count} Google account",
-        "other": "{count} Google accounts"
+        "one": "{count} calendar account",
+        "other": "{count} calendar accounts"
       },
       "activity": {
         "one": "{count} Activity entry",
@@ -190,7 +190,7 @@
     "calendar": "Calendar {number}",
     "stops": "Stops {rules}.",
     "ifTheyAsk": {
-      "reauthorize": "If they ask for help: they reauthorize their Google account in Settings, under Connections.",
+      "reauthorize": "If they ask for help: they reauthorize their {account} in Settings, under Connections.",
       "preview": "If they ask for help: they open the rule and preview it again to restart it.",
       "activity": "If they ask for help: their Activity explains what happened and what to do.",
       "overdue": "If they ask for help: they choose Sync now on the rule, or check their Activity.",
@@ -206,7 +206,7 @@
     },
     "next": {
       "reauthorize": {
-        "self": "Reauthorize your Google account in Settings, under Connections."
+        "self": "Reauthorize your {account} in Settings, under Connections."
       },
       "preview": {
         "self": "Open the rule and preview it again to restart it."
@@ -223,8 +223,8 @@
         "self": "Open the rule to choose another calendar, or remove the rule."
       },
       "administrator": {
-        "administrator": "You fix this as the administrator, in Google Cloud.",
-        "person": "You fix this as the administrator, in Google Cloud. {name} has nothing to do."
+        "administrator": "You fix this as the administrator, in {console}.",
+        "person": "You fix this as the administrator, in {console}. {name} has nothing to do."
       },
       "ownCause": {
         "person": "{name} can fix this from their dashboard.",
@@ -234,8 +234,8 @@
     "statusTitle": "Synchronization",
     "callsMeaning": {
       "normal": "These calls look normal.",
-      "limited": "Google asked Calendar Ghost to slow down a few times, and it tried again later.",
-      "manyFailed": "Many calls failed. A Google account usually needs reauthorization, or Google is having trouble."
+      "limited": "{Provider} asked Calendar Ghost to slow down a few times, and it tried again later.",
+      "manyFailed": "Many calls failed. A {account} usually needs reauthorization, or {provider} is having trouble."
     }
   },
   "problems": {
@@ -273,12 +273,12 @@
         "other": "{count} people are affected because {cause}."
       },
       "testingMode": {
-        "one": "{count} person lost Google about 7 days after connecting, which usually means the Google OAuth app is in Testing mode.",
-        "other": "{count} people lost Google about 7 days after connecting, which usually means the Google OAuth app is in Testing mode."
+        "one": "{count} person lost access about 7 days after connecting, which usually means the OAuth app at {provider} is in Testing mode.",
+        "other": "{count} people lost access about 7 days after connecting, which usually means the OAuth app at {provider} is in Testing mode."
       },
       "unrecognized": {
-        "one": "{count} person failed for a reason Calendar Ghost does not recognize. The service logs name Google's reason.",
-        "other": "{count} people failed for a reason Calendar Ghost does not recognize. The service logs name Google's reason."
+        "one": "{count} person failed for a reason Calendar Ghost does not recognize. The service logs name {provider}'s reason.",
+        "other": "{count} people failed for a reason Calendar Ghost does not recognize. The service logs name {provider}'s reason."
       },
       "howToFixLabel": "How to fix: {hint}"
     }
@@ -287,7 +287,7 @@
     "back": "People",
     "loading": "Loading this person",
     "loadFailure": "This person could not load",
-    "intro": "You see whether their synchronization works, never their calendar names, Google account emails, or events.",
+    "intro": "You see whether their synchronization works, never their calendar names, connected account emails, or events.",
     "joined": "Joined {relative}",
     "lastSignIn": "Last signed in {relative}",
     "neverSignedIn": "Never signed in",
@@ -310,15 +310,15 @@
   },
   "cause": {
     "label": "Likely cause: {cause}.",
-    "api_disabled": "the Google Calendar API is turned off for this installation",
-    "quota_exceeded": "this installation's daily quota of Google requests is used up",
-    "oauth_client_invalid": "Google no longer accepts this installation's OAuth client",
-    "access_revoked": "Google no longer accepts this Google account's permission",
-    "calendar_forbidden": "the Google account may not change this calendar",
+    "api_disabled": "{api} is turned off for this installation",
+    "quota_exceeded": "this installation's daily quota of {provider} requests is used up",
+    "oauth_client_invalid": "{provider} no longer accepts this installation's OAuth client",
+    "access_revoked": "{provider} no longer accepts this {account}'s permission",
+    "calendar_forbidden": "the {account} may not change this calendar",
     "calendar_not_found": "the calendar no longer exists, or is no longer shared with the account",
-    "rate_limited": "Google asked Calendar Ghost to slow down",
-    "temporary": "Google failed for a moment",
-    "unknown": "Google refused for a reason Calendar Ghost does not recognize",
+    "rate_limited": "{provider} asked Calendar Ghost to slow down",
+    "temporary": "{provider} failed for a moment",
+    "unknown": "{provider} refused for a reason Calendar Ghost does not recognize",
     "lastTried": "Last tried {relative}.",
     "triesAgain": "Tries again {relative}.",
     "howToFix": "How to fix"

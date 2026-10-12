@@ -205,7 +205,7 @@ describe("account select", () => {
     const fallbackMarkup = renderAccountSelect("unknown")
     expect(fallbackMarkup).toContain("Daniel Calatayud")
     expect(fallbackMarkup).toContain(">DC</span>")
-    expect(renderAccountSelect("", [])).toContain("No Google accounts")
+    expect(renderAccountSelect("", [])).toContain("No calendar accounts")
   })
 
   it("keeps the account avatar and combobox structure in the component", () => {

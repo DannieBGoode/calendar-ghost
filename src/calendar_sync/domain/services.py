@@ -23,6 +23,7 @@ from calendar_sync.domain.model import (
     ReconciliationConflict,
     ReconciliationDrift,
     ReconciliationReport,
+    Recurrence,
     SyncAction,
     SyncDecision,
     SyncReason,
@@ -65,10 +66,42 @@ def _tentative_title(title: str, content: ProjectionContent) -> str:
     return f"Maybe: {title}" if title else "Maybe"
 
 
+def _canonical_lines(recurrence: Recurrence | None) -> list[str] | None:
+    """Recurrence lines with each rule's parts in one order. RFC 5545 lets a rule list its parts
+    in any order, and a provider may store them in its own, such as `UNTIL` before `BYDAY`.
+    The rule repeats the same either way, so the order is no difference to repair."""
+    if recurrence is None:
+        return None
+    return [_canonical_line(line) for line in recurrence.lines]
+
+
+def _canonical_line(line: str) -> str:
+    name, separator, value = line.partition(":")
+    if not separator or name.upper() not in {"RRULE", "EXRULE"}:
+        return line
+    parts = sorted(value.split(";"), key=lambda part: (not part.upper().startswith("FREQ="), part))
+    return f"{name}:{';'.join(parts)}"
+
+
 class ProjectionFingerprinter:
     """Creates a stable, non-reversible digest of normalized projection content."""
 
     def fingerprint(self, projection: EventProjection) -> ProjectionFingerprint:
+        return self._digest(projection, _canonical_lines(projection.recurrence))
+
+    def matches(self, projection: EventProjection, stored: ProjectionFingerprint | None) -> bool:
+        """Whether `stored` was taken of this projection. A fingerprint stored before rules were
+        compared by their parts hashed the lines as written, and is kept until the next write."""
+        if stored is None:
+            return False
+        if self.fingerprint(projection) == stored:
+            return True
+        written = list(projection.recurrence.lines) if projection.recurrence else None
+        return projection.recurrence is not None and self._digest(projection, written) == stored
+
+    def _digest(
+        self, projection: EventProjection, recurrence: list[str] | None
+    ) -> ProjectionFingerprint:
         payload = {
             "time": self._serialize_time(
                 projection.time, recurring=projection.recurrence is not None
@@ -76,7 +109,7 @@ class ProjectionFingerprinter:
             "title": projection.title,
             "description": projection.description,
             "location": projection.location,
-            "recurrence": projection.recurrence.lines if projection.recurrence else None,
+            "recurrence": recurrence,
         }
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return ProjectionFingerprint(hashlib.sha256(encoded.encode()).hexdigest())
@@ -161,12 +194,13 @@ class SyncDecisionService:
         # Only a projection the source now calls for differently is a source change; a revision
         # whose projection is the one last written, such as another guest's reply, left the
         # destination edit to repair.
-        if (
-            mapping.source_revision != source_event.revision
-            and expected != mapping.projection_fingerprint
+        if mapping.source_revision != source_event.revision and not self._fingerprinter.matches(
+            projection, mapping.projection_fingerprint
         ):
             reason = SyncReason.SOURCE_CHANGED
-        elif rule.reprojection_required and actual == mapping.projection_fingerprint:
+        elif rule.reprojection_required and self._fingerprinter.matches(
+            self.as_projection(actual_destination), mapping.projection_fingerprint
+        ):
             # The destination is as last written, so the rule's changed policy calls for this.
             reason = SyncReason.POLICY_APPLIED
         else:
@@ -375,7 +409,7 @@ def _destination_occurrence_conflict(
         return None
     if not _is_occurrence_of(destination, series_mapping.destination, situation.original_start):
         return SyncReason.DESTINATION_IDENTITY_INCONSISTENT
-    # Google omits metadata on cancelled instances; the parent series proves ownership.
+    # A provider may omit metadata on cancelled instances; the parent series proves it.
     origin = destination.managed_origin
     if origin is not None and not origin.owns(rule, situation.source_series.reference):
         return SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT

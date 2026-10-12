@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import math
 import threading
 import time
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from email.utils import parsedate_to_datetime
 from typing import Any
 
 from google.auth.exceptions import RefreshError, TransportError
@@ -29,12 +27,14 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.google.causes import (
     QUOTA_REASONS,
     RATE_LIMIT_REASONS,
     cause_of,
     http_reasons,
 )
+from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.google.translation import (
     OPERATION_PROPERTY,
     RULE_PROPERTY,
@@ -43,7 +43,7 @@ from calendar_sync.infrastructure.google.translation import (
     to_domain_event,
 )
 from calendar_sync.infrastructure.provider_calls import record_call
-from calendar_sync.infrastructure.scheduling import SystemClock
+from calendar_sync.infrastructure.retry_after import retry_after_seconds
 
 GoogleServiceFactory = Callable[[ConnectedAccountId], Any]
 
@@ -123,6 +123,7 @@ class GoogleCalendarProvider:
                             ProviderFailureKind.PERMANENT,
                             "Google response did not include a synchronization token",
                             provider=ProviderKind.GOOGLE,
+                            provider_label=GOOGLE.calendar_name,
                         )
                     return ProviderChangeSet(tuple(items), next_cursor, complete=not cursor)
                 parameters["pageToken"] = page_token
@@ -153,21 +154,20 @@ class GoogleCalendarProvider:
     def find_projection(
         self, destination: CalendarEndpoint, operation_key: str
     ) -> CalendarEvent | None:
-        try:
-            existing = self._call(
-                "events.list",
-                self._service(destination.connected_account_id)
-                .events()
-                .list(
-                    calendarId=destination.calendar_id.value,
-                    privateExtendedProperty=f"{OPERATION_PROPERTY}={operation_key}",
-                    showDeleted=False,
-                    maxResults=2,
-                ),
-            ).get("items", [])
-        except Exception as error:
-            raise self._failure(error, destination.connected_account_id) from error
-        return to_domain_event(existing[0], destination) if existing else None
+        """The projection one Operation Key wrote, from every page Google answers; more than one
+        event carrying the key is never told apart."""
+        found = self._list(
+            destination,
+            {
+                "calendarId": destination.calendar_id.value,
+                "privateExtendedProperty": f"{OPERATION_PROPERTY}={operation_key}",
+                "showDeleted": False,
+                "maxResults": 2,
+            },
+        )
+        if len(found) > 1:
+            raise _mismatch("Google holds more than one event for one Operation Key")
+        return found[0] if found else None
 
     def create_projection(
         self,
@@ -179,6 +179,8 @@ class GoogleCalendarProvider:
     ) -> CreatedProjection:
         existing = self.find_projection(destination, operation_key)
         if existing is not None:
+            if not _owned(existing.managed_origin, rule_id, source):
+                raise _mismatch("Google event does not carry compatible ownership metadata")
             return CreatedProjection(existing)
         try:
             payload = self._call(
@@ -213,6 +215,7 @@ class GoogleCalendarProvider:
             raise ProjectionOwnershipMismatch(
                 "Google event does not carry compatible ownership metadata",
                 provider=ProviderKind.GOOGLE,
+                provider_label=GOOGLE.calendar_name,
             )
         try:
             payload = self._call(
@@ -251,6 +254,7 @@ class GoogleCalendarProvider:
             raise ProjectionOwnershipMismatch(
                 "Google event does not carry compatible ownership metadata",
                 provider=ProviderKind.GOOGLE,
+                provider_label=GOOGLE.calendar_name,
             )
         try:
             self._call(
@@ -349,6 +353,7 @@ class GoogleCalendarProvider:
                     ProviderFailureKind.TEMPORARY,
                     "Google series could not be read while resolving an occurrence",
                     provider=ProviderKind.GOOGLE,
+                    provider_label=GOOGLE.calendar_name,
                 ) from error
             raise self._failure(error, series.calendar.connected_account_id) from error
         # Pages beyond the limit were not read, so the occurrence is not proven absent.
@@ -356,6 +361,7 @@ class GoogleCalendarProvider:
             ProviderFailureKind.TEMPORARY,
             "Google did not finish resolving an occurrence within the page limit",
             provider=ProviderKind.GOOGLE,
+            provider_label=GOOGLE.calendar_name,
         )
 
     def list_occurrences(
@@ -487,6 +493,7 @@ class GoogleCalendarProvider:
                 ProviderFailureKind.PERMANENT,
                 "Google occurrence could not be resolved",
                 provider=ProviderKind.GOOGLE,
+                provider_label=GOOGLE.calendar_name,
             )
         body = projection_payload(
             projection, rule_id, source_series, operation_key, original_start=original_start
@@ -554,6 +561,7 @@ class GoogleCalendarProvider:
             _provider_failure(error, now, event_scoped),
             account_id=account,
             provider=ProviderKind.GOOGLE,
+            provider_label=GOOGLE.calendar_name,
             attempted_at=read.get(account, now),
         )
 
@@ -580,6 +588,7 @@ class GoogleCalendarProvider:
                 ProviderFailureKind.PERMANENT,
                 "Google occurrence does not carry compatible ownership metadata",
                 provider=ProviderKind.GOOGLE,
+                provider_label=GOOGLE.calendar_name,
             )
         return instance
 
@@ -588,6 +597,12 @@ def _as_instant(start: OccurrenceStart) -> datetime:
     if isinstance(start, datetime):
         return start.astimezone(UTC)
     return datetime(start.year, start.month, start.day, tzinfo=UTC)
+
+
+def _mismatch(detail: str) -> ProjectionOwnershipMismatch:
+    return ProjectionOwnershipMismatch(
+        detail, provider=ProviderKind.GOOGLE, provider_label=GOOGLE.calendar_name
+    )
 
 
 def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) -> bool:
@@ -658,28 +673,11 @@ OCCURRENCE_LISTING_MARGIN = timedelta(days=31)
 UNLISTABLE_SERIES_STATUSES = frozenset({400, 404, 410})
 
 
-# Retries wait in-process while holding the rule lock, so a longer provider hint is bounded; the
-# attempt then fails again and the rule's normal failure handling takes over.
-MAX_RETRY_AFTER_SECONDS = 60
-
-
 def _retry_after_seconds(error: Exception, now: datetime) -> int | None:
-    """Read Google's Retry-After header, given either as seconds or as an HTTP date."""
+    """Google's Retry-After header, read as for every provider."""
     response = getattr(error, "resp", None)
     value = response.get("retry-after") if isinstance(response, Mapping) else None
-    if not isinstance(value, str):
-        return None
-    if value.strip().isdigit():
-        seconds = int(value.strip())
-    else:
-        try:
-            moment = parsedate_to_datetime(value)
-        except (TypeError, ValueError):
-            return None
-        if moment.tzinfo is None:
-            moment = moment.replace(tzinfo=UTC)
-        seconds = max(0, math.ceil((moment - now).total_seconds()))
-    return min(seconds, MAX_RETRY_AFTER_SECONDS)
+    return retry_after_seconds(value if isinstance(value, str) else None, now)
 
 
 def _status_code(error: Exception) -> int | None:

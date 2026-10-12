@@ -4,6 +4,7 @@ import hashlib
 from dataclasses import dataclass
 
 from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import UnsupportedProjection
 from calendar_sync.application.sync.ports import CalendarProvider
 from calendar_sync.application.sync.sync_run import (
     SyncRunContext,
@@ -60,7 +61,13 @@ class SynchronizeEvents:
         # Deciding may read the provider, which takes time; the User may be disabled meanwhile.
         require_unchanged(run)
         run.count(decision.action, source_event.reference)
-        mapping = self._write(run, source_event, mapping, decision, source_moved=source_moved)
+        try:
+            mapping = self._write(run, source_event, mapping, decision, source_moved=source_moved)
+        except UnsupportedProjection as unsupported:
+            # The destination cannot hold it exactly, so it is blocked rather than approximated.
+            blocked = SyncDecision(SyncAction.CONFLICT, unsupported.reason)
+            run.recount(decision.action, blocked.action, source_event.reference)
+            decision, source_moved = blocked, False
         if record_current or decision.reason is not SyncReason.PROJECTION_CURRENT:
             record(
                 run,
@@ -96,7 +103,7 @@ class SynchronizeEvents:
             # A listed projection is used once; any later decision this run reads it fresh.
             listed = run.listed_destinations.pop(mapping.destination, None)
             fetched = listed if listed is not None else self.provider.get_event(mapping.destination)
-            # Google keeps deleted events as metadata-less cancellations; treat them as missing.
+            # A provider may keep deleted events as metadata-less cancellations: they are missing.
             actual = None if fetched is None or fetched.status is EventStatus.CANCELLED else fetched
         decision = self.decisions.decide(
             rule, source_event, mapping, actual, window_start=run.window_start
@@ -107,7 +114,7 @@ class SynchronizeEvents:
                 rule.id, source_event.reference, source_event.revision, SyncAction.CREATE
             ),
         ):
-            # Google acknowledged this create before an interrupted run could record its
+            # The provider acknowledged this create before an interrupted run could record its
             # mapping; complete it idempotently instead of orphaning the projection.
             decision = self.decisions.decide(rule, source_event, mapping, actual)
         if (
@@ -135,7 +142,14 @@ class SynchronizeEvents:
         """Apply a decision to the destination and the Event Mapping; answer the mapping now."""
         uow, rule = run.uow, run.rule
         operation_key = event_operation_key(
-            rule.id, source_event.reference, source_event.revision, decision.action
+            rule.id,
+            source_event.reference,
+            source_event.revision,
+            decision.action,
+            # Writing a projection again, after its destination lost it, is a create of its own.
+            replacing=mapping.destination
+            if mapping and decision.action is SyncAction.CREATE
+            else None,
         )
         if mapping is not None and decision.action in _DESTINATION_WRITES:
             # Occurrences decided after this write read the series as it now is.
@@ -210,7 +224,7 @@ class SynchronizeEvents:
     def _acknowledged_series(
         self, run: SyncRunContext, source_event: CalendarEvent
     ) -> tuple[EventMapping | None, CalendarEvent | None]:
-        """Find a series Google created before an interrupted run could record its mapping.
+        """Find a series the provider created before an interrupted run could record its mapping.
 
         Its ownership is then verified like any mapped projection before it is removed.
         """
@@ -238,15 +252,21 @@ def event_operation_key(
     source: EventRef,
     revision: str,
     action: SyncAction,
+    *,
+    replacing: EventRef | None = None,
 ) -> str:
-    raw = "|".join(
-        (
-            rule_id.value,
-            source.calendar.connected_account_id.value,
-            source.calendar.calendar_id.value,
-            source.event_id.value,
-            revision,
-            action.value,
-        )
-    )
-    return hashlib.sha256(raw.encode()).hexdigest()
+    """The write's stable key. A create that replaces a projection its destination lost names
+    the lost one, so it is new for each replacement and the same for each retry of it: a
+    provider that keeps the key of a create, as Graph's transactionId does, never answers it
+    with the projection it replaces."""
+    parts = [
+        rule_id.value,
+        source.calendar.connected_account_id.value,
+        source.calendar.calendar_id.value,
+        source.event_id.value,
+        revision,
+        action.value,
+    ]
+    if replacing is not None:
+        parts.append(replacing.event_id.value)
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()

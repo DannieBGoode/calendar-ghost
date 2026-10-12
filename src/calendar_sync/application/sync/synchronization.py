@@ -5,11 +5,16 @@ from dataclasses import dataclass, field
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.change_feeds import ChangeFeedCursors
-from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable, RuleNotFound
-from calendar_sync.application.sync.event_sync import SynchronizeEvents
+from calendar_sync.application.sync.errors import (
+    ProviderFailure,
+    RuleNotExecutable,
+    RuleNotFound,
+    UnsupportedProjection,
+)
+from calendar_sync.application.sync.event_sync import SynchronizeEvents, event_operation_key
 from calendar_sync.application.sync.exception_replays import ExceptionReplays
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.sync.occurrences import SynchronizeOccurrences
+from calendar_sync.application.sync.occurrences import SeriesRepairs, SynchronizeOccurrences
 from calendar_sync.application.sync.own_writes import is_own_occurrence_write, is_own_write
 from calendar_sync.application.sync.ports import (
     CalendarProvider,
@@ -21,13 +26,14 @@ from calendar_sync.application.sync.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.application.sync.resource_use import record_provider_calls
-from calendar_sync.application.sync.run_log import UntalliedProviderCalls
+from calendar_sync.application.sync.run_log import UntalliedProviderCalls, failure_site
 from calendar_sync.application.sync.sync_run import (
     SyncRunContext,
     SyncRunLog,
     record,
     require_unchanged,
 )
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import (
@@ -40,7 +46,6 @@ from calendar_sync.domain.model import (
     SyncReason,
     SyncRule,
     SyncRuleId,
-    SyncRuleState,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
@@ -67,7 +72,7 @@ def _executable_rule(uow: UnitOfWork, rule_id: SyncRuleId) -> SyncRule:
     rule = uow.rules.get(rule_id)
     if rule is None:
         raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
-    if rule.state is not SyncRuleState.ENABLED:
+    if not rule.synchronizes:
         raise RuleNotExecutable(f"sync rule is {rule.state}, not enabled")
     # The scheduler lists rules before it runs them, so a User disabled since is caught here.
     if not uow.user_active():
@@ -83,7 +88,7 @@ class ExecuteSyncRule:
     fingerprinter: ProjectionFingerprinter
     clock: Clock
     run_ids: RunIdGenerator
-    locks: RuleLocks = field(default_factory=RuleLocks)
+    locks: RuleLocks
     call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
     change_feeds: ChangeFeedCursors = field(init=False, repr=False)
     events: SynchronizeEvents = field(init=False, repr=False)
@@ -101,7 +106,7 @@ class ExecuteSyncRule:
             self.decisions,
             self.fingerprinter,
             self.clock,
-            self._repair_series,
+            SeriesRepairs(self._repair_series, self._rebuild_series),
             self.locks,
         )
         self.exception_replays = ExceptionReplays(self.provider, self.occurrences)
@@ -132,17 +137,24 @@ class ExecuteSyncRule:
             log.stopped()
             raise
         except ProviderFailure as failure:
-            log.failed(failure.kind.value)
-            self._record_failure(rule_id, full, failure.kind, failure.provider_cause)
+            log.failed(failure.kind.value, failure_site(failure))
+            self._record_failure(
+                rule_id, full, failure.kind, failure.provider_cause, failure.provider
+            )
             raise
-        except Exception:
-            log.failed(ProviderFailureKind.INFRASTRUCTURE.value)
+        except Exception as error:
+            log.failed(ProviderFailureKind.INFRASTRUCTURE.value, failure_site(error))
             # A local failure: no provider refused, so it has no Cause.
-            self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE, None)
+            self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE)
             raise
 
     def _record_failure(
-        self, rule_id: SyncRuleId, full: bool, kind: ProviderFailureKind, cause: Cause | None
+        self,
+        rule_id: SyncRuleId,
+        full: bool,
+        kind: ProviderFailureKind,
+        cause: Cause | None = None,
+        provider: ProviderKind | None = None,
     ) -> None:
         # Recording evidence must never replace the failure the scheduler classifies.
         with suppress(Exception), self.unit_of_work() as uow:
@@ -156,6 +168,7 @@ class ExecuteSyncRule:
                         full,
                         failure_kind=kind,
                         failure_cause=cause,
+                        failure_provider=provider,
                     )
                 )
                 uow.commit()
@@ -348,6 +361,75 @@ class ExecuteSyncRule:
             actual_destination=None,
             record_current=False,
         ).reason
+
+    def _rebuild_series(
+        self, run: SyncRunContext, source_series: CalendarEvent
+    ) -> SyncReason | None:
+        """Delete the destination series and write it again from the source, with its moved and
+        cancelled occurrences, to bring back an occurrence its provider cannot restore (ADR 0034).
+
+        Deleting it is guarded as any deletion is, so a series someone invited guests to is not
+        rebuilt; the answer is then why, and None once the series is written again.
+        """
+        run.rebuilt.add(source_series.reference)
+        if not self._series_current(run, source_series):
+            # The series is written again as the source has it now; one the destination could
+            # not hold would be deleted for good. It changes as any series does, then rebuilds.
+            return SyncReason.OCCURRENCE_NOT_RESTORABLE
+        with self.locks.for_writes(run.rule.id):
+            require_unchanged(run)
+            mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
+            if mapping is None:
+                return SyncReason.OCCURRENCE_NOT_RESTORABLE
+            try:
+                self.provider.delete_projection(
+                    mapping.destination,
+                    source_series.reference,
+                    run.rule.id,
+                    event_operation_key(
+                        run.rule.id,
+                        source_series.reference,
+                        source_series.revision,
+                        SyncAction.DELETE,
+                    ),
+                )
+            except UnsupportedProjection as unsupported:
+                return unsupported.reason
+            run.count(SyncAction.DELETE, source_series.reference)
+            record(
+                run,
+                AuditEntry(
+                    occurred_at=self.clock.now(),
+                    rule_id=run.rule.id,
+                    action=AuditAction.of(SyncAction.DELETE),
+                    outcome=AuditOutcome.of(SyncAction.DELETE),
+                    source_event_id=source_series.reference.event_id.value,
+                    destination_event_id=mapping.destination.event_id.value,
+                    reason=SyncReason.SERIES_REBUILT,
+                    run_id=run.run_id,
+                    event=RecordedEvent.of(source_series),
+                ),
+            )
+            run.uow.commit()
+        # Found missing, the series is written again and every recorded occurrence re-applied,
+        # including those this run checked against the series just deleted.
+        for recorded in run.uow.occurrences.for_series(mapping.id):
+            run.handled.discard(recorded.source)
+        self._synchronize_event(
+            run, source_series, destination_loaded=False, actual_destination=None
+        )
+        return None
+
+    def _series_current(self, run: SyncRunContext, source_series: CalendarEvent) -> bool:
+        """Whether the destination series is as the source series projects now."""
+        mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
+        if mapping is None:
+            return False
+        actual = self.provider.get_event(mapping.destination)
+        decision = self.decisions.decide(
+            run.rule, source_series, mapping, actual, window_start=run.window_start
+        )
+        return decision.reason is SyncReason.PROJECTION_CURRENT
 
     def _record_skipped_occurrence(self, run: SyncRunContext, exception: CalendarEvent) -> None:
         """An exception of a series this rule never projected has nothing to protect."""

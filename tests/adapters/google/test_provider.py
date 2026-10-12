@@ -136,10 +136,22 @@ def test_incremental_changes_are_not_a_complete_listing() -> None:
 
 
 def test_create_projection_reuses_an_existing_operation() -> None:
+    source = event().reference
+    # The projection an interrupted create left, owned by this rule and source.
+    existing = {
+        **google_event_payload("existing-projection"),
+        "extendedProperties": {
+            "private": {
+                "gcs_rule_id": "rule-1",
+                "gcs_source_account_id": source.calendar.connected_account_id.value,
+                "gcs_source_calendar_id": source.calendar.calendar_id.value,
+                "gcs_source_event_id": source.event_id.value,
+                "gcs_operation_key": "stable-operation-key",
+            }
+        },
+    }
     events_api = MagicMock()
-    events_api.list.return_value = request_returning(
-        {"items": [google_event_payload("existing-projection")]}
-    )
+    events_api.list.return_value = request_returning({"items": [existing]})
     provider = provider_with_events_api(events_api)
     projection = EventProjection(
         TimedInterval(
@@ -151,7 +163,7 @@ def test_create_projection_reuses_an_existing_operation() -> None:
 
     created = provider.create_projection(
         endpoint("work", "destination"),
-        event().reference,
+        source,
         SyncRuleId("rule-1"),
         projection,
         "stable-operation-key",
@@ -179,6 +191,32 @@ def test_google_rate_limit_is_classified_as_retryable() -> None:
 
     assert raised.value.kind is ProviderFailureKind.RATE_LIMIT
     assert raised.value.retryable is True
+
+
+def test_a_google_failure_names_google_calendar_for_incidents_and_logs() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_raising(503)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as raised:
+        provider.get_event(event().reference)
+
+    assert raised.value.provider is ProviderKind.GOOGLE
+    assert raised.value.summary == "Google Calendar is temporarily unavailable"
+
+
+def test_an_ownership_refusal_names_google_calendar() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_returning(google_event_payload("native"))
+    provider = provider_with_events_api(events_api)
+    destination = event("native", calendar=endpoint("work-account", "work-calendar")).reference
+
+    with pytest.raises(ProjectionOwnershipMismatch) as raised:
+        provider.delete_projection(
+            destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
+        )
+
+    assert raised.value.provider_name == "Google Calendar"
 
 
 @pytest.mark.parametrize(

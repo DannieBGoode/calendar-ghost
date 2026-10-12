@@ -14,9 +14,10 @@ from calendar_sync.infrastructure.persistence.connections import open_connection
 
 # Entries clearing never removes, besides every entry newer than the cutoff (the caller's own
 # `occurred_at < :cutoff` condition). Activity compares an entry with the earlier entries of its
-# rule and source event by id: `_repeated_repairs` reads the previous entry, `_previous_names` the
-# previous one that recorded a title, and a persisting block check the latest at or before its
-# floor. So, by id rather than by time, which a clock stepping back would reorder, it keeps:
+# User, rule, and source event by id: `_repeated_repairs` reads the previous entry,
+# `_previous_names` the previous one that recorded a title, and a persisting block check the
+# latest at or before its floor. So, by id rather than by time, which a clock stepping back
+# would reorder, it keeps:
 # - each event's latest entry, which keeps open blocks and the dashboard's blocked-entry links;
 # - the previous entry of every entry newer than the cutoff, and of each event's latest when that
 #   one is a block, which a block check compares with even when the clock made it look old;
@@ -25,10 +26,11 @@ from calendar_sync.infrastructure.persistence.connections import open_connection
 # With ids in time order these are the latest entry older than the cutoff and the latest titled
 # one; entries newer than the cutoff then render exactly as before clearing.
 # Interpolates only the constant `_TITLE_OBSERVED` and `_BLOCK` predicates.
-_LATEST = "SELECT MAX(id) AS id FROM audit_entries GROUP BY rule_id, source_event_id"
+_LATEST = "SELECT MAX(id) AS id FROM audit_entries GROUP BY user_id, rule_id, source_event_id"
 _PREVIOUS = """
     SELECT MAX(p.id) FROM audit_entries p
-    WHERE p.rule_id = k.rule_id AND p.source_event_id = k.source_event_id AND p.id < k.id
+    WHERE p.rule_id = k.rule_id AND p.user_id = k.user_id AND p.source_event_id = k.source_event_id
+        AND p.id < k.id
 """
 _PROTECTED = f"""
     SELECT id FROM (

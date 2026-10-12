@@ -52,12 +52,11 @@ from calendar_sync.infrastructure.persistence.health import SqliteIncidentReposi
 from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
 )
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.adapters.test_user_migration import LATEST_VERSION, database_at_version
 from tests.helpers import NOW, endpoint, event, rule, week_start
-from tests.users import OTHER_USER, RULE_ACCOUNTS, USER, add_user, sqlite_units
+from tests.users import OTHER_USER, RULE_ACCOUNTS, USER, add_user, memory_units, sqlite_units
 
 
 def test_sqlite_rule_repository_round_trip(tmp_path: Path) -> None:
@@ -658,7 +657,7 @@ def test_calendar_names_record_only_changes_and_go_with_their_account(tmp_path: 
 
 
 def test_memory_adapter_keeps_calendar_names_of_existing_accounts() -> None:
-    factory = InMemoryUnitOfWorkFactory().for_user(USER)
+    factory = memory_units()
     account = ConnectedAccountId("account-1")
     factory.state.accounts[account] = ConnectedAccountState.DISCONNECTED
     family = CalendarEndpoint(account, CalendarId("family"))
@@ -674,7 +673,7 @@ def test_memory_adapter_keeps_calendar_names_of_existing_accounts() -> None:
 
 
 def test_memory_adapter_purges_a_rule_with_its_audit_entries() -> None:
-    factory = InMemoryUnitOfWorkFactory().for_user(USER)
+    factory = memory_units()
     # Another direction, since SQLite refuses a second rule for one source and destination.
     other = replace(
         rule(), id=SyncRuleId("rule-2"), destination=endpoint("work-account", "other-calendar")
@@ -703,7 +702,7 @@ def test_memory_adapter_purges_a_rule_with_its_audit_entries() -> None:
 
 
 def test_memory_adapter_supports_removal_counts_and_outcomes() -> None:
-    factory = InMemoryUnitOfWorkFactory().for_user(USER)
+    factory = memory_units()
     with factory() as uow:
         uow.rules.add(rule(state=SyncRuleState.PAUSED))
         uow.mappings.save(_mapping())
@@ -1372,6 +1371,120 @@ def test_an_incident_keeps_the_cause_of_its_latest_failure(tmp_path: Path) -> No
     ] is Cause.API_DISABLED
 
 
+def test_an_incident_keeps_the_provider_of_its_latest_failure(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    user = add_user(database)
+    incidents = SqliteIncidentRepository(database, user)
+    report = IncidentReport(
+        "provider:rule-1",
+        SyncRuleId("rule-1"),
+        IncidentCategory.TEMPORARY,
+        "unavailable",
+        cause=Cause.TEMPORARY,
+        provider=ProviderKind.GOOGLE,
+    )
+
+    incidents.open(report, NOW)
+    incidents.open(
+        IncidentReport("blocked:rule-1", SyncRuleId("rule-1"), IncidentCategory.CONFLICT, "b"), NOW
+    )
+
+    providers = {
+        i.category: i.provider for i in SqliteOperationsQueries(database, user).incidents()
+    }
+    assert providers == {"temporary": ProviderKind.GOOGLE, "conflict": None}
+
+
+def test_a_failed_runs_provider_is_kept_with_its_cause(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    add_user(database)
+    failed = RuleRunOutcome(
+        rule().id,
+        RunKind.SYNC,
+        NOW,
+        False,
+        failure_kind=ProviderFailureKind.TEMPORARY,
+        failure_cause=Cause.TEMPORARY,
+        failure_provider=ProviderKind.GOOGLE,
+    )
+    with sqlite_units(database)() as uow:
+        uow.rules.add(rule())
+        uow.run_outcomes.record(failed)
+        uow.commit()
+    with sqlite_units(database)() as uow:
+        outcome = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+        uow.run_outcomes.record(replace(failed, succeeded=True, failure_kind=None))
+        uow.commit()
+    with sqlite_units(database)() as uow:
+        succeeded = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+
+    assert outcome is not None
+    assert outcome.failure_provider is ProviderKind.GOOGLE
+    # A success has no Cause, so no provider gave one.
+    assert succeeded is not None
+    assert succeeded.failure_provider is None
+
+
+def test_migration_27_names_google_for_every_earlier_providers_cause(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    user = add_user(database)
+    with sqlite_units(database)() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE incidents DROP COLUMN provider")
+        connection.execute("ALTER TABLE rule_run_outcomes DROP COLUMN failure_provider")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 27")
+        connection.executemany(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
+                summary, opened_at, updated_at, user_id, cause)
+            VALUES (?, ?, 'rule-1', ?, 'open', 's', ?, ?, ?, ?)
+            """,
+            [
+                (
+                    key,
+                    f"{kind}:rule-1",
+                    category,
+                    NOW.isoformat(),
+                    NOW.isoformat(),
+                    user.value,
+                    cause,
+                )
+                for key, kind, category, cause in (
+                    ("i-1", "provider", "authorization", "api_disabled"),
+                    ("i-2", "blocked", "conflict", "none"),
+                    ("i-3", "removal", "authorization", None),
+                )
+            ],
+        )
+        connection.execute(
+            """
+            INSERT INTO rule_run_outcomes (rule_id, kind, completed_at, succeeded, failure_kind,
+                failure_cause, user_id)
+            VALUES ('rule-1', 'sync', ?, 0, 'authorization', 'api_disabled', ?)
+            """,
+            (NOW.isoformat(), user.value),
+        )
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with sqlite3.connect(database) as connection:
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+    providers = {i.id: i.provider for i in SqliteOperationsQueries(database, user).incidents()}
+    with sqlite_units(database)() as uow:
+        outcome = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+    # Google was the only provider before; a failure without a Cause names none.
+    assert versions.count(27) == 1
+    assert providers == {"i-1": ProviderKind.GOOGLE, "i-2": None, "i-3": None}
+    assert outcome is not None
+    assert outcome.failure_provider is ProviderKind.GOOGLE
+
+
 def test_migration_26_reads_earlier_failures_as_unknown(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
@@ -1444,6 +1557,7 @@ def test_failure_causes_read_incidents_open_or_recent_and_how_long_a_lapsed_gran
         "expired",
         account_id=work.id,
         cause=Cause.ACCESS_REVOKED,
+        provider=ProviderKind.GOOGLE,
     )
     incidents.open(lapse, NOW - timedelta(days=2))
     old = IncidentReport(
@@ -1465,7 +1579,14 @@ def test_failure_causes_read_incidents_open_or_recent_and_how_long_a_lapsed_gran
     # The lapse is still open, so it counts however old; the resolved one is too old, and
     # blocked events have no Cause. The lapse came 7 days after the account was authorized.
     assert seen == [
-        CauseSighting(user, Cause.ACCESS_REVOKED, NOW - timedelta(days=2), True, timedelta(days=7))
+        CauseSighting(
+            user,
+            Cause.ACCESS_REVOKED,
+            NOW - timedelta(days=2),
+            True,
+            timedelta(days=7),
+            provider=ProviderKind.GOOGLE,
+        )
     ]
 
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { testI18n } from "@/i18n/testing"
 
-import type { Incident } from "@/lib/api"
+import type { CalendarProvider, Incident } from "@/lib/api"
 import {
   incidentClosedAt,
   incidentDetail,
@@ -12,8 +12,16 @@ import {
 } from "@/lib/incidents"
 
 const i18n = testI18n()
-const ADMINISTRATOR = { administrator: true }
-const USER = { administrator: false }
+// A provider as GET /api/v1/providers describes it, with a synthetic section of the guide.
+const GOOGLE: CalendarProvider = {
+  kind: "google",
+  display_name: "Google",
+  connect_url: "/api/v1/oauth/google/start",
+  redirect_uri: "http://localhost:8000/api/v1/oauth/google/callback",
+  cause_anchors: { api_disabled: "the-google-calendar-api-is-turned-off" },
+}
+const ADMINISTRATOR = { administrator: true, providers: [GOOGLE] }
+const USER = { administrator: false, providers: [GOOGLE] }
 
 function incident(overrides: Partial<Incident> = {}): Incident {
   return {
@@ -30,6 +38,7 @@ function incident(overrides: Partial<Incident> = {}): Incident {
     message: null,
     cause: null,
     step: "wait",
+    provider: "google",
     cursor: "cursor",
     ...overrides,
   }
@@ -39,7 +48,7 @@ describe("incident steps", () => {
   // The server decides the step (ADR 0033); the Web UI words it and offers its one button.
   it.each([
     ["reauthorize", "Nothing is written until", { kind: "settings", label: "Reauthorize in Settings", accountId: "failed-account" }],
-    ["recover_rule", "Google access is renewed", { kind: "rule", ruleId: "rule-1", label: "Recover this rule" }],
+    ["recover_rule", "Calendar access is renewed", { kind: "rule", ruleId: "rule-1", label: "Recover this rule" }],
     ["review_rule", "The rule is stopped", { kind: "rule", ruleId: "rule-1", label: "Review this rule" }],
     ["see_blocked", "The rest of the rule keeps syncing", { kind: "blocked", ruleId: "rule-1", label: "See blocked events" }],
     ["wait", "Nothing to do now", null],
@@ -77,6 +86,18 @@ describe("incident steps", () => {
     const disabled = incident({ cause: "api_disabled", step: "administrator" })
     expect(incidentDetail(i18n, disabled, ADMINISTRATOR).fixUrl).toMatch(/#the-google-calendar-api-is-turned-off$/)
     expect(incidentDetail(i18n, { ...disabled, state: "resolved" }, ADMINISTRATOR).fixUrl).toBeNull()
+  })
+
+  it("names the provider whose registration fails, in its own words", () => {
+    const expired = incident({ cause: "oauth_client_invalid", step: "administrator", provider: "outlook" })
+    expect(incidentDetail(i18n, expired, ADMINISTRATOR).explanation).toBe(
+      "You fix this as the administrator, in the Microsoft Entra admin center.",
+    )
+    expect(incidentDetail(i18n, expired, USER).explanation).toBe(
+      "Outlook is not available to Calendar Ghost right now. To try again, choose Check access on your Microsoft account in Settings. Events already synced stay where they are.",
+    )
+    // Microsoft is not configured here, so there is no section to link.
+    expect(incidentDetail(i18n, expired, ADMINISTRATOR).fixUrl).toBeNull()
   })
 })
 

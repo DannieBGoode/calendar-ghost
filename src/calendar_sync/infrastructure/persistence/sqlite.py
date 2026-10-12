@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -9,7 +10,11 @@ from types import TracebackType
 from typing import Self
 
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.sync.errors import (
+    DuplicateDirectionalRelationship,
+    IdentityCollision,
+    MissingReference,
+)
 from calendar_sync.application.sync.ports import (
     AuditRepository,
     CalendarNameRepository,
@@ -60,12 +65,13 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.persistence.connections import open_connection
+from calendar_sync.infrastructure.persistence.refusals import refusals
 from calendar_sync.infrastructure.persistence.source_changes import (
     SqliteSourceObservationRepository,
     change_columns,
 )
-from calendar_sync.infrastructure.scheduling import SystemClock
 from calendar_sync.infrastructure.security import HistoryCipher
 
 
@@ -171,7 +177,7 @@ class SqliteSyncRuleRepository:
         return tuple(rule_from_row(row) for row in rows)
 
     def add(self, rule: SyncRule) -> None:
-        try:
+        with refusals(), _rule_refusals():
             self._connection.execute(
                 """
                 INSERT INTO sync_rules (
@@ -188,18 +194,10 @@ class SqliteSyncRuleRepository:
                 """,
                 (*_rule_values(rule), self._user),
             )
-        except sqlite3.IntegrityError as error:
-            raise DuplicateDirectionalRelationship(
-                "a rule already exists for this source and destination"
-            ) from error
 
     def save(self, rule: SyncRule) -> None:
-        try:
+        with refusals(), _rule_refusals():
             cursor = self._update(rule)
-        except sqlite3.IntegrityError as error:
-            raise DuplicateDirectionalRelationship(
-                "a rule already exists for this source and destination"
-            ) from error
         if cursor.rowcount != 1:
             raise KeyError(f"sync rule {rule.id.value} does not exist")
 
@@ -259,6 +257,21 @@ class SqliteSyncRuleRepository:
         return row is not None
 
 
+@contextmanager
+def _rule_refusals() -> Iterator[None]:
+    """A rule's refusals. Apart from its identifier, only its direction is unique per User, so a
+    uniqueness failure naming its source is a second rule for one direction. Its accounts are
+    checked when the unit commits, as their references are deferred."""
+    try:
+        yield
+    except sqlite3.IntegrityError as error:
+        if "sync_rules.source_account_id" not in str(error):
+            raise
+        raise DuplicateDirectionalRelationship(
+            "a rule already exists for this source and destination"
+        ) from error
+
+
 class SqliteEventMappingRepository:
     def __init__(self, connection: sqlite3.Connection, user_id: UserId) -> None:
         self._connection = connection
@@ -308,7 +321,13 @@ class SqliteEventMappingRepository:
     def save(self, mapping: EventMapping) -> None:
         # The composite reference refuses a mapping for another User's rule; the update touches
         # only this User's mapping, so another User's identifier is refused rather than changed.
-        cursor = self._connection.execute(
+        with refusals():
+            cursor = self._insert(mapping)
+        if cursor.rowcount != 1:
+            raise IdentityCollision(f"event mapping {mapping.id.value} is another User's")
+
+    def _insert(self, mapping: EventMapping) -> sqlite3.Cursor:
+        return self._connection.execute(
             """
             INSERT INTO event_mappings (
                 id, rule_id, source_account_id, source_calendar_id, source_event_id,
@@ -337,8 +356,6 @@ class SqliteEventMappingRepository:
                 self._user,
             ),
         )
-        if cursor.rowcount != 1:
-            raise sqlite3.IntegrityError(f"event mapping {mapping.id.value} is another User's")
 
     def delete(self, mapping: EventMapping) -> None:
         self._connection.execute(
@@ -375,18 +392,17 @@ class SqliteExceptionReplayRepository:
 
     def add(self, series_mapping_id: EventMappingId) -> None:
         # Adding one already pending is a no-op; another User's is refused, not left alone.
-        cursor = self._connection.execute(
-            """
-            INSERT INTO pending_exception_replays (series_mapping_id, user_id) VALUES (?, ?)
-            ON CONFLICT(series_mapping_id) DO UPDATE SET user_id = excluded.user_id
-            WHERE pending_exception_replays.user_id = excluded.user_id
-            """,
-            (series_mapping_id.value, self._user),
-        )
-        if cursor.rowcount != 1:
-            raise sqlite3.IntegrityError(
-                f"series mapping {series_mapping_id.value} is not this User's"
+        with refusals():
+            cursor = self._connection.execute(
+                """
+                INSERT INTO pending_exception_replays (series_mapping_id, user_id) VALUES (?, ?)
+                ON CONFLICT(series_mapping_id) DO UPDATE SET user_id = excluded.user_id
+                WHERE pending_exception_replays.user_id = excluded.user_id
+                """,
+                (series_mapping_id.value, self._user),
             )
+        if cursor.rowcount != 1:
+            raise MissingReference(f"series mapping {series_mapping_id.value} is not this User's")
 
     def remove(self, series_mapping_id: EventMappingId) -> None:
         self._connection.execute(
@@ -423,7 +439,14 @@ class SqliteOccurrenceMappingRepository:
         return _occurrence_from_row(row) if row else None
 
     def save(self, mapping: OccurrenceMapping) -> None:
-        cursor = self._connection.execute(
+        with refusals():
+            cursor = self._insert(mapping)
+        if cursor.rowcount != 1:
+            # The occurrence the upsert met is another User's, so its series mapping is too.
+            raise MissingReference(f"occurrence mapping {mapping.id.value} is another User's")
+
+    def _insert(self, mapping: OccurrenceMapping) -> sqlite3.Cursor:
+        return self._connection.execute(
             """
             INSERT INTO occurrence_mappings (
                 id, series_mapping_id, original_start,
@@ -459,8 +482,6 @@ class SqliteOccurrenceMappingRepository:
                 self._user,
             ),
         )
-        if cursor.rowcount != 1:
-            raise sqlite3.IntegrityError(f"occurrence mapping {mapping.id.value} is another User's")
 
     def delete(self, mapping: OccurrenceMapping) -> None:
         self._connection.execute(
@@ -473,9 +494,10 @@ class SqliteOccurrenceMappingRepository:
 
 
 def _require_own(cursor: sqlite3.Cursor, rule_id: SyncRuleId) -> None:
-    """Refuse a write an upsert skipped because the record it met is another User's."""
+    """Refuse a write an upsert skipped because the record it met, so its rule, is another
+    User's."""
     if cursor.rowcount != 1:
-        raise sqlite3.IntegrityError(f"a record of rule {rule_id.value} is another User's")
+        raise MissingReference(f"a record of rule {rule_id.value} is another User's")
 
 
 def _serialize_start(value: OccurrenceStart) -> str:
@@ -530,17 +552,16 @@ class SqliteSyncCursorRepository:
 
     def save(self, rule_id: SyncRuleId, cursor: str) -> None:
         # Interpolates only one of the two constant table names.
-        _require_own(
-            self._connection.execute(
+        with refusals():
+            written = self._connection.execute(
                 f"""
                 INSERT INTO {self._table}(rule_id, cursor, user_id) VALUES (?, ?, ?)
                 ON CONFLICT(rule_id) DO UPDATE SET cursor = excluded.cursor
                 WHERE user_id = excluded.user_id
                 """,  # noqa: S608
                 (rule_id.value, cursor, self._user),
-            ),
-            rule_id,
-        )
+            )
+        _require_own(written, rule_id)
 
 
 class SqliteAuditRepository:
@@ -606,13 +627,18 @@ class SqliteRuleRunOutcomeRepository:
         self._user = user_id.value
 
     def record(self, outcome: RuleRunOutcome) -> None:
-        cursor = self._connection.execute(
+        with refusals():
+            cursor = self._insert(outcome)
+        _require_own(cursor, outcome.rule_id)
+
+    def _insert(self, outcome: RuleRunOutcome) -> sqlite3.Cursor:
+        return self._connection.execute(
             """
             INSERT INTO rule_run_outcomes (
                 rule_id, kind, completed_at, succeeded, full_run, created, updated,
                 deleted, conflicts, checked_mappings, drift, failure_kind, failure_cause,
-                last_succeeded_at, last_full_succeeded_at, user_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                failure_provider, last_succeeded_at, last_full_succeeded_at, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rule_id, kind) DO UPDATE SET
                 last_succeeded_at = CASE WHEN excluded.succeeded
                     THEN excluded.completed_at ELSE rule_run_outcomes.last_succeeded_at END,
@@ -628,7 +654,8 @@ class SqliteRuleRunOutcomeRepository:
                 checked_mappings = excluded.checked_mappings,
                 drift = excluded.drift,
                 failure_kind = excluded.failure_kind,
-                failure_cause = excluded.failure_cause
+                failure_cause = excluded.failure_cause,
+                failure_provider = excluded.failure_provider
             WHERE rule_run_outcomes.user_id = excluded.user_id
             """,
             (
@@ -649,6 +676,9 @@ class SqliteRuleRunOutcomeRepository:
                 else outcome.failure_cause.value
                 if outcome.failure_cause
                 else NO_CAUSE,
+                outcome.failure_provider.value
+                if outcome.failure_provider and _caused(outcome)
+                else None,
                 outcome.completed_at.isoformat() if outcome.succeeded else None,
                 outcome.completed_at.isoformat()
                 if outcome.succeeded and outcome.full_run
@@ -656,7 +686,6 @@ class SqliteRuleRunOutcomeRepository:
                 self._user,
             ),
         )
-        _require_own(cursor, outcome.rule_id)
 
     def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None:
         row = self._connection.execute(
@@ -664,6 +693,11 @@ class SqliteRuleRunOutcomeRepository:
             (rule_id.value, kind.value, self._user),
         ).fetchone()
         return outcome_from_row(row) if row is not None else None
+
+
+def _caused(outcome: RuleRunOutcome) -> bool:
+    """Whether a provider's answer explains the outcome: a failure that is not local."""
+    return not outcome.succeeded and outcome.failure_kind not in WITHOUT_CAUSE
 
 
 def outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
@@ -685,6 +719,7 @@ def outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
         failure_cause=None
         if row["succeeded"] or row["failure_kind"] in WITHOUT_CAUSE
         else Cause.recorded(row["failure_cause"]),
+        failure_provider=ProviderKind.recorded(row["failure_provider"]),
         last_succeeded_at=optional_time(row["last_succeeded_at"]),
         last_full_succeeded_at=optional_time(row["last_full_succeeded_at"]),
     )
@@ -700,7 +735,12 @@ class SqliteRulePreviewRepository:
         self._user = user_id.value
 
     def record(self, summary: RulePreviewSummary) -> None:
-        cursor = self._connection.execute(
+        with refusals():
+            cursor = self._insert(summary)
+        _require_own(cursor, summary.rule_id)
+
+    def _insert(self, summary: RulePreviewSummary) -> sqlite3.Cursor:
+        return self._connection.execute(
             """
             INSERT INTO rule_previews (
                 rule_id, completed_at, eligible_events, excluded_events, recurring_series,
@@ -724,7 +764,6 @@ class SqliteRulePreviewRepository:
                 self._user,
             ),
         )
-        _require_own(cursor, summary.rule_id)
 
     def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None:
         row = self._connection.execute(
@@ -795,7 +834,7 @@ class SqliteCalendarNameRepository:
             WHERE name != excluded.name
             """,
             [
-                (calendar.id, calendar.summary, now, account_id.value, self._user)
+                (calendar.id, calendar.name, now, account_id.value, self._user)
                 for calendar in calendars
             ],
         )
@@ -887,7 +926,10 @@ class SqliteUnitOfWork:
 
     def commit(self) -> None:
         assert self._connection is not None
-        self._connection.commit()
+        # A rule's references to its accounts are deferred, so a rule naming an account that is
+        # not its User's, or no longer exists, is refused here.
+        with refusals():
+            self._connection.commit()
 
     def user_active(self) -> bool:
         assert self._connection is not None

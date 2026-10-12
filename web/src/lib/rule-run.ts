@@ -1,6 +1,7 @@
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
 import type { ReconcileResult, RulePreview, RunOutcome, SyncResult } from "@/lib/api"
+import { providerWords } from "@/lib/providers"
 import { failureLabel, isFailureKind, type ProviderFailureKind } from "@/lib/rule-change"
 
 /** The one-line run status a rule row shows next to its policy. */
@@ -9,7 +10,7 @@ export function lastRunLabel(i18n: I18n, outcome: RunOutcome | null, now: number
   const when = i18n.format.relative(outcome.completed_at, now)
   return outcome.succeeded
     ? i18n.t("ruleDetails.run.lastSynced", { when })
-    : i18n.t("ruleDetails.run.lastSyncFailed", { when, reason: failureLabel(i18n, outcome.failure_kind) })
+    : i18n.t("ruleDetails.run.lastSyncFailed", { when, reason: failureLabel(i18n, outcome) })
 }
 
 function syncedChanges(i18n: I18n, result: SyncResult): string | null {
@@ -111,7 +112,8 @@ export function recoveryExplanation(i18n: I18n, outcome: RunOutcome | null, now:
   const cause =
     outcome && !outcome.succeeded
       ? i18n.t(isFailureKind(outcome.failure_kind) ? RECOVERY_CAUSES[outcome.failure_kind] : "ruleDetails.run.recovery.unknown", {
-          when: i18n.format.relative(outcome.completed_at, now),
+          ...providerWords(i18n, outcome.failure_provider),
+        when: i18n.format.relative(outcome.completed_at, now),
         })
       : i18n.t("ruleDetails.run.recovery.noFailure")
   return `${cause} ${i18n.t("ruleDetails.run.recovery.next")}`

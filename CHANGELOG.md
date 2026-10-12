@@ -24,6 +24,39 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- Outlook is the second calendar provider, for Microsoft 365 work or school accounts and personal
+  Outlook.com accounts, through Microsoft Graph v1.0
+  ([ADR 0034](docs/adr/0034-outlook-through-microsoft-graph.md)). An installation that registers a
+  Microsoft Entra application and sets `CALENDAR_SYNC_MICROSOFT_CLIENT_ID`,
+  `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`, `CALENDAR_SYNC_MICROSOFT_REDIRECT_URI` (default
+  `http://localhost:8000/api/v1/oauth/microsoft/callback`), and `CALENDAR_SYNC_MICROSOFT_TENANT`
+  (default `common`) offers **Connect Microsoft account**; without them nothing changes. A rule may
+  read from one provider and write to the other. Outlook projections are appointments with no
+  attendees, so no write emails anyone, and a repeat pattern Outlook cannot express exactly blocks
+  that event as a Conflict instead of being approximated. Microsoft's reasons become Causes from
+  its codes alone; an expired client secret is the administrator's `oauth_client_invalid`, with its
+  own troubleshooting section, and the self-hosting guide explains registering the application and
+  rotating its secret before it expires.
+- `httpx` and `tzdata` are runtime dependencies: `httpx` reaches Microsoft Graph and stays inside
+  the Microsoft adapter, and `tzdata` maps Outlook's Windows time zone names on any host.
+- Run outcomes and Incidents carry the Provider Kind that failed (`failure_provider`,
+  `provider`), and an access check a provider refuses names it in `params.provider`, so the Web UI
+  names Google or Microsoft in each message.
+- Migration 28 binds each OAuth state to the provider whose consent began it, so a state returned to
+  another provider's callback connects nothing. Rolling back is safe.
+- An event write the destination provider cannot represent exactly is recorded as a Conflict with
+  the reason `projection_unsupported`, and the rest of the rule keeps syncing.
+- The development preview makes Sam's and Robin's Work accounts Microsoft's, offers both
+  providers, and adds the `outlook-client` scenario.
+- `GET /api/v1/providers` lists each calendar provider people can connect on this installation:
+  its Provider Kind, name, connect address, redirect URI, and the troubleshooting section for each
+  Cause it can raise ([ADR 0022](docs/adr/0022-route-calendar-requests-by-provider.md), amended).
+  Connection flows live at `/api/v1/oauth/{provider}/start` and `/api/v1/oauth/{provider}/callback`.
+  Google's addresses, including the redirect URI every installation registered with Google, are
+  unchanged, and `GET /api/v1/google/configuration` keeps answering as before for earlier clients.
+- Installation Hints and every problem in Installation Status, the dashboard, and the Operator
+  Overview carry `provider`, the Provider Kind whose answer explains them. Migration 27 records the
+  provider with each Cause; every Cause recorded before names Google. Rolling back is safe.
 - Several people can share one installation, each with private Google accounts, rules, Activity,
   incidents, and tokens ([ADR 0029](docs/adr/0029-isolate-users-in-one-sqlite-database.md),
   [ADR 0030](docs/adr/0030-users-administrators-and-registration.md)). People sign in with email and
@@ -108,14 +141,62 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- The Overview counts stopped and running rules as the status API does: a rule has stopped when it
+  does not synchronize until someone acts. An enabled rule whose account was disconnected or whose
+  authorization lapsed now counts as stopped on the Overview (`stopped_rules`) instead of running,
+  and the Overview's "rules running" and "rules still running" facts count only the rules that
+  still run, from the new `running_rules` field, instead of every enabled rule. A rule whose
+  removal is running is not counted by either. `RuleCounts` in
+  `application/operations/status.py` is the one place both are counted.
+- What a scheduled pass does moves from `infrastructure/scheduling.py` to `ScheduledPass` in
+  `application/operations/scheduled_pass.py`, with no change in behavior: expiring Source Change
+  values and provider call counts, finishing interrupted lapses, choosing each rule's daily full
+  pass, taking turns between Users, retrying, and recording each run's outcome. The scheduler
+  keeps only its timing, its progress, and how many rules run at once, and an import contract
+  keeps it from importing the Synchronization context. `SystemClock` moves to
+  `infrastructure/clock.py`.
+- The Web UI names the provider wherever one is known: account rows read "Google account" or
+  "Microsoft account" beside the address, each avatar and Connect button carries its provider's
+  mark, a lapsed account's fix reads "Reauthorize with Microsoft", the collapsed account summary
+  groups addresses by provider, and the note about a provider returning to another address names
+  every provider that does, and causes, waiting messages, and next steps name Google
+  or Microsoft, their consoles, and their status pages. Where no one provider is meant, copy says
+  "calendar account" or "the calendar provider"; the People verdict reads "Waiting for the
+  provider".
+- Settings and the Overview offer one Connect button per configured calendar provider, and each
+  account's **Reauthorize account** goes to its own provider. A connection returns to Settings as
+  `?oauth=<outcome>&provider=<kind>` instead of `?google=<outcome>`.
+- The OpenAPI schemas `GoogleConfigurationResponse` and `GoogleAccountAccessResponse` are now
+  `ProviderConfigurationResponse` and `AccountAccessResponse`; their JSON is unchanged.
 - The Sync Run's code is split by responsibility, with no change in behavior: `ExecuteSyncRule`
   composes `ChangeFeedCursors`, `SynchronizeEvents`, and `ExceptionReplays`, and
   `SyncDecisionService.decide_occurrence` takes one `OccurrenceSituation` and no longer needs a
   complexity exception.
+- Synchronization safety is enforced by tests, with no change in behavior: every use case that
+  runs, previews, reconciles, or changes a rule must receive the installation's one rule lock
+  registry instead of creating its own, and a test fails on a complexity suppression in
+  production code or an application dataclass whose constructor exceeds Ruff's argument bound.
 - A run's failure kind, and each Connected Account's state and Provider Kind in Installation
   Status, are typed as their domain enums instead of strings. `ProviderFailureKind` moves to
   `domain/providers.py`, and `application/sync/events.py` is now `event_sync.py`, so it is not
   mistaken for domain events. Stored values, API payloads, and the OpenAPI document are unchanged.
+- Both units of work refuse a write with the same errors: `DuplicateDirectionalRelationship`,
+  `IdentityCollision`, or `MissingReference`, each a `RecordRefused`. SQLite raises them in place
+  of `sqlite3.IntegrityError`, also when a rule's accounts are checked at commit. The in-memory
+  store that application tests use now behaves as SQLite does: it refuses a rule whose accounts
+  are not its User's, resolves a removed rule's Incidents and deletes a purged rule's or a deleted
+  account's, and its Installation Status reads open Incidents, blocks, and Incident Causes. The
+  persistence contract checks each of these for both stores.
+- Synchronization rules live in the domain, with no change in behavior: `SyncRule` says whether
+  it synchronizes, whether a preview may validate it, whether it is stopped only by Lapsed
+  Authorization, what disconnecting one of its accounts makes of it, and which source events it
+  projects, so Rule Preview and Full Reconciliation share one eligibility rule. A Source
+  Observation keeps the last complete guest list itself (`SourceObservation.completed_by`). A test
+  fails when an API schema's `Literal` alias and the enum it mirrors list different values, or a
+  new alias mirrors no enum.
+- Activity's reads of a rule's earlier entries and block checks also match the User, so another
+  User's entries with the same rule and event identifiers never name, repeat, or clear this
+  User's events. Clearing Activity keeps the entries those reads need, matched the same way.
 - Activity has a History tab and an Incidents tab, each at its own address (`/activity` and
   `/activity/incidents`), while any Incident is kept; the Incidents tab counts the open ones.
   Incidents list in one table, open first, each with when it opened, the rule or account, and when
@@ -138,7 +219,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   "Load older incidents" while there are more, and `GET /api/v1/incidents/{incident_id}` opens an
   incident the list does not hold.
 - An administrator's Cause in Activity's incident details names the Cause and How to fix only to
-  an administrator; anyone else reads that Google Calendar is not available right now, with Check
+  an administrator; anyone else reads that their calendar is not available right now, with Check
   access, as on the Overview (ADR 0031).
 - Form fields have borders with enough contrast again: a global reset no longer overrides them.
   Midnight's primary color is calmer, so a red status draws the eye first.
@@ -319,6 +400,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- Outlook now holds a yearly series on a day its month always has, such as a birthday on
+  November 30. It refused every yearly series from the 29th on, as if every month could be
+  shorter, and Activity showed such a series as blocked. February 29 and the 31st of a 30-day
+  month stay blocked, because Outlook would move them to another day.
 - Rules that a Lapsed Authorization stopped resume even when the process stopped or failed while
   restoring them. Before, Reauthorization could clear the lapse and leave its rules stopped, with
   the account's Incident open, until the account was reauthorized or checked again. Each

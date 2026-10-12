@@ -45,10 +45,9 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from tests.helpers import NOW, event, rescheduled, rule
-from tests.users import USER, sqlite_units
+from tests.users import USER, memory_units, sqlite_units
 
 
 @dataclass
@@ -234,7 +233,7 @@ class ConcurrencyRecordingProvider(FakeCalendarProvider):
 
 
 def test_complete_create_use_case_persists_mapping_cursor_and_audit() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     provider = FakeCalendarProvider(event())
     fingerprinter = ProjectionFingerprinter()
@@ -245,6 +244,7 @@ def test_complete_create_use_case_persists_mapping_cursor_and_audit() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -261,7 +261,7 @@ def test_complete_create_use_case_persists_mapping_cursor_and_audit() -> None:
 
 
 def test_full_reconciliation_does_not_use_incremental_cursor() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     unit_of_work.state.cursors[rule().id] = "previous-cursor"
     unit_of_work.state.destination_cursors[rule().id] = "previous-destination-cursor"
@@ -274,6 +274,7 @@ def test_full_reconciliation_does_not_use_incremental_cursor() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     use_case.execute(rule().id, full=True)
@@ -284,7 +285,7 @@ def test_full_reconciliation_does_not_use_incremental_cursor() -> None:
 
 
 def test_destination_drift_is_updated_and_mapping_revision_advances() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     source = event(revision="revision-2")
     destination = event(
@@ -312,6 +313,7 @@ def test_destination_drift_is_updated_and_mapping_revision_advances() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -325,7 +327,7 @@ def test_destination_drift_is_updated_and_mapping_revision_advances() -> None:
 
 
 def test_destination_only_edit_is_repaired_on_the_next_incremental_sync() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     unit_of_work.state.cursors[rule().id] = "source-before"
     unit_of_work.state.destination_cursors[rule().id] = "destination-before"
@@ -357,6 +359,7 @@ def test_destination_only_edit_is_repaired_on_the_next_incremental_sync() -> Non
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -369,7 +372,7 @@ def test_destination_only_edit_is_repaired_on_the_next_incremental_sync() -> Non
 
 
 def test_destination_only_deletion_restores_projection_with_same_mapping_identity() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     source = event(revision="revision-2")
     destination = replace(
@@ -399,6 +402,7 @@ def test_destination_only_deletion_restores_projection_with_same_mapping_identit
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -411,7 +415,7 @@ def test_destination_only_deletion_restores_projection_with_same_mapping_identit
 
 
 def test_destination_change_does_not_delete_when_source_cannot_be_verified() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     source = event(revision="revision-2")
     destination = replace(
@@ -440,6 +444,7 @@ def test_destination_change_does_not_delete_when_source_cannot_be_verified() -> 
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -452,7 +457,7 @@ def test_destination_change_does_not_delete_when_source_cannot_be_verified() -> 
 
 
 def test_cancelled_source_deletes_only_its_owned_mapping() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     source = replace(event(), status=EventStatus.CANCELLED, time=None, revision="cancelled-2")
     destination = replace(
@@ -478,6 +483,7 @@ def test_cancelled_source_deletes_only_its_owned_mapping() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -488,7 +494,7 @@ def test_cancelled_source_deletes_only_its_owned_mapping() -> None:
 
 
 def test_managed_source_is_ignored_without_destination_write() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     source = replace(
         event(),
@@ -503,6 +509,7 @@ def test_managed_source_is_ignored_without_destination_write() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     result = use_case.execute(rule().id)
@@ -514,7 +521,7 @@ def test_managed_source_is_ignored_without_destination_write() -> None:
 
 
 def test_each_run_groups_its_audit_entries() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     managed = replace(event("managed"), managed_origin=ManagedOrigin(rule().id, event().reference))
     provider = FakeCalendarProvider(event())
@@ -527,6 +534,7 @@ def test_each_run_groups_its_audit_entries() -> None:
         fingerprinter,
         FixedClock(),
         ScriptedRunIds(iter(("run-1", "run-2"))),
+        locks=RuleLocks(),
     )
 
     first = use_case.execute(rule().id)
@@ -558,7 +566,7 @@ def test_each_run_groups_its_audit_entries() -> None:
     "state", [SyncRuleState.DRAFT, SyncRuleState.PAUSED, SyncRuleState.DEGRADED]
 )
 def test_non_enabled_rule_is_rejected(state: SyncRuleState) -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule(state=state)
     provider = FakeCalendarProvider(event())
     fingerprinter = ProjectionFingerprinter()
@@ -569,6 +577,7 @@ def test_non_enabled_rule_is_rejected(state: SyncRuleState) -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     with pytest.raises(RuleNotExecutable, match="not enabled"):
@@ -576,7 +585,7 @@ def test_non_enabled_rule_is_rejected(state: SyncRuleState) -> None:
 
 
 def test_a_missing_rule_is_rejected_without_reading_or_recording() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     provider = FakeCalendarProvider(event())
     fingerprinter = ProjectionFingerprinter()
     use_case = ExecuteSyncRule(
@@ -586,6 +595,7 @@ def test_a_missing_rule_is_rejected_without_reading_or_recording() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     with pytest.raises(RuleNotExecutable, match="does not exist"):
@@ -596,7 +606,7 @@ def test_a_missing_rule_is_rejected_without_reading_or_recording() -> None:
 
 
 def test_provider_failure_does_not_advance_cursor_or_write_audit() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     unit_of_work.state.cursors[rule().id] = "cursor-before-failure"
     provider = FakeCalendarProvider(event())
@@ -609,6 +619,7 @@ def test_provider_failure_does_not_advance_cursor_or_write_audit() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     with pytest.raises(ProviderFailure, match="outage"):
@@ -619,7 +630,7 @@ def test_provider_failure_does_not_advance_cursor_or_write_audit() -> None:
 
 
 def test_concurrent_requests_for_the_same_rule_are_serialized() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     provider = ConcurrencyRecordingProvider(event())
     fingerprinter = ProjectionFingerprinter()
@@ -630,6 +641,7 @@ def test_concurrent_requests_for_the_same_rule_are_serialized() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
     failures: list[BaseException] = []
 
@@ -662,6 +674,7 @@ def _use_case(unit_of_work: UnitOfWorkFactory, provider: FakeCalendarProvider) -
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
 
@@ -683,7 +696,7 @@ def _mapped_busy_projection(provider: FakeCalendarProvider, source: CalendarEven
 
 
 def test_policy_change_reprojects_mappings_outside_the_window_and_clears_the_flag() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     changed = replace(rule().change_policy(DETAILS), state=SyncRuleState.ENABLED)
     unit_of_work.state.rules[rule().id] = changed
     unit_of_work.state.cursors[rule().id] = "source-before"
@@ -708,7 +721,7 @@ def test_policy_change_reprojects_mappings_outside_the_window_and_clears_the_fla
 
 
 def test_unverifiable_source_during_reprojection_is_a_conflict_not_a_deletion() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = replace(
         rule().change_policy(DETAILS), state=SyncRuleState.ENABLED
     )
@@ -763,7 +776,7 @@ def test_edit_during_a_run_keeps_reprojection_pending(tmp_path: Path) -> None:
 
 
 def test_changed_rule_does_not_synchronize_until_enabled_again() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule().change_policy(DETAILS)
 
     with pytest.raises(RuleNotExecutable):
@@ -772,7 +785,7 @@ def test_changed_rule_does_not_synchronize_until_enabled_again() -> None:
 
 
 def test_failed_run_records_failure_kind_without_detail() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     provider = FakeCalendarProvider(event())
     provider.failure = ProviderFailure(ProviderFailureKind.RATE_LIMIT, "quota for person@x")
@@ -786,7 +799,7 @@ def test_failed_run_records_failure_kind_without_detail() -> None:
 
 
 def test_a_failed_run_records_why_the_provider_refused() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     provider = FakeCalendarProvider(event())
     provider.failure = ProviderFailure(
@@ -836,7 +849,7 @@ def test_run_stops_before_writing_when_the_rule_changes_mid_run(tmp_path: Path) 
 
 
 def test_a_rule_of_a_disabled_user_does_not_run() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     unit_of_work.database.disabled.add(USER)
     provider = FakeCalendarProvider(event())
@@ -880,7 +893,7 @@ def test_run_stops_before_writing_when_its_user_is_disabled_mid_run(tmp_path: Pa
 
 
 def test_a_user_disabled_while_the_projection_is_read_gets_no_write() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     source = event(revision="revision-2")
     destination = replace(
@@ -912,6 +925,7 @@ def test_a_user_disabled_while_the_projection_is_read_gets_no_write() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     with pytest.raises(RuleNotExecutable):
@@ -921,7 +935,7 @@ def test_a_user_disabled_while_the_projection_is_read_gets_no_write() -> None:
 
 
 def test_provider_writes_hold_the_rule_write_lock() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     locks = RuleLocks()
     observed: list[bool] = []
@@ -957,7 +971,7 @@ def test_provider_writes_hold_the_rule_write_lock() -> None:
 
 def test_a_local_failure_records_no_cause() -> None:
     # Nothing at the provider refused, so no Cause may say it did (ADR 0031).
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     provider = FakeCalendarProvider(event())
 

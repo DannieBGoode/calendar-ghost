@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import UnsupportedProjection
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import CalendarReader, OccurrenceWriter
 from calendar_sync.application.sync.sync_run import (
@@ -34,6 +35,17 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.domain.services import ProjectionFingerprinter, SyncDecisionService
 
+
+@dataclass(frozen=True, slots=True)
+class SeriesRepairs:
+    """What an occurrence may ask of its series: repair it when it is missing the occurrence, or
+    rebuild it when its destination cannot restore an occurrence deleted there. Each answers the
+    reason it found, or None."""
+
+    repair: Callable[[SyncRunContext, CalendarEvent], SyncReason | None]
+    rebuild: Callable[[SyncRunContext, CalendarEvent], SyncReason | None]
+
+
 _RECORDED_WHEN_UNCHANGED = {
     SyncReason.OCCURRENCE_CURRENT: OccurrenceState.MODIFIED,
     SyncReason.OCCURRENCE_ALREADY_CANCELLED: OccurrenceState.CANCELLED,
@@ -49,8 +61,7 @@ class SynchronizeOccurrences:
     decisions: SyncDecisionService
     fingerprinter: ProjectionFingerprinter
     clock: Clock
-    repair_series: Callable[[SyncRunContext, CalendarEvent], SyncReason | None]
-    """Repairs a series for one occurrence, answering how the series was found."""
+    series: SeriesRepairs
     locks: RuleLocks
 
     def reverify(
@@ -119,39 +130,96 @@ class SynchronizeOccurrences:
         # The stop check and the write share one short lock with rule lifecycle changes.
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
-            run.count(decision.action, occurrence.source_ref or source_series.reference)
-            destination_ref = self._write(
-                run,
-                series_mapping,
-                occurrence,
-                decision,
-                destination.reference if destination is not None else None,
-                record_current=record_current,
+            counted = occurrence.source_ref or source_series.reference
+            run.count(decision.action, counted)
+            try:
+                destination_ref = self._write(
+                    run,
+                    series_mapping,
+                    occurrence,
+                    decision,
+                    destination.reference if destination is not None else None,
+                    record_current=record_current,
+                )
+            except UnsupportedProjection as unsupported:
+                if self._rebuilds(run, series_mapping, unsupported):
+                    # Decided again once the series is rebuilt, so not counted or recorded now.
+                    run.uncount(decision.action)
+                    rebuild = True
+                else:
+                    # The destination cannot write it exactly: blocked, never approximated.
+                    blocked = SyncDecision(SyncAction.CONFLICT, unsupported.reason)
+                    run.recount(decision.action, blocked.action, counted)
+                    decision, rebuild = blocked, False
+                destination_ref = destination.reference if destination is not None else None
+            else:
+                rebuild = False
+            if not rebuild:
+                self._record(run, occurrence, decision, destination_ref, detail)
+        if rebuild:
+            self._rebuild(run, occurrence, destination_ref)
+
+    @staticmethod
+    def _rebuilds(
+        run: SyncRunContext, series_mapping: EventMapping | None, unsupported: UnsupportedProjection
+    ) -> bool:
+        """Whether an occurrence its destination cannot restore is brought back by rebuilding its
+        series, once a run."""
+        return (
+            unsupported.reason is SyncReason.OCCURRENCE_NOT_RESTORABLE
+            and series_mapping is not None
+            and series_mapping.source not in run.rebuilt
+        )
+
+    def _rebuild(
+        self, run: SyncRunContext, occurrence: _OccurrenceEvidence, destination: EventRef | None
+    ) -> None:
+        """Rebuild the occurrence's series, which decides the occurrence again; if it cannot be
+        rebuilt, the occurrence is blocked for the reason found."""
+        refused = self.series.rebuild(run, occurrence.source_series)
+        if refused is None:
+            return
+        with self.locks.for_writes(run.rule.id):
+            require_unchanged(run)
+            run.count(
+                SyncAction.CONFLICT, occurrence.source_ref or occurrence.source_series.reference
             )
-            source_ref = occurrence.source_ref
-            if source_ref is not None:
-                run.handled.add(source_ref)
-                run.handled_occurrences.add((source_series.reference, occurrence.original_start))
-            record(
-                run,
-                AuditEntry(
-                    occurred_at=self.clock.now(),
-                    rule_id=run.rule.id,
-                    action=AuditAction.of(decision.action),
-                    outcome=AuditOutcome.of(decision.action),
-                    source_event_id=(source_ref or source_series.reference).event_id.value,
-                    destination_event_id=destination_ref.event_id.value
-                    if destination_ref
-                    else None,
-                    detail=detail,
-                    reason=decision.reason,
-                    run_id=run.run_id,
-                    event=_recorded_event(source_occurrence),
-                ),
-                observed=source_occurrence,
+            self._record(
+                run, occurrence, SyncDecision(SyncAction.CONFLICT, refused), destination, ""
             )
-            # Commit before the next provider call so no write lock spans network requests.
-            run.uow.commit()
+
+    def _record(
+        self,
+        run: SyncRunContext,
+        occurrence: _OccurrenceEvidence,
+        decision: SyncDecision,
+        destination_ref: EventRef | None,
+        detail: str,
+    ) -> None:
+        """Record the occurrence's decision and commit, inside the write lock."""
+        source_series = occurrence.source_series
+        source_ref = occurrence.source_ref
+        if source_ref is not None:
+            run.handled.add(source_ref)
+            run.handled_occurrences.add((source_series.reference, occurrence.original_start))
+        record(
+            run,
+            AuditEntry(
+                occurred_at=self.clock.now(),
+                rule_id=run.rule.id,
+                action=AuditAction.of(decision.action),
+                outcome=AuditOutcome.of(decision.action),
+                source_event_id=(source_ref or source_series.reference).event_id.value,
+                destination_event_id=destination_ref.event_id.value if destination_ref else None,
+                detail=detail,
+                reason=decision.reason,
+                run_id=run.run_id,
+                event=_recorded_event(occurrence.source),
+            ),
+            observed=occurrence.source,
+        )
+        # Commit before the next provider call so no write lock spans network requests.
+        run.uow.commit()
 
     def _decide_after_series_repair(
         self,
@@ -168,7 +236,7 @@ class SynchronizeOccurrences:
             # The repair re-verifies the series' other occurrences; this one is re-decided.
             if occurrence.source is not None:
                 run.handled.add(occurrence.source.reference)
-            series_check = self.repair_series(run, source_series)
+            series_check = self.series.repair(run, source_series)
             series_mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
         decision, destination = self._decide(
             run, series_mapping, occurrence, has_live_occurrences=live

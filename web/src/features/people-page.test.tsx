@@ -421,12 +421,13 @@ describe("People page", () => {
     const hinted = {
       ...health,
       hints: [
-        { kind: "shared_cause", cause: "api_disabled", users: 2, anchor: "the-google-calendar-api-is-turned-off" },
+        { kind: "shared_cause", cause: "api_disabled", users: 2, anchor: "the-google-calendar-api-is-turned-off", provider: "google" },
         {
           kind: "testing_mode",
           cause: "access_revoked",
           users: 3,
           anchor: "google-accounts-stop-working-7-days-after-connecting",
+          provider: "google",
         },
       ],
     }
@@ -440,7 +441,7 @@ describe("People page", () => {
     const hints = [...summary.querySelectorAll("li.installation-hint")]
     expect(hints.map((hint) => hint.querySelector("p")?.textContent)).toEqual([
       "2 people are affected because the Google Calendar API is turned off for this installation.",
-      "3 people lost Google about 7 days after connecting, which usually means the Google OAuth app is in Testing mode.",
+      "3 people lost access about 7 days after connecting, which usually means the OAuth app at Google is in Testing mode.",
     ])
     expect(hints.map((hint) => hint.querySelector("a")?.getAttribute("href"))).toEqual([
       "https://calendarghost.com/docs/troubleshooting#the-google-calendar-api-is-turned-off",
@@ -710,13 +711,13 @@ describe("People page", () => {
     await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
     const item = [...personRow("robin@example.test").querySelectorAll("[role='menuitem']")].at(-1)!
     expect(item.textContent).toBe(
-      "DeleteDeletes their sign-in, rules, and Google connections, and the events their rules wrote. Their Google accounts and their own events stay.",
+      "DeleteDeletes their sign-in, rules, and calendar connections, and the events their rules wrote. Their calendar accounts and their own events stay.",
     )
     await click(item as HTMLElement)
     const confirmation = container.querySelector<HTMLElement>("#delete-person-user-robin")!
     expect(confirmation.querySelector("h3")?.textContent).toBe("Delete robin@example.test permanently?")
     expect(confirmation.querySelector("p")?.textContent).toBe(
-      "This deletes their sign-in, rules, Google connections, tokens, and Activity. The events their rules wrote are deleted from their calendars wherever Calendar Ghost can still reach them. Their own events and their Google accounts stay as they are. Backups taken before now keep their records until they rotate out. This cannot be undone.",
+      "This deletes their sign-in, rules, calendar connections, tokens, and Activity. The events their rules wrote are deleted from their calendars wherever Calendar Ghost can still reach them. Their own events and their calendar accounts stay as they are. Backups taken before now keep their records until they rotate out. This cannot be undone.",
     )
     expect(sent("DELETE", "/api/v1/users/user-robin")).toBeUndefined()
 

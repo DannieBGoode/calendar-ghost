@@ -134,6 +134,7 @@ function incident(overrides: Partial<Incident>): Incident {
     cause: null,
     // The server decides each incident's step (ADR 0033); these fixtures name the one it would.
     step: "reauthorize",
+    provider: "google",
     ...overrides,
     // The server's cursor is opaque; these fixtures make one from the id.
     cursor: `cursor-${overrides.id ?? "incident"}`,
@@ -512,7 +513,7 @@ describe("ActivityView", () => {
     await renderActivity(testI18n(), {}, "?entry=5")
     const next = container.querySelector(".activity-next")
     expect(next?.textContent).toBe(
-      "What to do: If this repeats, check in Settings that the Google account for Family is still connected.",
+      "What to do: If this repeats, check in Settings that the calendar account for Family is still connected.",
     )
     expect(next?.querySelector("strong")?.textContent).toBe("What to do:")
   })

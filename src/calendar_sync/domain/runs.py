@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.domain.providers import ProviderFailureKind
@@ -35,6 +36,8 @@ class RuleRunOutcome:
     failure_cause: Cause | None = None
     """Why a failed run failed (ADR 0031); None for a success. A failure recorded without one
     reads as unknown."""
+    failure_provider: ProviderKind | None = None
+    """The provider whose answer gave the Cause, so hints can name it; None without a Cause."""
     # When the most recent successful run of this kind completed. The repository keeps it across
     # later failures, so a failed run never erases evidence that calendars were once current.
     last_succeeded_at: datetime | None = None

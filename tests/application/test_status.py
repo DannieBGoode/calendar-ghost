@@ -13,6 +13,7 @@ from calendar_sync.application.operations.ports import (
     SchedulerProgress,
 )
 from calendar_sync.application.operations.status import (
+    Dashboard,
     InstallationStatus,
     ProblemKind,
     StatusVerdict,
@@ -536,6 +537,32 @@ def test_a_problem_an_incident_explains_carries_its_cause_and_when_it_was_last_t
     }
 
 
+def test_a_problem_names_the_provider_whose_failure_explains_it() -> None:
+    waiting = replace(
+        _incident("rule-1", "rate_limit", opened=NOW - timedelta(hours=2)),
+        cause=Cause.RATE_LIMITED,
+        provider=ProviderKind.GOOGLE,
+    )
+    account_incident = replace(
+        _incident(None, "authorization", opened=NOW - timedelta(hours=2)),
+        id="incident-account",
+        account_id="work-account",
+        cause=Cause.ACCESS_REVOKED,
+        provider=ProviderKind.GOOGLE,
+    )
+    lapsed = _rule("rule-2", SyncRuleState.DEGRADED)
+
+    status = _assess(
+        [_summary(_rule("rule-1")), _summary(lapsed)],
+        _overview(accounts=LAPSED, open_incidents=2),
+        (waiting, account_incident),
+    )
+
+    # A lapse names the account's provider even when its Incident is gone.
+    providers = {p.rule_id: p.provider for p in status.problems}
+    assert providers == {"rule-1": ProviderKind.GOOGLE, "rule-2": ProviderKind.GOOGLE}
+
+
 def test_a_problem_no_provider_failure_explains_has_no_cause() -> None:
     overdue = _summary(_rule("rule-1"), succeeded_at=NOW - timedelta(days=2))
 
@@ -543,3 +570,33 @@ def test_a_problem_no_provider_failure_explains_has_no_cause() -> None:
 
     (problem,) = status.problems
     assert (problem.kind, problem.cause, problem.last_tried_at) == (ProblemKind.OVERDUE, None, None)
+    assert problem.provider is None
+
+
+def test_the_dashboard_counts_rules_as_installation_status_does() -> None:
+    paused = _rule("rule-2", SyncRuleState.PAUSED)
+    degraded = _rule("rule-3", SyncRuleState.DEGRADED)
+    status = _assess([_summary(_rule()), _summary(paused), _summary(degraded)])
+
+    dashboard = Dashboard.of(status)
+
+    assert dashboard.rules == status.counts
+    assert (status.counts.rules, status.counts.running) == (3, 1)
+    assert (status.counts.stopped, status.counts.paused) == (1, 1)
+    assert dashboard.enabled_rules == 1
+    assert dashboard.blocked_rule_id is None
+
+
+def test_the_dashboard_names_the_blocked_rule_only_when_every_block_is_its_own() -> None:
+    def blocked(*blocks: OpenBlock) -> Dashboard:
+        return Dashboard.of(_assess([], overview=_overview(blocks=blocks)))
+
+    one_rule = blocked(OpenBlock(9, "a"), OpenBlock(4, "a"))
+    two_rules = blocked(OpenBlock(9, "a"), OpenBlock(4, "b"))
+
+    assert (one_rule.blocked_events, one_rule.blocked_entry_id, one_rule.blocked_rule_id) == (
+        2,
+        9,
+        "a",
+    )
+    assert (two_rules.blocked_entry_id, two_rules.blocked_rule_id) == (9, None)

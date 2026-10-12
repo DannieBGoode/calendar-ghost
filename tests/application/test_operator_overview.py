@@ -34,7 +34,7 @@ from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.helpers import NOW, RecentSchedulerHeartbeat, endpoint, rule
 from tests.identity_fakes import MemoryUsers
-from tests.users import OTHER_USER, USER
+from tests.users import OTHER_USER, USER, memory_units, rule_accounts
 
 DAY = timedelta(days=1)
 
@@ -70,6 +70,7 @@ def test_each_users_status_names_calendars_only_by_their_labels() -> None:
     units = InMemoryUnitOfWorkFactory()
     created_first = replace(rule(), id=SyncRuleId("rule-z"), source=FAMILY, destination=WORK)
     created_second = replace(rule(), id=SyncRuleId("rule-a"), source=WORK, destination=TRIPS)
+    memory_units(units, accounts=rule_accounts(created_first, created_second))
     with units.for_user(USER)() as uow:
         uow.rules.add(created_first)
         uow.rules.add(created_second)
@@ -93,6 +94,7 @@ def test_a_users_verdict_and_problems_are_their_own_overviews() -> None:
     state = units.for_user(USER).state
     for account in (FAMILY, WORK):
         state.accounts[account.connected_account_id] = ConnectedAccountState.CONNECTED
+        state.providers[account.connected_account_id] = ProviderKind.GOOGLE
     with units.for_user(USER)() as uow:
         uow.rules.add(stopped)
         uow.run_outcomes.record(
@@ -124,9 +126,10 @@ def _installation() -> OperatorOverview:
         users.add(user, "hash")
     bobs = (endpoint("bob-personal", "personal"), endpoint("bob-work", "work"))
     for owner, endpoints in ((ALICE, (FAMILY, WORK)), (BOB, bobs)):
-        accounts = units.for_user(owner.id).state.accounts
+        state = units.for_user(owner.id).state
         for account in endpoints:
-            accounts[account.connected_account_id] = ConnectedAccountState.CONNECTED
+            state.accounts[account.connected_account_id] = ConnectedAccountState.CONNECTED
+            state.providers[account.connected_account_id] = ProviderKind.GOOGLE
     with units.for_user(ALICE.id)() as uow:
         uow.rules.add(replace(rule(), state=SyncRuleState.DEGRADED))
         uow.commit()

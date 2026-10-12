@@ -9,6 +9,7 @@ import {
   clearAuthorizationStart,
   oauthRedirectMismatch,
   oauthOutcome,
+  oauthProvider,
   oauthReturnAtCurrentOrigin,
   recordAuthorizationStart,
 } from "./oauth-redirect"
@@ -16,7 +17,7 @@ import {
 const localhostRedirect = "http://localhost:18000/api/v1/oauth/google/callback"
 
 describe("oauthRedirectMismatch", () => {
-  it("reports the Google return address when the browser uses a different host", () => {
+  it("reports the provider's return address when the browser uses a different host", () => {
     expect(oauthRedirectMismatch(localhostRedirect, "http://192.168.1.50:18000")).toEqual({
       redirectOrigin: "http://localhost:18000",
       currentOrigin: "http://192.168.1.50:18000",
@@ -28,7 +29,7 @@ describe("oauthRedirectMismatch", () => {
     expect(oauthRedirectMismatch(localhostRedirect, "https://localhost:18000")).not.toBeNull()
   })
 
-  it("accepts the address Google will return to", () => {
+  it("accepts the address the provider will return to", () => {
     expect(oauthRedirectMismatch(localhostRedirect, "http://localhost:18000")).toBeNull()
     expect(
       oauthRedirectMismatch(
@@ -46,21 +47,24 @@ describe("oauthRedirectMismatch", () => {
 
 describe("oauthOutcome", () => {
   it("reads the outcome the OAuth callback adds to the Settings address", () => {
-    expect(oauthOutcome("?google=connected")).toBe("connected")
-    expect(oauthOutcome("?google=calendar_permission_required")).toBe("calendar_permission_required")
-    expect(oauthOutcome("?tab=x&google=authorization_failed")).toBe("authorization_failed")
+    expect(oauthOutcome("?oauth=connected&provider=google")).toBe("connected")
+    expect(oauthOutcome("?oauth=calendar_permission_required")).toBe("calendar_permission_required")
+    expect(oauthOutcome("?tab=x&oauth=authorization_failed")).toBe("authorization_failed")
+    expect(oauthProvider("?oauth=connected&provider=google")).toBe("google")
   })
 
   it("ignores a missing or unknown outcome", () => {
     expect(oauthOutcome("")).toBeNull()
-    expect(oauthOutcome("?google=surprise")).toBeNull()
+    expect(oauthOutcome("?oauth=surprise")).toBeNull()
+    expect(oauthProvider("?oauth=connected")).toBeNull()
   })
 
-  it("names each outcome in the catalog", () => {
+  it("names each outcome in the catalog, with the provider it was for", () => {
     const { t } = testI18n()
-    expect(t(OAUTH_OUTCOME_MESSAGES.connected.title)).toBe("Google account connected")
-    expect(t(OAUTH_OUTCOME_MESSAGES.calendar_permission_required.title)).toBe("Calendar access wasn’t granted")
-    expect(t(OAUTH_OUTCOME_MESSAGES.authorization_failed.title)).toBe("Google authorization could not be completed")
+    const names = { account: "Example account", provider: "Example" }
+    expect(t(OAUTH_OUTCOME_MESSAGES.connected.title, names)).toBe("Example account connected")
+    expect(t(OAUTH_OUTCOME_MESSAGES.calendar_permission_required.title, names)).toBe("Calendar access wasn’t granted")
+    expect(t(OAUTH_OUTCOME_MESSAGES.authorization_failed.title, names)).toBe("Example authorization could not be completed")
   })
 })
 
@@ -81,7 +85,7 @@ describe("oauthReturnAtCurrentOrigin", () => {
     )
   })
 
-  it("refuses anything that is not a Google return address", () => {
+  it("refuses anything that is not the provider's return address", () => {
     const refused = [
       "not a url",
       localhostRedirect,
@@ -114,13 +118,19 @@ describe("authorizationAwaitingReturn", () => {
     vi.unstubAllGlobals()
   })
 
-  it("is pending only while Google's return address still works", () => {
+  it("names the provider while its return address still works", () => {
     const storage = memoryStorage()
-    expect(authorizationAwaitingReturn(storage, 1_000)).toBe(false)
-    recordAuthorizationStart(storage, 1_000)
-    expect(authorizationAwaitingReturn(storage, 1_000 + AUTHORIZATION_RETURN_MS - 1)).toBe(true)
-    expect(authorizationAwaitingReturn(storage, 1_000 + AUTHORIZATION_RETURN_MS)).toBe(false)
-    expect(authorizationAwaitingReturn(storage, 999)).toBe(false)
+    expect(authorizationAwaitingReturn(storage, 1_000)).toBeNull()
+    recordAuthorizationStart("google", storage, 1_000)
+    expect(authorizationAwaitingReturn(storage, 1_000 + AUTHORIZATION_RETURN_MS - 1)).toBe("google")
+    expect(authorizationAwaitingReturn(storage, 1_000 + AUTHORIZATION_RETURN_MS)).toBeNull()
+    expect(authorizationAwaitingReturn(storage, 999)).toBeNull()
+  })
+
+  it("forgets an attempt an earlier version recorded without its provider", () => {
+    const storage = memoryStorage()
+    storage.setItem("calendar-sync-authorization-started", "1000")
+    expect(authorizationAwaitingReturn(storage, 2_000)).toBeNull()
   })
 
   it("falls back to quiet help when browser policy blocks storage", () => {
@@ -129,15 +139,15 @@ describe("authorizationAwaitingReturn", () => {
         throw new DOMException("The operation is insecure.", "SecurityError")
       },
     })
-    expect(() => recordAuthorizationStart()).not.toThrow()
+    expect(() => recordAuthorizationStart("google")).not.toThrow()
     expect(() => clearAuthorizationStart()).not.toThrow()
-    expect(authorizationAwaitingReturn()).toBe(false)
+    expect(authorizationAwaitingReturn()).toBeNull()
   })
 
   it("ends once the attempt returned", () => {
     const storage = memoryStorage()
-    recordAuthorizationStart(storage, 1_000)
+    recordAuthorizationStart("google", storage, 1_000)
     clearAuthorizationStart(storage)
-    expect(authorizationAwaitingReturn(storage, 2_000)).toBe(false)
+    expect(authorizationAwaitingReturn(storage, 2_000)).toBeNull()
   })
 })

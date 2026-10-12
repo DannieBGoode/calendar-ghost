@@ -168,6 +168,8 @@ const editUrl = `${REPO_URL}/edit/main/${source}`
     font: 600 0.75rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted-foreground);
   }
   .doc :global(.doc-copy) { min-height: 2.75rem; background: var(--surface); }
+  /* A screenshot shrinks to the text's width, keeping its proportions. */
+  .doc :global(img) { display: block; max-width: 100%; height: auto; margin: 0.25rem 0 1.15rem; border: 1px solid var(--border); border-radius: var(--radius); }
   /* A wide table scrolls inside its own box rather than widening the page. */
   .doc :global(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 0.9375rem; line-height: 1.5; }
   .doc :global(:is(th, td)) { padding: 0.55rem 0.8rem; border: 1px solid var(--border); text-align: left; vertical-align: top; }

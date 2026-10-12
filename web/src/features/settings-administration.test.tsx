@@ -56,7 +56,7 @@ let calls: Call[] = []
 function serve({ role = "installation_administrator", registration, answers = {} }: Scenario) {
   const defaults: Record<string, Response> = {
     "GET /api/v1/session": jsonResponse(session(role)),
-    "GET /api/v1/google/configuration": jsonResponse({ configured: true, redirect_uri: null }),
+    "GET /api/v1/providers": jsonResponse([]),
     "GET /api/v1/accounts": jsonResponse([]),
     "GET /api/v1/integration-tokens": jsonResponse([]),
     "GET /api/v1/storage": jsonResponse({
