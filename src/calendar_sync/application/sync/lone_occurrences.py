@@ -25,12 +25,14 @@ _SHOWN = frozenset({SyncReason.OCCURRENCE_CURRENT, SyncReason.OCCURRENCE_ALREADY
 
 @dataclass(slots=True)
 class RetireLoneOccurrences:
-    """Removes the single projection of an occurrence once the destination shows its series.
+    """Removes the single projection of an occurrence once its series is shown.
 
     An occurrence whose series its calendar did not show was projected on its own (ADR 0011).
     Once the destination series shows that occurrence as the source projects it, the single
     projection would show it twice. Until then it stays, so the occurrence is never shown wrong
-    or not at all; one someone invited guests to stays too, and is recorded as blocked.
+    or not at all; one someone invited guests to stays too, and is recorded as blocked. A series
+    the rule excludes projects none of its occurrences (ADR 0018), so once the calendar shows it,
+    their single projections are removed as the series' exclusion says.
     """
 
     provider: CalendarProvider
@@ -52,6 +54,27 @@ class RetireLoneOccurrences:
                 self._remove(run, lone, source, SyncReason.SOURCE_CANCELLED)
             elif self._shown(run, series_mapping, source_series, lone.occurrence, source):
                 self._remove(run, lone, source, SyncReason.OCCURRENCE_JOINED_SERIES)
+
+    def retire_excluded(self, run: SyncRunContext, source_series: CalendarEvent) -> None:
+        """Remove the single projections of the occurrences of a shown series the rule excludes."""
+        if source_series.status is not EventStatus.CONFIRMED:
+            return
+        exclusion = run.rule.transformation.exclusion(source_series)
+        if exclusion is None:
+            return
+        for lone in run.uow.mappings.lone_occurrences(run.rule.id, source_series.reference):
+            assert lone.occurrence is not None
+            source = self.provider.get_occurrence(
+                source_series.reference, lone.occurrence.original_start
+            )
+            if source is None:
+                continue  # unreadable, so decided as the event it was projected as
+            reason = (
+                SyncReason.SOURCE_CANCELLED
+                if source.status is EventStatus.CANCELLED
+                else exclusion.removal_reason
+            )
+            self._remove(run, lone, source, reason)
 
     def _shown(
         self,
@@ -101,9 +124,10 @@ class RetireLoneOccurrences:
                 self._record(run, mapping, source, SyncAction.CONFLICT, unsupported.reason)
                 return
             run.uow.mappings.delete(mapping)
-            if reason is SyncReason.OCCURRENCE_JOINED_SERIES:
-                # Its series shows it as it is, so nothing later this run projects it again. A
-                # cancelled one is still applied to its series when its own change arrives.
+            if reason is not SyncReason.SOURCE_CANCELLED:
+                # Its series shows it as it is, or projects none of it, so nothing later this run
+                # projects it again. A cancelled one is still applied to its series when its own
+                # change arrives.
                 run.handled.add(mapping.source)
             self._record(run, mapping, source, SyncAction.DELETE, reason)
 

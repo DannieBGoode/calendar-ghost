@@ -506,12 +506,11 @@ class ExecuteSyncRule:
             and not run.source_listed
         ):
             self.exception_replays.replay(run, mapping, source_event)
-        if (
-            mapping is not None
-            and source_event.recurrence is not None
-            and decision.action is not SyncAction.DELETE
-        ):
-            self.lone_occurrences.retire(run, mapping, source_event)
+        if source_event.recurrence is not None:
+            if mapping is not None and decision.action is not SyncAction.DELETE:
+                self.lone_occurrences.retire(run, mapping, source_event)
+            else:
+                self.lone_occurrences.retire_excluded(run, source_event)
         return decision
 
     def _complete_series_revision(self, run: SyncRunContext, source_series: CalendarEvent) -> None:

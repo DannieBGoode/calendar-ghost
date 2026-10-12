@@ -404,6 +404,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- An occurrence projected on its own, because its calendar did not show its series, is now
+  removed once the calendar shows a series the rule leaves out, such as one you declined. Before,
+  the single projection stayed in the destination for good, though the rule projects no
+  occurrence of that series.
 - Rules no longer copy the contacts' birthdays Google keeps in a primary calendar. Google Calendar
   lists them as a separate "Birthdays" calendar, but they are events of the primary calendar, so a
   rule from it copied every one. A new rule setting, "Sync birthdays", is off by default; upgrading
