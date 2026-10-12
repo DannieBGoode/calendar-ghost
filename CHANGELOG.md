@@ -143,6 +143,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- The rule health policy, which decides when a failed run stops its rule and when it opens an
+  Incident, moves into the domain (`domain/health.py`), with the failure kinds that need
+  reauthorization or a retry (`domain/providers.py`). Behavior is unchanged (#104).
 - Connecting or reauthorizing an account opens the provider's consent in a new tab when its
   redirect URI is at another address than the one Calendar Ghost is open at, such as `localhost`
   while Calendar Ghost runs on a LAN host. The tab you started from stays on Calendar Ghost and
@@ -417,6 +420,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- A provider failure, an interrupted Rule Removal or Rule Replacement, or a refusal from Microsoft
+  raised through a context manager keeps its kind. Before, Python 3.12 replaced it with a
+  `TypeError`, because these errors were frozen dataclasses, so a failure could read as a local
+  infrastructure failure. A test now fails if any error is a frozen dataclass (#103).
 - Outlook now holds a yearly series on a day its month always has, such as a birthday on
   November 30. It refused every yearly series from the 29th on, as if every month could be
   shorter, and Activity showed such a series as blocked. February 29 and the 31st of a 30-day

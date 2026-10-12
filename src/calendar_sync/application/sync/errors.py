@@ -9,7 +9,11 @@ from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId
-from calendar_sync.domain.providers import ProviderFailureKind
+from calendar_sync.domain.providers import (
+    AUTHORIZATION_FAILURES,
+    TRANSIENT_FAILURES,
+    ProviderFailureKind,
+)
 
 
 class RuleNotExecutable(ApplicationError):
@@ -54,14 +58,6 @@ class RemovalRequiresAuthorization(ApplicationError):
     """Deleting projections needs an authorized destination account."""
 
 
-# Failures that only reauthorizing the Connected Account can resolve.
-AUTHORIZATION_FAILURES = frozenset(
-    {ProviderFailureKind.AUTHENTICATION, ProviderFailureKind.AUTHORIZATION}
-)
-# Failures a later attempt can resolve, so they are retried with backoff.
-TRANSIENT_FAILURES = frozenset({ProviderFailureKind.RATE_LIMIT, ProviderFailureKind.TEMPORARY})
-
-
 _FAILURE_SUMMARIES = {
     ProviderFailureKind.AUTHENTICATION: "Authorization for {calendar} expired",
     ProviderFailureKind.AUTHORIZATION: "Access to {calendar} was denied",
@@ -72,7 +68,8 @@ _FAILURE_SUMMARIES = {
 }
 
 
-@dataclass(frozen=True, slots=True)
+# Not frozen: raising an error sets its __traceback__, which a frozen dataclass refuses.
+@dataclass(eq=False)
 class ProviderFailure(ApplicationError):
     kind: ProviderFailureKind
     detail: str
@@ -151,7 +148,8 @@ class UnsupportedProjection(ApplicationError):
         """Why, as the Conflict records it."""
 
 
-@dataclass(frozen=True, slots=True)
+# Not frozen: raising an error sets its __traceback__, which a frozen dataclass refuses.
+@dataclass(eq=False)
 class RemovalInterrupted(ApplicationError):
     """Rule Removal stopped partway; the rule stays in Removing with its remaining mappings."""
 
@@ -167,7 +165,8 @@ class RemovalInterrupted(ApplicationError):
         )
 
 
-@dataclass(frozen=True, slots=True)
+# Not frozen: raising an error sets its __traceback__, which a frozen dataclass refuses.
+@dataclass(eq=False)
 class ReplacementInterrupted(ApplicationError):
     """The replacement draft exists, but removing the previous rule stopped partway."""
 

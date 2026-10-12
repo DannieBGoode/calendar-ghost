@@ -121,9 +121,12 @@ Connected Accounts and their credentials, encrypted by the `CredentialCipher` in
 `ConnectedAccountRepository` port. Deleting an account and its rules is the `DeleteConnectedAccount`
 use case, which deletes both in one unit of work; the adapters only delete their own records.
 
-Rule health follows the same direction. `application/sync/health.py` holds the `RuleHealthPolicy`: which
-failures require intervention and degrade the rule, the three-failure Provider Incident threshold,
-and every incident key and summary. `RuleHealth` applies it through the `RuleHealthRecords`,
+Rule health follows the same direction. The domain's `domain/health.py` holds the
+`RuleHealthPolicy`: which failures require intervention and degrade the rule, the three-failure
+Provider Incident threshold, and every incident key and summary. It reads a failure only through
+`ProviderFailureFacts` in `domain/providers.py`, which `ProviderFailure` satisfies, so the domain
+names no application error. `RuleHealth` in `application/sync/health.py` applies it through the
+`RuleHealthRecords`,
 `IncidentRepository`, and `IncidentNotifications` ports and the `Clock`. Each use case reports to it
 through a protocol of its own: the scheduler through `RunHealth` after every Sync Run, Reconcile Now
 through `FullPassRecords` after its full pass, Rule Removal through `RemovalIncidents` when lost

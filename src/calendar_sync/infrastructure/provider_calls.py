@@ -35,8 +35,6 @@ class ContextProviderCallStats:
 
 
 class _Measuring(AbstractContextManager[ProviderCallTally]):
-    # Not @contextmanager: its exit assigns __traceback__ on the exception, which frozen
-    # slotted dataclass errors such as RemovalInterrupted reject.
     def __init__(self, tally: ProviderCallTally) -> None:
         self._tally = tally
         self._token: Token[ProviderCallTally | None] | None = None

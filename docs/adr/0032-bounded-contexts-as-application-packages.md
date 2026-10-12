@@ -22,7 +22,7 @@ states will not hold while it grows.
 
   | Package | Owns |
   | --- | --- |
-  | `application/sync` | Directional Sync Rules, previews, Sync Runs, occurrences, reconciliation, Rule Removal, Connected Accounts and Lapsed Authorization, rule health and the Incidents it reports, the rule locks, and provider failures, retries, and call counts |
+  | `application/sync` | Directional Sync Rules, previews, Sync Runs, occurrences, reconciliation, Rule Removal, Connected Accounts and Lapsed Authorization, applying rule health and reporting its Incidents, the rule locks, and provider failures, retries, and call counts |
   | `application/identity` | Users, sign-in and sessions, administration, Invitations, Password Reset Links, and Integration Tokens |
   | `application/operations` | Activity, Installation Status, Installation Health and Installation Hints, the Operator Overview, and storage |
   | `application/shared` | The base application error and the clock and identifier ports, which every context uses |
@@ -41,21 +41,25 @@ states will not hold while it grows.
 
 - **Connected Accounts and rule health belong to `sync`.** The account use cases are mostly about
   rules: disconnecting an account degrades its rules, deleting it purges them, and a Lapsed
-  Authorization stops and later resumes them. Rule health degrades rules when runs fail. Each of
-  these use cases coordinates accounts and rules, but only deleting an account changes both in one
-  transaction. Disconnection degrades each previewed or enabled rule that uses the account, and
-  makes one awaiting reauthorization need a preview, each in its own transaction under that rule's
-  lock, then disconnects the account in another. Lapsed Authorization
-  records the lapse, then stops each enabled rule of the account, then opens its Incident, each
-  committed separately. Restoring it clears the lapse, then resolves the Incident, then resumes
-  each rule the lapse alone stopped once both of its accounts are authorized. Moving accounts to a context of their own would
-  put this coordination in two contexts that both need the other. Google authorization,
-  credentials, and discovery stay in the Google adapter, as before.
+  Authorization stops and later resumes them. Rule health degrades rules when runs fail. The
+  application coordinates rule health in `RuleHealth`, but the policy it applies, which failures
+  stop a rule and when trouble opens an Incident, is a domain rule in `domain/health.py`. It reads a
+  failure only through the domain's `ProviderFailureFacts`, so the domain names no application error
+  (#104). Each of these use cases coordinates accounts and rules, but only deleting an account
+  changes both in one transaction. Disconnection degrades each previewed or enabled rule that uses
+  the account, and makes one awaiting reauthorization need a preview, each in its own transaction
+  under that rule's lock, then disconnects the account in another. Lapsed Authorization records the
+  lapse, then stops each enabled rule of the account, then opens its Incident, each committed
+  separately. Restoring it clears the lapse, then resolves the Incident, then resumes each rule the
+  lapse alone stopped once both of its accounts are authorized. Moving accounts to a context of
+  their own would put this coordination in two contexts that both need the other. Google
+  authorization, credentials, and discovery stay in the Google adapter, as before.
 
-- **Glossary concepts live in the domain.** `domain/accounts.py` holds the Connected Account and
-  its Provider Kind, `domain/audit.py` the Audit Entry, `domain/incidents.py` the Incident report,
-  `domain/runs.py` the Sync Run outcome, and `domain/causes.py` the Cause. Read models that only
-  one view uses, such as an Incident summary for Activity, stay with that view's ports.
+- **Glossary concepts live in the domain.** `domain/accounts.py` holds the Connected Account and its
+  Provider Kind, `domain/audit.py` the Audit Entry, `domain/incidents.py` the Incident report,
+  `domain/runs.py` the Sync Run outcome, `domain/causes.py` the Cause, and `domain/health.py` the
+  rule health policy. Read models that only one view uses, such as an Incident summary for Activity,
+  stay with that view's ports.
 
 - **SQLite schema migrations are their own module**, `infrastructure/persistence/migrations.py`,
   and the installation-wide unit of work is `infrastructure/persistence/installation.py`, so
