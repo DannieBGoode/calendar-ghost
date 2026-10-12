@@ -145,7 +145,7 @@ After changing an API response or request model, regenerate the frontend types i
 npm --prefix web run api:types
 ```
 
-Fixtures in `tests/fixtures` are synthetic. Never copy provider responses from a personal account into the repository.
+Fixtures in `tests/fixtures` are synthetic. Never copy provider responses from a personal account into the repository; make them synthetic first ([Live provider checks](#live-provider-checks)).
 
 A new calendar adapter adds a `CalendarProviderContract` subclass in its own test package, as
 `tests/adapters/google/` and `tests/adapters/microsoft/` do. Its harness seeds and removes Native
@@ -153,6 +153,52 @@ Events in that adapter's backend, makes the backend refuse a calendar's cursors,
 event if the backend re-reads events changed shortly before a cursor, and, if the backend cannot
 expand a recurrence itself, tells it how the contract's series expands. The fake
 of the provider's API must expand a daily series with a count, as the contract's series is.
+
+## Live provider checks
+
+Tests use fakes and never need a personal account. Some behavior only a real provider can show,
+such as what Microsoft Graph accepts or how Google stores a rule, so `scripts/live_provider_checks.py`
+runs ADR 0034's checks against real Google and Outlook calendars. Run it before a release that
+touches a provider adapter, after a provider changes its API, and to verify a new kind of account,
+such as a Microsoft work or school account. CI never runs it.
+
+It needs:
+
+- A local installation started with your `.env` (see [Setup](#setup)), signed in with an account
+  you made for this, with exactly one Outlook and one Google account connected. Use test accounts
+  if you can; it never reads or writes any other calendar of theirs.
+- Two empty Google calendars, `CG live source` and `CG live destination`, which you create: the
+  installation's Google grant may not create calendars. `CALENDAR_GHOST_GOOGLE_SOURCE` and
+  `CALENDAR_GHOST_GOOGLE_DESTINATION` name others.
+
+```sh
+set -a; . ./.env; set +a
+CALENDAR_GHOST_URL=http://127.0.0.1:8000 CALENDAR_GHOST_EMAIL=you@example.test \
+CALENDAR_GHOST_PASSWORD=... .venv/bin/python scripts/live_provider_checks.py
+```
+
+It creates its own Outlook calendars, named `CG live ...`, writes only to those and the two Google
+calendars, and notifies nobody: invitations are imported with their answers rather than sent, and
+every other write asks for no notification. Its events fall in the year after the run, so the
+checks never age. Any error answer fails the check rather than reading as an empty calendar, and
+it deletes everything it made, whatever the outcome, warning about anything it could not delete.
+In about five minutes it prints one Markdown table:
+
+- Graph v1.0: the behaviors ADR 0034 relies on, such as exceptions listed with their attendees,
+  `If-Match` on PATCH, a repeated `transactionId`, and the extended-property filter.
+- Outlook to Outlook, Google to Outlook, and Outlook to Google: every kind of event and series the
+  checks found worth keeping, moves, cancellations, series changes, invitations and their answers,
+  rule settings, edits made in the destination, an occurrence deleted in Outlook, blocked events
+  with their reasons, an idle run that writes nothing, and Rule Removal.
+
+It exits 1 if any check failed. A failure is a finding: reproduce it in a test before changing code.
+
+When a provider's answer is in doubt, record it from the test calendars and keep it as a fixture.
+`scripts/provider_fixtures.py RECORDED.json FIXTURE.json` keeps every key, type, date, status, and
+recurrence rule, and replaces identifiers, version stamps, addresses, people's names, and links'
+query strings with stable placeholders. Record synthetic test events only: event text is kept.
+`tests/fixtures/providers/` holds the answers recorded on 2026-10-12, and
+`tests/adapters/*/test_recorded_*_answers.py` pin how each adapter reads them.
 
 ## Architecture rules
 
