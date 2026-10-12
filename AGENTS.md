@@ -117,7 +117,7 @@ web/ and interfaces/  ->  application/  ->  domain/
   for alias and relative imports.
 - Call the API through `api` in `web/src/lib/api.ts`. Each method names its route and HTTP method,
   which select the generated path, query, body, and response types; never pass a type by hand.
-- React Doctor (`pnpm --dir web run doctor`) fails on any warning. Fix the code; change
+- React Doctor (`pnpm run doctor` in `web/`) fails on any warning. Fix the code; change
   `web/doctor.config.ts` only for a documented false positive.
 
 ## Landing page
@@ -196,12 +196,12 @@ the Docker build context, and has its own `Site` workflow.
 
 ## Development
 
-Requirements are Python 3.12, Node.js 22 or later with pnpm 12 (`corepack enable` provides it), and Docker with Compose for container validation.
+Requirements are Python 3.12, Node.js 22 or later with pnpm 12 (`corepack enable` provides it; run pnpm from inside `web/` or `site/`, where Corepack reads its version), and Docker with Compose for container validation.
 
 ```sh
 python3.12 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-pnpm --dir web install --frozen-lockfile
+(cd web && pnpm install --frozen-lockfile)
 ```
 
 Run the integrated FastAPI service on port 8000:
@@ -213,7 +213,7 @@ Run the integrated FastAPI service on port 8000:
 For frontend development, run Vite on port 5173; it proxies `/api` and `/health` to FastAPI:
 
 ```sh
-pnpm --dir web run dev
+cd web && pnpm run dev
 ```
 
 The production frontend is committed under `src/calendar_sync/interfaces/api/static/`. After any
@@ -247,14 +247,16 @@ Run the complete backend quality gate:
 Run the complete frontend quality gate:
 
 ```sh
-pnpm --dir web audit --audit-level=high
-pnpm --dir web run api:check
-pnpm --dir web run typecheck
-pnpm --dir web run lint
-pnpm --dir web run doctor
-pnpm --dir web run knip
-pnpm --dir web run test
-pnpm --dir web run build
+cd web
+pnpm audit --audit-level=high
+pnpm run api:check
+pnpm run typecheck
+pnpm run lint
+pnpm run doctor
+pnpm run knip
+pnpm run test
+pnpm run build
+cd ..
 ```
 
 CI's `frontend` job runs the same commands. `lint` fails on any ESLint warning (`--max-warnings 0`):
@@ -263,7 +265,7 @@ fix the code, never disable a rule to pass. `knip` fails on an unused file, expo
 
 The frontend's API types are generated from the backend's OpenAPI schema (ADR 0025). After changing
 a response or request model in `interfaces/api/schemas.py`, run
-`.venv/bin/python scripts/export_openapi.py` and `pnpm --dir web run api:types`, and commit both
+`.venv/bin/python scripts/export_openapi.py` and `cd web && pnpm run api:types`, and commit both
 generated files. Never edit `web/openapi.json` or `web/src/lib/api-schema.ts` by hand.
 
 Scan the repository for secrets with gitleaks (8.30.1, the version CI pins):

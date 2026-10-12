@@ -4,7 +4,8 @@
 
 - Python 3.12
 - Node.js 22 or later
-- pnpm 12. With Node.js 22 to 24, `corepack enable` provides the version `package.json` names.
+- pnpm 12. With Node.js 22 to 24, `corepack enable` provides the version `web/package.json` and
+  `site/package.json` name. Run pnpm from inside `web/` or `site/`, where Corepack reads it.
 - Docker with Compose for container validation
 
 ## Setup
@@ -24,8 +25,8 @@ revision; CI and Docker builds should set `CALENDAR_GHOST_SOURCE_URL` to the imm
 release tag URL for the source being built:
 
 ```sh
-CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/calendar-ghost/tree/<commit-or-tag> \
-  pnpm --dir web run build
+cd web && CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/calendar-ghost/tree/<commit-or-tag> \
+  pnpm run build
 ```
 
 Docker Compose passes the same variable as a build argument. Downstream forks can point the link at
@@ -89,13 +90,14 @@ cross providers. Robin's Personal account is Google's and their Work account is 
 The landing page in `site/` has its own toolchain:
 
 ```sh
-pnpm --dir site install --frozen-lockfile
-pnpm --dir site run dev          # http://localhost:4321
-pnpm --dir site run check        # astro check
-pnpm --dir site test             # unit tests
-pnpm --dir site run build && pnpm --dir site run audit:dist
-pnpm --dir site run e2e          # Playwright; run `pnpm --dir site exec playwright install chromium` once
-pnpm --dir site run og-image     # regenerate public/og.png from a running `pnpm --dir site run preview`
+cd site
+pnpm install --frozen-lockfile
+pnpm run dev          # http://localhost:4321
+pnpm run check        # astro check
+pnpm test             # unit tests
+pnpm run build && pnpm run audit:dist
+pnpm run e2e          # Playwright; run `pnpm exec playwright install chromium` once
+pnpm run og-image     # regenerate public/og.png from a running `pnpm run preview`
 ```
 
 Cloudflare Workers Builds deploys it from `main`; other branches get preview URLs. The site also
@@ -114,7 +116,7 @@ paths).
    lists for that language. English only needs `one` and `other`; other languages may need more.
 3. Register the language in `web/src/i18n/locales/index.ts`:
    `{ tag, load: () => import("./<tag>").then((module) => module.default) }`.
-4. Run the frontend gate (`pnpm --dir web run typecheck && pnpm --dir web run lint && pnpm --dir web run test`).
+4. Run the frontend gate (`cd web && pnpm run typecheck && pnpm run lint && pnpm run test`).
 5. Open the app with `?locale=pseudo` in dev to check layouts take the longer pseudo-text, then
    open it with the new language and read every screen.
 
@@ -143,7 +145,7 @@ After changing an API response or request model, regenerate the frontend types i
 
 ```sh
 .venv/bin/python scripts/export_openapi.py
-pnpm --dir web run api:types
+(cd web && pnpm run api:types)
 ```
 
 Fixtures in `tests/fixtures` are synthetic. Never copy provider responses from a personal account into the repository; make them synthetic first ([Live provider checks](#live-provider-checks)).

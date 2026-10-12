@@ -41,7 +41,7 @@ definition directly.
 ## Consequences
 
 A change to a response model is a two-command update (`scripts/export_openapi.py`, then
-`pnpm --dir web run api:types`) in the same commit. The schema also documents the HTTP API, which
+`cd web && pnpm run api:types`) in the same commit. The schema also documents the HTTP API, which
 is a compatibility surface, so an accidental payload change shows up in review as a diff to
 `web/openapi.json`. Request bodies with a closed set of values are validated by Pydantic, so an
 unknown `privacy_policy` is rejected with FastAPI's standard 422 validation detail, whose messages

@@ -451,12 +451,12 @@ language and settled product decisions live in [CONTEXT.md](CONTEXT.md).
 
 ## Local development
 
-Backend requirements: Python 3.12. Frontend requirements: Node.js 22 or later and pnpm 12. With Node.js 22 to 24, `corepack enable` provides the pnpm version `package.json` names.
+Backend requirements: Python 3.12. Frontend requirements: Node.js 22 or later and pnpm 12. With Node.js 22 to 24, `corepack enable` provides the pnpm version `web/package.json` names; run pnpm from `web/` or `site/`, since Corepack reads the version there.
 
 ```sh
 python3.12 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-pnpm --dir web install --frozen-lockfile
+(cd web && pnpm install --frozen-lockfile)
 ```
 
 Run FastAPI on port 8000:
@@ -468,7 +468,7 @@ Run FastAPI on port 8000:
 In another terminal, run Vite on port 5173:
 
 ```sh
-pnpm --dir web run dev
+cd web && pnpm run dev
 ```
 
 Vite proxies `/api` and `/health` to FastAPI. The OpenAPI interface is available at
@@ -482,13 +482,15 @@ Vite proxies `/api` and `/health` to FastAPI. The OpenAPI interface is available
 .venv/bin/mypy
 .venv/bin/lint-imports
 .venv/bin/pytest --cov --cov-report=term-missing --cov-fail-under=80
-pnpm --dir web audit --audit-level=high
-pnpm --dir web run api:check
-pnpm --dir web run typecheck
-pnpm --dir web run lint
-pnpm --dir web run doctor
-pnpm --dir web run test
-pnpm --dir web run build
+cd web
+pnpm audit --audit-level=high
+pnpm run api:check
+pnpm run typecheck
+pnpm run lint
+pnpm run doctor
+pnpm run test
+pnpm run build
+cd ..
 docker compose build
 ```
 
