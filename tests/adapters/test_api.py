@@ -1966,14 +1966,7 @@ def test_sync_and_reconcile_now_answer_a_failed_run_as_the_providers_failure(
     def failed_run(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> None:
         raise failure
 
-    container = _with_services(
-        container,
-        execute_sync_rule=Mock(execute=Mock(side_effect=failure)),
-        reconcile_now=replace(
-            _reconcile_now(container),
-            synchronize=cast(ExecuteSyncRule, _sync_stand_in(failed_run)),
-        ),
-    )
+    container = _failing_now(container, failed_run)
 
     with TestClient(create_app(container)) as client:
         sign_in(client)
@@ -1984,6 +1977,61 @@ def test_sync_and_reconcile_now_answer_a_failed_run_as_the_providers_failure(
         assert answer.status_code == 424
         assert answer.json()["code"] == "provider_failed"
         assert answer.json()["params"]["kind"] == "temporary"
+
+
+@pytest.mark.parametrize("command", ["sync", "reconcile"])
+def test_sync_and_reconcile_now_lapse_an_account_the_provider_refused(
+    tmp_path: Path, command: str
+) -> None:
+    # Any request the provider refuses for authentication lapses the account and stops its rules
+    # at once, as preview and the scheduler do, not at the next scheduled pass (ADR 0027).
+    database = tmp_path / "test.db"
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key())
+    )
+    _connect_accounts(database, "personal-account", "work-account")
+    with _units(adapters)() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        uow.commit()
+    failure = ProviderFailure(
+        ProviderFailureKind.AUTHENTICATION,
+        "Microsoft refused the token request: invalid_grant",
+        account_id=ConnectedAccountId("work-account"),
+        # As the adapter records it: the refused request began after the account connected.
+        attempted_at=datetime.now(UTC),
+    )
+
+    def failed_run(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> None:
+        raise failure
+
+    container = _failing_now(container, failed_run)
+
+    with TestClient(create_app(container)) as client:
+        sign_in(client)
+        answer = client.post(f"/api/v1/rules/rule-1/{command}")
+        accounts = {item["id"]: item for item in client.get("/api/v1/accounts").json()}
+        rules = client.get("/api/v1/rules").json()
+
+    assert answer.status_code == 424
+    assert accounts["work-account"]["authorization_lapsed_at"] is not None
+    assert accounts["personal-account"]["authorization_lapsed_at"] is None
+    assert [item["state"] for item in rules] == ["degraded"]
+
+
+def _failing_now(container: Container, failed_run: object) -> Container:
+    """The container whose Sync Now and Reconcile Now runs fail as `failed_run` does."""
+    services = _services(container)
+    assert services.sync_now is not None
+    return _with_services(
+        container,
+        sync_now=replace(
+            services.sync_now, synchronize=cast(ExecuteSyncRule, Mock(execute=failed_run))
+        ),
+        reconcile_now=replace(
+            _reconcile_now(container),
+            synchronize=cast(ExecuteSyncRule, _sync_stand_in(failed_run)),
+        ),
+    )
 
 
 def _sync_stand_in(execute: object) -> Mock:

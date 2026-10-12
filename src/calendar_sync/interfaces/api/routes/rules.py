@@ -32,7 +32,7 @@ from calendar_sync.application.sync.rules import (
     PauseSyncRule,
     ReplaceSyncRuleCalendars,
 )
-from calendar_sync.application.sync.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.synchronization import SyncNow
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
@@ -92,7 +92,7 @@ class RuleServices(Protocol):
     @property
     def replace_sync_rule_calendars(self) -> ReplaceSyncRuleCalendars: ...
     @property
-    def execute_sync_rule(self) -> ExecuteSyncRule | None: ...
+    def sync_now(self) -> SyncNow | None: ...
     @property
     def preview_sync_rule(self) -> PreviewSyncRule | None: ...
     @property
@@ -150,19 +150,19 @@ def create_rule(request: CreateRuleRequest, services: Services) -> RuleResponse:
     dependencies=[Depends(current_user)],
 )
 async def sync_now(rule_id: str, services: Services) -> SyncResultResponse:
-    execute_sync_rule = available(
-        services.execute_sync_rule,
+    sync_now = available(
+        services.sync_now,
         "rule_execution_unavailable",
         "configure a calendar provider and the installation master key before synchronizing",
     )
     try:
-        result = await asyncio.to_thread(execute_sync_rule.execute, SyncRuleId(rule_id))
+        result = await asyncio.to_thread(sync_now.execute, SyncRuleId(rule_id))
     except RuleNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except RuleNotExecutable as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
     except ProviderFailure as error:
-        # The run failed and recorded why, as a scheduled run does; the answer names the failure.
+        # The answer names the failure; lost authorization has already lapsed the account.
         raise problem_from(status.HTTP_424_FAILED_DEPENDENCY, error) from error
     return SyncResultResponse(
         rule_id=result.rule_id.value,
