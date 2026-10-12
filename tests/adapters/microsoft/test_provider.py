@@ -358,6 +358,30 @@ def _destination_series(provider: Any, graph: FakeMicrosoftGraph) -> tuple[Event
     return created.destination_event.reference, source
 
 
+def test_the_first_occurrence_of_an_endless_series_is_looked_for_in_windows_graph_lists() -> None:
+    # Graph lists a series without end only up to five years at once, and a first occurrence may
+    # have moved any distance earlier, so its search back to 1601 goes window by window. One
+    # wide request answered 400 and stopped the rule (2026-10-12).
+    provider, graph = outlook()
+    destination, source = _destination_series(provider, graph)
+    provider.cancel_occurrence(destination, MONDAY, source, RULE, "key-2")
+
+    found = provider.get_occurrence(destination, MONDAY)
+
+    assert found is not None
+    assert found.status is EventStatus.CANCELLED
+    windows = [
+        (request.url.params["startDateTime"], request.url.params["endDateTime"])
+        for request in graph.requests
+        if request.url.path.endswith("/instances")
+    ]
+    assert all(
+        datetime.fromisoformat(end[:19]) - datetime.fromisoformat(start[:19])
+        <= timedelta(days=1825)
+        for start, end in windows
+    )
+
+
 def test_an_occurrence_is_written_and_cancelled_without_emailing_anyone() -> None:
     provider, graph = outlook()
     destination, source = _destination_series(provider, graph)
