@@ -24,6 +24,10 @@ export function RuleFacts({ detail, destinationName }: { detail: RuleDetail; des
           <dd>{detail.sync_all_day_events ? t("ruleDetails.facts.allDayIncluded") : t("ruleDetails.facts.allDayExcluded")}</dd>
         </div>
         <div>
+          <dt>{t("ruleDetails.facts.birthdays")}</dt>
+          <dd>{detail.sync_birthdays ? t("ruleDetails.facts.birthdaysIncluded") : t("ruleDetails.facts.birthdaysExcluded")}</dd>
+        </div>
+        <div>
           <dt>{t("ruleDetails.facts.tentative")}</dt>
           <dd>{tentativeFact(i18n, detail)}</dd>
         </div>

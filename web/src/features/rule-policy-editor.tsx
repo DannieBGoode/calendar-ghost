@@ -32,6 +32,7 @@ export function PolicyEditor({
     sync_all_day_events: detail.sync_all_day_events,
     tentative_events: detail.tentative_events,
     unanswered_invitations: detail.unanswered_invitations,
+    sync_birthdays: detail.sync_birthdays,
   }
   const [open, setOpen] = useState(false)
   const [next, setNext] = useState<RulePolicyPayload>(current)
@@ -106,6 +107,17 @@ export function PolicyEditor({
             <span>
               <strong>{t("ruleDetails.policy.allDay")}</strong>
               <small>{t("ruleDetails.policy.allDayHint")}</small>
+            </span>
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={next.sync_birthdays}
+              onChange={(event) => setNext({ ...next, sync_birthdays: event.target.checked })}
+            />
+            <span>
+              <strong>{t("ruleDetails.policy.birthdays")}</strong>
+              <small>{t("ruleDetails.policy.birthdaysHint")}</small>
             </span>
           </label>
           <InvitationResponseFields

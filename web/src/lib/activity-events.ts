@@ -30,6 +30,7 @@ const OCCURRENCE_REASONS = new Set([
 
 const EITHER_SCOPE_REASONS = new Set([
   "all_day_excluded_removed",
+  "birthday_removed",
   "declined_removed",
   "tentative_excluded_removed",
   "awaiting_response_removed",

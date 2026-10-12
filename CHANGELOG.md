@@ -417,6 +417,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- Rules no longer copy the contacts' birthdays Google keeps in a primary calendar. Google Calendar
+  lists them as a separate "Birthdays" calendar, but they are events of the primary calendar, so a
+  rule from it copied every one. A new rule setting, "Sync birthdays", is off by default; upgrading
+  deletes the birthdays rules already copied on their next run
+  ([ADR 0035](docs/adr/0035-leave-out-birthdays-unless-a-rule-syncs-them.md)).
 - Outlook now holds a yearly series on a day its month always has, such as a birthday on
   November 30. It refused every yearly series from the 29th on, as if every month could be
   shorter, and Activity showed such a series as blocked. February 29 and the 31st of a 30-day

@@ -36,6 +36,7 @@ from calendar_sync.application.sync.synchronization import SyncNow
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
+    BirthdayPolicy,
     CalendarEndpoint,
     CalendarId,
     ConnectedAccountId,
@@ -132,6 +133,7 @@ def create_rule(request: CreateRuleRequest, services: Services) -> RuleResponse:
         all_day=_all_day(request.sync_all_day_events),
         tentative=TentativeEventPolicy(request.tentative_events),
         unanswered=UnansweredInvitationPolicy(request.unanswered_invitations),
+        birthdays=_birthdays(request.sync_birthdays),
     )
     try:
         rule = services.create_draft_rule.execute(
@@ -306,6 +308,7 @@ def change_rule_policy(
             all_day,
             tentative=TentativeEventPolicy(request.tentative_events),
             unanswered=UnansweredInvitationPolicy(request.unanswered_invitations),
+            birthdays=_birthdays(request.sync_birthdays),
         )
     except RuleNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
@@ -408,6 +411,7 @@ def _rule_response(rule: SyncRule) -> RuleResponse:
         sync_all_day_events=rule.transformation.all_day is AllDaySyncPolicy.INCLUDE,
         tentative_events=rule.transformation.tentative.value,
         unanswered_invitations=rule.transformation.unanswered.value,
+        sync_birthdays=rule.transformation.birthdays is BirthdayPolicy.INCLUDE,
         state=rule.state.value,
         reprojection_required=rule.reprojection_required,
     )
@@ -430,6 +434,10 @@ def _named_rule_response(rule: SyncRule, names: Mapping[CalendarEndpoint, str]) 
 
 def _all_day(sync_all_day_events: bool) -> AllDaySyncPolicy:
     return AllDaySyncPolicy.INCLUDE if sync_all_day_events else AllDaySyncPolicy.EXCLUDE
+
+
+def _birthdays(sync_birthdays: bool) -> BirthdayPolicy:
+    return BirthdayPolicy.INCLUDE if sync_birthdays else BirthdayPolicy.EXCLUDE
 
 
 def _work_response(work: RuleWork | None) -> RuleWorkResponse | None:

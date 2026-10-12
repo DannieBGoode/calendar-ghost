@@ -11,6 +11,7 @@ const marked: RulePolicyPayload = {
   sync_all_day_events: true,
   tentative_events: "mark",
   unanswered_invitations: "as_tentative",
+  sync_birthdays: false,
 }
 
 describe("invitation responses", () => {

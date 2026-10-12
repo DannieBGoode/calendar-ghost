@@ -124,6 +124,8 @@ class CreateRuleRequest(BaseModel):
     sync_all_day_events: bool = True
     tentative_events: TentativeChoice = "mark"
     unanswered_invitations: UnansweredChoice = "as_tentative"
+    # Whether to project the birthdays a provider keeps among the source calendar's events.
+    sync_birthdays: bool = False
 
 
 class RuleResponse(ApiResponse):
@@ -134,6 +136,7 @@ class RuleResponse(ApiResponse):
     sync_all_day_events: bool
     tentative_events: TentativeChoice
     unanswered_invitations: UnansweredChoice
+    sync_birthdays: bool
     state: str
     reprojection_required: bool
 
@@ -244,6 +247,7 @@ class UpdateRulePolicyRequest(BaseModel):
     sync_all_day_events: bool
     tentative_events: TentativeChoice
     unanswered_invitations: UnansweredChoice
+    sync_birthdays: bool
 
 
 class ReplaceRuleRequest(BaseModel):

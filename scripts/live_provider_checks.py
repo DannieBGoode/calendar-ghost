@@ -314,6 +314,7 @@ class Live:
                 "sync_all_day_events",
                 "tentative_events",
                 "unanswered_invitations",
+                "sync_birthdays",
             )
         }
         changed = self.api.patch(f"/api/v1/rules/{rule_id}", json={**body, **fields})

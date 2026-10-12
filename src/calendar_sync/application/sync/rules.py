@@ -17,6 +17,7 @@ from calendar_sync.application.sync.removal import RemovalResult, RemoveSyncRule
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
+    BirthdayPolicy,
     CalendarEndpoint,
     ProjectionContent,
     ProjectionHandling,
@@ -127,6 +128,7 @@ class ChangeSyncRulePolicy:
         *,
         tentative: TentativeEventPolicy,
         unanswered: UnansweredInvitationPolicy,
+        birthdays: BirthdayPolicy,
     ) -> SyncRule:
         # Waiting for any in-flight provider write means none happens under the old policy
         # once this returns; the run's next stop check then sees the paused rule.
@@ -141,6 +143,7 @@ class ChangeSyncRulePolicy:
                     all_day=all_day,
                     tentative=tentative,
                     unanswered=unanswered,
+                    birthdays=birthdays,
                 )
             )
             if changed == rule:
@@ -154,7 +157,8 @@ class ChangeSyncRulePolicy:
                     outcome=AuditOutcome.COMPLETED,
                     detail=(
                         f"privacy={content.value}, all_day={all_day.value}, "
-                        f"tentative={tentative.value}, unanswered={unanswered.value}"
+                        f"tentative={tentative.value}, unanswered={unanswered.value}, "
+                        f"birthdays={birthdays.value}"
                     ),
                 )
             )

@@ -73,6 +73,7 @@ def to_domain_event(payload: Mapping[str, Any], endpoint: CalendarEndpoint) -> C
         guests=None if status is EventStatus.CANCELLED else _guests(payload),
         conferencing=None if status is EventStatus.CANCELLED else _conferencing(payload),
         response=_response(payload),
+        is_birthday=payload.get("eventType") == "birthday",
     )
 
 

@@ -298,3 +298,16 @@ def test_an_event_the_calendar_was_not_invited_to_counts_as_accepted() -> None:
     for payload in (_timed(), others):
         translated = to_domain_event(payload, endpoint("account", "calendar"))
         assert translated.response is InvitationResponse.ACCEPTED
+
+
+@pytest.mark.parametrize(
+    ("event_type", "is_birthday"),
+    [("birthday", True), ("default", False), ("outOfOffice", False), (None, False)],
+)
+def test_only_a_google_birthday_event_reads_as_a_birthday(
+    event_type: str | None, is_birthday: bool
+) -> None:
+    # Google keeps contacts' birthdays among the primary calendar's own events (eventType).
+    payload = _timed() if event_type is None else _timed(eventType=event_type)
+
+    assert to_domain_event(payload, endpoint("account", "calendar")).is_birthday is is_birthday

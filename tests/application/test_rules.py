@@ -20,6 +20,7 @@ from calendar_sync.domain.accounts import ConnectedAccountState
 from calendar_sync.domain.errors import InvalidStateTransition
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
+    BirthdayPolicy,
     ProjectionContent,
     SyncRuleId,
     SyncRuleState,
@@ -34,6 +35,7 @@ from tests.users import memory_units
 
 MARK = TentativeEventPolicy.MARK
 AS_TENTATIVE = UnansweredInvitationPolicy.AS_TENTATIVE
+EXCLUDE = BirthdayPolicy.EXCLUDE
 
 
 def test_changing_an_enabled_rule_pauses_it_and_audits_without_google_writes() -> None:
@@ -46,6 +48,7 @@ def test_changing_an_enabled_rule_pauses_it_and_audits_without_google_writes() -
         AllDaySyncPolicy.INCLUDE,
         tentative=TentativeEventPolicy.SKIP,
         unanswered=UnansweredInvitationPolicy.WAIT,
+        birthdays=BirthdayPolicy.INCLUDE,
     )
 
     stored = unit_of_work.state.rules[rule().id]
@@ -55,8 +58,9 @@ def test_changing_an_enabled_rule_pauses_it_and_audits_without_google_writes() -
     assert unit_of_work.state.audit[-1].action == "policy_changed"
     assert stored.transformation.tentative is TentativeEventPolicy.SKIP
     assert stored.transformation.unanswered is UnansweredInvitationPolicy.WAIT
+    assert stored.transformation.birthdays is BirthdayPolicy.INCLUDE
     assert unit_of_work.state.audit[-1].detail == (
-        "privacy=copy_details, all_day=include, tentative=skip, unanswered=wait"
+        "privacy=copy_details, all_day=include, tentative=skip, unanswered=wait, birthdays=include"
     )
 
 
@@ -70,6 +74,7 @@ def test_saving_the_same_policy_keeps_the_rule_enabled() -> None:
         AllDaySyncPolicy.INCLUDE,
         tentative=MARK,
         unanswered=AS_TENTATIVE,
+        birthdays=EXCLUDE,
     )
 
     assert unchanged.state is SyncRuleState.ENABLED
@@ -88,6 +93,7 @@ def test_policy_change_is_blocked_for_missing_or_removing_rules() -> None:
             AllDaySyncPolicy.INCLUDE,
             tentative=MARK,
             unanswered=AS_TENTATIVE,
+            birthdays=EXCLUDE,
         )
     with pytest.raises(InvalidStateTransition):
         use_case.execute(
@@ -96,6 +102,7 @@ def test_policy_change_is_blocked_for_missing_or_removing_rules() -> None:
             AllDaySyncPolicy.INCLUDE,
             tentative=MARK,
             unanswered=AS_TENTATIVE,
+            birthdays=EXCLUDE,
         )
 
 
@@ -125,7 +132,7 @@ def test_policy_change_waits_for_an_in_flight_provider_write() -> None:
     worker = Thread(
         target=change.execute,
         args=(rule().id, ProjectionContent.DETAILS, AllDaySyncPolicy.INCLUDE),
-        kwargs={"tentative": MARK, "unanswered": AS_TENTATIVE},
+        kwargs={"tentative": MARK, "unanswered": AS_TENTATIVE, "birthdays": EXCLUDE},
     )
     worker.start()
     worker.join(0.1)
