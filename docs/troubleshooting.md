@@ -252,8 +252,9 @@ run, within five minutes, resolves the incident; **Sync Now** and **Reconcile No
 
 Some failures come from the installation's Google Cloud project or Microsoft Entra application,
 not from anyone's account or calendars, so only an Installation Administrator can fix them.
-Outlook support is a preview until the checks in
-[ADR 0034](adr/0034-outlook-through-microsoft-graph.md) pass with real Microsoft accounts.
+Outlook is verified with personal Microsoft accounts, such as Outlook.com and Hotmail. Microsoft
+365 work or school accounts can connect, but are not yet verified: the checks in
+[ADR 0034](adr/0034-outlook-through-microsoft-graph.md) have not yet run against a work or school account.
 Calendar Ghost reads why the provider refused from its reason code, never its message, and records
 it as a Cause. Each person's own Overview says only that the calendar service is temporarily
 unavailable, without the cause or a mention of you, so people are not prompted to contact you. On

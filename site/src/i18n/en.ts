@@ -152,9 +152,9 @@ export const en = {
   },
   compatibleCalendars: {
     title: "Compatible calendars",
-    body: "Sync Google and Outlook calendars across personal, Google Workspace, and Microsoft 365 accounts.",
+    body: "Sync Google and Outlook calendars across personal Google, Google Workspace, and Outlook.com accounts.",
     google: { name: "Google Calendar", status: "Compatible", detail: "Personal Google accounts and Google Workspace." },
-    outlook: { name: "Outlook", status: "Compatible", detail: "Microsoft 365 work or school accounts and personal Outlook.com." },
+    outlook: { name: "Outlook", status: "Compatible", detail: "Personal Outlook.com and Hotmail accounts. Microsoft 365 work or school accounts connect too, but are not yet verified." },
     icloud: { name: "iCloud", status: "Coming soon", detail: "Support for Apple calendars is on the way." },
   },
   /** The "How it works" strip's small pieces of the app, and the ghost waiting at the last step. */
@@ -338,7 +338,7 @@ export const en = {
       },
       {
         q: "Outlook, iCloud, or CalDAV?",
-        a: "Outlook works today, beside Google Calendar, for Microsoft 365 and Outlook.com accounts, and one rule can sync between them. iCloud is coming soon; CalDAV is not supported yet.",
+        a: "Outlook works today, beside Google Calendar, for personal Outlook.com and Hotmail accounts, and one rule can sync between them. Microsoft 365 work or school accounts can connect, but are not yet verified. iCloud is coming soon; CalDAV is not supported yet.",
       },
       {
         q: "Is it ready for my real calendars?",
