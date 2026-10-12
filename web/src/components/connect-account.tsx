@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { CalendarProvider } from "@/lib/api"
-import { recordAuthorizationStart } from "@/lib/oauth-redirect"
-import { accountNoun, connectUrl, providerDisplayName } from "@/lib/providers"
+import { connectLink } from "@/lib/oauth-redirect"
+import { accountNoun, providerDisplayName } from "@/lib/providers"
 
 /**
  * The one action that adds a calendar account: a button for the only configured provider, or a
@@ -21,7 +21,7 @@ export function ConnectAccount({ providers, primary }: { providers: readonly Cal
   if (providers.length === 1 && only) {
     return (
       <Button variant={variant} asChild>
-        <a href={connectUrl(only)} onClick={() => recordAuthorizationStart(only.kind)}>
+        <a {...connectLink(only)}>
           <ProviderMark provider={only.kind} fallback={<Plus aria-hidden="true" />} />
           {i18n.t("common.connectAccount.one", { account: accountNoun(i18n, only.kind, providers) })}
         </a>
@@ -32,14 +32,18 @@ export function ConnectAccount({ providers, primary }: { providers: readonly Cal
     <OverflowMenu
       label={i18n.t("common.connectAccount.menu")}
       trigger={{ icon: <Plus aria-hidden="true" />, variant }}
-      items={providers.map((provider) => ({
-        id: provider.kind,
-        label: accountNoun(i18n, provider.kind, providers),
-        description: signInHint(i18n, provider, providers),
-        icon: <ProviderMark provider={provider.kind} fallback={<Plus aria-hidden="true" />} />,
-        href: connectUrl(provider),
-        onSelect: () => recordAuthorizationStart(provider.kind),
-      }))}
+      items={providers.map((provider) => {
+        const link = connectLink(provider)
+        return {
+          id: provider.kind,
+          label: accountNoun(i18n, provider.kind, providers),
+          description: signInHint(i18n, provider, providers),
+          icon: <ProviderMark provider={provider.kind} fallback={<Plus aria-hidden="true" />} />,
+          href: link.href,
+          newTab: link.target === "_blank",
+          onSelect: link.onClick,
+        }
+      })}
     />
   )
 }

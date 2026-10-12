@@ -11,6 +11,8 @@ export type OverflowMenuItem = {
   icon?: ReactNode
   /** Where the item goes, as a link; `onSelect` still runs first. */
   href?: string
+  /** Opens `href` in a new tab, so this page stays and the menu returns focus to its trigger. */
+  newTab?: boolean
   disabled?: boolean
   onSelect: () => void
 }
@@ -144,7 +146,7 @@ export function OverflowMenu({
               entryRef={(element) => {
                 itemRefs.current[index] = element
               }}
-              onChosen={() => close(!item.href)}
+              onChosen={() => close(!item.href || Boolean(item.newTab))}
             />
           ))}
         </div>
@@ -190,6 +192,7 @@ function OverflowMenuEntry({
         {...shared}
         ref={entryRef}
         href={item.href}
+        {...(item.newTab ? { target: "_blank", rel: "noopener" } : {})}
         onClick={() => {
           onChosen()
           item.onSelect()

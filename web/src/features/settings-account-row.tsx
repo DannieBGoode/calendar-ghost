@@ -9,8 +9,8 @@ import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import { needsReauthorization } from "@/lib/account-summary"
 import type { CalendarProvider, ConnectedAccount } from "@/lib/api"
-import { recordAuthorizationStart } from "@/lib/oauth-redirect"
-import { accountNoun, connectUrl, providerDisplayName } from "@/lib/providers"
+import { connectLink } from "@/lib/oauth-redirect"
+import { accountNoun, providerDisplayName } from "@/lib/providers"
 import type { AccessCheck, AccountCommands } from "@/lib/use-account-commands"
 
 function ruleUsage({ t }: I18n, count: number, authorized: boolean): string {
@@ -160,7 +160,7 @@ function ReauthorizeButton({ account, provider }: { account: ConnectedAccount; p
   }
   return (
     <Button className="account-action" asChild>
-      <a href={connectUrl(provider, account.id)} onClick={() => recordAuthorizationStart(provider.kind)}>
+      <a {...connectLink(provider, account.id)}>
         <KeyRound aria-hidden="true" />{" "}
         {i18n.t("settings.accounts.actions.reauthorizeWith", { provider: providerDisplayName(i18n, provider.kind, [provider]) })}
       </a>

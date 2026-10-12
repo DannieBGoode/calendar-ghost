@@ -310,6 +310,8 @@ describe("SettingsPage", () => {
       ["Google account", "/api/v1/oauth/google/start"],
       ["Example account", "/api/v1/oauth/example/start"],
     ])
+    // Both return to localhost:18000, not this address, so each opens consent in a new tab.
+    expect(items.map((link) => link.target)).toEqual(["_blank", "_blank"])
     expect(items.map((link) => link.querySelector(".overflow-menu-description")?.textContent)).toEqual([
       "Sign in with Google, then come back here.",
       "Sign in with Example, then come back here.",
@@ -340,6 +342,27 @@ describe("SettingsPage", () => {
       ["Connect Google account", "/api/v1/oauth/google/start"],
     ])
     expect([...container.querySelectorAll("button")].some((item) => item.textContent.includes("Connect an account"))).toBe(false)
+  })
+
+  it("opens consent in a new tab when Google returns elsewhere, and offers to finish here at once", async () => {
+    await renderSettings(testI18n())
+    const connect = container.querySelector<HTMLAnchorElement>(".section-heading a")!
+    expect([connect.target, connect.rel]).toEqual(["_blank", "noopener"])
+    expect(container.querySelector(".oauth-return")).toBeNull()
+
+    // The new tab is the browser's; this one stays on Settings.
+    connect.addEventListener("click", (event) => event.preventDefault())
+    await click(connect)
+
+    expect(container.querySelector(".oauth-return h3")?.textContent).toBe("Finish connecting your Google account")
+    expect(container.querySelector(".oauth-return label")?.textContent).toBe("Address Google returned to")
+  })
+
+  it("keeps consent in this tab when Google returns to this address", async () => {
+    page().happyDOM.setURL("http://localhost:18000/settings")
+    await renderSettings(testI18n())
+    const connect = container.querySelector<HTMLAnchorElement>(".section-heading a")!
+    expect(connect.hasAttribute("target")).toBe(false)
   })
 
   it("puts Connect in the empty state, as the next step, until an account exists", async () => {
@@ -413,12 +436,59 @@ describe("SettingsPage", () => {
 
     const notes = [...container.querySelectorAll<HTMLDetailsElement>("details.account-group-footer")]
     expect(notes.map((note) => note.querySelector("summary")?.textContent)).toEqual([
-      "Google and Microsoft return to http://localhost:18000, not this address",
+      "Google and Microsoft return to http://localhost:18000, not to this page's address",
     ])
+    // One field finishes either: the address it is given names its provider.
     expect([...notes[0]!.querySelectorAll("label")].map((label) => label.textContent)).toEqual([
-      "Address Google returned to",
-      "Address Microsoft returned to",
+      "Address the provider returned to",
     ])
+    expect(notes[0]!.querySelector("input")?.placeholder).toBe("")
+  })
+
+  it("names where each provider returns when they disagree, in one note, and finishes either from one field", async () => {
+    const microsoft: CalendarProvider = {
+      ...googleProvider(REDIRECT_URI),
+      kind: "outlook",
+      display_name: "Microsoft",
+      connect_url: "/api/v1/oauth/microsoft/start",
+      redirect_uri: "http://localhost:8000/api/v1/oauth/microsoft/callback",
+    }
+    await renderSettings(testI18n(), { providers: [googleProvider(REDIRECT_URI), microsoft] })
+
+    const notes = [...container.querySelectorAll<HTMLDetailsElement>("details.account-group-footer")]
+    expect(notes).toHaveLength(1)
+    const note = notes[0]!
+    expect(note.querySelector("summary")?.textContent).toBe("Google and Microsoft return to addresses other than this page's")
+    expect([...note.querySelectorAll(".oauth-return-origins li")].map((item) => item.textContent)).toEqual([
+      "Google: http://localhost:18000",
+      "Microsoft: http://localhost:8000",
+    ])
+    expect(note.querySelectorAll("form")).toHaveLength(1)
+    expect(note.textContent).toContain("They now return to different addresses, but an installation usually answers at only one.")
+    expect(note.textContent).not.toContain("SSH tunnel")
+
+    const field = note.querySelector("input")!
+    const form = note.querySelector("form")!
+    const enter = (value: string) => {
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, value)
+        field.dispatchEvent(new Event("input", { bubbles: true }))
+      })
+    }
+    enter("http://localhost:8000/settings?state=s&code=c")
+    act(() => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+    expect(note.querySelector('[role="alert"]')?.textContent).toBe(
+      "That is not an address one of these providers returned to. Copy the whole address from the address bar.",
+    )
+
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined)
+    enter("http://localhost:8000/api/v1/oauth/microsoft/callback?state=s&code=c")
+    act(() => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+    expect(assign).toHaveBeenCalledWith(`${window.location.origin}/api/v1/oauth/microsoft/callback?state=s&code=c`)
   })
 
   it("keeps an account's reauthorization unavailable while its provider is not configured", async () => {

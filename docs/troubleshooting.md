@@ -459,10 +459,12 @@ Calendar or Outlook and will no longer be managed. Unrelated accounts and rules 
 
 After Google or Microsoft consent, the browser followed the configured redirect URI to an address that does not reach this
 installation, usually `localhost` while Calendar Ghost runs on another host. No account was saved.
-To finish this attempt, copy the whole address from the address bar, return to Settings in the
-browser you started from, paste it into **Address Google returned to** (or **Address Microsoft
-returned to**) under **Finish connecting your Google account** (or **Microsoft account**), and choose **Finish connecting** within 10 minutes; each callback works
-once. From another browser, sign in there as the same person first; the same field is in the note
+When the redirect URI is at another address than the one Calendar Ghost is open at, consent opens
+in a new tab, so the tab you started from stays on Calendar Ghost. To finish this attempt, copy the
+whole address from the new tab's address bar, return to the Calendar Ghost tab, paste it into
+**Address Google returned to** (or **Address Microsoft returned to**) under **Finish connecting
+your Google account** (or **Microsoft account**), and choose **Finish connecting** within 10
+minutes; each callback works once. From another browser, sign in there as the same person first; the same field is in the note
 at the foot of Connected accounts. Replacing the origin in the address bar by hand, for example
 `localhost:18000` with `192.168.1.50:18000`, does the same. Only the person who started connecting
 can finish: a callback opened without signing in, or by anyone else, connects nothing and reports

@@ -87,28 +87,33 @@
   "oauthReturn": {
     "step": {
       "title": "Finish connecting your {account}",
-      "body": "{provider} sends your browser to <code>{origin}</code> after you approve access. If that page did not load, copy its whole address from the address bar and paste it here. It works once, for 10 minutes.",
+      "body": "{provider} opened in a new tab and sends it to <code>{origin}</code> after you approve access. If that page does not load, copy its whole address from that tab's address bar and paste it here. It works once, for 10 minutes.",
       "dismiss": "Dismiss"
     },
     "note": {
       "summary": {
-        "one": "{provider} returns to <code>{origin}</code>, not this address",
-        "other": "{provider} return to <code>{origin}</code>, not this address"
+        "one": "{provider} returns to <code>{origin}</code>, not to this page's address",
+        "other": "{provider} return to <code>{origin}</code>, not to this page's address"
       },
-      "body": {
-        "one": "If its page does not load after you approve access, copy the whole address from the address bar and paste it here within 10 minutes to finish connecting.",
-        "other": "If the page does not load after you approve access, copy the whole address from the address bar and paste it in the field for that provider within 10 minutes to finish connecting."
-      },
+      "summaryApart": "{provider} return to addresses other than this page's",
+      "origin": "{provider}: <code>{origin}</code>",
+      "body": "If the page does not load after you approve access, copy the whole address from its address bar and paste it here within 10 minutes to finish connecting.",
       "fix": {
         "one": "To stop this, set the redirect URI for {provider} in <code>.env</code> to an HTTPS address of this installation, for example with Tailscale Serve, and register it with {provider}. Opening Calendar Ghost at <code>{origin}</code>, for example through an SSH tunnel, also works.",
         "other": "To stop this, set the redirect URIs for {provider} in <code>.env</code> to HTTPS addresses of this installation, for example with Tailscale Serve, and register each with its provider. Opening Calendar Ghost at <code>{origin}</code>, for example through an SSH tunnel, also works."
-      }
+      },
+      "fixApart": "To stop this, set the redirect URIs for {provider} in <code>.env</code> to one HTTPS address of this installation, for example with Tailscale Serve, and register each with its provider. They now return to different addresses, but an installation usually answers at only one."
     },
     "form": {
-      "label": "Address {provider} returned to",
-      "placeholder": "{redirectUri}?state=…",
+      "label": {
+        "one": "Address {provider} returned to",
+        "other": "Address the provider returned to"
+      },
       "submit": "Finish connecting",
-      "invalid": "That is not the address {provider} returned to. Copy the whole address, starting with <code>{start}</code>"
+      "invalid": {
+        "one": "That is not the address {provider} returned to. Copy the whole address, starting with <code>{start}</code>",
+        "other": "That is not an address one of these providers returned to. Copy the whole address from the address bar."
+      }
     }
   },
   "oauthOutcome": {

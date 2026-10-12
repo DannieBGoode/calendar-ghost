@@ -143,6 +143,16 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Connecting or reauthorizing an account opens the provider's consent in a new tab when its
+  redirect URI is at another address than the one Calendar Ghost is open at, such as `localhost`
+  while Calendar Ghost runs on a LAN host. The tab you started from stays on Calendar Ghost and
+  shows **Finish connecting** at once, ready for the address the new tab ends on. When the
+  redirect URI is this address, consent still opens in the same tab.
+- Providers that return to another address share one note at the foot of Connected accounts
+  instead of one note per address. It has one field that finishes a connection for any of them,
+  without a placeholder that looked like a filled-in value, and gives the fix once. When providers
+  return to different addresses, it lists each one and says an installation usually answers at
+  only one.
 - Connecting an account is one action instead of one equal button per provider. With one provider
   configured it stays a direct button, such as "Connect Google account"; with several, "Connect an
   account" opens a menu that names each provider's account beside its mark. It is the primary

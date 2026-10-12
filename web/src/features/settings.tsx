@@ -16,13 +16,13 @@ import {
 import {
   OAUTH_OUTCOME_MESSAGES,
   clearAuthorizationStart,
+  connectLink,
   oauthOutcome,
   oauthProvider,
-  recordAuthorizationStart,
   type OAuthOutcome,
 } from "@/lib/oauth-redirect"
 import { isAdministrator } from "@/lib/people"
-import { accountNoun, connectUrl, providerDisplayName, providerOf } from "@/lib/providers"
+import { accountNoun, providerDisplayName, providerOf } from "@/lib/providers"
 import { useOAuthReturn } from "@/lib/use-oauth-return"
 import { useRegistration } from "@/lib/use-registration"
 import { cn } from "@/lib/utils"
@@ -196,7 +196,7 @@ function OAuthOutcomeNotice({
       </div>
       {!succeeded && retry && (
         <Button variant="outline" asChild>
-          <a href={connectUrl(retry)} onClick={() => recordAuthorizationStart(retry.kind)}>
+          <a {...connectLink(retry)}>
             {t("settings.oauthOutcome.tryAgain")}
           </a>
         </Button>
