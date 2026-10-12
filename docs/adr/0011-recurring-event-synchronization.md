@@ -158,6 +158,19 @@ decision is a Conflict (`source_unverifiable`) and no deletion occurs. When the 
 has no occurrence at the required Occurrence Start, the application repairs the destination
 master from the source and resolves again once; a remaining mismatch is a Conflict.
 
+### An occurrence whose series its calendar does not show
+
+Amended 2026-10-12. A calendar may hold one occurrence of a series without the series itself, as
+when someone invites it to one meeting of their recurring event: the provider reports the
+occurrence with its series' identity, but reading that series in the calendar finds nothing. The
+occurrence is then an event of that calendar like any other, so it projects on its own, as a single
+event, mapped by the occurrence's own identity: it is created, changed, repaired, and deleted when
+cancelled, as any single event is. Earlier releases skipped it as `series_not_synchronized`, so its
+time never reached the destination. If the calendar later shows the whole series, the series is
+projected as usual and the single projection is removed, recorded as `occurrence_joined_series`, so
+the occurrence is never shown twice; one someone invited guests to stays, as any deletion would. A
+series the calendar does not show, but that a Series Mapping names, is still unverifiable.
+
 ### Transformations and eligibility
 
 The rule's Transformation Policy applies to the series and to every occurrence it writes.

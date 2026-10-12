@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Literal
@@ -154,7 +154,8 @@ class PreviewSyncRule:
             return not live[master.reference]
 
         scope = _PreviewScope()
-        for event in events:
+        for listed in events:
+            event, parent = self._with_series(rule, listed, masters)
             if event.occurrence is None:
                 if skipped(event):
                     scope.excluded += 1
@@ -162,14 +163,24 @@ class PreviewSyncRule:
                 scope.series_count += event.recurrence is not None
                 scope.eligible.append((event, None))
                 continue
-            parent_ref = EventRef(rule.source, event.occurrence.series_event_id)
-            parent = masters.get(parent_ref) or self.provider.get_event(parent_ref)
-            if parent is None or skipped(parent):
+            assert parent is not None
+            if skipped(parent):
                 scope.excluded += 1
                 continue
             scope.occurrence_changes += 1
             scope.eligible.append((event, parent))
         return scope
+
+    def _with_series(
+        self, rule: SyncRule, event: CalendarEvent, masters: Mapping[EventRef, CalendarEvent]
+    ) -> tuple[CalendarEvent, CalendarEvent | None]:
+        """An occurrence with its series; one whose series is not shown projects on its own, as a
+        single event, and so does every other event."""
+        if event.occurrence is None:
+            return event, None
+        parent_ref = EventRef(rule.source, event.occurrence.series_event_id)
+        parent = masters.get(parent_ref) or self.provider.get_event(parent_ref)
+        return (event, parent) if parent is not None else (event.as_single(), None)
 
     def _item(
         self, uow: UnitOfWork, rule: SyncRule, event: CalendarEvent, parent: CalendarEvent | None

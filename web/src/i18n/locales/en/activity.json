@@ -348,6 +348,11 @@
       "explanation": "Someone invited guests to this event in {destination}. Changing or deleting it there would email them, and Calendar Ghost never emails anyone, so it leaves the event as it is.",
       "next": "If you want Calendar Ghost to sync it again, remove the guests from the event in {destination}, or delete the event there yourself."
     },
+    "occurrenceJoinedSeries": {
+      "trigger": "Its series now shows in {source}",
+      "effect": "removed from {destination} as a single event",
+      "explanation": "{source} showed this occurrence without its series, as when someone invites you to one meeting of their recurring event, so Calendar Ghost added it to {destination} on its own. Now {source} shows the whole series, which shows this occurrence too, so the single event was removed."
+    },
     "seriesRebuilt": {
       "trigger": "An occurrence was deleted in {destination}",
       "effect": "series written again in {destination}",

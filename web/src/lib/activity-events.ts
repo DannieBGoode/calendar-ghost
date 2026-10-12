@@ -25,6 +25,7 @@ const OCCURRENCE_REASONS = new Set([
   "destination_occurrence_missing",
   "occurrence_past_neighbour",
   "occurrence_not_restorable",
+  "occurrence_joined_series",
 ])
 
 const EITHER_SCOPE_REASONS = new Set([

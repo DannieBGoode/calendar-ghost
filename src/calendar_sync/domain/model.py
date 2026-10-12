@@ -340,6 +340,12 @@ class CalendarEvent:
         boundary: date | datetime = instant if isinstance(original, datetime) else instant.date()
         return original >= boundary or (self.time is not None and not self.ended_before(instant))
 
+    def as_single(self) -> CalendarEvent:
+        """This occurrence read on its own, as a single event: how an occurrence whose series its
+        calendar does not show is synchronized, such as one meeting of a series someone invited
+        the calendar to."""
+        return replace(self, occurrence=None)
+
     def is_exception_of(self, series: CalendarEvent) -> bool:
         """Whether this occurrence of `series` is cancelled or differs from its regular one.
 
@@ -638,6 +644,9 @@ class SyncReason(StrEnum):
     PROJECTION_HAS_GUESTS = "projection_has_guests"
     """Someone invited guests to the projection in the destination; writing it would email them."""
     SERIES_REBUILT = "series_rebuilt"
+    OCCURRENCE_JOINED_SERIES = "occurrence_joined_series"
+    """An occurrence projected on its own while its series was not shown; now its series is, so
+    the single projection is removed and the series shows it."""
     """The destination series was written again to bring back an occurrence deleted in it."""
 
 

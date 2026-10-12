@@ -313,3 +313,18 @@ def test_preview_cannot_reach_a_provider_write() -> None:
     assert preview.recurring_series == 1
     assert preview.occurrence_changes == 2
     assert calendars.writes == writes
+
+
+def test_preview_counts_an_occurrence_whose_series_is_not_shown_as_a_single_event() -> None:
+    # One meeting of someone else's series, the series itself not in the calendar.
+    calendars = FakeCalendars()
+    calendars.put(occurrence(series("their-series"), 2))
+    draft = rule(state=SyncRuleState.DRAFT)
+    unit_of_work = memory_units()
+    unit_of_work.state.rules[draft.id] = draft
+
+    preview = _preview(unit_of_work, ReaderOnlyCalendar(calendars)).execute(draft.id)
+
+    assert (preview.eligible_events, preview.excluded_events) == (1, 0)
+    assert (preview.recurring_series, preview.occurrence_changes) == (0, 0)
+    assert preview.sample[0].kind == "single"

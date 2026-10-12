@@ -221,6 +221,11 @@ export const REASONS: Record<string, CopyKeys> = {
     explanation: "activity.reason.projectionHasGuests.explanation",
     next: "activity.reason.projectionHasGuests.next",
   },
+  occurrence_joined_series: {
+    trigger: "activity.reason.occurrenceJoinedSeries.trigger",
+    effect: "activity.reason.occurrenceJoinedSeries.effect",
+    explanation: "activity.reason.occurrenceJoinedSeries.explanation",
+  },
   series_rebuilt: {
     trigger: "activity.reason.seriesRebuilt.trigger",
     effect: "activity.reason.seriesRebuilt.effect",

@@ -281,15 +281,22 @@ class ExecuteSyncRule:
     def _synchronize_source_exception(self, run: SyncRunContext, exception: CalendarEvent) -> None:
         identity = exception.occurrence
         assert identity is not None
+        series_ref = EventRef(run.rule.source, identity.series_event_id)
         if exception.reference in run.handled:
             # A replay or re-verification already applied it this run from a fresher read.
+            if run.uow.mappings.for_source(run.rule.id, series_ref) is not None:
+                self._leave_single_projection(run, exception)
             return
-        series_ref = EventRef(run.rule.source, identity.series_event_id)
         source_series = self.provider.get_event(series_ref)
         series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
         if source_series is None:
             if series_mapping is None:
-                self._record_skipped_occurrence(run, exception)
+                # Its calendar does not show the series, as for one invited meeting of someone
+                # else's: the occurrence is an event of the calendar, so it projects on its own.
+                self._synchronize_event(
+                    run, exception.as_single(), destination_loaded=False, actual_destination=None
+                )
+                run.handled.add(exception.reference)
             else:
                 self._record_unverifiable(run, exception.reference, series_mapping.destination)
             return
@@ -309,6 +316,8 @@ class ExecuteSyncRule:
             exception,
             record_current=True,
         )
+        # Its series shows it now, so a projection of it on its own would show it twice.
+        self._leave_single_projection(run, exception)
 
     def _repair_destination_occurrence(
         self, run: SyncRunContext, destination_event: CalendarEvent
@@ -433,22 +442,42 @@ class ExecuteSyncRule:
         )
         return decision.reason is SyncReason.PROJECTION_CURRENT
 
-    def _record_skipped_occurrence(self, run: SyncRunContext, exception: CalendarEvent) -> None:
-        """An exception of a series this rule never projected has nothing to protect."""
-        run.count(SyncAction.IGNORE, exception.reference)
-        record(
-            run,
-            AuditEntry(
-                occurred_at=self.clock.now(),
-                rule_id=run.rule.id,
-                action=AuditAction.IGNORE,
-                outcome=AuditOutcome.SKIPPED,
-                source_event_id=exception.reference.event_id.value,
-                reason=SyncReason.SERIES_NOT_SYNCHRONIZED,
-                run_id=run.run_id,
-                event=RecordedEvent.of(exception),
-            ),
-        )
+    def _leave_single_projection(self, run: SyncRunContext, occurrence: CalendarEvent) -> None:
+        """Remove the single projection of an occurrence whose series its calendar now shows, so
+        only the series shows it. One someone invited guests to stays, as any deletion would."""
+        with self.locks.for_writes(run.rule.id):
+            require_unchanged(run)
+            mapping = run.uow.mappings.for_source(run.rule.id, occurrence.reference)
+            if mapping is None:
+                return
+            try:
+                self.provider.delete_projection(
+                    mapping.destination,
+                    mapping.source,
+                    run.rule.id,
+                    event_operation_key(
+                        run.rule.id, occurrence.reference, occurrence.revision, SyncAction.DELETE
+                    ),
+                )
+            except UnsupportedProjection:
+                return
+            run.uow.mappings.delete(mapping)
+            run.count(SyncAction.DELETE, occurrence.reference)
+            record(
+                run,
+                AuditEntry(
+                    occurred_at=self.clock.now(),
+                    rule_id=run.rule.id,
+                    action=AuditAction.of(SyncAction.DELETE),
+                    outcome=AuditOutcome.of(SyncAction.DELETE),
+                    source_event_id=occurrence.reference.event_id.value,
+                    destination_event_id=mapping.destination.event_id.value,
+                    reason=SyncReason.OCCURRENCE_JOINED_SERIES,
+                    run_id=run.run_id,
+                    event=RecordedEvent.of(occurrence),
+                ),
+            )
+            run.uow.commit()
 
     def _record_unverifiable(
         self, run: SyncRunContext, source: EventRef, destination: EventRef | None
@@ -476,6 +505,9 @@ class ExecuteSyncRule:
         actual_destination: CalendarEvent | None,
         record_current: bool = True,
     ) -> SyncDecision:
+        if source_event.occurrence is not None:
+            # Only an occurrence projected on its own is mapped, and read again, as an event.
+            source_event = source_event.as_single()
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
             mapping, decision, source_moved = self.events.decide_and_write(
