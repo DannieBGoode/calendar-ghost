@@ -72,7 +72,8 @@ _FAILURE_SUMMARIES = {
 }
 
 
-@dataclass(frozen=True, slots=True)
+# Not frozen: raising an error sets its __traceback__, which a frozen dataclass refuses.
+@dataclass(eq=False)
 class ProviderFailure(ApplicationError):
     kind: ProviderFailureKind
     detail: str
@@ -151,7 +152,8 @@ class UnsupportedProjection(ApplicationError):
         """Why, as the Conflict records it."""
 
 
-@dataclass(frozen=True, slots=True)
+# Not frozen: raising an error sets its __traceback__, which a frozen dataclass refuses.
+@dataclass(eq=False)
 class RemovalInterrupted(ApplicationError):
     """Rule Removal stopped partway; the rule stays in Removing with its remaining mappings."""
 
@@ -167,7 +169,8 @@ class RemovalInterrupted(ApplicationError):
         )
 
 
-@dataclass(frozen=True, slots=True)
+# Not frozen: raising an error sets its __traceback__, which a frozen dataclass refuses.
+@dataclass(eq=False)
 class ReplacementInterrupted(ApplicationError):
     """The replacement draft exists, but removing the previous rule stopped partway."""
 

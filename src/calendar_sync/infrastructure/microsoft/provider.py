@@ -820,8 +820,7 @@ class OutlookCalendarProvider:
 
 
 class _Refusals(AbstractContextManager[None]):
-    """Not @contextmanager: its exit sets the traceback of the provider failures raised inside,
-    which frozen slotted dataclass errors reject."""
+    """Raises a Microsoft refusal, or an answer this release cannot read, as a ProviderFailure."""
 
     def __init__(
         self, provider: OutlookCalendarProvider, account: ConnectedAccountId, event_scoped: bool
