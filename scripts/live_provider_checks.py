@@ -803,7 +803,8 @@ def graph_answers(live: Live) -> None:
 
 @contextmanager
 def cleanup(live: Live, google_calendars: tuple[str, str]) -> Iterator[None]:
-    """Remove what the run made, each step on its own, so one failure leaves no other behind."""
+    """Remove what the run made, each step on its own, so one failure leaves no other behind; a
+    step that fails is a failed check, so the run exits 1 and names what is left."""
     try:
         yield
     finally:
@@ -818,8 +819,8 @@ def cleanup(live: Live, google_calendars: tuple[str, str]) -> Iterator[None]:
         for step in steps:
             try:
                 step()
-            except Exception as error:  # Cleanup goes on; the operator is told what is left.
-                print(f"cleanup step failed: {error!r}", file=sys.stderr)
+            except Exception as error:  # Cleanup goes on; the failure fails the run.
+                live.check("cleanup", "everything the run made is removed", False, repr(error))
 
 
 def connect() -> Live:
