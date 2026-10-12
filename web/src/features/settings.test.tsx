@@ -316,6 +316,22 @@ describe("SettingsPage", () => {
     ])
   })
 
+  it("says in the Connect menu that Microsoft work or school accounts are not yet verified", async () => {
+    const microsoft: CalendarProvider = {
+      ...googleProvider(REDIRECT_URI),
+      kind: "outlook",
+      display_name: "Microsoft",
+      connect_url: "/api/v1/oauth/microsoft/start",
+    }
+    await renderSettings(testI18n(), { providers: [googleProvider(REDIRECT_URI), microsoft] })
+
+    const items = await connectMenuItems()
+    expect(items.map((link) => link.querySelector(".overflow-menu-description")?.textContent)).toEqual([
+      "Sign in with Google, then come back here.",
+      "Sign in with Microsoft, then come back here. Work or school accounts are not yet verified.",
+    ])
+  })
+
   it("connects the only configured provider directly, without a menu", async () => {
     await renderSettings(testI18n())
 

@@ -287,11 +287,13 @@ logged, or returned. Nothing Graph answers maps to `api_disabled` or `quota_exce
 
 **Amended 2026-10-12: Outlook is released for personal Microsoft accounts.** The items below were
 checked with a real personal account on 2026-10-11 and 2026-10-12, and the bugs those checks found
-were fixed before release (#90, #92 to #96). No work or school account was available. Work or school
-accounts can still connect, through the same Graph v1.0 requests, but they are **not yet verified**: the README, the self-hosting and troubleshooting guides, and the
-landing page say so, until these checks pass with a real work or school account too. Items 7, 11,
-and 14 may differ between the two account types, and item 14 needs a calendar shared from a second
-account. The personal account's results are on PR #86.
+were fixed before release (#90, #92 to #98). `scripts/live_provider_checks.py` repeats the checks
+([Live provider checks](../development.md#live-provider-checks)). No work or school account was
+available. Work or school accounts can still connect, through the same Graph v1.0 requests, but
+they are **not yet verified**: the README, the self-hosting and troubleshooting guides, the landing
+page, and the Web UI's Connect menu say so, until these checks pass with a real work or school
+account too. Items 7, 11, and 14 may differ between the two account types, and item 14 needs a
+calendar shared from a second account. The personal account's results are on PR #86.
 
 The documentation leaves these unconfirmed; each has a synthetic fixture that mirrors the documented
 shape, and each must be confirmed with a real personal account and a real work account before both

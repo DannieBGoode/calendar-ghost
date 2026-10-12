@@ -36,7 +36,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   that event as a Conflict instead of being approximated. Microsoft's reasons become Causes from
   its codes alone; an expired client secret is the administrator's `oauth_client_invalid`, with its
   own troubleshooting section, and the self-hosting guide explains registering the application and
-  rotating its secret before it expires.
+  rotating its secret before it expires. Outlook is verified with personal Outlook.com and Hotmail
+  accounts; Microsoft 365 work or school accounts can connect but are not yet verified, and the
+  landing page, the documentation, and the Connect menu say so.
 - `httpx` and `tzdata` are runtime dependencies: `httpx` reaches Microsoft Graph and stays inside
   the Microsoft adapter, and `tzdata` maps Outlook's Windows time zone names on any host.
 - Run outcomes and Incidents carry the Provider Kind that failed (`failure_provider`,

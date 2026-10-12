@@ -130,7 +130,10 @@
   "connectAccount": {
     "one": "Connect {account}",
     "menu": "Connect an account",
-    "signIn": "Sign in with {provider}, then come back here."
+    "signIn": "Sign in with {provider}, then come back here.",
+    "note": {
+      "outlook": "Work or school accounts are not yet verified."
+    }
   },
   "providerApi": {
     "google": "the Google Calendar API",

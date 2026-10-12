@@ -254,7 +254,7 @@ Some failures come from the installation's Google Cloud project or Microsoft Ent
 not from anyone's account or calendars, so only an Installation Administrator can fix them.
 Outlook is verified with personal Microsoft accounts, such as Outlook.com and Hotmail. Microsoft
 365 work or school accounts can connect, but are not yet verified: the checks in
-[ADR 0034](adr/0034-outlook-through-microsoft-graph.md) have not yet run against a work or school account.
+[ADR 0034](adr/0034-outlook-through-microsoft-graph.md) have not yet run against one.
 Calendar Ghost reads why the provider refused from its reason code, never its message, and records
 it as a Cause. Each person's own Overview says only that the calendar service is temporarily
 unavailable, without the cause or a mention of you, so people are not prompted to contact you. On
