@@ -62,22 +62,26 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v7
+      # The pnpm version is the one web/package.json names in packageManager.
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: web/package.json
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
       # Fails on a known high or critical advisory in any installed package, build tools included,
       # because they run in CI and in the image build.
-      - run: npm audit --audit-level=high
-      - run: npm run api:check
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run doctor
-      - run: npm run knip
-      - run: npm run test
-      - run: npm run build
+      - run: pnpm audit --audit-level=high
+      - run: pnpm run api:check
+      - run: pnpm run typecheck
+      - run: pnpm run lint
+      - run: pnpm run doctor
+      - run: pnpm run knip
+      - run: pnpm run test
+      - run: pnpm run build
 
   docker:
     runs-on: ubuntu-latest

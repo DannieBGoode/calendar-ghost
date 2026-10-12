@@ -1,0 +1,11 @@
+# pnpm reads its settings here, also for a single package. They harden installs against
+# malicious packages: no dependency runs an install script unless it is listed in allowBuilds, a
+# version is installed only once it is 7 days old, and a package whose provenance or signature
+# weakens since an earlier version is refused.
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+strictDepBuilds: true
+trustPolicyExclude:
+  # npm's own release of semver 6, a dependency of Babel through the React Hooks lint rules. It was
+  # published in 2023 without the provenance later semver 7 releases have.
+  - semver@6.3.1
