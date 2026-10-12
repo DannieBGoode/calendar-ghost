@@ -1,0 +1,22 @@
+# pnpm reads its settings here, also for a single package. They harden installs against
+# malicious packages: no dependency runs an install script unless it is listed in allowBuilds, a
+# version is installed only once it is 7 days old, and a package whose provenance or signature
+# weakens since an earlier version is refused.
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+strictDepBuilds: true
+allowBuilds:
+  # Each ships its binary as a platform package, so its install script only checks it.
+  esbuild: false
+  workerd: false
+overrides:
+  # Wrangler's Miniflare pins sharp 0.35.4, which CVE-2026-96889 affects; 0.35.5 fixes it.
+  sharp: 0.35.5
+minimumReleaseAgeExclude:
+  # Astro 7.3.6 and the packages it brings, in use before this policy and 7 days old on 2026-10-13.
+  - astro@7.3.6
+  - "@astrojs/internal-helpers@0.12.0"
+  - "@astrojs/markdown-satteri@0.4.3"
+trustPolicyExclude:
+  # Released by its maintainer in December 2024 without the provenance 4.0.1 had.
+  - chokidar@4.0.3

@@ -2,28 +2,14 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and semantic versioning.
 
-## [0.1.1] - 2026-10-03
-
-### Added
-
-- Overview now opens with a health hero that pairs the synchronization state and next action with a more expressive Calendar Ghost illustration.
-- Settings explains the three-step connection flow in a collapsed helper beside Connected accounts.
-
-### Changed
-
-- Overview, Rules, Activity, and Rule Details now share bordered information cards, clearer section summaries, and a calmer visual rhythm.
-- Recent Changes reads as a clickable timeline with connected markers, event context, and direct links into Activity and Rules.
-- The Ghost mark gains a quiet happy expression for healthy synchronization, while the hero keeps state colors and copy aligned with the existing health model.
-- Activity day separators are quiet, non-sticky row labels, and the generated Web UI bundle is refreshed for the release.
-
-### Removed
-
-- Removed the temporary in-app synthetic-data preview layer used to review the redesign; shipped views now stay connected to the installation's live data.
-
 ## [Unreleased]
 
 ### Added
 
+- `scripts/live_provider_checks.py` runs the Outlook and Google release checks against real test
+  calendars on demand, in about 5 minutes. Recorded provider answers from those checks now run in
+  CI as adapter tests. Troubleshooting explains a projected series that appears twice after an
+  edit with "this and following" in the destination (#99).
 - Outlook is the second calendar provider, for Microsoft 365 work or school accounts and personal
   Outlook.com accounts, through Microsoft Graph v1.0
   ([ADR 0034](docs/adr/0034-outlook-through-microsoft-graph.md)). An installation that registers a
@@ -140,9 +126,62 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   The MCP endpoint's HTTP refusals use the same shape.
 - Incidents record what they say as a message code and parameters (migration 19), returned as
   `message` by the Incidents API and on each Installation Status problem an Incident explains.
+- The Community Edition is documented as a single-installation, privacy-first deployment under the
+  GNU Affero General Public License, version 3 or later, with a separate trademark policy, data
+  ownership guide. `LICENSE` holds the unmodified license text so GitHub and package tools detect
+  it, and contributions need no CLA. A future hosted service will run this same open code, with
+  billing behind a Commercial Mode that is off by default, so self-hosted installations keep every
+  feature (ADR 0023).
+- `provider` on Connected Account payloads (`GET /api/v1/accounts`), and `writable` on discovered
+  calendars.
+- SQLite migration 17 lets `connected_accounts.provider` hold any Provider Kind; code validates the
+  value, so adding a provider needs no schema change (see [Deployment](docs/deployment.md) for
+  rollback).
+- The new-rule account selectors show each Connected Account's photo or initials alongside its name and email.
+- An optional blue dark palette, **Midnight**, in Settings → Appearance → Dark palette. It applies whenever the interface is dark, including when it follows the device, and is saved in the browser like the theme. Twilight remains the default.
+- Connected Account management with permission checks, safe disconnection, reauthorization, and permanent local deletion.
+- Stable URLs for Overview, Rules, Activity, and Settings, with account identity markers throughout rule management.
+- A warning before connecting a Google account when the browser address differs from the configured OAuth redirect URI, with LAN and Raspberry Pi redirect guidance.
+- Google profile names and photos for Connected Accounts through optional basic profile access. Reconnect existing accounts to show their photos.
+- Rule Details at `/rules/{id}` showing calendars, projection policy, all-day eligibility, initial window, state, managed projection count, and the last synchronization and reconciliation outcomes.
+- Transformation Policy and all-day eligibility editing as a Material Rule Change that pauses the rule, requires a new preview, and rewrites every existing projection on the next run.
+- Rule Removal with an explicit choice to delete mapped projections or keep them as Detached Events, and Rule Replacement for changing a rule's calendars.
+- Activity groups decisions by synchronization run, names the rule's calendars, explains every skipped, blocked, or changed event in plain language, and can be filtered by rule and outcome with older entries loaded on demand.
+- Activity entries can look up their source event and Managed Projection live from Google, showing the title, time, recurrence, and a Google Calendar link without storing any event content.
+- Activity is a table grouped by day with Time, Event, What happened, and Rule columns. Event titles and times are read live from Google in small deduplicated batches for the rows on screen (`GET /api/v1/audit-entries/events`), and selecting an entry opens its details beside the table, led by the event and what happened, with a way to open the rule when a change was blocked. Checks that found an event already up to date are counted in one expandable row per run by default, consecutive runs that only made such checks share one summary row, and **All decisions** lists every check. A rule picker shows each rule's calendars with their account photos, lists removed rules separately, and follows the accessible select-only combobox pattern. The rule, filter, and open entry are kept in the page address.
+- A development-only preview (`scripts/dev_preview.py`) serves the Web UI with synthetic data from its own marked database and a read-only fake Google; it refuses any other database and is excluded from the package and image.
+- `GET /api/v1/audit-entries/{id}` returns one audit entry, `category` may be repeated to combine outcomes, `run_id` filters to one run, and `GET /api/v1/audit-entries/no-change-runs` lists recent runs with how many no-change checks each made, including runs that made nothing else.
+- SQLite migration 7 indexes audit entries by run so Activity counts and expands runs without scanning the whole history.
+- SQLite migration 3 adds stable reason codes and run identifiers to audit entries and backfills reason codes for existing entries.
+- The Overview derives its headline, health strip, and single next action from one health model, so it never reports healthy while an incident, a stopped rule, or a lost authorization needs attention. It lists every rule with its state and last successful sync, and first-run guidance stays until a rule is running.
+- Rule rows and Rule Details show when each rule last synchronized, move Sync Now, Reconcile Now, and Pause into a "More actions" menu that explains how each differs, report each command's result on its own rule, and restate the privacy consequence of the latest preview before a rule starts syncing.
+- `GET /api/v1/dashboard` adds `disconnected_accounts`, `enabled_rules`, `stopped_rules`, and `last_synced_at`, and reports `attention` for stopped rules as well as open incidents. `GET /api/v1/rules` adds each rule's `last_sync` outcome.
+- The Overview shows recent changes: the last runs that added, updated, removed, or repaired events, per rule and in plain language, with blocked changes linked to that rule's Activity. "Show events" looks up the affected events' titles and times live from Google on request and never stores them. When something needs attention, the status names the affected rule and links straight to it.
+- `GET /api/v1/recent-changes` summarizes recent runs that changed or blocked events, using counts and entry identifiers only.
+- SQLite migration 6 keeps the counts of each rule's latest preview, so "Start syncing" always restates how many events will appear. Rules and Rule Details expose them as `latest_preview`. It also keeps each rule's last successful run time across later failures (`last_succeeded_at`), so the Overview's last sync never disappears after a failed run.
+- Activity filters live in the address (`/activity?rule=…`), and Rule Details links to that rule's activity.
+- Recurring series and single-occurrence changes synchronize under the same ownership, privacy, drift-repair, reprojection, and removal guarantees as single events, and Rule Preview reports recurring series and changed occurrences with their planned actions.
+- Rules, Rule Details, and the Overview show a rule's preview, sync, reconciliation, or removal while it runs, including runs the scheduler started and work that began before the page was reloaded. `GET /api/v1/rules` and `GET /api/v1/rules/{id}` add `running` (kind, start time, and a removal's handled and total projections), kept in memory by the single service process. A removal that is still running is never shown as incomplete, and Rule Details says when it finished.
+- A rule whose preview passed shows **Start syncing** inline with one line saying how many events will appear and how many are excluded, replacing the review panel.
+- The Activity rule filter has a clear button, and Delete or Backspace on the picker clears it.
+- Overview rules show each calendar's account photo, list running rules first, and come before recent changes.
+- Activity searches event titles as each run recorded them (`GET /api/v1/audit-entries?q=…`), ignoring case and accents so “reunion” finds “Reunión”. The search lives in the address as `q` and lists matching entries only, without per-run counts of no-change checks.
+
+- Activity says what changed in a source event: "Title and description changed in Personal → updated in Work". Opening an entry lists each changed field's value before and after, with guests and video call links as added and removed, read on request from `GET /api/v1/audit-entries/{id}/changes`; `GET /api/v1/audit-entries` adds `changed_fields`. Title, time, description, location, guests, repeat pattern, and video call links are tracked; responses to invitations are not. Who made a change is not known to Google's API and is never shown. SQLite migration 14 keeps each rule's latest Source Observation of an event and each entry's Source Change. Titles stay plain text; the other values are sealed with a key derived from the installation master key and kept for 90 days ([ADR 0017](docs/adr/0017-record-source-changes.md)).
+- Rules follow the source calendar's answer to each invitation. Events answered Maybe are synced marked as tentative ("Busy (tentative)", or "Maybe: Standup" when copying details) by default, or can be synced like accepted events or skipped. Invitations not answered yet are synced as Maybe by default, or can wait until answered. Declined events are never synced. Answering an invitation updates or removes its projection, an occurrence answered on its own changes only that occurrence, and Activity shows "Your response: Maybe → Yes". `POST /api/v1/rules`, `PATCH /api/v1/rules/{id}`, and rule responses add `tentative_events` and `unanswered_invitations`; `PATCH` requires both. SQLite migration 15 gives existing rules the defaults and reprojects them on their next run ([ADR 0018](docs/adr/0018-project-by-invitation-response.md)).
+- Sync Runs, Reconcile now, and Rule Removal log what they are doing: when a run starts and why it lists what it lists, what each calendar reported, progress at most every 30 seconds while it decides events, and how it finished or failed, with its Google call count, token refreshes, rate-limited and server-error responses, and slowest call. A Google call slower than 10 seconds is logged as a warning, and `CALENDAR_SYNC_LOG_LEVEL=DEBUG` logs every call. Lines name rules and runs by their identifiers only and never contain event content, calendar identifiers, or account emails. Docker Compose caps the container's logs at three files of 10 MB. See [Reading the logs](docs/troubleshooting.md#reading-the-logs).
+- A running sync shows how far it got on Rules and Rule Details: "380 of 840 checked · Running for 12 min 3 s", with a progress bar, counting the events both calendars reported and, after a Material Rule Change, the projections being rewritten. `running` in `GET /api/v1/rules` and `GET /api/v1/rules/{id}` now reports a sync's `total` and `done` as well as a removal's.
+- Settings → Storage shows the database size, reclaimable space, the number of Activity entries, and the oldest one, and clears Activity older than 30, 90, 180, or 365 days, with an inline confirmation that shows the count first. Clearing keeps, per rule and source event, the older entries newer ones are compared with, found by id so a clock stepping back cannot reorder them (normally the latest entry older than the cutoff and the latest that recorded a title), deletes in batches of 5,000, then compacts the database while every rule's run lock is held, answering 409 when a rule is still synchronizing after 30 seconds; the entries are removed by then, and their space stays unreclaimed until a later clear, which Settings offers as Reclaim space ([ADR 0019](docs/adr/0019-administrator-chosen-activity-retention.md)). The service also writes its own rotating log files beside the database (`CALENDAR_SYNC_LOG_DIR` to relocate them, empty to turn file logging off), capped at 25 MB across five files, and Settings → Storage offers Download and Purge logs. `GET /api/v1/storage`, `GET /api/v1/storage/activity`, `POST /api/v1/storage/activity/clear`, `GET /api/v1/storage/logs`, and `DELETE /api/v1/storage/logs` are admin-only.
 
 ### Changed
 
+- The Web UI and the landing page install with pnpm instead of npm. No dependency runs an install
+  script unless it is allowed, a package version is installed only once it is 7 days old, and a
+  package whose provenance weakens since an earlier version is refused. The landing page now
+  declares `sharp`, which it used without declaring, at 0.35.5, which fixes CVE-2026-96889.
+- The rule health policy, which decides when a failed run stops its rule and when it opens an
+  Incident, moves into the domain (`domain/health.py`), with the failure kinds that need
+  reauthorization or a retry (`domain/providers.py`). Behavior is unchanged (#104).
 - Connecting or reauthorizing an account opens the provider's consent in a new tab when its
   redirect URI is at another address than the one Calendar Ghost is open at, such as `localhost`
   while Calendar Ghost runs on a LAN host. The tab you started from stays on Calendar Ghost and
@@ -327,58 +366,6 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   development preview, as it already is in a real installation.
 - The development preview records a recent sync for each rule, and `--scenario` starts it in any of
   those states.
-
-### Added
-
-- The Community Edition is documented as a single-installation, privacy-first deployment under the
-  GNU Affero General Public License, version 3 or later, with a separate trademark policy, data
-  ownership guide. `LICENSE` holds the unmodified license text so GitHub and package tools detect
-  it, and contributions need no CLA. A future hosted service will run this same open code, with
-  billing behind a Commercial Mode that is off by default, so self-hosted installations keep every
-  feature (ADR 0023).
-- `provider` on Connected Account payloads (`GET /api/v1/accounts`), and `writable` on discovered
-  calendars.
-- SQLite migration 17 lets `connected_accounts.provider` hold any Provider Kind; code validates the
-  value, so adding a provider needs no schema change (see [Deployment](docs/deployment.md) for
-  rollback).
-- The new-rule account selectors show each Connected Account's photo or initials alongside its name and email.
-- An optional blue dark palette, **Midnight**, in Settings → Appearance → Dark palette. It applies whenever the interface is dark, including when it follows the device, and is saved in the browser like the theme. Twilight remains the default.
-- Connected Account management with permission checks, safe disconnection, reauthorization, and permanent local deletion.
-- Stable URLs for Overview, Rules, Activity, and Settings, with account identity markers throughout rule management.
-- A warning before connecting a Google account when the browser address differs from the configured OAuth redirect URI, with LAN and Raspberry Pi redirect guidance.
-- Google profile names and photos for Connected Accounts through optional basic profile access. Reconnect existing accounts to show their photos.
-- Rule Details at `/rules/{id}` showing calendars, projection policy, all-day eligibility, initial window, state, managed projection count, and the last synchronization and reconciliation outcomes.
-- Transformation Policy and all-day eligibility editing as a Material Rule Change that pauses the rule, requires a new preview, and rewrites every existing projection on the next run.
-- Rule Removal with an explicit choice to delete mapped projections or keep them as Detached Events, and Rule Replacement for changing a rule's calendars.
-- Activity groups decisions by synchronization run, names the rule's calendars, explains every skipped, blocked, or changed event in plain language, and can be filtered by rule and outcome with older entries loaded on demand.
-- Activity entries can look up their source event and Managed Projection live from Google, showing the title, time, recurrence, and a Google Calendar link without storing any event content.
-- Activity is a table grouped by day with Time, Event, What happened, and Rule columns. Event titles and times are read live from Google in small deduplicated batches for the rows on screen (`GET /api/v1/audit-entries/events`), and selecting an entry opens its details beside the table, led by the event and what happened, with a way to open the rule when a change was blocked. Checks that found an event already up to date are counted in one expandable row per run by default, consecutive runs that only made such checks share one summary row, and **All decisions** lists every check. A rule picker shows each rule's calendars with their account photos, lists removed rules separately, and follows the accessible select-only combobox pattern. The rule, filter, and open entry are kept in the page address.
-- A development-only preview (`scripts/dev_preview.py`) serves the Web UI with synthetic data from its own marked database and a read-only fake Google; it refuses any other database and is excluded from the package and image.
-- `GET /api/v1/audit-entries/{id}` returns one audit entry, `category` may be repeated to combine outcomes, `run_id` filters to one run, and `GET /api/v1/audit-entries/no-change-runs` lists recent runs with how many no-change checks each made, including runs that made nothing else.
-- SQLite migration 7 indexes audit entries by run so Activity counts and expands runs without scanning the whole history.
-- SQLite migration 3 adds stable reason codes and run identifiers to audit entries and backfills reason codes for existing entries.
-- The Overview derives its headline, health strip, and single next action from one health model, so it never reports healthy while an incident, a stopped rule, or a lost authorization needs attention. It lists every rule with its state and last successful sync, and first-run guidance stays until a rule is running.
-- Rule rows and Rule Details show when each rule last synchronized, move Sync Now, Reconcile Now, and Pause into a "More actions" menu that explains how each differs, report each command's result on its own rule, and restate the privacy consequence of the latest preview before a rule starts syncing.
-- `GET /api/v1/dashboard` adds `disconnected_accounts`, `enabled_rules`, `stopped_rules`, and `last_synced_at`, and reports `attention` for stopped rules as well as open incidents. `GET /api/v1/rules` adds each rule's `last_sync` outcome.
-- The Overview shows recent changes: the last runs that added, updated, removed, or repaired events, per rule and in plain language, with blocked changes linked to that rule's Activity. "Show events" looks up the affected events' titles and times live from Google on request and never stores them. When something needs attention, the status names the affected rule and links straight to it.
-- `GET /api/v1/recent-changes` summarizes recent runs that changed or blocked events, using counts and entry identifiers only.
-- SQLite migration 6 keeps the counts of each rule's latest preview, so "Start syncing" always restates how many events will appear. Rules and Rule Details expose them as `latest_preview`. It also keeps each rule's last successful run time across later failures (`last_succeeded_at`), so the Overview's last sync never disappears after a failed run.
-- Activity filters live in the address (`/activity?rule=…`), and Rule Details links to that rule's activity.
-- Recurring series and single-occurrence changes synchronize under the same ownership, privacy, drift-repair, reprojection, and removal guarantees as single events, and Rule Preview reports recurring series and changed occurrences with their planned actions.
-- Rules, Rule Details, and the Overview show a rule's preview, sync, reconciliation, or removal while it runs, including runs the scheduler started and work that began before the page was reloaded. `GET /api/v1/rules` and `GET /api/v1/rules/{id}` add `running` (kind, start time, and a removal's handled and total projections), kept in memory by the single service process. A removal that is still running is never shown as incomplete, and Rule Details says when it finished.
-- A rule whose preview passed shows **Start syncing** inline with one line saying how many events will appear and how many are excluded, replacing the review panel.
-- The Activity rule filter has a clear button, and Delete or Backspace on the picker clears it.
-- Overview rules show each calendar's account photo, list running rules first, and come before recent changes.
-- Activity searches event titles as each run recorded them (`GET /api/v1/audit-entries?q=…`), ignoring case and accents so “reunion” finds “Reunión”. The search lives in the address as `q` and lists matching entries only, without per-run counts of no-change checks.
-
-- Activity says what changed in a source event: "Title and description changed in Personal → updated in Work". Opening an entry lists each changed field's value before and after, with guests and video call links as added and removed, read on request from `GET /api/v1/audit-entries/{id}/changes`; `GET /api/v1/audit-entries` adds `changed_fields`. Title, time, description, location, guests, repeat pattern, and video call links are tracked; responses to invitations are not. Who made a change is not known to Google's API and is never shown. SQLite migration 14 keeps each rule's latest Source Observation of an event and each entry's Source Change. Titles stay plain text; the other values are sealed with a key derived from the installation master key and kept for 90 days ([ADR 0017](docs/adr/0017-record-source-changes.md)).
-- Rules follow the source calendar's answer to each invitation. Events answered Maybe are synced marked as tentative ("Busy (tentative)", or "Maybe: Standup" when copying details) by default, or can be synced like accepted events or skipped. Invitations not answered yet are synced as Maybe by default, or can wait until answered. Declined events are never synced. Answering an invitation updates or removes its projection, an occurrence answered on its own changes only that occurrence, and Activity shows "Your response: Maybe → Yes". `POST /api/v1/rules`, `PATCH /api/v1/rules/{id}`, and rule responses add `tentative_events` and `unanswered_invitations`; `PATCH` requires both. SQLite migration 15 gives existing rules the defaults and reprojects them on their next run ([ADR 0018](docs/adr/0018-project-by-invitation-response.md)).
-- Sync Runs, Reconcile now, and Rule Removal log what they are doing: when a run starts and why it lists what it lists, what each calendar reported, progress at most every 30 seconds while it decides events, and how it finished or failed, with its Google call count, token refreshes, rate-limited and server-error responses, and slowest call. A Google call slower than 10 seconds is logged as a warning, and `CALENDAR_SYNC_LOG_LEVEL=DEBUG` logs every call. Lines name rules and runs by their identifiers only and never contain event content, calendar identifiers, or account emails. Docker Compose caps the container's logs at three files of 10 MB. See [Reading the logs](docs/troubleshooting.md#reading-the-logs).
-- A running sync shows how far it got on Rules and Rule Details: "380 of 840 checked · Running for 12 min 3 s", with a progress bar, counting the events both calendars reported and, after a Material Rule Change, the projections being rewritten. `running` in `GET /api/v1/rules` and `GET /api/v1/rules/{id}` now reports a sync's `total` and `done` as well as a removal's.
-- Settings → Storage shows the database size, reclaimable space, the number of Activity entries, and the oldest one, and clears Activity older than 30, 90, 180, or 365 days, with an inline confirmation that shows the count first. Clearing keeps, per rule and source event, the older entries newer ones are compared with, found by id so a clock stepping back cannot reorder them (normally the latest entry older than the cutoff and the latest that recorded a title), deletes in batches of 5,000, then compacts the database while every rule's run lock is held, answering 409 when a rule is still synchronizing after 30 seconds; the entries are removed by then, and their space stays unreclaimed until a later clear, which Settings offers as Reclaim space ([ADR 0019](docs/adr/0019-administrator-chosen-activity-retention.md)). The service also writes its own rotating log files beside the database (`CALENDAR_SYNC_LOG_DIR` to relocate them, empty to turn file logging off), capped at 25 MB across five files, and Settings → Storage offers Download and Purge logs. `GET /api/v1/storage`, `GET /api/v1/storage/activity`, `POST /api/v1/storage/activity/clear`, `GET /api/v1/storage/logs`, and `DELETE /api/v1/storage/logs` are admin-only.
-
-### Changed
-
 - The run log key `google_calls=` is now `provider_calls=`, and the debug and slow-call log lines
   read `provider call provider=google op=…` and `slow provider call provider=google op=…`. Anyone
   grepping or alerting on the old text must update it.
@@ -421,7 +408,35 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   lists them as a separate "Birthdays" calendar, but they are events of the primary calendar, so a
   rule from it copied every one. A new rule setting, "Sync birthdays", is off by default; upgrading
   deletes the birthdays rules already copied on their next run
-  ([ADR 0035](docs/adr/0035-leave-out-birthdays-unless-a-rule-syncs-them.md)).
+  ([ADR 0035](docs/adr/0035-leave-out-birthdays-unless-a-rule-syncs-them.md)) (#108).
+- A provider failure, an interrupted Rule Removal or Rule Replacement, or a refusal from Microsoft
+  raised through a context manager keeps its kind. Before, Python 3.12 replaced it with a
+  `TypeError`, because these errors were frozen dataclasses, so a failure could read as a local
+  infrastructure failure. A test now fails if any error is a frozen dataclass (#103).
+- An occurrence whose series its calendar does not show, such as one meeting of a recurring event
+  someone invited you to, now projects as a single event. Before, it was skipped as
+  `series_not_synchronized`, so its time never reached the destination. If the calendar later shows
+  the whole series, the single event is removed once the series shows the occurrence, recorded as
+  `occurrence_joined_series` (migration 29, ADR 0011) (#102).
+- Deleting the first occurrence of an Outlook series with no end no longer stops its rule. Graph
+  lists such a series at most five years at a time, so the search for a missing first occurrence
+  now reads it in 1825-day windows (#98).
+- A timed event that ends as it starts, as some reminders do, no longer fails Preview and stops its
+  rule. Both providers accept such events (#97).
+- Sync now and Reconcile now lapse an account the provider refused, as a scheduled run does: its
+  rules stop, an Incident opens, and the message asks to reauthorize (#96).
+- A Google series is no longer rewritten on every run of an Outlook to Google rule. Google stores
+  the parts of a repeat rule in its own order, so recurrence rules are now compared by their parts
+  (#95).
+- An occurrence deleted in Outlook comes back: the run rebuilds the Outlook series from the source,
+  with its moved and cancelled occurrences, and records `series_rebuilt`. Each blocked event in
+  Activity now says why it is blocked (#94).
+- Sync now and Reconcile now answer a provider failure as `424 provider_failed` instead of a server
+  error. A calendar listing the provider refuses lapses the account, and a failed run's log line
+  names where it failed (`at=`) (#93).
+- An Outlook series with a moved occurrence can change again, and Rule Removal no longer stops at
+  it. The guest check before a series write reads the series' exceptions whole, since Graph leaves
+  out their attendees from any narrower read (#92).
 - Outlook now holds a yearly series on a day its month always has, such as a birthday on
   November 30. It refused every yearly series from the 29th on, as if every month could be
   shorter, and Activity showed such a series as blocked. February 29 and the 31st of a 30-day
@@ -470,6 +485,24 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Occurrences of a recurring event that already matched their projection are listed as no change instead of as skipped.
 - Every database connection now enforces foreign keys and closes when it is done, so a failure
   recorded for a rule removed meanwhile no longer leaves a stray failure count behind.
+
+## [0.1.1] - 2026-10-03
+
+### Added
+
+- Overview now opens with a health hero that pairs the synchronization state and next action with a more expressive Calendar Ghost illustration.
+- Settings explains the three-step connection flow in a collapsed helper beside Connected accounts.
+
+### Changed
+
+- Overview, Rules, Activity, and Rule Details now share bordered information cards, clearer section summaries, and a calmer visual rhythm.
+- Recent Changes reads as a clickable timeline with connected markers, event context, and direct links into Activity and Rules.
+- The Ghost mark gains a quiet happy expression for healthy synchronization, while the hero keeps state colors and copy aligned with the existing health model.
+- Activity day separators are quiet, non-sticky row labels, and the generated Web UI bundle is refreshed for the release.
+
+### Removed
+
+- Removed the temporary in-app synthetic-data preview layer used to review the redesign; shipped views now stay connected to the installation's live data.
 
 ## [0.1.0] - 2026-08-30
 

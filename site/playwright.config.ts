@@ -7,7 +7,7 @@ export default defineConfig({
   testDir: "e2e",
   use: { baseURL: `http://localhost:${PORT}` },
   webServer: {
-    command: `npm run preview -- --port ${PORT}`,
+    command: `pnpm run preview --port ${PORT}`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     // Astro's preview CLI auto-backgrounds itself (and exits immediately) when it detects it is

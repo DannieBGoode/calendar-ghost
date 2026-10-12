@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.1",
   "type": "module",
+  "packageManager": "pnpm@12.9.1",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -39,7 +40,7 @@
     "eslint-plugin-react-refresh": "0.5.5",
     "globals": "17.11.0",
     "happy-dom": "20.14.5",
-    "knip": "6.41.0",
+    "knip": "6.39.0",
     "openapi-typescript": "7.13.0",
     "react-doctor": "0.9.14",
     "tailwindcss": "4.3.3",

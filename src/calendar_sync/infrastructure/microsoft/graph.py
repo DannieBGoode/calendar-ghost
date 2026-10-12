@@ -28,7 +28,8 @@ TIMEOUT_SECONDS = 30.0
 Json = dict[str, Any]
 
 
-@dataclass(frozen=True, slots=True)
+# Not frozen: raising an error sets its __traceback__, which a frozen dataclass refuses.
+@dataclass(eq=False)
 class GraphRefusal(Exception):
     """Graph answered a request with an error."""
 
@@ -42,7 +43,8 @@ class GraphRefusal(Exception):
         return f"Graph answered {self.status or 'nothing'} {' '.join(self.codes)}".strip()
 
 
-@dataclass(frozen=True, slots=True)
+# Not frozen: raising an error sets its __traceback__, which a frozen dataclass refuses.
+@dataclass(eq=False)
 class TokenRefusal(Exception):
     """The identity platform's token endpoint refused, or could not be reached."""
 

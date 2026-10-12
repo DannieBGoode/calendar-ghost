@@ -1,7 +1,7 @@
 """Write the Web API's OpenAPI schema to ``web/openapi.json`` for the frontend types.
 
     .venv/bin/python scripts/export_openapi.py
-    npm --prefix web run api:types
+    cd web && pnpm run api:types
 
 The frontend generates ``web/src/lib/api-schema.ts`` from this file, so a changed response model
 breaks the frontend type check instead of the running page. ``tests/test_openapi_contract.py``

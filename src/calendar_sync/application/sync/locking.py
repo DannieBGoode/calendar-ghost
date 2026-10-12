@@ -109,8 +109,6 @@ class RuleLocks:
 
 @dataclass(frozen=True, slots=True)
 class _Working(AbstractContextManager[RuleWork]):
-    # Not @contextmanager: its exit assigns __traceback__ on the exception, which frozen
-    # slotted dataclass errors such as RemovalInterrupted reject.
     locks: RuleLocks
     rule_id: SyncRuleId
     work: RuleWork
@@ -124,7 +122,6 @@ class _Working(AbstractContextManager[RuleWork]):
 
 
 class _EveryRule(AbstractContextManager[None]):
-    # Not @contextmanager, for the same reason as _Working.
     def __init__(self, locks: RuleLocks, timeout: float) -> None:
         self._locks = locks
         self._timeout = timeout

@@ -9,3 +9,5 @@ __pycache__
 scripts
 # The landing page deploys separately to Cloudflare and never enters the image.
 site
+# Installed inside the image from the lockfile; a local install would replace it.
+**/node_modules
