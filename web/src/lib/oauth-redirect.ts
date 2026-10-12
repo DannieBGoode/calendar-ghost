@@ -1,4 +1,6 @@
 import type { MessageKey } from "@/i18n/types"
+import type { CalendarProvider } from "@/lib/api"
+import { connectUrl } from "@/lib/providers"
 
 export type OAuthRedirectMismatch = {
   redirectOrigin: string
@@ -43,6 +45,8 @@ export function oauthReturnAtCurrentOrigin(
 }
 
 const AUTHORIZATION_STARTED_KEY = "calendar-sync-authorization-started"
+// Tells this tab's pages that a connection just started, since `storage` events reach only other tabs.
+const AUTHORIZATION_STARTED_EVENT = "calendar-sync-authorization-started"
 // A provider's return address works once, for 10 minutes after the attempt starts.
 export const AUTHORIZATION_RETURN_MS = 10 * 60 * 1000
 
@@ -71,6 +75,29 @@ export function recordAuthorizationStart(
   } catch {
     // Without storage the page just offers its quiet help instead of the pending step.
   }
+  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+    window.dispatchEvent(new Event(AUTHORIZATION_STARTED_EVENT))
+  }
+}
+
+/** Calls `listener` each time a connection starts in this tab; returns how to stop. */
+export function onAuthorizationStart(listener: () => void): () => void {
+  window.addEventListener(AUTHORIZATION_STARTED_EVENT, listener)
+  return () => window.removeEventListener(AUTHORIZATION_STARTED_EVENT, listener)
+}
+
+/** The attributes of a link that starts connecting a provider, or reauthorizing one of its accounts. */
+export type ConnectLink = { href: string; onClick: () => void; target?: "_blank"; rel?: "noopener" }
+
+/**
+ * A link that starts connecting. When the provider returns somewhere other than this address, its
+ * consent opens in a new tab: that tab may end on a page this installation does not serve, and this
+ * one stays here to finish the connection with the address it ended on.
+ */
+export function connectLink(provider: CalendarProvider, accountId?: string, currentOrigin = window.location.origin): ConnectLink {
+  const link = { href: connectUrl(provider, accountId), onClick: () => recordAuthorizationStart(provider.kind) }
+  const elsewhere = oauthRedirectMismatch(provider.redirect_uri, currentOrigin) !== null
+  return elsewhere ? { ...link, target: "_blank", rel: "noopener" } : link
 }
 
 export function clearAuthorizationStart(storage: AuthorizationStorage | null = browserStorage()) {

@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { testI18n } from "@/i18n/testing"
+import type { CalendarProvider } from "@/lib/api"
 
 import {
   AUTHORIZATION_RETURN_MS,
   OAUTH_OUTCOME_MESSAGES,
   authorizationAwaitingReturn,
   clearAuthorizationStart,
+  connectLink,
   oauthRedirectMismatch,
   oauthOutcome,
   oauthProvider,
@@ -42,6 +44,31 @@ describe("oauthRedirectMismatch", () => {
   it("stays silent when the redirect URI is missing or unparseable", () => {
     expect(oauthRedirectMismatch(null, "http://192.168.1.50:18000")).toBeNull()
     expect(oauthRedirectMismatch("not a url", "http://192.168.1.50:18000")).toBeNull()
+  })
+})
+
+describe("connectLink", () => {
+  const google: CalendarProvider = {
+    kind: "google",
+    display_name: "Google",
+    connect_url: "/api/v1/oauth/google/start",
+    redirect_uri: localhostRedirect,
+    cause_anchors: {},
+  }
+
+  it("opens consent in a new tab when the provider returns somewhere else, so this page stays to finish", () => {
+    expect(connectLink(google, undefined, "http://192.168.1.50:18000")).toMatchObject({
+      href: "/api/v1/oauth/google/start",
+      target: "_blank",
+      rel: "noopener",
+    })
+  })
+
+  it("keeps consent in this tab when the provider returns here", () => {
+    const link = connectLink(google, "acct-a", "http://localhost:18000")
+    expect(link.href).toBe("/api/v1/oauth/google/start?account=acct-a")
+    expect(link).not.toHaveProperty("target")
+    expect(link).not.toHaveProperty("rel")
   })
 })
 
