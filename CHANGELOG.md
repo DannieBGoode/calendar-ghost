@@ -141,6 +141,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Connecting an account is one action instead of one equal button per provider. With one provider
+  configured it stays a direct button, such as "Connect Google account"; with several, "Connect an
+  account" opens a menu that names each provider's account beside its mark. It is the primary
+  action only while no account exists, in the Getting started step and in the Connected accounts
+  empty state, and a quiet outline button in the section heading after that.
 - The Overview counts stopped and running rules as the status API does: a rule has stopped when it
   does not synchronize until someone acts. An enabled rule whose account was disconnected or whose
   authorization lapsed now counts as stopped on the Overview (`stopped_rules`) instead of running,

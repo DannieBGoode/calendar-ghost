@@ -518,6 +518,20 @@ Pause the rule before changing a destination projection that should temporarily 
 Deleting a Managed Projection is Drift while its source remains eligible. Synchronization recreates
 it on the next destination change poll. Delete or exclude the source, or pause the rule instead.
 
+## A projected series appears twice after "this and following"
+
+Editing or deleting a projected series in the destination with **This and all following events**
+splits it in two: the calendar service ends the series Calendar Ghost wrote, and makes a new series
+for the rest. Calendar Ghost puts its own series back as the source has it, but it did not write the
+new one, so it never changes or deletes it, as it would not change one of your own events. Delete
+the new series yourself. To change a projected series, change it in the source instead.
+
+## The first sync of a large calendar is slow
+
+The first sync writes every event of the window one at a time, about one event a second into Google
+or Outlook; a calendar of a few hundred events takes several minutes, and Activity shows its
+progress. The runs after it write only what changed.
+
 ## A recurring event keeps being restored and removed
 
 Earlier releases showed a recurring event in Activity as added to the destination and then removed

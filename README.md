@@ -277,7 +277,7 @@ listed first, marked **Disconnected** or **Needs reauthorization**, says how man
 stopped, and offers **Reauthorize account**, which is disabled until its provider's OAuth is configured.
 Once the provider accepts the account again, rules that stopped only because its access lapsed restart on
 their own. Accounts connected before profile photos were supported show initials until they are
-connected again with **Connect Google account**, which updates the existing identity in place.
+connected again with **Connect**, which updates the existing identity in place.
 
 Use **Settings → Administration → Storage** to see the database size, the number of Activity entries,
 the oldest one, and any space earlier clearing left to reclaim, and clear Activity older than 30,

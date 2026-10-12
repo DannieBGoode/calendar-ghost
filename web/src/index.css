@@ -1241,14 +1241,6 @@ p {
   line-height: 1.5;
 }
 
-/* One connect button per configured provider, wrapping under the heading on narrow screens. */
-.connect-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
 .step-action {
   display: flex;
   max-width: 25rem;
@@ -2675,11 +2667,17 @@ p {
   gap: 0.75rem;
 }
 
+/* With no account yet, Connect sits beside the text it answers and wraps under it when narrow. */
 .account-empty {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 1rem;
   padding: 1.25rem;
+}
+
+.account-empty-copy {
+  flex: 1 1 16rem;
 }
 
 .account-empty > svg {
@@ -3141,8 +3139,8 @@ p {
 
 .overflow-menu-item {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+  align-items: flex-start;
+  gap: 0.625rem;
   padding: 0.625rem 0.75rem;
   border: 0;
   border-radius: var(--radius-md);
@@ -3150,6 +3148,24 @@ p {
   color: var(--foreground);
   text-align: left;
   transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.overflow-menu-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+/* A provider mark sits beside the label's first line, never in place of it. */
+.overflow-menu-icon {
+  display: flex;
+  flex: none;
+  padding-top: 0.0625rem;
+}
+
+.overflow-menu-icon svg {
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
 .overflow-menu-item:hover {

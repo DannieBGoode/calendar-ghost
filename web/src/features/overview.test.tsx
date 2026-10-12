@@ -9,7 +9,7 @@ import { OverviewView } from "./overview"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { ConnectedAccount, Dashboard, RecentChange, RuleSummary, ServerProblem } from "@/lib/api"
+import type { CalendarProvider, ConnectedAccount, Dashboard, RecentChange, RuleSummary, ServerProblem } from "@/lib/api"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -171,6 +171,7 @@ type Scenario = {
   dashboard: Dashboard
   rules: RuleSummary[]
   recentChanges: RecentChange[]
+  providers?: CalendarProvider[]
 }
 
 function jsonResponse(body: unknown): Response {
@@ -182,7 +183,7 @@ function mockFetch(scenario: Scenario) {
     "/api/v1/dashboard": scenario.dashboard,
     "/api/v1/rules": scenario.rules,
     "/api/v1/accounts": [accountA, accountB],
-    "/api/v1/providers": [],
+    "/api/v1/providers": scenario.providers ?? [],
     "/api/v1/recent-changes": scenario.recentChanges,
   }
   vi.stubGlobal("fetch", vi.fn((input: string | URL) => Promise.resolve(respond(String(input)))))
@@ -249,6 +250,42 @@ describe("OverviewView", () => {
     expect(detail).toContain("Access to Google Calendar was denied")
     expect(detail).not.toContain("Stored summary")
     expect(container.querySelector(".activity-happened-suffix")?.textContent).toContain("3 times since")
+  })
+
+  it("offers one Connect action as the first step, choosing the provider in its menu", async () => {
+    const provider = (kind: string, displayName: string): CalendarProvider => ({
+      kind,
+      display_name: displayName,
+      connect_url: `/api/v1/oauth/${kind}/start`,
+      redirect_uri: `http://localhost/api/v1/oauth/${kind}/callback`,
+      cause_anchors: {},
+    })
+    const { container } = await renderOverview(testI18n(), {
+      dashboard: {
+        ...attentionDashboard,
+        status: "setup",
+        needs_attention: false,
+        problems: [],
+        connected_accounts: 0,
+        sync_rules: 0,
+        enabled_rules: 0,
+        running_rules: 0,
+        open_incidents: 0,
+        last_synced_at: null,
+      },
+      rules: [],
+      recentChanges: [],
+      providers: [provider("google", "Google"), provider("outlook", "Microsoft")],
+    })
+    const action = [...container.querySelectorAll<HTMLElement>(".step-action > *")]
+    expect(action).toHaveLength(1)
+    const trigger = action[0]?.querySelector("button")
+    expect(trigger?.textContent).toBe("Connect an account")
+    expect(trigger?.className).toContain("bg-primary")
+    act(() => trigger?.click())
+    expect(
+      [...container.querySelectorAll("[role='menu'] a[role='menuitem']")].map((item) => item.getAttribute("href")),
+    ).toEqual(["/api/v1/oauth/google/start", "/api/v1/oauth/outlook/start"])
   })
 
   it("has no untranslated text for a rule with an open incident and a repeated change", async () => {
