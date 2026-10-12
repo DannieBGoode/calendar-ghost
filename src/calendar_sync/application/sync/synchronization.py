@@ -40,6 +40,7 @@ from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, Re
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import (
     CalendarEvent,
+    EventMapping,
     EventRef,
     EventStatus,
     ProjectionFingerprint,
@@ -284,8 +285,7 @@ class ExecuteSyncRule:
         series_ref = EventRef(run.rule.source, identity.series_event_id)
         if exception.reference in run.handled:
             # A replay or re-verification already applied it this run from a fresher read.
-            if run.uow.mappings.for_source(run.rule.id, series_ref) is not None:
-                self._leave_single_projection(run, exception)
+            self._leave_single_projection(run, exception, series_ref)
             return
         source_series = self.provider.get_event(series_ref)
         series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
@@ -317,7 +317,7 @@ class ExecuteSyncRule:
             record_current=True,
         )
         # Its series shows it now, so a projection of it on its own would show it twice.
-        self._leave_single_projection(run, exception)
+        self._leave_single_projection(run, exception, series_ref)
 
     def _repair_destination_occurrence(
         self, run: SyncRunContext, destination_event: CalendarEvent
@@ -442,9 +442,17 @@ class ExecuteSyncRule:
         )
         return decision.reason is SyncReason.PROJECTION_CURRENT
 
-    def _leave_single_projection(self, run: SyncRunContext, occurrence: CalendarEvent) -> None:
-        """Remove the single projection of an occurrence whose series its calendar now shows, so
-        only the series shows it. One someone invited guests to stays, as any deletion would."""
+    def _leave_single_projection(
+        self, run: SyncRunContext, occurrence: CalendarEvent, series_ref: EventRef
+    ) -> None:
+        """Remove the single projection of an occurrence whose series the destination now shows,
+        so it is never shown twice. While the series is not shown there, as when the destination
+        cannot hold it, the single projection stays; one someone invited guests to stays too, and
+        is recorded as blocked, as any deletion would be."""
+        if run.uow.mappings.for_source(run.rule.id, occurrence.reference) is None:
+            return
+        if not self._series_shown(run, series_ref):
+            return
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
             mapping = run.uow.mappings.for_source(run.rule.id, occurrence.reference)
@@ -459,25 +467,50 @@ class ExecuteSyncRule:
                         run.rule.id, occurrence.reference, occurrence.revision, SyncAction.DELETE
                     ),
                 )
-            except UnsupportedProjection:
+            except UnsupportedProjection as unsupported:
+                self._record_leaving(
+                    run, occurrence, mapping, SyncAction.CONFLICT, unsupported.reason
+                )
                 return
             run.uow.mappings.delete(mapping)
-            run.count(SyncAction.DELETE, occurrence.reference)
-            record(
-                run,
-                AuditEntry(
-                    occurred_at=self.clock.now(),
-                    rule_id=run.rule.id,
-                    action=AuditAction.of(SyncAction.DELETE),
-                    outcome=AuditOutcome.of(SyncAction.DELETE),
-                    source_event_id=occurrence.reference.event_id.value,
-                    destination_event_id=mapping.destination.event_id.value,
-                    reason=SyncReason.OCCURRENCE_JOINED_SERIES,
-                    run_id=run.run_id,
-                    event=RecordedEvent.of(occurrence),
-                ),
+            self._record_leaving(
+                run, occurrence, mapping, SyncAction.DELETE, SyncReason.OCCURRENCE_JOINED_SERIES
             )
-            run.uow.commit()
+
+    def _series_shown(self, run: SyncRunContext, series_ref: EventRef) -> bool:
+        """Whether the destination shows the series now, so its occurrence needs no projection of
+        its own."""
+        series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
+        if series_mapping is None:
+            return False
+        shown = self.provider.get_event(series_mapping.destination)
+        return shown is not None and shown.status is EventStatus.CONFIRMED
+
+    def _record_leaving(
+        self,
+        run: SyncRunContext,
+        occurrence: CalendarEvent,
+        mapping: EventMapping,
+        action: SyncAction,
+        reason: SyncReason,
+    ) -> None:
+        """Record what became of an occurrence's single projection, inside the write lock."""
+        run.count(action, occurrence.reference)
+        record(
+            run,
+            AuditEntry(
+                occurred_at=self.clock.now(),
+                rule_id=run.rule.id,
+                action=AuditAction.of(action),
+                outcome=AuditOutcome.of(action),
+                source_event_id=occurrence.reference.event_id.value,
+                destination_event_id=mapping.destination.event_id.value,
+                reason=reason,
+                run_id=run.run_id,
+                event=RecordedEvent.of(occurrence),
+            ),
+        )
+        run.uow.commit()
 
     def _record_unverifiable(
         self, run: SyncRunContext, source: EventRef, destination: EventRef | None

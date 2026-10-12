@@ -5,7 +5,14 @@ single event until its series appears (ADR 0011)."""
 from dataclasses import replace
 from datetime import timedelta
 
-from calendar_sync.domain.model import CalendarEvent, EventStatus, SyncReason, TimedInterval
+from calendar_sync.domain.model import (
+    CalendarEvent,
+    EventId,
+    EventRef,
+    EventStatus,
+    SyncReason,
+    TimedInterval,
+)
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import occurrence, rule, series, week_start
 
@@ -90,3 +97,41 @@ def test_a_lone_occurrence_leaves_its_single_projection_once_its_series_is_shown
     assert shown is not None
     assert shown.time == moved.time
     assert SyncReason.OCCURRENCE_JOINED_SERIES in {entry.reason for entry in factory.state.audit}
+
+
+def _series_now_shown(calendars: FakeCalendars, invited: CalendarEvent) -> CalendarEvent:
+    """The calendar shows the whole series now, and reports the occurrence again."""
+    master = calendars.put(series("their-series"), starts=STARTS)
+    calendars.report(master, calendars.put(replace(invited, revision="r2")))
+    return master
+
+
+def test_a_lone_projection_stays_while_its_series_cannot_be_shown() -> None:
+    # The destination cannot hold the series, so removing the single event would show nothing.
+    calendars, invited = _invited()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    calendars.unsupported.add(EventRef(rule().source, EventId("their-series")))
+
+    _series_now_shown(calendars, invited)
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert (rule().id, invited.reference) in factory.state.mappings
+    assert lone in calendars.events
+
+
+def test_a_lone_projection_someone_invited_guests_to_is_reported_blocked() -> None:
+    calendars, invited = _invited()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    calendars.undeletable.add(lone)
+
+    _series_now_shown(calendars, invited)
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert lone in calendars.events
+    assert result.conflicts == 1
+    blocked = [entry for entry in factory.state.audit if entry.outcome == "blocked"]
+    assert [entry.reason for entry in blocked] == [SyncReason.PROJECTION_HAS_GUESTS]
