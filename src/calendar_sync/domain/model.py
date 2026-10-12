@@ -84,8 +84,9 @@ class TimedInterval:
     def __post_init__(self) -> None:
         if self.starts_at.tzinfo is None or self.ends_at.tzinfo is None:
             raise DomainValidationError("timed event bounds must include a timezone")
-        if self.ends_at <= self.starts_at:
-            raise DomainValidationError("event end must be after its start")
+        # An event may end as it starts: calendar providers keep such events, as some reminders are.
+        if self.ends_at < self.starts_at:
+            raise DomainValidationError("event end must not be before its start")
         if self.time_zone is not None:
             _require_non_empty(self.time_zone, "time zone")
 
