@@ -258,6 +258,13 @@ def test_occurrence_identity_requires_a_normalized_start() -> None:
         )
 
 
+def test_a_timed_event_may_last_no_time_but_never_end_before_it_starts() -> None:
+    # Google and Outlook both keep an event that ends as it starts, as some apps' reminders do.
+    assert TimedInterval(NOW, NOW).ends_at == NOW
+    with pytest.raises(DomainValidationError):
+        TimedInterval(NOW, NOW - timedelta(minutes=1))
+
+
 def test_timed_interval_rejects_a_blank_time_zone() -> None:
     with pytest.raises(DomainValidationError):
         TimedInterval(NOW, NOW + timedelta(hours=1), " ")
