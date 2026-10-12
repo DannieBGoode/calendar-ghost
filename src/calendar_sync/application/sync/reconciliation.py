@@ -15,12 +15,17 @@ from calendar_sync.application.sync.ports import (
     FullPassRecords,
     ProviderCallStats,
     ProviderCallTally,
+    RecoveryIncidents,
     RunIdGenerator,
     UnitOfWorkFactory,
 )
 from calendar_sync.application.sync.resource_use import record_provider_calls
 from calendar_sync.application.sync.run_log import UntalliedProviderCalls, call_summary, duration
-from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncRunResult
+from calendar_sync.application.sync.synchronization import (
+    ExecuteSyncRule,
+    SyncRunResult,
+    lapse_if_unauthorized,
+)
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import (
     CalendarEvent,
@@ -366,11 +371,20 @@ class ReconcileNow:
     synchronize: ExecuteSyncRule
     reconcile: ReconcileSyncRule
     full_passes: FullPassRecords | None = None
+    incidents: RecoveryIncidents | None = None
 
     def execute(self, rule_id: SyncRuleId) -> ReconcileNowResult:
         work = RuleWork(
             RuleWorkKind.RECONCILIATION, self.synchronize.clock.now(), stage=RuleWorkKind.SYNC
         )
+        try:
+            return self._execute(rule_id, work)
+        except ProviderFailure as failure:
+            # Lapsed once the rule's work is over, as for a scheduled run (ADR 0027).
+            lapse_if_unauthorized(self.incidents, rule_id, failure, work.started_at)
+            raise
+
+    def _execute(self, rule_id: SyncRuleId, work: RuleWork) -> ReconcileNowResult:
         # Reported from start to finish, so a reload between the stages still sees it.
         with self.synchronize.locks.working(rule_id, work):
             floor = self._audit_floor()

@@ -43,6 +43,16 @@ def test_google_all_day_series_translates_without_midnight_conversion() -> None:
     assert translated.recurrence == Recurrence(("RRULE:FREQ=DAILY;COUNT=2",))
 
 
+def test_a_google_event_that_ends_as_it_starts_reads_as_lasting_no_time() -> None:
+    instant = {"dateTime": "2026-11-22T10:00:00+01:00", "timeZone": "Europe/Madrid"}
+    payload = {"id": "reminder-1", "etag": "revision-1", "start": instant, "end": instant}
+
+    translated = to_domain_event(payload, endpoint("account", "calendar"))
+
+    assert isinstance(translated.time, TimedInterval)
+    assert translated.time.starts_at == translated.time.ends_at
+
+
 def test_projection_payload_contains_private_identity_but_no_invitation_fields() -> None:
     source = event().reference
     projection = EventProjection(

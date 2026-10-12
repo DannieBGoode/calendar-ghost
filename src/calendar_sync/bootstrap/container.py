@@ -99,7 +99,7 @@ from calendar_sync.application.sync.rules import (
     ReplaceSyncRuleCalendars,
 )
 from calendar_sync.application.sync.run_log import UntalliedProviderCalls
-from calendar_sync.application.sync.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncNow
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.logs import configure_logging
 from calendar_sync.domain.access import UserId
@@ -184,6 +184,7 @@ class UserServices:
     check_account_access: CheckAccountAccess | None
     discover_calendars: DiscoverCalendars | None
     execute_sync_rule: ExecuteSyncRule | None
+    sync_now: SyncNow | None
     preview_sync_rule: PreviewSyncRule | None
     reconcile_now: ReconcileNow | None
 
@@ -582,6 +583,7 @@ def _compose_user(
                 call_stats=call_stats,
             ),
             rule_health,
+            incidents=rule_health,
         )
     calendars = adapters.account_calendars
     return UserServices(
@@ -627,6 +629,7 @@ def _compose_user(
             else None
         ),
         execute_sync_rule=execute_sync_rule,
+        sync_now=(SyncNow(execute_sync_rule, rule_health, clock) if execute_sync_rule else None),
         preview_sync_rule=preview_sync_rule,
         reconcile_now=reconcile_now,
     )
