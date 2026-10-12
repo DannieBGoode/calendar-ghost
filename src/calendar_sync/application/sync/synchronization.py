@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext, suppress
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.change_feeds import ChangeFeedCursors
@@ -21,6 +22,7 @@ from calendar_sync.application.sync.ports import (
     ProviderCallStats,
     ProviderCallTally,
     ProviderChangeSet,
+    RecoveryIncidents,
     RunIdGenerator,
     UnitOfWork,
     UnitOfWorkFactory,
@@ -519,3 +521,34 @@ class ExecuteSyncRule:
 def stored_fingerprint(value: str) -> ProjectionFingerprint:
     """Reconstitute a persisted fingerprint without exposing event content."""
     return ProjectionFingerprint(value)
+
+
+@dataclass(slots=True)
+class SyncNow:
+    """Sync Now: one run the User asked for. Lost authorization it meets lapses the account at
+    once, as a preview's does, rather than at the next scheduled pass (ADR 0027); the scheduler
+    records every other failure as it records its own."""
+
+    synchronize: ExecuteSyncRule
+    incidents: RecoveryIncidents
+    clock: Clock
+
+    def execute(self, rule_id: SyncRuleId) -> SyncRunResult:
+        started = self.clock.now()
+        try:
+            return self.synchronize.execute(rule_id)
+        except ProviderFailure as failure:
+            lapse_if_unauthorized(self.incidents, rule_id, failure, started)
+            raise
+
+
+def lapse_if_unauthorized(
+    incidents: RecoveryIncidents | None,
+    rule_id: SyncRuleId,
+    failure: ProviderFailure,
+    started: datetime,
+) -> None:
+    """Lapse the account a run the User asked for found refused for authentication or
+    authorization; a second lapse of the same account changes nothing."""
+    if failure.requires_authorization and incidents is not None:
+        incidents.recovery_blocked(rule_id, failure, attempted_at=started)
