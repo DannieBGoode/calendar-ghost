@@ -31,6 +31,7 @@ from calendar_sync.domain.model import (
     EventMapping,
     EventMappingId,
     EventRef,
+    OccurrenceIdentity,
     OccurrenceMapping,
     OccurrenceMappingId,
     OccurrenceState,
@@ -166,6 +167,47 @@ def test_recreated_projection_updates_existing_mapping_and_destination_cursor(
         assert uow.mappings.for_source(rule().id, source) == restored
         assert uow.mappings.for_destination(rule().id, restored_destination) == restored
         assert uow.destination_cursors.get(rule().id) == "destination-cursor"
+
+
+def test_a_lone_occurrences_mapping_keeps_its_occurrence_and_is_found_by_its_series(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = sqlite_units(database)
+    source = rule().source
+    lone = EventMapping(
+        EventMappingId("lone-mapping"),
+        rule().id,
+        EventRef(source, EventId("their-series_20260915T080000Z")),
+        EventRef(rule().destination, EventId("single")),
+        "revision-1",
+        ProjectionFingerprint("fingerprint-1"),
+        OccurrenceIdentity(EventId("their-series"), week_start(2)),
+    )
+    other = replace(
+        lone,
+        id=EventMappingId("other-mapping"),
+        source=EventRef(source, EventId("other")),
+        destination=EventRef(rule().destination, EventId("other-single")),
+        occurrence=OccurrenceIdentity(EventId("other-series"), date(2026, 9, 15)),
+    )
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.mappings.save(lone)
+        uow.mappings.save(other)
+        uow.mappings.save(replace(lone, occurrence=None, source_revision="revision-2"))
+        uow.commit()
+
+    with factory() as uow:
+        # The occurrence a mapping projects is fixed when it is created, as its source is.
+        assert uow.mappings.for_source(rule().id, lone.source) == replace(
+            lone, source_revision="revision-2"
+        )
+        assert uow.mappings.lone_occurrences(
+            rule().id, EventRef(source, EventId("their-series"))
+        ) == (replace(lone, source_revision="revision-2"),)
+        assert uow.mappings.for_source(rule().id, other.source) == other
 
 
 def test_sqlite_unique_relationship_is_translated_to_application_error(tmp_path: Path) -> None:

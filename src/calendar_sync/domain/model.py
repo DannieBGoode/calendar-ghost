@@ -532,6 +532,9 @@ class EventMapping:
     destination: EventRef
     source_revision: str
     projection_fingerprint: ProjectionFingerprint
+    occurrence: OccurrenceIdentity | None = None
+    """The occurrence this mapping projects on its own, while its calendar does not show its
+    series (ADR 0011); None for any other event."""
 
     def __post_init__(self) -> None:
         _require_non_empty(self.source_revision, "mapped source revision")

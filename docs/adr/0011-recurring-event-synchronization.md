@@ -166,10 +166,16 @@ occurrence with its series' identity, but reading that series in the calendar fi
 occurrence is then an event of that calendar like any other, so it projects on its own, as a single
 event, mapped by the occurrence's own identity: it is created, changed, repaired, and deleted when
 cancelled, as any single event is. Earlier releases skipped it as `series_not_synchronized`, so its
-time never reached the destination. If the calendar later shows the whole series, the series is
-projected as usual and the single projection is removed, recorded as `occurrence_joined_series`, so
-the occurrence is never shown twice; one someone invited guests to stays, as any deletion would. A
-series the calendar does not show, but that a Series Mapping names, is still unverifiable.
+time never reached the destination. Its Event Mapping records which occurrence it is, so its
+series finds it later. If the calendar later shows the whole series, the series is projected as
+usual. Each time the series is synchronized, it looks for the single projections of its
+occurrences. It removes one once the destination series shows that occurrence as the source
+projects it, recorded as `occurrence_joined_series`, so the occurrence is never shown twice. This
+works even when only the series is reported, as when the occurrence is now a regular one. Until
+then the single projection stays, as when the destination cannot write the occurrence, so the
+occurrence is never shown wrong or not at all. One someone invited guests to stays and is recorded
+as blocked, as any deletion would be. A series the calendar does not show, but that a Series
+Mapping names, is still unverifiable.
 
 ### Transformations and eligibility
 

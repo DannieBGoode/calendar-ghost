@@ -135,3 +135,58 @@ def test_a_lone_projection_someone_invited_guests_to_is_reported_blocked() -> No
     assert result.conflicts == 1
     blocked = [entry for entry in factory.state.audit if entry.outcome == "blocked"]
     assert [entry.reason for entry in blocked] == [SyncReason.PROJECTION_HAS_GUESTS]
+
+
+def test_a_lone_projection_stays_while_its_series_shows_the_occurrence_wrong() -> None:
+    # The destination refuses the occurrence's move, so its series shows it at its regular time.
+    calendars, invited = _invited()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    calendars.unsupported_occurrences.add(week_start(2))
+    master = calendars.put(series("their-series"), starts=STARTS)
+    moved = occurrence(
+        series("their-series"), 2, title="Planning", moved_by=timedelta(hours=1), revision="r2"
+    )
+    calendars.report(master, calendars.put(moved))
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert result.conflicts == 1
+    assert (rule().id, invited.reference) in factory.state.mappings
+    assert lone in calendars.events
+
+
+def test_a_lone_projection_leaves_when_only_its_series_is_reported() -> None:
+    # Invited to the whole series, the occurrence is a regular one of it and is not reported.
+    calendars, invited = _invited()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    del calendars.events[invited.reference]
+    calendars.report(calendars.put(series("their-series"), starts=STARTS))
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert result.deleted == 1
+    assert (rule().id, invited.reference) not in factory.state.mappings
+    assert lone not in calendars.events
+    assert factory.state.audit[-1].reason == SyncReason.OCCURRENCE_JOINED_SERIES
+
+
+def test_a_lone_occurrence_cancelled_as_its_series_is_shown_leaves_no_projection() -> None:
+    calendars, invited = _invited()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    master = calendars.put(series("their-series"), starts=STARTS)
+    cancelled = calendars.put(replace(invited, status=EventStatus.CANCELLED, revision="r2"))
+    calendars.report(master, cancelled)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert lone not in calendars.events
+    series_mapping = factory.state.mappings[(rule().id, master.reference)]
+    shown = calendars.get_occurrence(series_mapping.destination, week_start(2))
+    assert shown is None or shown.status is EventStatus.CANCELLED
+    assert SyncReason.SOURCE_CANCELLED in {entry.reason for entry in factory.state.audit}
