@@ -129,6 +129,8 @@ const TEMPLATE_VALUES: TemplateValues = {
   "common.providerApi.*": PROVIDER_KINDS,
   "common.providerConsole.*": PROVIDER_KINDS,
   "common.providerStatus.*": PROVIDER_KINDS,
+  // Only providers whose support is not yet verified for every kind of account have a note.
+  "common.connectAccount.note.*": ["outlook"],
   "common.apiError.*": "server",
   "common.apiError.*_*": "server",
 }

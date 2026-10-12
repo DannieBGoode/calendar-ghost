@@ -43,6 +43,10 @@ test("compatible calendars distinguish available and planned providers on deskto
     await expect(google.getByText(en.compatibleCalendars.google.status, { exact: true })).toBeVisible()
     await expect(outlook.getByText(en.compatibleCalendars.outlook.status, { exact: true })).toBeVisible()
     await expect(icloud.getByText(en.compatibleCalendars.icloud.status, { exact: true })).toBeVisible()
+    // Google and Outlook work today; iCloud is still planned.
+    await expect(google).not.toHaveClass(/is-unavailable/)
+    await expect(outlook).not.toHaveClass(/is-unavailable/)
+    await expect(icloud).toHaveClass(/is-unavailable/)
     expect(await section.getByRole("link").count()).toBe(0)
     const first = (await google.boundingBox())!
     const second = (await outlook.boundingBox())!
