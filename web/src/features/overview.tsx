@@ -2,10 +2,10 @@ import { useQuery } from "@tanstack/react-query"
 import {
   ArrowRight,
   Check,
-  ExternalLink,
-  KeyRound,
+  Plus,
 } from "lucide-react"
 
+import { ConnectAccount } from "@/components/connect-account"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { Button } from "@/components/ui/button"
@@ -23,10 +23,8 @@ import {
   type OpenRule,
   type ViewChange,
 } from "@/lib/navigation"
-import { recordAuthorizationStart } from "@/lib/oauth-redirect"
 import { overviewHealth } from "@/lib/overview-health"
 import { isAdministrator } from "@/lib/people"
-import { accountNoun, connectUrl } from "@/lib/providers"
 import { workRefreshInterval } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
@@ -178,19 +176,14 @@ function OnboardingSteps({
   )
 }
 
-/** One button per provider Users can connect here, or why none can be connected yet. */
+/** The one Connect action, or why no account can be connected yet. */
 function ConnectStep({ providers }: { providers: CalendarProvider[] }) {
-  const i18n = useI18n()
-  const { t } = i18n
-  const connect = (provider: CalendarProvider) => {
-    recordAuthorizationStart(provider.kind)
-    window.location.assign(connectUrl(provider))
-  }
+  const { t } = useI18n()
   if (providers.length === 0) {
     return (
       <div className="step-action">
         <Button disabled>
-          <KeyRound aria-hidden="true" /> {t("overview.onboarding.steps.connect.action", { account: accountNoun(i18n, null) })}
+          <Plus aria-hidden="true" /> {t("common.connectAccount.menu")}
         </Button>
         <p className="configuration-note">
           {rich(t("overview.onboarding.steps.connect.configurationNote"), { code: codeTag })}
@@ -200,12 +193,7 @@ function ConnectStep({ providers }: { providers: CalendarProvider[] }) {
   }
   return (
     <div className="step-action">
-      {providers.map((provider) => (
-        <Button key={provider.kind} onClick={() => connect(provider)}>
-          <KeyRound aria-hidden="true" /> {t("overview.onboarding.steps.connect.action", { account: accountNoun(i18n, provider.kind, [provider]) })}{" "}
-          <ExternalLink aria-hidden="true" />
-        </Button>
-      ))}
+      <ConnectAccount providers={providers} primary />
     </div>
   )
 }
