@@ -127,6 +127,11 @@
     "named": "{name} account",
     "unknown": "calendar account"
   },
+  "connectAccount": {
+    "one": "Connect {account}",
+    "menu": "Connect an account",
+    "signIn": "Sign in with {provider}, then come back here."
+  },
   "providerApi": {
     "google": "the Google Calendar API",
     "outlook": "Microsoft Graph",

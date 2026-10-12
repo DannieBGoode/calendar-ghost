@@ -251,6 +251,12 @@ async function click(target: HTMLElement) {
   await settle()
 }
 
+/** Opens the Connect menu and returns its providers' links. */
+async function connectMenuItems(): Promise<HTMLAnchorElement[]> {
+  await click(button("Connect an account"))
+  return [...container.querySelectorAll<HTMLAnchorElement>("[role='menu'] a[role='menuitem']")]
+}
+
 describe("SettingsPage", () => {
   it("has no untranslated text with a connected and a disconnected account", async () => {
     // A public plain-HTTP address, so the Integrations transport note shows too.
@@ -285,7 +291,7 @@ describe("SettingsPage", () => {
     expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
   })
 
-  it("offers to connect an account of each provider the installation configured", async () => {
+  it("offers one Connect action that chooses among the providers the installation configured", async () => {
     // A provider this version has no words for is named by what the server calls it.
     const example: CalendarProvider = {
       ...googleProvider(REDIRECT_URI),
@@ -295,11 +301,38 @@ describe("SettingsPage", () => {
     }
     await renderSettings(testI18n(), { providers: [googleProvider(REDIRECT_URI), example] })
 
-    const connect = [...container.querySelectorAll<HTMLAnchorElement>(".connect-actions a")]
+    // Accounts exist, so Connect is not the next step: one quiet trigger, never a button per provider.
+    const trigger = button("Connect an account")
+    expect(trigger.className).toContain("border-border")
+    expect(container.querySelectorAll(".section-heading a")).toHaveLength(0)
+    const items = await connectMenuItems()
+    expect(items.map((link) => [link.querySelector(".overflow-menu-label")?.textContent, link.getAttribute("href")])).toEqual([
+      ["Google account", "/api/v1/oauth/google/start"],
+      ["Example account", "/api/v1/oauth/example/start"],
+    ])
+    expect(items.map((link) => link.querySelector(".overflow-menu-description")?.textContent)).toEqual([
+      "Sign in with Google, then come back here.",
+      "Sign in with Example, then come back here.",
+    ])
+  })
+
+  it("connects the only configured provider directly, without a menu", async () => {
+    await renderSettings(testI18n())
+
+    const connect = [...container.querySelectorAll<HTMLAnchorElement>(".section-heading a")]
     expect(connect.map((link) => [link.textContent.trim(), link.getAttribute("href")])).toEqual([
       ["Connect Google account", "/api/v1/oauth/google/start"],
-      ["Connect Example account", "/api/v1/oauth/example/start"],
     ])
+    expect([...container.querySelectorAll("button")].some((item) => item.textContent.includes("Connect an account"))).toBe(false)
+  })
+
+  it("puts Connect in the empty state, as the next step, until an account exists", async () => {
+    await renderSettings(testI18n(), { accounts: [] })
+
+    expect(container.querySelector(".section-heading a, .section-heading [aria-haspopup]")).toBeNull()
+    const connect = container.querySelector<HTMLAnchorElement>(".account-empty a")
+    expect(connect?.textContent.trim()).toBe("Connect Google account")
+    expect(connect?.className).toContain("bg-primary")
   })
 
   it("names each account's provider in its row and on its avatar, and reauthorizes it with that provider", async () => {
@@ -338,14 +371,18 @@ describe("SettingsPage", () => {
     const reauthorize = rows[0]?.querySelector("a")
     expect(reauthorize?.textContent.trim()).toBe("Reauthorize with Microsoft")
     expect(reauthorize?.getAttribute("href")).toBe("/api/v1/oauth/microsoft/start?account=acct-m")
-    const connect = [...container.querySelectorAll<HTMLAnchorElement>(".connect-actions a")]
-    expect(connect.map((link) => link.textContent.trim())).toEqual(["Connect Google account", "Connect Microsoft account"])
-    expect(connect.map((link) => link.querySelector(".provider-mark")?.getAttribute("data-provider"))).toEqual(["google", "outlook"])
     // The collapsed summary groups addresses by provider, and its avatars wear their marks too.
     expect(container.querySelector(".account-summary-emails")?.textContent).toBe(
       "Google: dana@example.test · Microsoft: dana@contoso.example",
     )
     expect(container.querySelectorAll(".account-stack .provider-mark")).toHaveLength(2)
+    // Each provider in the Connect menu wears its mark beside its name.
+    const connect = await connectMenuItems()
+    expect(connect.map((link) => link.querySelector(".overflow-menu-label")?.textContent)).toEqual([
+      "Google account",
+      "Microsoft account",
+    ])
+    expect(connect.map((link) => link.querySelector(".provider-mark")?.getAttribute("data-provider"))).toEqual(["google", "outlook"])
   })
 
   it("names every provider that returns somewhere else, with a way to finish for each", async () => {

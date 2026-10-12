@@ -1,0 +1,212 @@
+{
+ "projected_series_as_google_stores_it": {
+  "status": 200,
+  "body": {
+   "kind": "calendar#event",
+   "etag": "version-1",
+   "id": "item-1",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?token-1",
+   "created": "2026-10-12T00:43:53.000Z",
+   "updated": "2026-10-12T00:43:53.979Z",
+   "summary": "CG big series 19",
+   "creator": {
+    "email": "address-1@example.test"
+   },
+   "organizer": {
+    "email": "address-2@group.calendar.example.test",
+    "displayName": "CG G Dest",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-11-06T09:30:00+01:00",
+    "timeZone": "Europe/Berlin"
+   },
+   "end": {
+    "dateTime": "2026-11-06T10:00:00+01:00",
+    "timeZone": "Europe/Berlin"
+   },
+   "recurrence": [
+    "RRULE:FREQ=WEEKLY;WKST=SU;COUNT=15;INTERVAL=2;BYDAY=FR"
+   ],
+   "iCalUID": "item-2",
+   "sequence": 0,
+   "extendedProperties": {
+    "private": {
+     "gcs_rule_id": "token-2",
+     "gcs_source_event_id": "token-3",
+     "gcs_source_account_id": "token-4",
+     "gcs_source_calendar_id": "token-5",
+     "gcs_operation_key": "token-6"
+    }
+   },
+   "reminders": {
+    "useDefault": true
+   },
+   "eventType": "default"
+  }
+ },
+ "invitations_answered_by_the_calendar": {
+  "status": 200,
+  "body": {
+   "items": [
+    {
+     "kind": "calendar#event",
+     "etag": "version-2",
+     "id": "item-3",
+     "status": "confirmed",
+     "htmlLink": "https://www.google.com/calendar/event?token-7",
+     "created": "2026-10-12T00:31:40.000Z",
+     "updated": "2026-10-12T00:31:50.766Z",
+     "summary": "CG invite probe",
+     "creator": {
+      "email": "address-1@example.test"
+     },
+     "organizer": {
+      "email": "address-2@group.calendar.example.test",
+      "displayName": "CG G Dest"
+     },
+     "start": {
+      "dateTime": "2026-11-20T10:00:00+01:00",
+      "timeZone": "Europe/Madrid"
+     },
+     "end": {
+      "dateTime": "2026-11-20T11:00:00+01:00",
+      "timeZone": "Europe/Madrid"
+     },
+     "iCalUID": "item-4",
+     "sequence": 0,
+     "attendees": [
+      {
+       "email": "address-3@group.calendar.example.test",
+       "displayName": "CG G Source",
+       "self": true,
+       "responseStatus": "needsAction"
+      }
+     ],
+     "reminders": {
+      "useDefault": true
+     },
+     "eventType": "default"
+    },
+    {
+     "kind": "calendar#event",
+     "etag": "version-3",
+     "id": "item-5",
+     "status": "confirmed",
+     "htmlLink": "https://www.google.com/calendar/event?token-8",
+     "created": "2026-10-12T00:32:19.000Z",
+     "updated": "2026-10-12T00:32:37.431Z",
+     "summary": "CG invite accepted",
+     "creator": {
+      "email": "address-1@example.test"
+     },
+     "organizer": {
+      "email": "address-2@group.calendar.example.test",
+      "displayName": "CG G Dest"
+     },
+     "start": {
+      "dateTime": "2026-11-10T10:00:00+01:00",
+      "timeZone": "Europe/Madrid"
+     },
+     "end": {
+      "dateTime": "2026-11-10T11:00:00+01:00",
+      "timeZone": "Europe/Madrid"
+     },
+     "iCalUID": "item-6",
+     "sequence": 0,
+     "attendees": [
+      {
+       "email": "address-3@group.calendar.example.test",
+       "displayName": "CG G Source",
+       "self": true,
+       "responseStatus": "accepted"
+      }
+     ],
+     "reminders": {
+      "useDefault": true
+     },
+     "eventType": "default"
+    },
+    {
+     "kind": "calendar#event",
+     "etag": "version-4",
+     "id": "item-7",
+     "status": "confirmed",
+     "htmlLink": "https://www.google.com/calendar/event?token-9",
+     "created": "2026-10-12T00:32:20.000Z",
+     "updated": "2026-10-12T00:32:38.083Z",
+     "summary": "CG invite tentative",
+     "creator": {
+      "email": "address-1@example.test"
+     },
+     "organizer": {
+      "email": "address-2@group.calendar.example.test",
+      "displayName": "CG G Dest"
+     },
+     "start": {
+      "dateTime": "2026-11-11T10:00:00+01:00",
+      "timeZone": "Europe/Madrid"
+     },
+     "end": {
+      "dateTime": "2026-11-11T11:00:00+01:00",
+      "timeZone": "Europe/Madrid"
+     },
+     "iCalUID": "item-8",
+     "sequence": 0,
+     "attendees": [
+      {
+       "email": "address-3@group.calendar.example.test",
+       "displayName": "CG G Source",
+       "self": true,
+       "responseStatus": "tentative"
+      }
+     ],
+     "reminders": {
+      "useDefault": true
+     },
+     "eventType": "default"
+    },
+    {
+     "kind": "calendar#event",
+     "etag": "version-5",
+     "id": "item-9",
+     "status": "confirmed",
+     "htmlLink": "https://www.google.com/calendar/event?token-10",
+     "created": "2026-10-12T00:32:21.000Z",
+     "updated": "2026-10-12T00:32:38.861Z",
+     "summary": "CG invite declined",
+     "creator": {
+      "email": "address-1@example.test"
+     },
+     "organizer": {
+      "email": "address-2@group.calendar.example.test",
+      "displayName": "CG G Dest"
+     },
+     "start": {
+      "dateTime": "2026-11-12T10:00:00+01:00",
+      "timeZone": "Europe/Madrid"
+     },
+     "end": {
+      "dateTime": "2026-11-12T11:00:00+01:00",
+      "timeZone": "Europe/Madrid"
+     },
+     "iCalUID": "item-10",
+     "sequence": 0,
+     "attendees": [
+      {
+       "email": "address-3@group.calendar.example.test",
+       "displayName": "CG G Source",
+       "self": true,
+       "responseStatus": "declined"
+      }
+     ],
+     "reminders": {
+      "useDefault": true
+     },
+     "eventType": "default"
+    }
+   ]
+  }
+ }
+}

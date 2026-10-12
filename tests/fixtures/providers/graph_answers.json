@@ -1,0 +1,662 @@
+{
+ "master_expand_exceptions": {
+  "status": 200,
+  "body": {
+   "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('address-1@example.test')/events(exceptionOccurrences())/$entity",
+   "@odata.etag": "version-1",
+   "id": "item-1",
+   "createdDateTime": "2026-10-12T00:48:00.9821167Z",
+   "lastModifiedDateTime": "2026-10-12T00:48:01.8520795Z",
+   "changeKey": "version-2",
+   "categories": [],
+   "transactionId": null,
+   "originalStartTimeZone": "W. Europe Standard Time",
+   "originalEndTimeZone": "W. Europe Standard Time",
+   "iCalUId": "item-2",
+   "uid": "item-2",
+   "reminderMinutesBeforeStart": 15,
+   "isReminderOn": false,
+   "hasAttachments": false,
+   "subject": "CG fixture weekly",
+   "bodyPreview": "",
+   "importance": "normal",
+   "sensitivity": "normal",
+   "isAllDay": false,
+   "isCancelled": false,
+   "isOrganizer": true,
+   "responseRequested": true,
+   "seriesMasterId": null,
+   "showAs": "busy",
+   "type": "seriesMaster",
+   "webLink": "https://outlook.live.com/owa/?itemid=redacted&exvsurl=redacted&path=redacted",
+   "onlineMeetingUrl": null,
+   "isOnlineMeeting": false,
+   "onlineMeetingProvider": "unknown",
+   "allowNewTimeProposals": true,
+   "cancelledOccurrences": [
+    "OID.item-1.2026-11-23"
+   ],
+   "occurrenceId": null,
+   "isDraft": false,
+   "hideAttendees": false,
+   "responseStatus": {
+    "response": "organizer",
+    "time": "0001-01-01T00:00:00Z"
+   },
+   "body": {
+    "contentType": "text",
+    "content": ""
+   },
+   "start": {
+    "dateTime": "2026-11-02T08:00:00.0000000",
+    "timeZone": "UTC"
+   },
+   "end": {
+    "dateTime": "2026-11-02T08:30:00.0000000",
+    "timeZone": "UTC"
+   },
+   "location": {
+    "displayName": "Person 1",
+    "locationType": "default",
+    "uniqueIdType": "unknown",
+    "address": {},
+    "coordinates": {}
+   },
+   "locations": [],
+   "recurrence": {
+    "pattern": {
+     "type": "weekly",
+     "interval": 1,
+     "month": 0,
+     "dayOfMonth": 0,
+     "daysOfWeek": [
+      "monday"
+     ],
+     "firstDayOfWeek": "sunday",
+     "index": "first"
+    },
+    "range": {
+     "type": "numbered",
+     "startDate": "2026-11-02",
+     "endDate": "0001-01-01",
+     "recurrenceTimeZone": "W. Europe Standard Time",
+     "numberOfOccurrences": 5
+    }
+   },
+   "attendees": [],
+   "organizer": {
+    "emailAddress": {
+     "name": "Person 2",
+     "address": "address-1@example.test"
+    }
+   },
+   "onlineMeeting": null,
+   "exceptionOccurrences": [
+    {
+     "@odata.etag": "version-1",
+     "id": "item-3",
+     "createdDateTime": "2026-10-12T00:48:01.3134792Z",
+     "lastModifiedDateTime": "2026-10-12T00:48:01.3663604Z",
+     "changeKey": "version-2",
+     "categories": [],
+     "transactionId": null,
+     "originalStartTimeZone": "W. Europe Standard Time",
+     "originalEndTimeZone": "W. Europe Standard Time",
+     "iCalUId": "item-4",
+     "uid": "item-2",
+     "reminderMinutesBeforeStart": 15,
+     "isReminderOn": false,
+     "hasAttachments": false,
+     "subject": "CG fixture weekly",
+     "bodyPreview": "",
+     "importance": "normal",
+     "sensitivity": "normal",
+     "originalStart": "2026-11-09T08:00:00Z",
+     "isAllDay": false,
+     "isCancelled": false,
+     "isOrganizer": true,
+     "responseRequested": true,
+     "seriesMasterId": "item-1",
+     "showAs": "busy",
+     "type": "exception",
+     "webLink": "https://outlook.live.com/owa/?token-1%2FOHruFp%2B0WMID3lTKbAMAAJVyCKdQAAABA%3D&exvsurl=redacted&path=redacted",
+     "onlineMeetingUrl": null,
+     "isOnlineMeeting": false,
+     "onlineMeetingProvider": "unknown",
+     "allowNewTimeProposals": true,
+     "occurrenceId": "item-5",
+     "isDraft": false,
+     "hideAttendees": false,
+     "responseStatus": {
+      "response": "organizer",
+      "time": "0001-01-01T00:00:00Z"
+     },
+     "body": {
+      "contentType": "text",
+      "content": ""
+     },
+     "start": {
+      "dateTime": "2026-11-10T13:00:00.0000000",
+      "timeZone": "UTC"
+     },
+     "end": {
+      "dateTime": "2026-11-10T13:30:00.0000000",
+      "timeZone": "UTC"
+     },
+     "location": {
+      "displayName": "Person 1",
+      "locationType": "default",
+      "uniqueIdType": "unknown",
+      "address": {},
+      "coordinates": {}
+     },
+     "locations": [],
+     "recurrence": null,
+     "attendees": [],
+     "organizer": {
+      "emailAddress": {
+       "name": "Person 2",
+       "address": "address-1@example.test"
+      }
+     },
+     "onlineMeeting": null
+    }
+   ],
+   "calendar@odata.associationLink": "https://graph.microsoft.com/v1.0/users('address-1@example.test')/calendars('token-2')/$ref",
+   "calendar@odata.navigationLink": "https://graph.microsoft.com/v1.0/users('address-1@example.test')/calendars('token-2')"
+  }
+ },
+ "master_select_expand_exceptions": {
+  "status": 200,
+  "body": {
+   "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('address-1@example.test')/events(id,exceptionOccurrences,exceptionOccurrences(id,attendees))/$entity",
+   "@odata.etag": "version-1",
+   "id": "item-1",
+   "exceptionOccurrences": [
+    {
+     "@odata.etag": "version-1",
+     "id": "item-3"
+    }
+   ],
+   "calendar@odata.associationLink": "https://graph.microsoft.com/v1.0/users('address-1@example.test')/calendars('token-2')/$ref",
+   "calendar@odata.navigationLink": "https://graph.microsoft.com/v1.0/users('address-1@example.test')/calendars('token-2')"
+  }
+ },
+ "master_cancelled_occurrences": {
+  "status": 200,
+  "body": {
+   "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('address-1@example.test')/events(id,cancelledOccurrences,lastModifiedDateTime,changeKey)/$entity",
+   "@odata.etag": "version-1",
+   "id": "item-1",
+   "lastModifiedDateTime": "2026-10-12T00:48:01.8520795Z",
+   "changeKey": "version-2",
+   "cancelledOccurrences": [
+    "OID.item-1.2026-11-23"
+   ],
+   "calendar@odata.associationLink": "https://graph.microsoft.com/v1.0/users('address-1@example.test')/calendars('token-2')/$ref",
+   "calendar@odata.navigationLink": "https://graph.microsoft.com/v1.0/users('address-1@example.test')/calendars('token-2')"
+  }
+ },
+ "instances": {
+  "status": 200,
+  "body": {
+   "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('address-1@example.test')/events('item-1')/instances",
+   "value": [
+    {
+     "@odata.etag": "version-1",
+     "id": "item-3",
+     "createdDateTime": "2026-10-12T00:48:01.3134792Z",
+     "lastModifiedDateTime": "2026-10-12T00:48:01.3663604Z",
+     "changeKey": "version-2",
+     "categories": [],
+     "transactionId": null,
+     "originalStartTimeZone": "W. Europe Standard Time",
+     "originalEndTimeZone": "W. Europe Standard Time",
+     "iCalUId": "item-4",
+     "uid": "item-2",
+     "reminderMinutesBeforeStart": 15,
+     "isReminderOn": false,
+     "hasAttachments": false,
+     "subject": "CG fixture weekly",
+     "bodyPreview": "",
+     "importance": "normal",
+     "sensitivity": "normal",
+     "isAllDay": false,
+     "isCancelled": false,
+     "isOrganizer": true,
+     "responseRequested": true,
+     "seriesMasterId": "item-1",
+     "showAs": "busy",
+     "type": "exception",
+     "webLink": "https://outlook.live.com/owa/?token-1%2FOHruFp%2B0WMID3lTKbAMAAJVyCKdQAAABA%3D&exvsurl=redacted&path=redacted",
+     "onlineMeetingUrl": null,
+     "isOnlineMeeting": false,
+     "onlineMeetingProvider": "unknown",
+     "allowNewTimeProposals": true,
+     "occurrenceId": "item-5",
+     "isDraft": false,
+     "hideAttendees": false,
+     "responseStatus": {
+      "response": "organizer",
+      "time": "0001-01-01T00:00:00Z"
+     },
+     "body": {
+      "contentType": "text",
+      "content": ""
+     },
+     "start": {
+      "dateTime": "2026-11-10T13:00:00.0000000",
+      "timeZone": "UTC"
+     },
+     "end": {
+      "dateTime": "2026-11-10T13:30:00.0000000",
+      "timeZone": "UTC"
+     },
+     "location": {
+      "displayName": "Person 1",
+      "locationType": "default",
+      "uniqueIdType": "unknown",
+      "address": {},
+      "coordinates": {}
+     },
+     "locations": [],
+     "recurrence": null,
+     "attendees": [],
+     "organizer": {
+      "emailAddress": {
+       "name": "Person 2",
+       "address": "address-1@example.test"
+      }
+     },
+     "onlineMeeting": null
+    },
+    {
+     "@odata.etag": "version-1",
+     "id": "item-6",
+     "createdDateTime": "2026-10-12T00:48:00.9821167Z",
+     "lastModifiedDateTime": "2026-10-12T00:48:01.8520795Z",
+     "changeKey": "version-2",
+     "categories": [],
+     "transactionId": null,
+     "originalStartTimeZone": "W. Europe Standard Time",
+     "originalEndTimeZone": "W. Europe Standard Time",
+     "iCalUId": "item-7",
+     "uid": "item-2",
+     "reminderMinutesBeforeStart": 15,
+     "isReminderOn": false,
+     "hasAttachments": false,
+     "subject": "CG fixture weekly",
+     "bodyPreview": "",
+     "importance": "normal",
+     "sensitivity": "normal",
+     "isAllDay": false,
+     "isCancelled": false,
+     "isOrganizer": true,
+     "responseRequested": true,
+     "seriesMasterId": "item-1",
+     "showAs": "busy",
+     "type": "occurrence",
+     "webLink": "https://outlook.live.com/owa/?token-3%3D%3D&exvsurl=redacted&path=redacted",
+     "onlineMeetingUrl": null,
+     "isOnlineMeeting": false,
+     "onlineMeetingProvider": "unknown",
+     "allowNewTimeProposals": true,
+     "occurrenceId": "item-8",
+     "isDraft": false,
+     "hideAttendees": false,
+     "responseStatus": {
+      "response": "organizer",
+      "time": "0001-01-01T00:00:00Z"
+     },
+     "body": {
+      "contentType": "text",
+      "content": ""
+     },
+     "start": {
+      "dateTime": "2026-11-02T08:00:00.0000000",
+      "timeZone": "UTC"
+     },
+     "end": {
+      "dateTime": "2026-11-02T08:30:00.0000000",
+      "timeZone": "UTC"
+     },
+     "location": {
+      "displayName": "Person 1",
+      "locationType": "default",
+      "uniqueIdType": "unknown",
+      "address": {},
+      "coordinates": {}
+     },
+     "locations": [],
+     "recurrence": null,
+     "attendees": [],
+     "organizer": {
+      "emailAddress": {
+       "name": "Person 2",
+       "address": "address-1@example.test"
+      }
+     },
+     "onlineMeeting": null
+    },
+    {
+     "@odata.etag": "version-1",
+     "id": "item-9",
+     "createdDateTime": "2026-10-12T00:48:00.9821167Z",
+     "lastModifiedDateTime": "2026-10-12T00:48:01.8520795Z",
+     "changeKey": "version-2",
+     "categories": [],
+     "transactionId": null,
+     "originalStartTimeZone": "W. Europe Standard Time",
+     "originalEndTimeZone": "W. Europe Standard Time",
+     "iCalUId": "item-10",
+     "uid": "item-2",
+     "reminderMinutesBeforeStart": 15,
+     "isReminderOn": false,
+     "hasAttachments": false,
+     "subject": "CG fixture weekly",
+     "bodyPreview": "",
+     "importance": "normal",
+     "sensitivity": "normal",
+     "isAllDay": false,
+     "isCancelled": false,
+     "isOrganizer": true,
+     "responseRequested": true,
+     "seriesMasterId": "item-1",
+     "showAs": "busy",
+     "type": "occurrence",
+     "webLink": "https://outlook.live.com/owa/?token-4%3D%3D&exvsurl=redacted&path=redacted",
+     "onlineMeetingUrl": null,
+     "isOnlineMeeting": false,
+     "onlineMeetingProvider": "unknown",
+     "allowNewTimeProposals": true,
+     "occurrenceId": "item-11",
+     "isDraft": false,
+     "hideAttendees": false,
+     "responseStatus": {
+      "response": "organizer",
+      "time": "0001-01-01T00:00:00Z"
+     },
+     "body": {
+      "contentType": "text",
+      "content": ""
+     },
+     "start": {
+      "dateTime": "2026-11-16T08:00:00.0000000",
+      "timeZone": "UTC"
+     },
+     "end": {
+      "dateTime": "2026-11-16T08:30:00.0000000",
+      "timeZone": "UTC"
+     },
+     "location": {
+      "displayName": "Person 1",
+      "locationType": "default",
+      "uniqueIdType": "unknown",
+      "address": {},
+      "coordinates": {}
+     },
+     "locations": [],
+     "recurrence": null,
+     "attendees": [],
+     "organizer": {
+      "emailAddress": {
+       "name": "Person 2",
+       "address": "address-1@example.test"
+      }
+     },
+     "onlineMeeting": null
+    },
+    {
+     "@odata.etag": "version-1",
+     "id": "item-12",
+     "createdDateTime": "2026-10-12T00:48:00.9821167Z",
+     "lastModifiedDateTime": "2026-10-12T00:48:01.8520795Z",
+     "changeKey": "version-2",
+     "categories": [],
+     "transactionId": null,
+     "originalStartTimeZone": "W. Europe Standard Time",
+     "originalEndTimeZone": "W. Europe Standard Time",
+     "iCalUId": "item-13",
+     "uid": "item-2",
+     "reminderMinutesBeforeStart": 15,
+     "isReminderOn": false,
+     "hasAttachments": false,
+     "subject": "CG fixture weekly",
+     "bodyPreview": "",
+     "importance": "normal",
+     "sensitivity": "normal",
+     "isAllDay": false,
+     "isCancelled": false,
+     "isOrganizer": true,
+     "responseRequested": true,
+     "seriesMasterId": "item-1",
+     "showAs": "busy",
+     "type": "occurrence",
+     "webLink": "https://outlook.live.com/owa/?token-5%3D%3D&exvsurl=redacted&path=redacted",
+     "onlineMeetingUrl": null,
+     "isOnlineMeeting": false,
+     "onlineMeetingProvider": "unknown",
+     "allowNewTimeProposals": true,
+     "occurrenceId": "item-14",
+     "isDraft": false,
+     "hideAttendees": false,
+     "responseStatus": {
+      "response": "organizer",
+      "time": "0001-01-01T00:00:00Z"
+     },
+     "body": {
+      "contentType": "text",
+      "content": ""
+     },
+     "start": {
+      "dateTime": "2026-11-30T08:00:00.0000000",
+      "timeZone": "UTC"
+     },
+     "end": {
+      "dateTime": "2026-11-30T08:30:00.0000000",
+      "timeZone": "UTC"
+     },
+     "location": {
+      "displayName": "Person 1",
+      "locationType": "default",
+      "uniqueIdType": "unknown",
+      "address": {},
+      "coordinates": {}
+     },
+     "locations": [],
+     "recurrence": null,
+     "attendees": [],
+     "organizer": {
+      "emailAddress": {
+       "name": "Person 2",
+       "address": "address-1@example.test"
+      }
+     },
+     "onlineMeeting": null
+    }
+   ]
+  }
+ },
+ "all_day_event": {
+  "status": 200,
+  "body": {
+   "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('address-1@example.test')/events/$entity",
+   "@odata.etag": "version-3",
+   "id": "item-15",
+   "createdDateTime": "2026-10-12T00:48:02.5189548Z",
+   "lastModifiedDateTime": "2026-10-12T00:48:02.5555117Z",
+   "changeKey": "version-4",
+   "categories": [],
+   "transactionId": null,
+   "originalStartTimeZone": "UTC",
+   "originalEndTimeZone": "UTC",
+   "iCalUId": "item-16",
+   "uid": "item-16",
+   "reminderMinutesBeforeStart": 15,
+   "isReminderOn": false,
+   "hasAttachments": false,
+   "subject": "CG fixture allday",
+   "bodyPreview": "",
+   "importance": "normal",
+   "sensitivity": "normal",
+   "isAllDay": true,
+   "isCancelled": false,
+   "isOrganizer": true,
+   "responseRequested": true,
+   "seriesMasterId": null,
+   "showAs": "busy",
+   "type": "singleInstance",
+   "webLink": "https://outlook.live.com/owa/?itemid=redacted&exvsurl=redacted&path=redacted",
+   "onlineMeetingUrl": null,
+   "isOnlineMeeting": false,
+   "onlineMeetingProvider": "unknown",
+   "allowNewTimeProposals": true,
+   "occurrenceId": null,
+   "isDraft": false,
+   "hideAttendees": false,
+   "responseStatus": {
+    "response": "organizer",
+    "time": "0001-01-01T00:00:00Z"
+   },
+   "body": {
+    "contentType": "text",
+    "content": ""
+   },
+   "start": {
+    "dateTime": "2027-03-10T00:00:00.0000000",
+    "timeZone": "UTC"
+   },
+   "end": {
+    "dateTime": "2027-03-11T00:00:00.0000000",
+    "timeZone": "UTC"
+   },
+   "location": {
+    "displayName": "Person 1",
+    "locationType": "default",
+    "uniqueIdType": "unknown",
+    "address": {},
+    "coordinates": {}
+   },
+   "locations": [],
+   "recurrence": null,
+   "attendees": [],
+   "organizer": {
+    "emailAddress": {
+     "name": "Person 2",
+     "address": "address-1@example.test"
+    }
+   },
+   "onlineMeeting": null,
+   "calendar@odata.associationLink": "https://graph.microsoft.com/v1.0/users('address-1@example.test')/calendars('token-2')/$ref",
+   "calendar@odata.navigationLink": "https://graph.microsoft.com/v1.0/users('address-1@example.test')/calendars('token-2')"
+  }
+ },
+ "zero_length_event": {
+  "status": 200,
+  "body": {
+   "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('address-1@example.test')/events/$entity",
+   "@odata.etag": "version-5",
+   "id": "item-17",
+   "createdDateTime": "2026-10-12T00:48:02.8084725Z",
+   "lastModifiedDateTime": "2026-10-12T00:48:02.8781646Z",
+   "changeKey": "version-6",
+   "categories": [],
+   "transactionId": null,
+   "originalStartTimeZone": "W. Europe Standard Time",
+   "originalEndTimeZone": "W. Europe Standard Time",
+   "iCalUId": "item-18",
+   "uid": "item-18",
+   "reminderMinutesBeforeStart": 15,
+   "isReminderOn": false,
+   "hasAttachments": false,
+   "subject": "CG fixture zero",
+   "bodyPreview": "",
+   "importance": "normal",
+   "sensitivity": "normal",
+   "isAllDay": false,
+   "isCancelled": false,
+   "isOrganizer": true,
+   "responseRequested": true,
+   "seriesMasterId": null,
+   "showAs": "busy",
+   "type": "singleInstance",
+   "webLink": "https://outlook.live.com/owa/?itemid=redacted&exvsurl=redacted&path=redacted",
+   "onlineMeetingUrl": null,
+   "isOnlineMeeting": false,
+   "onlineMeetingProvider": "unknown",
+   "allowNewTimeProposals": true,
+   "occurrenceId": null,
+   "isDraft": false,
+   "hideAttendees": false,
+   "responseStatus": {
+    "response": "organizer",
+    "time": "0001-01-01T00:00:00Z"
+   },
+   "body": {
+    "contentType": "text",
+    "content": ""
+   },
+   "start": {
+    "dateTime": "2027-03-12T09:00:00.0000000",
+    "timeZone": "UTC"
+   },
+   "end": {
+    "dateTime": "2027-03-12T09:00:00.0000000",
+    "timeZone": "UTC"
+   },
+   "location": {
+    "displayName": "Person 1",
+    "locationType": "default",
+    "uniqueIdType": "unknown",
+    "address": {},
+    "coordinates": {}
+   },
+   "locations": [],
+   "recurrence": null,
+   "attendees": [],
+   "organizer": {
+    "emailAddress": {
+     "name": "Person 2",
+     "address": "address-1@example.test"
+    }
+   },
+   "onlineMeeting": null,
+   "calendar@odata.associationLink": "https://graph.microsoft.com/v1.0/users('address-1@example.test')/calendars('token-2')/$ref",
+   "calendar@odata.navigationLink": "https://graph.microsoft.com/v1.0/users('address-1@example.test')/calendars('token-2')"
+  }
+ },
+ "delta_after_delete": {
+  "status": 200,
+  "body": {
+   "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#Collection(event)",
+   "value": [
+    {
+     "@odata.type": "#microsoft.graph.event",
+     "id": "item-17",
+     "@removed": {
+      "reason": "deleted"
+     }
+    }
+   ],
+   "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/calendars('token-6')/calendarView/delta?$token-7.token-8"
+  }
+ },
+ "patch_stale_version": {
+  "status": 412,
+  "body": {
+   "error": {
+    "code": "ErrorIrresolvableConflict",
+    "message": "The send or update operation could not be performed because the change key passed in the request does not match the current change key for the item."
+   }
+  }
+ },
+ "deleted_calendar_listing": {
+  "status": 404,
+  "body": {
+   "error": {
+    "code": "ErrorItemNotFound",
+    "message": "The specified object was not found in the store."
+   }
+  }
+ }
+}
