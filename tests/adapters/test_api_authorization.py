@@ -204,6 +204,7 @@ RULE_POLICY = {
     "sync_all_day_events": True,
     "tentative_events": "mark",
     "unanswered_invitations": "as_tentative",
+    "sync_birthdays": False,
 }
 ENDPOINTS = {
     "source": {"connected_account_id": "personal-account", "calendar_id": "personal-calendar"},

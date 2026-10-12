@@ -109,6 +109,10 @@
       "label": "Sync all-day events",
       "hint": "Turn this off to synchronize timed events only."
     },
+    "birthdays": {
+      "label": "Sync birthdays",
+      "hint": "Google Calendar adds your contacts' birthdays to your calendar. Turn this on to sync them too."
+    },
     "calendarsLoadError": "Calendars could not load: {reason}",
     "loadingCalendars": "Loading calendars…",
     "noCalendars": "This account has no calendars to choose.",

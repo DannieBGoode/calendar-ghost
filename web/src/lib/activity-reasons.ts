@@ -44,6 +44,11 @@ export const REASONS: Record<string, CopyKeys> = {
     effect: "activity.reason.allDayExcludedRemoved.effect",
     explanation: "activity.reason.allDayExcludedRemoved.explanation",
   },
+  birthday_removed: {
+    trigger: "activity.reason.birthdayRemoved.trigger",
+    effect: "activity.reason.birthdayRemoved.effect",
+    explanation: "activity.reason.birthdayRemoved.explanation",
+  },
   declined_removed: {
     trigger: "activity.reason.declinedRemoved.trigger",
     effect: "activity.reason.declinedRemoved.effect",
@@ -92,6 +97,11 @@ export const REASONS: Record<string, CopyKeys> = {
     trigger: "activity.reason.allDayExcluded.trigger",
     effect: "activity.reason.allDayExcluded.effect",
     explanation: "activity.reason.allDayExcluded.explanation",
+  },
+  birthday: {
+    trigger: "activity.reason.birthday.trigger",
+    effect: "activity.reason.birthday.effect",
+    explanation: "activity.reason.birthday.explanation",
   },
   declined: {
     trigger: "activity.reason.declined.trigger",

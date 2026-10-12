@@ -221,6 +221,7 @@ function ruleSummary(id: string, overrides: Partial<RuleSummary>): RuleSummary {
     sync_all_day_events: true,
     tentative_events: "mark",
     unanswered_invitations: "wait",
+    sync_birthdays: false,
     state: "enabled",
     reprojection_required: false,
     last_sync: lastSync,

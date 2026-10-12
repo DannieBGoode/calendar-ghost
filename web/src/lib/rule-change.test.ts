@@ -14,7 +14,7 @@ import {
 
 const i18n = testI18n()
 
-const responses = { tentative_events: "mark", unanswered_invitations: "as_tentative" } as const
+const responses = { tentative_events: "mark", unanswered_invitations: "as_tentative", sync_birthdays: false } as const
 const busy = { privacy_policy: "busy_only", sync_all_day_events: true, ...responses } as const
 const details = { privacy_policy: "copy_details", sync_all_day_events: true, ...responses } as const
 
@@ -25,6 +25,16 @@ describe("policy change consequences", () => {
     expect(policyChanged(busy, { ...busy, sync_all_day_events: false })).toBe(true)
     expect(policyChanged(busy, { ...busy, tentative_events: "skip" })).toBe(true)
     expect(policyChanged(busy, { ...busy, unanswered_invitations: "wait" })).toBe(true)
+    expect(policyChanged(busy, { ...busy, sync_birthdays: true })).toBe(true)
+  })
+
+  it("explains what turning birthdays on or off does to the destination", () => {
+    const change = (current: typeof busy | typeof syncing, next: typeof busy | typeof syncing) =>
+      policyChangeConsequences(testI18n(), { state: "enabled", current, next, mappingCount: 3, destination: "Work" })
+    const syncing = { ...busy, sync_birthdays: true }
+
+    expect(change(busy, syncing)).toContain("Your contacts' birthdays will be added to Work on the next run.")
+    expect(change(syncing, busy)).toContain("Birthday projections in Work will be deleted on the next run.")
   })
 
   it("warns before exposing event details", () => {

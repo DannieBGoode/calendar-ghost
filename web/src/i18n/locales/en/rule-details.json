@@ -23,6 +23,9 @@
     "allDay": "All-day events",
     "allDayIncluded": "Included",
     "allDayExcluded": "Excluded; timed events only",
+    "birthdays": "Birthdays from contacts",
+    "birthdaysIncluded": "Synced",
+    "birthdaysExcluded": "Not synced",
     "tentative": "Events you answered Maybe",
     "unanswered": "Invitations you haven't answered",
     "declined": "Declined events",
@@ -105,6 +108,8 @@
     "copyDetails": "Copy title, description, and location",
     "allDay": "Sync all-day events",
     "allDayHint": "Turn this off to synchronize timed events only.",
+    "birthdays": "Sync birthdays",
+    "birthdaysHint": "Google Calendar adds your contacts' birthdays to your calendar. Turn this on to sync them too.",
     "widensTitle": "Everyone who can see {destination} will see event details",
     "consequencesTitle": "What happens when you save",
     "saving": "Saving…",
@@ -131,6 +136,8 @@
     },
     "allDayRemoved": "All-day projections in {destination} will be deleted on the next run.",
     "allDayAdded": "All-day source events will be added to {destination} on the next run.",
+    "birthdaysRemoved": "Birthday projections in {destination} will be deleted on the next run.",
+    "birthdaysAdded": "Your contacts' birthdays will be added to {destination} on the next run.",
     "nothingChanges": "Nothing changes in your calendars until the rule is enabled again."
   },
   "projections": {

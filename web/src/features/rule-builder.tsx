@@ -50,6 +50,7 @@ export function RuleBuilder({
   const draft = useDraftEndpoints(accounts)
   const [privacy, setPrivacy] = useState<Privacy>("busy_only")
   const [allDay, setAllDay] = useState(true)
+  const [birthdays, setBirthdays] = useState(false)
   const [responses, setResponses] = useState<Responses>({ tentative_events: "mark", unanswered_invitations: "as_tentative" })
 
   useEffect(() => {
@@ -63,6 +64,7 @@ export function RuleBuilder({
         destination: { connected_account_id: draft.resolvedDestinationAccount, calendar_id: draft.resolvedDestinationCalendar },
         privacy_policy: privacy,
         sync_all_day_events: allDay,
+        sync_birthdays: birthdays,
         ...responses,
       }),
     onSuccess: async (rule) => {
@@ -131,6 +133,13 @@ export function RuleBuilder({
             <span>
               <strong>{t("rules.builder.allDay.label")}</strong>
               <small>{t("rules.builder.allDay.hint")}</small>
+            </span>
+          </label>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={birthdays} onChange={(event) => setBirthdays(event.target.checked)} />
+            <span>
+              <strong>{t("rules.builder.birthdays.label")}</strong>
+              <small>{t("rules.builder.birthdays.hint")}</small>
             </span>
           </label>
           <InvitationResponseFields
