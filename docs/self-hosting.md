@@ -94,8 +94,10 @@ not reuse one operator's self-hosted credentials for it.
 Skip this if nobody will connect a Microsoft account. Each installation registers its own
 application; do not copy another operator's client secret into your installation. Calendar Ghost
 reaches Outlook calendars through Microsoft Graph, for Microsoft 365 work or school accounts and for
-personal Outlook.com accounts. Outlook support is a preview until the checks in
-[ADR 0034](adr/0034-outlook-through-microsoft-graph.md) pass with real Microsoft accounts.
+personal Outlook.com accounts. Outlook is verified with personal Microsoft accounts, such as
+Outlook.com and Hotmail. Microsoft 365 work or school accounts can connect, but are not yet
+verified: the checks in [ADR 0034](adr/0034-outlook-through-microsoft-graph.md) have not yet run
+against one.
 
 1. Sign in with an account that may register applications in a directory you control, and open
    **App registrations → New registration**:

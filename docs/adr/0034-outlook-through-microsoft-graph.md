@@ -285,9 +285,19 @@ logged, or returned. Nothing Graph answers maps to `api_disabled` or `quota_exce
 
 ## Verify against a test tenant before release
 
+**Amended 2026-10-12: Outlook is released for personal Microsoft accounts.** The items below were
+checked with a real personal account on 2026-10-11 and 2026-10-12, and the bugs those checks found
+were fixed before release (#90, #92 to #98). `scripts/live_provider_checks.py` repeats the checks
+([Live provider checks](../development.md#live-provider-checks)). No work or school account was
+available. Work or school accounts can still connect, through the same Graph v1.0 requests, but
+they are **not yet verified**: the README, the self-hosting and troubleshooting guides, the landing
+page, and the Web UI's Connect menu say so, until these checks pass with a real work or school
+account too. Items 7, 11, and 14 may differ between the two account types, and item 14 needs a
+calendar shared from a second account. The personal account's results are on PR #86.
+
 The documentation leaves these unconfirmed; each has a synthetic fixture that mirrors the documented
-shape, and each must be confirmed with a real personal account and a real work account before a
-release that enables the provider:
+shape, and each must be confirmed with a real personal account and a real work account before both
+account types are called verified:
 
 1. `/me/calendars/{id}/calendarView/delta` on v1.0 (the v1.0 reference shows only the default
    calendar's path), and that changes outside the window arrive as `@removed`.
@@ -347,5 +357,6 @@ series' instances when its master changes and of expanding Outlook patterns in t
 CLDR zone mapping, the pattern translation table, and the extended property names become
 compatibility surfaces. Occurrence cancellations made in Outlook may wait for the daily pass.
 Recurrences that only Google can express are blocked events rather than approximations, and an
-occurrence deleted in Outlook is brought back by rebuilding its series, which gives it a new id. `httpx` becomes a runtime dependency. The items above must be
-verified against a live tenant before release.
+occurrence deleted in Outlook is brought back by rebuilding its series, which gives it a new id.
+`httpx` becomes a runtime dependency. The items above were verified with a personal account before
+release; a work or school account remains to verify them.

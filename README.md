@@ -114,8 +114,9 @@ Supported providers:
 | Google Calendar | Personal Google accounts and Google Workspace | Google Calendar API |
 | Outlook | Microsoft 365 work or school accounts and personal Outlook.com accounts | Microsoft Graph v1.0 ([ADR 0034](docs/adr/0034-outlook-through-microsoft-graph.md)) |
 
-Outlook support is a preview until the checks in
-[ADR 0034](docs/adr/0034-outlook-through-microsoft-graph.md) pass with real Microsoft accounts.
+Outlook is verified with personal Microsoft accounts, such as Outlook.com and Hotmail. Microsoft
+365 work or school accounts can connect, but are not yet verified: the checks in
+[ADR 0034](docs/adr/0034-outlook-through-microsoft-graph.md) have not yet run against one.
 A rule may read from one provider and write to the other. iCloud support is planned and shown as
 coming soon on the landing page. CalDAV and ICS feeds remain architectural possibilities, not
 supported features.

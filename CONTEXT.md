@@ -5,7 +5,10 @@ This glossary defines the shared language for describing provider-independent ca
 ## Product Boundary
 
 Google Calendar and Outlook (Microsoft 365 work or school accounts and personal Outlook.com
-accounts, through Microsoft Graph) are the supported calendar providers. iCloud support is planned
+accounts, through Microsoft Graph) are the supported calendar providers. Outlook is verified with
+personal Microsoft accounts; work or school accounts can connect but are not yet verified, and the
+landing page, the documentation, and the Web UI's Connect menu say so until ADR 0034's checks pass
+with one. iCloud support is planned
 and advertised as coming soon, with no release date promised. Other providers, including CalDAV and
 ICS feeds, remain unsupported.
 

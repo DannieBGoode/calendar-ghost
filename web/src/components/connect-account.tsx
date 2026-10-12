@@ -4,6 +4,7 @@ import { OverflowMenu } from "@/components/overflow-menu"
 import { ProviderMark } from "@/components/provider-mark"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
+import type { I18n } from "@/i18n/translator"
 import type { CalendarProvider } from "@/lib/api"
 import { connectLink } from "@/lib/oauth-redirect"
 import { accountNoun, providerDisplayName } from "@/lib/providers"
@@ -36,9 +37,7 @@ export function ConnectAccount({ providers, primary }: { providers: readonly Cal
         return {
           id: provider.kind,
           label: accountNoun(i18n, provider.kind, providers),
-          description: i18n.t("common.connectAccount.signIn", {
-            provider: providerDisplayName(i18n, provider.kind, providers),
-          }),
+          description: signInHint(i18n, provider, providers),
           icon: <ProviderMark provider={provider.kind} fallback={<Plus aria-hidden="true" />} />,
           href: link.href,
           newTab: link.target === "_blank",
@@ -47,4 +46,13 @@ export function ConnectAccount({ providers, primary }: { providers: readonly Cal
       })}
     />
   )
+}
+
+/** How to connect an account of the provider, then what is not yet verified for it, if anything. */
+function signInHint(i18n: I18n, provider: CalendarProvider, providers: readonly CalendarProvider[]): string {
+  const signIn = i18n.t("common.connectAccount.signIn", {
+    provider: providerDisplayName(i18n, provider.kind, providers),
+  })
+  const note = `common.connectAccount.note.${provider.kind}`
+  return i18n.has(note) ? `${signIn} ${i18n.t(note)}` : signIn
 }
