@@ -162,6 +162,10 @@ _Avoid_: Midnight event, untimed event
 A directional sync rule setting that includes or excludes all-day source events from synchronization. New rules include all-day events unless the user opts out.
 _Avoid_: All-day filter, skip all-day flag
 
+**Birthday Policy**:
+A directional sync rule setting that includes or excludes the birthdays a provider keeps among a calendar's events, such as the contacts' birthdays Google keeps in a primary calendar. New rules exclude them unless the user opts in.
+_Avoid_: Birthday calendar
+
 ## Invitations
 
 **Invitation Response**:

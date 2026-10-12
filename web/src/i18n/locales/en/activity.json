@@ -175,6 +175,11 @@
       "effect": "removed from {destination}",
       "explanation": "This rule syncs timed events only, so the all-day event it had written was removed."
     },
+    "birthdayRemoved": {
+      "trigger": "Birthday, which this rule leaves out",
+      "effect": "removed from {destination}",
+      "explanation": "This rule doesn't sync the birthdays {source} keeps for your contacts, so the event it had written was removed."
+    },
     "declinedRemoved": {
       "trigger": "Declined",
       "effect": "removed from {destination}",
@@ -223,6 +228,11 @@
       "trigger": "All-day event",
       "effect": "skipped",
       "explanation": "This rule syncs timed events only. Edit the rule to include all-day events."
+    },
+    "birthday": {
+      "trigger": "Birthday",
+      "effect": "skipped",
+      "explanation": "{source} keeps this birthday for one of your contacts. This rule doesn't sync birthdays. Edit the rule to sync them."
     },
     "declined": {
       "trigger": "Declined",

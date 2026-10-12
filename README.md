@@ -94,7 +94,7 @@ machine and creates only the destination representation selected by each rule.
 | Area | Behavior |
 | --- | --- |
 | Events | Timed events, all-day events, recurring series, single-occurrence changes, and cancellations |
-| Policies | Busy-only or detail-copy projection; include or exclude all-day events; mark, sync, or skip events answered Maybe; sync unanswered invitations as Maybe or wait for an answer, per rule. Declined events are never synced |
+| Policies | Busy-only or detail-copy projection; include or exclude all-day events; include or exclude contacts' birthdays; mark, sync, or skip events answered Maybe; sync unanswered invitations as Maybe or wait for an answer, per rule. Declined events are never synced |
 | Scheduling | Source and destination incremental polling every five minutes plus **Sync Now** |
 | Reconciliation | Daily full pass plus **Reconcile Now**, which reports remaining drift and records conflicts as blocked |
 | Loop prevention | Private managed-origin metadata prevents projections from becoming sources |
@@ -217,7 +217,7 @@ Open <http://localhost:8000>, create the administrator with your email and a pas
 the three-step setup:
 
 1. Connect each Google or Microsoft identity you need.
-2. Create a directional rule and choose its privacy, all-day, Maybe, and unanswered-invitation policies.
+2. Create a directional rule and choose its privacy, all-day, birthday, Maybe, and unanswered-invitation policies.
 3. Preview the rule, inspect the result, and enable it.
 
 The **Overview** leads with one plain-language health state and at most one next action:

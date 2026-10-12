@@ -42,6 +42,7 @@ from calendar_sync.domain.incidents import IncidentResolution
 from calendar_sync.domain.model import (
     AllDayRange,
     AllDaySyncPolicy,
+    BirthdayPolicy,
     CalendarEndpoint,
     CalendarId,
     ConnectedAccountId,
@@ -185,11 +186,11 @@ class SqliteSyncRuleRepository:
                     id, source_account_id, source_calendar_id,
                     destination_account_id, destination_calendar_id,
                     privacy_policy, all_day_policy, busy_title,
-                    tentative_policy, unanswered_policy,
+                    tentative_policy, unanswered_policy, birthday_policy,
                     initial_lookback_days, state, reprojection_required,
                     awaiting_reauthorization, user_id, creation_order
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     (SELECT COALESCE(MAX(creation_order), 0) + 1 FROM sync_rules)
                 )
                 """,
@@ -209,7 +210,7 @@ class SqliteSyncRuleRepository:
                 source_account_id = ?, source_calendar_id = ?,
                 destination_account_id = ?, destination_calendar_id = ?,
                 privacy_policy = ?, all_day_policy = ?, busy_title = ?,
-                tentative_policy = ?, unanswered_policy = ?,
+                tentative_policy = ?, unanswered_policy = ?, birthday_policy = ?,
                 initial_lookback_days = ?, state = ?, reprojection_required = ?,
                 awaiting_reauthorization = ?
             WHERE id = ? AND user_id = ?
@@ -1000,6 +1001,7 @@ def _rule_values(rule: SyncRule) -> tuple[object, ...]:
         rule.transformation.busy_title,
         rule.transformation.tentative.value,
         rule.transformation.unanswered.value,
+        rule.transformation.birthdays.value,
         rule.initial_lookback_days,
         rule.state.value,
         int(rule.reprojection_required),
@@ -1024,6 +1026,7 @@ def rule_from_row(row: sqlite3.Row) -> SyncRule:
             busy_title=str(row["busy_title"]),
             tentative=TentativeEventPolicy(str(row["tentative_policy"])),
             unanswered=UnansweredInvitationPolicy(str(row["unanswered_policy"])),
+            birthdays=BirthdayPolicy(str(row["birthday_policy"])),
         ),
         initial_lookback_days=int(row["initial_lookback_days"]),
         state=SyncRuleState(str(row["state"])),

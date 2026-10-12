@@ -217,6 +217,13 @@ Google's, so the migration fills in `google` wherever a Cause was recorded. Migr
 consent begun before the upgrade was Google's. Rolling back past either is safe: earlier releases
 ignore the columns.
 
+Migration 30 adds `sync_rules.birthday_policy` (default `exclude`) and sets every rule's
+reprojection flag ([ADR 0035](adr/0035-leave-out-birthdays-unless-a-rule-syncs-them.md)). Existing
+rules keep running without a new preview: their next run lists both calendars in full and deletes
+the projections of the contacts' birthdays Google keeps in a primary calendar. Activity records
+these as `birthday_removed`. Rolling back works with the same database: earlier releases ignore the
+column and project birthdays again on their next full pass.
+
 Sign-in failures are counted per email and per client address for 15 minutes: after five failures
 for one email, or twenty from one address, sign-in answers `429` with a `Retry-After` header until
 the oldest failure leaves the window. Behind a reverse proxy every request comes from the proxy's

@@ -1116,6 +1116,11 @@ export interface components {
              */
             sync_all_day_events: boolean;
             /**
+             * Sync Birthdays
+             * @default false
+             */
+            sync_birthdays: boolean;
+            /**
              * Tentative Events
              * @default mark
              * @enum {string}
@@ -1772,6 +1777,8 @@ export interface components {
             state: string;
             /** Sync All Day Events */
             sync_all_day_events: boolean;
+            /** Sync Birthdays */
+            sync_birthdays: boolean;
             /**
              * Tentative Events
              * @enum {string}
@@ -1825,6 +1832,8 @@ export interface components {
             state: string;
             /** Sync All Day Events */
             sync_all_day_events: boolean;
+            /** Sync Birthdays */
+            sync_birthdays: boolean;
             /**
              * Tentative Events
              * @enum {string}
@@ -1856,6 +1865,8 @@ export interface components {
             state: string;
             /** Sync All Day Events */
             sync_all_day_events: boolean;
+            /** Sync Birthdays */
+            sync_birthdays: boolean;
             /**
              * Tentative Events
              * @enum {string}
@@ -2111,6 +2122,8 @@ export interface components {
             privacy_policy: "busy_only" | "copy_details";
             /** Sync All Day Events */
             sync_all_day_events: boolean;
+            /** Sync Birthdays */
+            sync_birthdays: boolean;
             /**
              * Tentative Events
              * @enum {string}

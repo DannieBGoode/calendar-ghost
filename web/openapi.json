@@ -402,6 +402,11 @@
             "title": "Sync All Day Events",
             "type": "boolean"
           },
+          "sync_birthdays": {
+            "default": false,
+            "title": "Sync Birthdays",
+            "type": "boolean"
+          },
           "tentative_events": {
             "default": "mark",
             "enum": [
@@ -2366,6 +2371,10 @@
             "title": "Sync All Day Events",
             "type": "boolean"
           },
+          "sync_birthdays": {
+            "title": "Sync Birthdays",
+            "type": "boolean"
+          },
           "tentative_events": {
             "enum": [
               "sync",
@@ -2392,6 +2401,7 @@
           "sync_all_day_events",
           "tentative_events",
           "unanswered_invitations",
+          "sync_birthdays",
           "state",
           "reprojection_required",
           "initial_lookback_days",
@@ -2504,6 +2514,10 @@
             "title": "Sync All Day Events",
             "type": "boolean"
           },
+          "sync_birthdays": {
+            "title": "Sync Birthdays",
+            "type": "boolean"
+          },
           "tentative_events": {
             "enum": [
               "sync",
@@ -2530,6 +2544,7 @@
           "sync_all_day_events",
           "tentative_events",
           "unanswered_invitations",
+          "sync_birthdays",
           "state",
           "reprojection_required"
         ],
@@ -2598,6 +2613,10 @@
             "title": "Sync All Day Events",
             "type": "boolean"
           },
+          "sync_birthdays": {
+            "title": "Sync Birthdays",
+            "type": "boolean"
+          },
           "tentative_events": {
             "enum": [
               "sync",
@@ -2624,6 +2643,7 @@
           "sync_all_day_events",
           "tentative_events",
           "unanswered_invitations",
+          "sync_birthdays",
           "state",
           "reprojection_required",
           "last_sync",
@@ -3447,6 +3467,10 @@
             "title": "Sync All Day Events",
             "type": "boolean"
           },
+          "sync_birthdays": {
+            "title": "Sync Birthdays",
+            "type": "boolean"
+          },
           "tentative_events": {
             "enum": [
               "sync",
@@ -3469,7 +3493,8 @@
           "privacy_policy",
           "sync_all_day_events",
           "tentative_events",
-          "unanswered_invitations"
+          "unanswered_invitations",
+          "sync_birthdays"
         ],
         "title": "UpdateRulePolicyRequest",
         "type": "object"

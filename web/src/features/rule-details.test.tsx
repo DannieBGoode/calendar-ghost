@@ -86,6 +86,7 @@ const enabledRule: RuleDetail = {
   sync_all_day_events: true,
   tentative_events: "mark",
   unanswered_invitations: "wait",
+  sync_birthdays: false,
   state: "enabled",
   reprojection_required: false,
   initial_lookback_days: 30,
@@ -240,6 +241,7 @@ describe("RuleDetailsView", () => {
     expect(container.querySelector("h1")?.textContent).toContain("Family")
     expect(container.querySelector(".rule-facts")?.textContent).toContain("3 projections this rule manages in Work")
     expect(container.textContent).toContain("Includes events from the past 30 days onward")
+    expect(container.querySelector(".rule-facts")?.textContent).toContain("Birthdays from contactsNot synced")
     expect(container.textContent).toContain("Succeeded: 1 created, 2 updated, 0 deleted, 1 conflict")
     expect(container.textContent).toContain(
       "Checked 3 projections: 2 differences found; none were changed. 1 conflict blocked",

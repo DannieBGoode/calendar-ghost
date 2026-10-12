@@ -9,7 +9,8 @@ export function policyChanged(current: RulePolicyPayload, next: RulePolicyPayloa
     current.privacy_policy !== next.privacy_policy ||
     current.sync_all_day_events !== next.sync_all_day_events ||
     current.tentative_events !== next.tentative_events ||
-    current.unanswered_invitations !== next.unanswered_invitations
+    current.unanswered_invitations !== next.unanswered_invitations ||
+    current.sync_birthdays !== next.sync_birthdays
   )
 }
 
@@ -27,6 +28,23 @@ const BUSY_TITLE = "Busy"
 
 function stateConsequence(i18n: I18n, state: string): string {
   return i18n.t(STATE_CONSEQUENCES[state] ?? "ruleDetails.change.state.draft")
+}
+
+/** The kinds of event a rule includes or leaves out with one switch. */
+const INCLUSIONS = [
+  { field: "sync_all_day_events", removed: "ruleDetails.change.allDayRemoved", added: "ruleDetails.change.allDayAdded" },
+  { field: "sync_birthdays", removed: "ruleDetails.change.birthdaysRemoved", added: "ruleDetails.change.birthdaysAdded" },
+] as const satisfies { field: keyof RulePolicyPayload; removed: MessageKey; added: MessageKey }[]
+
+function inclusionConsequences(
+  i18n: I18n,
+  current: RulePolicyPayload,
+  next: RulePolicyPayload,
+  destination: string,
+): string[] {
+  return INCLUSIONS.flatMap(({ field, removed, added }) =>
+    current[field] === next[field] ? [] : [i18n.t(next[field] ? added : removed, { destination })],
+  )
 }
 
 export function policyChangeConsequences(
@@ -56,12 +74,7 @@ export function policyChangeConsequences(
   if (current.privacy_policy === "copy_details" && next.privacy_policy === "busy_only") {
     lines.push(i18n.t("ruleDetails.change.redactExisting", { count: mappingCount, destination, title: BUSY_TITLE }))
   }
-  if (current.sync_all_day_events && !next.sync_all_day_events) {
-    lines.push(i18n.t("ruleDetails.change.allDayRemoved", { destination }))
-  }
-  if (!current.sync_all_day_events && next.sync_all_day_events) {
-    lines.push(i18n.t("ruleDetails.change.allDayAdded", { destination }))
-  }
+  lines.push(...inclusionConsequences(i18n, current, next, destination))
   lines.push(...responseConsequences(i18n, current, next, destination))
   lines.push(i18n.t("ruleDetails.change.nothingChanges"))
   return lines

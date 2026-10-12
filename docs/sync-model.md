@@ -43,7 +43,7 @@ For each changed source event, the decision service chooses one action:
 
 - **Create** when an eligible source has no managed projection or the mapped projection is missing.
 - **Update** whenever actual destination content differs from the projection derived from source authority. A new source revision whose projection matches the destination, such as another guest's reply to an invitation or a title change under a Busy-Only rule, is ignored as `projection_current`, and the mapping records the revision without a provider write. An update is `source_changed` only when the projection the source calls for differs from the one last written. During reprojection, an update of a projection still as the rule last wrote it is `policy_applied`; otherwise it repairs drift.
-- **Delete** when a mapped source is cancelled or becomes excluded by rule policy: an all-day event under an all-day exclusion, a declined event, an event answered Maybe under a rule that skips them, or an unanswered invitation under a rule that waits for an answer ([ADR 0018](adr/0018-project-by-invitation-response.md)).
+- **Delete** when a mapped source is cancelled or becomes excluded by rule policy: an all-day event under an all-day exclusion, a birthday under a rule that leaves birthdays out ([ADR 0035](adr/0035-leave-out-birthdays-unless-a-rule-syncs-them.md)), a declined event, an event answered Maybe under a rule that skips them, or an unanswered invitation under a rule that waits for an answer ([ADR 0018](adr/0018-project-by-invitation-response.md)).
 - **Ignore** when content is current, the source is itself managed, an excluded/cancelled source has no mapping, or an unmapped single event ended before the window.
 - **Conflict** only when identity or ownership is ambiguous.
 

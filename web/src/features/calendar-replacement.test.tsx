@@ -41,6 +41,7 @@ function detail(sourceCalendar: string, destinationCalendar: string): RuleDetail
     sync_all_day_events: true,
     tentative_events: "mark",
     unanswered_invitations: "as_tentative",
+    sync_birthdays: false,
     state: "enabled",
     reprojection_required: false,
     initial_lookback_days: 30,

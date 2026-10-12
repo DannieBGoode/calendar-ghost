@@ -166,6 +166,13 @@ class AllDaySyncPolicy(StrEnum):
     EXCLUDE = "exclude"
 
 
+class BirthdayPolicy(StrEnum):
+    """Whether a rule projects the birthdays a provider keeps among a calendar's events."""
+
+    INCLUDE = "include"
+    EXCLUDE = "exclude"
+
+
 class InvitationResponse(StrEnum):
     """How the Source Calendar answered an event's invitation.
 
@@ -202,6 +209,7 @@ class Exclusion(StrEnum):
     """Why a rule's Transformation Policy projects no event like this one."""
 
     ALL_DAY = "all_day"
+    BIRTHDAY = "birthday"
     DECLINED = "declined"
     TENTATIVE = "tentative"
     AWAITING_RESPONSE = "awaiting_response"
@@ -245,6 +253,7 @@ class TransformationPolicy:
     busy_title: str = "Busy"
     tentative: TentativeEventPolicy = TentativeEventPolicy.MARK
     unanswered: UnansweredInvitationPolicy = UnansweredInvitationPolicy.AS_TENTATIVE
+    birthdays: BirthdayPolicy = BirthdayPolicy.EXCLUDE
 
     def __post_init__(self) -> None:
         if self.content is ProjectionContent.BUSY_ONLY:
@@ -265,6 +274,8 @@ class TransformationPolicy:
 
     def exclusion(self, event: CalendarEvent) -> Exclusion | None:
         """Why this policy projects no event like this one; None when it projects it."""
+        if event.is_birthday and self.birthdays is BirthdayPolicy.EXCLUDE:
+            return Exclusion.BIRTHDAY
         if event.is_all_day and not self.includes_all_day:
             return Exclusion.ALL_DAY
         response = self.response_to(event)
@@ -310,6 +321,8 @@ class CalendarEvent:
     conferencing: tuple[str, ...] | None = None
     """Conferencing entry points, never projected; None when the provider did not return them."""
     response: InvitationResponse = InvitationResponse.ACCEPTED
+    is_birthday: bool = False
+    """Whether its provider keeps it as a birthday, such as one added from a contact."""
 
     def __post_init__(self) -> None:
         _require_non_empty(self.revision, "event revision")
@@ -608,6 +621,7 @@ class SyncReason(StrEnum):
     """A changed policy rewrote a projection still as this rule last wrote it."""
     SOURCE_CANCELLED = "source_cancelled"
     ALL_DAY_EXCLUDED_REMOVED = "all_day_excluded_removed"
+    BIRTHDAY_REMOVED = "birthday_removed"
     DECLINED_REMOVED = "declined_removed"
     TENTATIVE_EXCLUDED_REMOVED = "tentative_excluded_removed"
     AWAITING_RESPONSE_REMOVED = "awaiting_response_removed"
@@ -617,6 +631,7 @@ class SyncReason(StrEnum):
     RECURRING_UNSUPPORTED = "recurring_unsupported"
     CANCELLED_WITHOUT_PROJECTION = "cancelled_without_projection"
     ALL_DAY_EXCLUDED = "all_day_excluded"
+    BIRTHDAY = "birthday"
     DECLINED = "declined"
     TENTATIVE_EXCLUDED = "tentative_excluded"
     AWAITING_RESPONSE = "awaiting_response"
@@ -655,6 +670,7 @@ class SyncReason(StrEnum):
 
 _EXCLUSION_REASONS = {
     Exclusion.ALL_DAY: (SyncReason.ALL_DAY_EXCLUDED, SyncReason.ALL_DAY_EXCLUDED_REMOVED),
+    Exclusion.BIRTHDAY: (SyncReason.BIRTHDAY, SyncReason.BIRTHDAY_REMOVED),
     Exclusion.DECLINED: (SyncReason.DECLINED, SyncReason.DECLINED_REMOVED),
     Exclusion.TENTATIVE: (SyncReason.TENTATIVE_EXCLUDED, SyncReason.TENTATIVE_EXCLUDED_REMOVED),
     Exclusion.AWAITING_RESPONSE: (

@@ -24,6 +24,7 @@ from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentCategory, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
+    BirthdayPolicy,
     CalendarEndpoint,
     CalendarId,
     ConnectedAccountId,
@@ -82,7 +83,9 @@ def test_sqlite_rule_repository_keeps_the_invitation_response_policies(tmp_path:
     waiting = replace(
         rule(),
         transformation=TransformationPolicy(
-            tentative=TentativeEventPolicy.SKIP, unanswered=UnansweredInvitationPolicy.WAIT
+            tentative=TentativeEventPolicy.SKIP,
+            unanswered=UnansweredInvitationPolicy.WAIT,
+            birthdays=BirthdayPolicy.INCLUDE,
         ),
     )
 
@@ -117,6 +120,28 @@ def test_migration_15_gives_existing_rules_the_defaults_and_reprojects_them(
     with sqlite_units(database)() as uow:
         restored = uow.rules.get(rule().id)
     assert restored == replace(rule(), reprojection_required=True)
+
+
+def test_migration_30_leaves_birthdays_out_and_reprojects_existing_rules(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    with sqlite_units(database)() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE sync_rules DROP COLUMN birthday_policy")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 30")
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with sqlite_units(database)() as uow:
+        restored = uow.rules.get(rule().id)
+    assert restored is not None
+    assert restored == replace(rule(), reprojection_required=True)
+    assert restored.transformation.birthdays is BirthdayPolicy.EXCLUDE
 
 
 def test_database_migration_is_idempotent(tmp_path: Path) -> None:

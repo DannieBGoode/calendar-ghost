@@ -406,6 +406,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- Rules no longer copy the contacts' birthdays Google keeps in a primary calendar. Google Calendar
+  lists them as a separate "Birthdays" calendar, but they are events of the primary calendar, so a
+  rule from it copied every one. A new rule setting, "Sync birthdays", is off by default; upgrading
+  deletes the birthdays rules already copied on their next run
+  ([ADR 0035](docs/adr/0035-leave-out-birthdays-unless-a-rule-syncs-them.md)) (#108).
 - A provider failure, an interrupted Rule Removal or Rule Replacement, or a refusal from Microsoft
   raised through a context manager keeps its kind. Before, Python 3.12 replaced it with a
   `TypeError`, because these errors were frozen dataclasses, so a failure could read as a local

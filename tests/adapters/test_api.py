@@ -197,6 +197,8 @@ def test_create_cross_account_rule_through_api(tmp_path: Path) -> None:
         # New rules mark Maybe events and treat unanswered invitations as Maybe.
         assert response.json()["tentative_events"] == "mark"
         assert response.json()["unanswered_invitations"] == "as_tentative"
+        # New rules leave out the birthdays a provider keeps among calendar events.
+        assert response.json()["sync_birthdays"] is False
 
 
 def test_activity_and_incidents_require_admin_and_return_operational_data(
@@ -1765,7 +1767,11 @@ def test_rule_details_include_policy_state_mapping_count_and_outcomes(tmp_path: 
     assert missing.json()["code"] == "rule_not_found"
 
 
-RESPONSES = {"tentative_events": "mark", "unanswered_invitations": "as_tentative"}
+RESPONSES = {
+    "tentative_events": "mark",
+    "unanswered_invitations": "as_tentative",
+    "sync_birthdays": False,
+}
 POLICY = {"privacy_policy": "busy_only", "sync_all_day_events": True, **RESPONSES}
 
 
@@ -1779,6 +1785,7 @@ def test_policy_edit_pauses_rule_and_blocks_enable_until_previewed(tmp_path: Pat
                 "sync_all_day_events": True,
                 "tentative_events": "skip",
                 "unanswered_invitations": "wait",
+                "sync_birthdays": True,
             },
         )
         enable = client.post("/api/v1/rules/rule-1/enable")
@@ -1801,6 +1808,7 @@ def test_policy_edit_pauses_rule_and_blocks_enable_until_previewed(tmp_path: Pat
     assert edited.json()["privacy_policy"] == "copy_details"
     assert edited.json()["tentative_events"] == "skip"
     assert edited.json()["unanswered_invitations"] == "wait"
+    assert edited.json()["sync_birthdays"] is True
     assert edited.json()["reprojection_required"] is True
     assert enable.status_code == 409
     assert enable.json()["code"] == "invalid_state_transition"
