@@ -267,6 +267,15 @@ class InMemoryEventMappingRepository:
             )
         )
 
+    def lone_occurrences(self, rule_id: SyncRuleId, series: EventRef) -> tuple[EventMapping, ...]:
+        return tuple(
+            mapping
+            for mapping in self.for_rule(rule_id)
+            if mapping.occurrence is not None
+            and mapping.source.calendar == series.calendar
+            and mapping.occurrence.series_event_id == series.event_id
+        )
+
     def save(self, mapping: EventMapping) -> None:
         if self._others.hold_mapping(mapping.id):
             # Mirror SQLite's primary key: another User's mapping is neither replaced nor changed,
@@ -275,8 +284,13 @@ class InMemoryEventMappingRepository:
         _require_rule(self._state, mapping.rule_id)
         same_id = next((m for m in self._state.mappings.values() if m.id == mapping.id), None)
         if same_id is not None:
-            # Mirror SQLite's upsert by id: a mapping keeps its rule and source.
-            mapping = replace(mapping, rule_id=same_id.rule_id, source=same_id.source)
+            # Mirror SQLite's upsert by id: a mapping keeps its rule, source, and occurrence.
+            mapping = replace(
+                mapping,
+                rule_id=same_id.rule_id,
+                source=same_id.source,
+                occurrence=same_id.occurrence,
+            )
         at_source = self._state.mappings.get((mapping.rule_id, mapping.source))
         if at_source is not None and at_source.id != mapping.id:
             raise IdentityCollision("the source is already mapped by another mapping")

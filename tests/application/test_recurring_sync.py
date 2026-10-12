@@ -842,7 +842,8 @@ def test_occurrence_reverification_never_holds_the_database_write_lock(tmp_path:
     assert locked == []
 
 
-def test_exception_of_an_unreadable_unmapped_series_is_skipped_not_blocked() -> None:
+def test_a_cancelled_occurrence_of_a_series_not_shown_is_neither_projected_nor_blocked() -> None:
+    # Decided on its own, as a single event: cancelled, and never projected, so nothing to do.
     calendars = FakeCalendars()
     factory = enabled_rule_factory()
     sync_use_case(factory, calendars).execute(rule().id)
@@ -851,8 +852,8 @@ def test_exception_of_an_unreadable_unmapped_series_is_skipped_not_blocked() -> 
 
     result = sync_use_case(factory, calendars).execute(rule().id)
 
-    assert result.conflicts == 0
-    assert factory.state.audit[-1].reason == SyncReason.SERIES_NOT_SYNCHRONIZED.value
+    assert (result.conflicts, result.created, result.deleted) == (0, 0, 0)
+    assert factory.state.audit == []
     assert calendars.writes == []
 
 

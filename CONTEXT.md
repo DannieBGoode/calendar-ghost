@@ -128,7 +128,9 @@ _Avoid_: Event diff, edit history
 A recurring source event projects as one recurring destination series, never as unrelated single
 events. Moving, editing, or cancelling one source occurrence changes only the matching destination
 occurrence, and deleting a source series deletes its destination series. Direct destination edits
-to a series or one of its occurrences are repaired from the source.
+to a series or one of its occurrences are repaired from the source. An occurrence whose series its
+calendar does not show, such as one meeting of a series someone invited the calendar to, projects
+on its own as a single event until its series is shown (ADR 0011).
 
 **Event Series**:
 A recurring source event that defines a recurrence pattern shared by its occurrences. Its managed projection remains a recurring series rather than a collection of unrelated events.

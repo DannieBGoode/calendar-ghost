@@ -19,6 +19,7 @@ from calendar_sync.domain.model import (
     EventMappingId,
     EventRef,
     EventStatus,
+    OccurrenceIdentity,
     SyncAction,
     SyncDecision,
     SyncReason,
@@ -46,8 +47,12 @@ class SynchronizeEvents:
         destination_loaded: bool,
         actual_destination: CalendarEvent | None,
         record_current: bool = True,
+        lone: OccurrenceIdentity | None = None,
     ) -> tuple[EventMapping | None, SyncDecision, bool]:
-        """Decide and apply one source event; also whether its revision is new to its mapping."""
+        """Decide and apply one source event; also whether its revision is new to its mapping.
+
+        `lone` names the occurrence the event is, when it is projected on its own (ADR 0011).
+        """
         uow, rule = run.uow, run.rule
         mapping = uow.mappings.for_source(rule.id, source_event.reference)
         source_moved = mapping is not None and mapping.source_revision != source_event.revision
@@ -62,7 +67,9 @@ class SynchronizeEvents:
         require_unchanged(run)
         run.count(decision.action, source_event.reference)
         try:
-            mapping = self._write(run, source_event, mapping, decision, source_moved=source_moved)
+            mapping = self._write(
+                run, source_event, mapping, decision, source_moved=source_moved, lone=lone
+            )
         except UnsupportedProjection as unsupported:
             # The destination cannot hold it exactly, so it is blocked rather than approximated.
             blocked = SyncDecision(SyncAction.CONFLICT, unsupported.reason)
@@ -138,6 +145,7 @@ class SynchronizeEvents:
         decision: SyncDecision,
         *,
         source_moved: bool,
+        lone: OccurrenceIdentity | None,
     ) -> EventMapping | None:
         """Apply a decision to the destination and the Event Mapping; answer the mapping now."""
         uow, rule = run.uow, run.rule
@@ -170,6 +178,7 @@ class SynchronizeEvents:
                 destination=created.destination_event.reference,
                 source_revision=source_event.revision,
                 projection_fingerprint=self.fingerprinter.fingerprint(decision.projection),
+                occurrence=lone,
             )
             uow.mappings.save(mapping)
             if source_event.recurrence is not None and not run.source_listed:

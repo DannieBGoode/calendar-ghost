@@ -49,6 +49,7 @@ from calendar_sync.domain.model import (
     EventMapping,
     EventMappingId,
     EventRef,
+    OccurrenceIdentity,
     OccurrenceMapping,
     OccurrenceMappingId,
     OccurrenceStart,
@@ -318,6 +319,24 @@ class SqliteEventMappingRepository:
         ).fetchall()
         return tuple(_mapping_from_row(row) for row in rows)
 
+    def lone_occurrences(self, rule_id: SyncRuleId, series: EventRef) -> Sequence[EventMapping]:
+        rows = self._connection.execute(
+            """
+            SELECT * FROM event_mappings
+            WHERE rule_id = ? AND user_id = ? AND occurrence_series_event_id = ?
+              AND source_account_id = ? AND source_calendar_id = ?
+            ORDER BY id
+            """,
+            (
+                rule_id.value,
+                self._user,
+                series.event_id.value,
+                series.calendar.connected_account_id.value,
+                series.calendar.calendar_id.value,
+            ),
+        ).fetchall()
+        return tuple(_mapping_from_row(row) for row in rows)
+
     def save(self, mapping: EventMapping) -> None:
         # The composite reference refuses a mapping for another User's rule; the update touches
         # only this User's mapping, so another User's identifier is refused rather than changed.
@@ -332,8 +351,9 @@ class SqliteEventMappingRepository:
             INSERT INTO event_mappings (
                 id, rule_id, source_account_id, source_calendar_id, source_event_id,
                 destination_account_id, destination_calendar_id, destination_event_id,
-                source_revision, projection_fingerprint, user_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_revision, projection_fingerprint, user_id,
+                occurrence_series_event_id, occurrence_original_start
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 source_revision = excluded.source_revision,
                 destination_account_id = excluded.destination_account_id,
@@ -354,6 +374,8 @@ class SqliteEventMappingRepository:
                 mapping.source_revision,
                 mapping.projection_fingerprint.value,
                 self._user,
+                mapping.occurrence.series_event_id.value if mapping.occurrence else None,
+                _serialize_start(mapping.occurrence.original_start) if mapping.occurrence else None,
             ),
         )
 
@@ -1030,4 +1052,12 @@ def _mapping_from_row(row: sqlite3.Row) -> EventMapping:
         ),
         source_revision=str(row["source_revision"]),
         projection_fingerprint=ProjectionFingerprint(str(row["projection_fingerprint"])),
+        occurrence=(
+            None
+            if row["occurrence_series_event_id"] is None
+            else OccurrenceIdentity(
+                EventId(str(row["occurrence_series_event_id"])),
+                _parse_start(str(row["occurrence_original_start"])),
+            )
+        ),
     )

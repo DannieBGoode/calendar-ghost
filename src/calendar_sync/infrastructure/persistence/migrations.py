@@ -38,6 +38,7 @@ _FORWARD_MIGRATIONS = (
     (26, "0026_failure_causes.sql"),
     (27, "0027_failure_providers.sql"),
     (28, "0028_oauth_state_providers.sql"),
+    (29, "0029_lone_occurrences.sql"),
 )
 
 
