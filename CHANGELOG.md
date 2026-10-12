@@ -4,6 +4,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-12
+
 ### Added
 
 - `scripts/live_provider_checks.py` runs the Outlook and Google release checks against real test
