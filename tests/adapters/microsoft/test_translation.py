@@ -94,6 +94,13 @@ def test_a_single_event_reads_with_its_content_and_utc_times() -> None:
     assert event.response is InvitationResponse.ACCEPTED
 
 
+def test_an_event_that_ends_as_it_starts_reads_as_lasting_no_time() -> None:
+    start = {"dateTime": "2026-10-12T07:00:00.0000000", "timeZone": "UTC"}
+    event = to_domain_event(item(start=start, end=start), CALENDAR)
+
+    assert event.time == TimedInterval(NINE_UTC, NINE_UTC)
+
+
 def test_an_all_day_event_reads_by_its_dates() -> None:
     event = to_domain_event(
         item(
