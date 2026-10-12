@@ -127,6 +127,12 @@ The adapter keeps series as series without beta, from three documented reads:
    other occurrence there, so that answer is short. It is cancelled only when that answer is
    complete and does not list it. For the same reason, whether a series that ends still has a
    live occurrence is asked of every date Outlook keeps, not only of its first to last slot.
+   Graph lists a series without end only up to five years at once: a longer window answered 400
+   `ErrorInvalidRequest` on 2026-10-12, while a series that ends was listed from 1601 to 4500 at
+   once. A longer window of a series without end is listed in consecutive windows of 1825 days,
+   five years with no leap day, the latest first, so looking back to 1601 for its first
+   occurrence takes about 85 requests. That happens only while its first occurrence is missing
+   nearby.
 
 What this cannot do, and what follows:
 
@@ -302,7 +308,9 @@ account types are called verified:
 7. Which `/me` field holds a personal account's address.
 8. The Graph `error.code` values above, which Graph's error reference no longer lists.
 9. That `instances` accepts a window from 1601 to 4500, and that Outlook keeps no calendar item
-   outside it, so a first or last occurrence it does not list there was cancelled.
+   outside it, so a first or last occurrence it does not list there was cancelled. A personal
+   account accepted it for a series that ends, and refused any window over five years for a series
+   without end (2026-10-12), which is now listed in windows of 1825 days.
 10. That a POST repeating an earlier `transactionId` answers with the event already stored.
 11. Whether an event is visible to the extended-property filter as soon as it is created, on a
     personal account and on a work account, or only after a delay; `transactionId` covers a retried

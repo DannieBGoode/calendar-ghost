@@ -90,6 +90,11 @@ EXCEPTION_HORIZON = timedelta(days=730)
 # occurrence cannot move outside them. ADR 0034 lists confirming this with real accounts.
 OUTLOOK_EARLIEST = datetime(1601, 1, 1, tzinfo=UTC)
 OUTLOOK_LATEST = datetime(4501, 1, 1, tzinfo=UTC)
+# The longest window Graph lists a series without end in: five years. A longer one is refused
+# with 400 ErrorInvalidRequest, "the range between the start and end dates is greater than the
+# allowed range" (2026-10-12, ADR 0034), so a window spans 1825 days, five years with no leap day.
+# A series that ends is listed from 1601 to 4500 at once.
+ENDLESS_SPAN = timedelta(days=1825)
 # Listings run under the rule's write lock, so a long one is read only this far.
 PAGE_LIMIT = 20
 PAGE_SIZE = "250"
@@ -640,19 +645,21 @@ class OutlookCalendarProvider:
         among them, and whether the listing was answered in full."""
         token = self._token(series.calendar.connected_account_id)
         zone = _series_zone(master)
-        params = {"$select": SELECT, "$expand": EXPAND, **instances_window(after, before)}
-        found: list[CalendarEvent] = []
-        pages = self._graph.pages(
-            "events.instances", f"{_event_path(series)}/instances", token, params=params
-        )
-        for count, page in enumerate(pages, start=1):
-            found.extend(
-                _translate(each, series.calendar, series_zone=zone) for each in items_of(page)
+        found: dict[EventRef, CalendarEvent] = {}
+        for start, end in _spans(master, after, before):
+            params = {"$select": SELECT, "$expand": EXPAND, **instances_window(start, end)}
+            pages = self._graph.pages(
+                "events.instances", f"{_event_path(series)}/instances", token, params=params
             )
-            if count >= PAGE_LIMIT and "@odata.nextLink" in page:
-                # Pages beyond the limit were not read, so the listing proves nothing absent.
-                return found, False
-        return found, True
+            for count, page in enumerate(pages, start=1):
+                for each in items_of(page):
+                    # An occurrence across two windows' boundary is listed by both.
+                    event = _translate(each, series.calendar, series_zone=zone)
+                    found[event.reference] = event
+                if count >= PAGE_LIMIT and "@odata.nextLink" in page:
+                    # Pages beyond the limit were not read, so the listing proves nothing absent.
+                    return list(found.values()), False
+        return list(found.values()), True
 
     def write_occurrence(
         self,
@@ -954,6 +961,25 @@ def _is_edge(shape: Series, original: OccurrenceStart) -> bool:
     away from its one neighbour."""
     previous, following, is_slot = shape.neighbours(original)
     return is_slot and (previous is None or following is None)
+
+
+def _spans(
+    master: Mapping[str, Any], after: datetime, before: datetime
+) -> list[tuple[datetime, datetime]]:
+    """The windows a series' instances from `after` to `before` are listed in: one, or for a
+    series without end, consecutive windows of at most ENDLESS_SPAN, the latest first."""
+    recurrence = master.get("recurrence")
+    range_ = recurrence.get("range") if isinstance(recurrence, Mapping) else None
+    endless = isinstance(range_, Mapping) and range_.get("type") == "noEnd"
+    if not endless or before - after <= ENDLESS_SPAN:
+        return [(after, before)]
+    spans: list[tuple[datetime, datetime]] = []
+    end = before
+    while end > after:
+        start = max(after, end - ENDLESS_SPAN)
+        spans.append((start, end))
+        end = start
+    return spans
 
 
 def _last_end(shape: Series) -> datetime | None:

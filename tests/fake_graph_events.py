@@ -47,6 +47,7 @@ PROPERTY_FILTER = re.compile(
 )
 MODIFIED_FILTER = re.compile(r"lastModifiedDateTime ge (?P<since>\S+)")
 MAILING = ("cancel", "forward", "accept", "decline", "tentativelyAccept")
+
 PAGE = 50
 
 
@@ -337,6 +338,16 @@ class FakeGraphEvents:
             return _error(404, "ErrorItemNotFound")
         after = datetime.fromisoformat(params["startDateTime"].replace("Z", "+00:00"))
         before = datetime.fromisoformat(params["endDateTime"].replace("Z", "+00:00"))
+        endless = series.fields.get("recurrence", {}).get("range", {}).get("type") == "noEnd"
+        five_years_later = (
+            after.replace(year=after.year + 5)
+            if after.month != 2 or after.day != 29
+            else after.replace(year=after.year + 5, day=28)
+        )
+        if endless and before > five_years_later:
+            # As Graph v1.0 answered on 2026-10-12: "The range between the start and end dates is
+            # greater than the allowed range", for a series without end and over five years.
+            return _error(400, "ErrorInvalidRequest")
         listed = [
             day
             for day in _slots(series, before + timedelta(days=400))
