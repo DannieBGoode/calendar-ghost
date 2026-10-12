@@ -10,6 +10,7 @@ from calendar_sync.domain.model import (
     EventId,
     EventRef,
     EventStatus,
+    InvitationResponse,
     SyncReason,
     TimedInterval,
 )
@@ -190,3 +191,85 @@ def test_a_lone_occurrence_cancelled_as_its_series_is_shown_leaves_no_projection
     shown = calendars.get_occurrence(series_mapping.destination, week_start(2))
     assert shown is None or shown.status is EventStatus.CANCELLED
     assert SyncReason.SOURCE_CANCELLED in {entry.reason for entry in factory.state.audit}
+
+
+def _declined_series() -> CalendarEvent:
+    return replace(series("their-series"), response=InvitationResponse.DECLINED)
+
+
+def test_a_lone_projection_leaves_when_its_series_is_shown_but_excluded() -> None:
+    # A series the rule leaves out projects none of its occurrences, even one accepted on its own
+    # (ADR 0018), so the single projection would be the only trace of it in the destination.
+    calendars, invited = _invited()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    master = calendars.put(_declined_series(), starts=STARTS)
+    calendars.report(master, calendars.put(replace(invited, revision="r2")))
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert result.deleted == 1
+    assert lone not in calendars.events
+    assert (rule().id, invited.reference) not in factory.state.mappings
+    assert (rule().id, master.reference) not in factory.state.mappings
+    assert SyncReason.DECLINED_REMOVED in {entry.reason for entry in factory.state.audit}
+
+
+def test_a_lone_projection_leaves_when_only_its_excluded_series_is_reported() -> None:
+    calendars, invited = _invited()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    calendars.report(calendars.put(_declined_series(), starts=STARTS))
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert result.deleted == 1
+    assert lone not in calendars.events
+    assert factory.state.audit[-1].reason == SyncReason.DECLINED_REMOVED
+
+
+def test_a_lone_projection_of_an_excluded_series_someone_invited_guests_to_is_blocked() -> None:
+    calendars, invited = _invited()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    calendars.undeletable.add(lone)
+    calendars.report(calendars.put(_declined_series(), starts=STARTS))
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert lone in calendars.events
+    assert result.conflicts == 1
+    assert factory.state.audit[-1].reason == SyncReason.PROJECTION_HAS_GUESTS
+
+
+def test_a_lone_projection_stays_while_its_excluded_series_cannot_find_the_occurrence() -> None:
+    # Unread, the occurrence is decided as the single event it was projected as.
+    calendars, invited = _invited()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    without_it = tuple(start for start in STARTS if start != week_start(2))
+    calendars.report(calendars.put(_declined_series(), starts=without_it))
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert lone in calendars.events
+
+
+def test_a_full_pass_removes_a_lone_projection_whose_series_is_shown_but_excluded() -> None:
+    # Reprojection after a policy change or an upgrade lists the calendar in full; nothing is
+    # reported as changed.
+    calendars, invited = _invited()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    calendars.put(_declined_series(), starts=STARTS)
+
+    result = sync_use_case(factory, calendars).execute(rule().id, full=True)
+
+    assert result.deleted == 1
+    assert lone not in calendars.events
+    assert (rule().id, invited.reference) not in factory.state.mappings

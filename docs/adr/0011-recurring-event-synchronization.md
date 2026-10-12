@@ -175,7 +175,11 @@ works even when only the series is reported, as when the occurrence is now a reg
 then the single projection stays, as when the destination cannot write the occurrence, so the
 occurrence is never shown wrong or not at all. One someone invited guests to stays and is recorded
 as blocked, as any deletion would be. A series the calendar does not show, but that a Series
-Mapping names, is still unverifiable.
+Mapping names, is still unverifiable. A series the calendar shows but the rule excludes, such as
+one it declined, projects none of its occurrences ([ADR 0018](0018-project-by-invitation-response.md)),
+so its occurrences' single projections are removed with the series' removal reason, such as
+`declined_removed`. An occurrence the series cannot find is left to be decided as the single event
+it was projected as.
 
 ### Transformations and eligibility
 
