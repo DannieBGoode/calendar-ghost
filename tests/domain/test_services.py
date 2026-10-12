@@ -1,3 +1,5 @@
+import hashlib
+import json
 from dataclasses import replace
 from datetime import timedelta, timezone
 
@@ -111,6 +113,65 @@ def test_destination_drift_is_overwritten_not_conflicted() -> None:
     assert decision.action is SyncAction.UPDATE
     assert decision.projection is not None
     assert decision.projection.title == "Busy"
+
+
+def test_a_destination_series_whose_provider_reordered_its_rule_is_current() -> None:
+    # Google stores an RRULE's parts in its own order. The rule repeats exactly as written, so
+    # reading it back is no drift, and rewriting it would only be reordered again, every run.
+    source = replace(
+        event(), recurrence=Recurrence(("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20261120T225959Z",))
+    )
+    destination = replace(
+        _destination(source),
+        recurrence=Recurrence(("RRULE:FREQ=WEEKLY;UNTIL=20261120T225959Z;BYDAY=MO,WE,FR",)),
+    )
+
+    decision = decisions.decide(rule(), source, _mapping(source, destination), destination)
+
+    assert decision.action is SyncAction.IGNORE
+
+
+def test_a_destination_series_whose_rule_differs_is_drift() -> None:
+    source = replace(event(), recurrence=Recurrence(("RRULE:FREQ=WEEKLY;BYDAY=MO;INTERVAL=2",)))
+    destination = replace(
+        _destination(source), recurrence=Recurrence(("RRULE:FREQ=WEEKLY;INTERVAL=3;BYDAY=MO",))
+    )
+
+    decision = decisions.decide(rule(), source, _mapping(source, destination), destination)
+
+    assert decision.action is SyncAction.UPDATE
+
+
+def _text_fingerprint(projection: EventProjection) -> ProjectionFingerprint:
+    """A fingerprint as releases before rules were compared by their parts stored it."""
+    payload = {
+        "time": ProjectionFingerprinter._serialize_time(
+            projection.time, recurring=projection.recurrence is not None
+        ),
+        "title": projection.title,
+        "description": projection.description,
+        "location": projection.location,
+        "recurrence": projection.recurrence.lines if projection.recurrence else None,
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return ProjectionFingerprint(hashlib.sha256(encoded.encode()).hexdigest())
+
+
+def test_a_fingerprint_stored_before_rules_were_compared_by_parts_still_matches() -> None:
+    # A mapping written by an earlier release keeps its textual fingerprint until the next write,
+    # so the projection it recorded is still recognized, as the feed reports it back.
+    time = event().time
+    assert time is not None
+    written = EventProjection(
+        time,
+        "Busy",
+        recurrence=Recurrence(("RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20261120T225959Z",)),
+    )
+    stored = _text_fingerprint(written)
+
+    assert fingerprinter.matches(written, stored)
+    assert fingerprinter.matches(written, fingerprinter.fingerprint(written))
+    assert not fingerprinter.matches(replace(written, title="Moved"), stored)
 
 
 def test_current_projection_is_ignored() -> None:
