@@ -144,13 +144,12 @@
       "title": "Preview before syncing",
       "body": "Review what will be written before anything reaches the destination."
     },
-    "ready": "Use a Connect button above to begin.",
+    "ready": "Use the Connect button to begin.",
     "notConfigured": "Add the master key and a calendar provider's OAuth credentials in <code>.env</code>, then restart before connecting."
   },
   "accounts": {
     "title": "Connected accounts",
     "intro": "The calendar accounts whose calendars your rules can read and write.",
-    "connect": "Connect {account}",
     "providerAndAddress": "{account} · {address}",
     "addressesOf": "{provider}: {addresses}",
     "addressGroups": "{first} · {next}",

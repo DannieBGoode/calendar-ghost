@@ -160,7 +160,6 @@
       "connect": {
         "title": "Connect a calendar account",
         "body": "Authorize calendar discovery and event access for one account.",
-        "action": "Connect {account}",
         "configurationNote": "Add the master key and a calendar provider's OAuth credentials in <code>.env</code>, then restart."
       },
       "createRule": {

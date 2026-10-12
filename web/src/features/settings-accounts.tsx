@@ -1,11 +1,10 @@
 import { useQuery } from "@tanstack/react-query"
-import { CheckCircle2, ChevronDown, CircleUserRound, KeyRound, Plus, ShieldAlert } from "lucide-react"
+import { CheckCircle2, ChevronDown, CircleUserRound, KeyRound, ShieldAlert } from "lucide-react"
 import { useState } from "react"
 
 import { AccountAvatar } from "@/components/account-avatar"
-import { ProviderMark } from "@/components/provider-mark"
+import { ConnectAccount } from "@/components/connect-account"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
@@ -13,8 +12,7 @@ import { codeTag, rich } from "@/i18n/rich"
 import type { MessageKey } from "@/i18n/types"
 import { accountSummary, addressesByProvider, needsReauthorization } from "@/lib/account-summary"
 import { type CalendarProvider, type ConnectedAccount, api } from "@/lib/api"
-import { recordAuthorizationStart } from "@/lib/oauth-redirect"
-import { accountNoun, connectUrl, providerOf } from "@/lib/providers"
+import { providerOf } from "@/lib/providers"
 import { type AccountCommands, useAccountCommands } from "@/lib/use-account-commands"
 import type { OAuthReturn } from "@/lib/use-oauth-return"
 import { AccountRow } from "@/features/settings-account-row"
@@ -74,7 +72,7 @@ export function AccountsSection({
 
   return (
     <section className="settings-section" aria-labelledby="accounts-title">
-      <AccountsHeading providers={providers} hasAccounts={Boolean(accounts.data?.length)} />
+      <AccountsHeading providers={providers} showConnect={Boolean(accounts.data?.length) || Boolean(accounts.error)} />
 
       {providers.length === 0 && (
         <p className="settings-note" role="status">
@@ -111,7 +109,8 @@ export function AccountsSection({
   )
 }
 
-function AccountsHeading({ providers, hasAccounts }: { providers: CalendarProvider[]; hasAccounts: boolean }) {
+/** The section's heading, with Connect once accounts exist; before that, the empty state holds it. */
+function AccountsHeading({ providers, showConnect }: { providers: CalendarProvider[]; showConnect: boolean }) {
   const { t } = useI18n()
   return (
     <div className="section-heading">
@@ -119,29 +118,12 @@ function AccountsHeading({ providers, hasAccounts }: { providers: CalendarProvid
         <h2 id="accounts-title">{t("settings.accounts.title")}</h2>
         <p>{t("settings.accounts.intro")}</p>
       </div>
-      {providers.length > 0 ? (
-        <div className="connect-actions">
-          {providers.map((provider) => (
-            <ConnectButton key={provider.kind} provider={provider} primary={!hasAccounts} />
-          ))}
-        </div>
-      ) : (
+      {providers.length === 0 ? (
         <Badge variant="attention"><ShieldAlert aria-hidden="true" /> {t("settings.accounts.notConfigured")}</Badge>
+      ) : (
+        showConnect && <ConnectAccount providers={providers} primary={false} />
       )}
     </div>
-  )
-}
-
-/** Starts connecting an account of one provider; the next step only while nothing is connected. */
-function ConnectButton({ provider, primary }: { provider: CalendarProvider; primary: boolean }) {
-  const i18n = useI18n()
-  return (
-    <Button variant={primary ? "default" : "outline"} asChild>
-      <a href={connectUrl(provider)} onClick={() => recordAuthorizationStart(provider.kind)}>
-        <ProviderMark provider={provider.kind} fallback={<Plus aria-hidden="true" />} />
-        {i18n.t("settings.accounts.connect", { account: accountNoun(i18n, provider.kind, [provider]) })}
-      </a>
-    </Button>
   )
 }
 
@@ -182,10 +164,11 @@ function AccountGroup({
       {accounts.length === 0 ? (
         <div className="account-empty">
           <CircleUserRound aria-hidden="true" />
-          <div>
+          <div className="account-empty-copy">
             <h3>{t("settings.accounts.empty.title")}</h3>
             <p>{t("settings.accounts.empty.body")}</p>
           </div>
+          {providers.length > 0 && <ConnectAccount providers={providers} primary />}
         </div>
       ) : (
         <>
