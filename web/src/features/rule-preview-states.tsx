@@ -9,6 +9,7 @@ import type { I18n } from "@/i18n/translator"
 import { accountSearch, appPathForRule, connectionsPath, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
 import { providerWords } from "@/lib/providers"
 import type { PreviewFailure } from "@/lib/rule-preview-failure"
+import { withYear } from "@/lib/rule-preview-text"
 
 function Panel({ variant, icon, title, body, action }: { variant: "stopped" | "attention" | "quiet"; icon: ReactNode; title: string; body: string; action: ReactNode }) {
   return (
@@ -98,12 +99,12 @@ export function PreviewFailurePanel({
 }
 
 /** The source has nothing in the window yet; the rule still syncs what arrives. */
-export function PreviewEmpty({ source, from }: { source: string; from: Date }) {
+export function PreviewEmpty({ source, from, now }: { source: string; from: Date; now: Date }) {
   const i18n = useI18n()
   return (
     <section className="rule-preview-empty">
       <span className="rule-preview-ghost"><GhostMark /></span>
-      <h2>{i18n.t("rulePreview.states.emptyTitle", { source, date: i18n.format.date(from, { day: "numeric", month: "short" }) })}</h2>
+      <h2>{i18n.t("rulePreview.states.emptyTitle", { source, date: i18n.format.date(from, withYear(from, now)) })}</h2>
       <p>{i18n.t("rulePreview.states.emptyBody")}</p>
     </section>
   )

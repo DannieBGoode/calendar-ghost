@@ -84,14 +84,21 @@ export function outcomeParts(i18n: I18n, counts: ReadonlyMap<PreviewOutcome, num
 
 const SHORT_DAY: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" }
 
+/** A date's options as calendars write it: "Jul 3", or "Jul 3, 2030" when it is not in `now`'s year. */
+export function withYear(date: Date, now: Date, options: Intl.DateTimeFormatOptions = SHORT_DAY): Intl.DateTimeFormatOptions {
+  return date.getFullYear() === now.getFullYear() ? options : { ...options, year: "numeric" }
+}
+
+const dayText = (i18n: I18n, date: Date, now: Date) => i18n.format.date(date, withYear(date, now))
+
 /** One day, or the days it spans from where it is placed, as a series' next date is. */
-function allDayText(i18n: I18n, item: PreviewItem, at: Date): string {
+function allDayText(i18n: I18n, item: PreviewItem, at: Date, now: Date): string {
   if (!item.starts_on || !item.ends_before) return i18n.t("rulePreview.row.allDay")
   const span = Math.round((localDay(item.ends_before).getTime() - localDay(item.starts_on).getTime()) / 86_400_000)
   if (span <= 1) return i18n.t("rulePreview.row.allDay")
   const first = at
   const last = new Date(at.getFullYear(), at.getMonth(), at.getDate() + span - 1)
-  const range = i18n.t("rulePreview.row.timeRange", { start: i18n.format.date(first, SHORT_DAY), end: i18n.format.date(last, SHORT_DAY) })
+  const range = i18n.t("rulePreview.row.timeRange", { start: dayText(i18n, first, now), end: dayText(i18n, last, now) })
   return i18n.t("rulePreview.row.allDayDays", { range })
 }
 
@@ -101,9 +108,9 @@ function durationMs(item: PreviewItem): number | null {
 }
 
 /** "09:00–10:00", "22:00–01:00 Tue" when it ends on another day, or "All day". */
-export function whenText(i18n: I18n, placed: PlacedItem): string {
+export function whenText(i18n: I18n, placed: PlacedItem, now: Date): string {
   if (!placed.at) return i18n.t("rulePreview.row.noDate")
-  if (placed.allDay) return allDayText(i18n, placed.item, placed.at)
+  if (placed.allDay) return allDayText(i18n, placed.item, placed.at, now)
   const start = i18n.format.time(placed.at)
   const duration = durationMs(placed.item)
   if (duration === null || duration <= 0) return start
@@ -113,7 +120,7 @@ export function whenText(i18n: I18n, placed: PlacedItem): string {
   return i18n.t("rulePreview.row.endsNextDay", { start, end, day: i18n.format.date(ends, { weekday: "short" }) })
 }
 
-function occurrenceNote(i18n: I18n, item: PreviewItem): string {
+function occurrenceNote(i18n: I18n, item: PreviewItem, now: Date): string {
   if (item.cancelled) return i18n.t("rulePreview.row.cancelledOnce")
   const regular = item.original_start
   const start = itemStart(item)
@@ -123,10 +130,10 @@ function occurrenceNote(i18n: I18n, item: PreviewItem): string {
   if (was.getTime() === start.at.getTime()) return i18n.t("rulePreview.row.changedOnce")
   const sameDay = was.toDateString() === start.at.toDateString()
   const time = allDay
-    ? i18n.format.date(was, SHORT_DAY)
+    ? dayText(i18n, was, now)
     : sameDay
       ? i18n.format.time(was)
-      : i18n.format.dateTime(was, { ...SHORT_DAY, hour: "numeric", minute: "2-digit" })
+      : i18n.format.dateTime(was, withYear(was, now, { ...SHORT_DAY, hour: "numeric", minute: "2-digit" }))
   return i18n.t("rulePreview.row.moved", { time })
 }
 
@@ -137,15 +144,15 @@ function responseNote(item: PreviewItem): MessageKey | undefined {
 }
 
 /** What else the source row says: its recurrence, a change to one date, or your response. */
-export function sourceNotes(i18n: I18n, placed: PlacedItem): string[] {
+export function sourceNotes(i18n: I18n, placed: PlacedItem, now: Date): string[] {
   const { item, since } = placed
   const notes: string[] = []
   if (item.kind === "series") {
     const first = itemStart(item)?.at ?? placed.at ?? new Date()
     notes.push(describeRepeat(i18n, readRepeat(item.recurrence), first, item.time_zone))
-    if (since) notes.push(i18n.t("rulePreview.row.since", { date: i18n.format.date(since, SHORT_DAY) }))
+    if (since) notes.push(i18n.t("rulePreview.row.since", { date: dayText(i18n, since, now) }))
   }
-  if (item.kind === "occurrence") notes.push(occurrenceNote(i18n, item))
+  if (item.kind === "occurrence") notes.push(occurrenceNote(i18n, item, now))
   const response = responseNote(item)
   if (response) notes.push(i18n.t(response))
   // An excluded birthday already says so in its outcome.

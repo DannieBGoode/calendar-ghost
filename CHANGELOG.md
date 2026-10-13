@@ -25,9 +25,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   that stays out ("Not synced: birthday"). One row of filters narrows it to what will or will not
   sync, combined with any of all-day, birthday, recurring, declined, Maybe, or unanswered events.
   A recurring series shows at its next date, and earlier events fold away unless one would be
-  removed. "Start syncing" is only on this page, in a footer that stays in view beside the counts,
-  and names sharing details when the rule copies them. A new rule's builder ends there, a rule
-  ready to start offers "Review and start", and Refresh reads the calendars again.
+  removed. A date outside the current year names its year ("Tue, Jul 9, 2030"). "Start syncing"
+  is only on this page, in a footer that stays in view beside the counts, and names sharing
+  details when the rule copies them. A new rule's builder ends there, a rule ready to start
+  offers "Review and start", and Refresh reads the calendars again.
 - A preview reads the destination through one listing of the rule's projections instead of one
   request per mapped event, and returns every event instead of a sample of 10.
 

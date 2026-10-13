@@ -15,7 +15,7 @@ import {
   type PreviewLayout,
   type PreviewOutcome,
 } from "@/lib/rule-preview"
-import { destinationNotes, outcomeParts, outcomeText, sourceNotes, whenText } from "@/lib/rule-preview-text"
+import { destinationNotes, outcomeParts, outcomeText, sourceNotes, whenText, withYear } from "@/lib/rule-preview-text"
 
 const COLUMNS = 4
 const DAY: Intl.DateTimeFormatOptions = { weekday: "short", day: "numeric", month: "short" }
@@ -31,7 +31,7 @@ const TONES: Record<PreviewOutcome, "change" | "quiet" | "blocked"> = {
 }
 
 function dayHeading(i18n: I18n, day: PreviewDay, now: Date): string {
-  const date = i18n.format.date(day.date, DAY)
+  const date = i18n.format.date(day.date, withYear(day.date, now, DAY))
   if (isToday(day.date, now)) return i18n.t("rulePreview.table.today", { date })
   if (isTomorrow(day.date, now)) return i18n.t("rulePreview.table.tomorrow", { date })
   return date
@@ -58,16 +58,16 @@ function Notes({ notes }: { notes: string[] }) {
 }
 
 /** Kept while filters change, since narrowing reuses the same placed rows. */
-const PreviewRow = memo(function PreviewRow({ placed }: { placed: PlacedItem }) {
+const PreviewRow = memo(function PreviewRow({ placed, now }: { placed: PlacedItem; now: Date }) {
   const i18n = useI18n()
   const { item } = placed
   const outcome = previewOutcome(item)
   return (
     <tr role="row" className="rule-preview-row" data-written={item.projection ? "true" : "false"}>
-      <td role="cell" className="rule-preview-col-when">{whenText(i18n, placed)}</td>
+      <td role="cell" className="rule-preview-col-when">{whenText(i18n, placed, now)}</td>
       <td role="cell" className="rule-preview-col-source">
         <span className="rule-preview-title">{item.title || i18n.t("rulePreview.row.untitled")}</span>{" "}
-        <Notes notes={sourceNotes(i18n, placed)} />
+        <Notes notes={sourceNotes(i18n, placed, now)} />
       </td>
       <td role="cell" className="rule-preview-col-destination">
         {item.projection ? (
@@ -93,28 +93,28 @@ const PreviewRow = memo(function PreviewRow({ placed }: { placed: PlacedItem }) 
   )
 })
 
-function DayRows({ day, heading }: { day: PreviewDay; heading: string }) {
+function DayRows({ day, heading, now }: { day: PreviewDay; heading: string; now: Date }) {
   return (
     <tbody role="rowgroup" className="rule-preview-day">
       <tr role="row">
         <th scope="rowgroup" role="rowheader" colSpan={COLUMNS}>{heading}</th>
       </tr>
       {day.items.map((placed) => (
-        <PreviewRow key={`${placed.item.source_event_id}-${placed.item.original_start ?? ""}`} placed={placed} />
+        <PreviewRow key={`${placed.item.source_event_id}-${placed.item.original_start ?? ""}`} placed={placed} now={now} />
       ))}
     </tbody>
   )
 }
 
 /** The past part of the window, folded into one row that says what it holds; a removal opens it. */
-function EarlierRows({ days }: { days: PreviewDay[] }) {
+function EarlierRows({ days, now }: { days: PreviewDay[]; now: Date }) {
   const i18n = useI18n()
   const items = days.flatMap((day) => day.items.map((placed) => placed.item))
   const counts = outcomeCounts(items)
   const [open, setOpen] = useState(() => counts.has("remove") || counts.has("blocked"))
   const first = days[0]
   if (!first) return null
-  const title = i18n.t("rulePreview.table.earlier", { date: i18n.format.date(first.date, { day: "numeric", month: "short" }) })
+  const title = i18n.t("rulePreview.table.earlier", { date: i18n.format.date(first.date, withYear(first.date, now)) })
   const countText = i18n.t("rulePreview.table.earlierCount", { count: items.length })
   const parts = outcomeParts(i18n, counts)
   // Spoken as phrases; the visible counts sit in separate boxes with no punctuation between.
@@ -142,10 +142,10 @@ function EarlierRows({ days }: { days: PreviewDay[] }) {
         <tbody role="rowgroup" id="rule-preview-earlier-days" className="rule-preview-earlier-days">
           {days.flatMap((day) => [
             <tr role="row" key={`${day.key}-heading`} className="rule-preview-earlier-day">
-              <th scope="rowgroup" role="rowheader" colSpan={COLUMNS}>{i18n.format.date(day.date, DAY)}</th>
+              <th scope="rowgroup" role="rowheader" colSpan={COLUMNS}>{i18n.format.date(day.date, withYear(day.date, now, DAY))}</th>
             </tr>,
             ...day.items.map((placed) => (
-              <PreviewRow key={`${placed.item.source_event_id}-${placed.item.original_start ?? ""}`} placed={placed} />
+              <PreviewRow key={`${placed.item.source_event_id}-${placed.item.original_start ?? ""}`} placed={placed} now={now} />
             )),
           ])}
         </tbody>
@@ -197,11 +197,12 @@ export function PreviewTable({
           <DayRows
             day={{ key: "undated", date: now, items: layout.undated }}
             heading={t("rulePreview.table.undated", { source })}
+            now={now}
           />
         )}
-        {layout.earlier.length > 0 && <EarlierRows days={layout.earlier} />}
+        {layout.earlier.length > 0 && <EarlierRows days={layout.earlier} now={now} />}
         {layout.upcoming.map((day) => (
-          <DayRows key={day.key} day={day} heading={dayHeading(i18n, day, now)} />
+          <DayRows key={day.key} day={day} heading={dayHeading(i18n, day, now)} now={now} />
         ))}
         {complete && (
           <tbody role="rowgroup" className="rule-preview-later">

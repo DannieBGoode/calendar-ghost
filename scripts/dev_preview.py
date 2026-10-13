@@ -250,6 +250,8 @@ EVENTS = {
     "lunch": SyntheticEvent("Lunch with Sam", 1, 13, response=InvitationResponse.DECLINED),
     "review": SyntheticEvent("Design review", 2, 14, response=InvitationResponse.TENTATIVE),
     "birthday": SyntheticEvent("Mum's birthday", 4, None, birthday=True),
+    # Far enough ahead to fall in a later year, so its date must name the year.
+    "reunion": SyntheticEvent("School reunion", 1365, 18),
 }
 
 
