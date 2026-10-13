@@ -159,6 +159,7 @@ export function PreviewTable({
   destination,
   now,
   zone,
+  complete,
 }: {
   layout: PreviewLayout
   source: string
@@ -166,6 +167,8 @@ export function PreviewTable({
   now: Date
   /** The browser's time zone, such as "GMT+2", which every time in the table is in. */
   zone: string
+  /** Whether the table holds every event, so it may say so; a filtered one does not. */
+  complete: boolean
 }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -199,13 +202,15 @@ export function PreviewTable({
         {layout.upcoming.map((day) => (
           <DayRows key={day.key} day={day} heading={dayHeading(i18n, day, now)} />
         ))}
-        <tbody role="rowgroup" className="rule-preview-later">
-          <tr role="row">
-            <td role="cell" colSpan={COLUMNS}>
-              {t("rulePreview.table.later", { source })}
-            </td>
-          </tr>
-        </tbody>
+        {complete && (
+          <tbody role="rowgroup" className="rule-preview-later">
+            <tr role="row">
+              <td role="cell" colSpan={COLUMNS}>
+                {t("rulePreview.table.later", { source })}
+              </td>
+            </tr>
+          </tbody>
+        )}
       </table>
     </div>
   )

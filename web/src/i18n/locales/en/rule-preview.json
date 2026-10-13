@@ -10,7 +10,6 @@
     "starting": "Starting…",
     "availableWhenDone": "Available when the preview finishes",
     "previewAgain": "Refresh",
-    "previewing": "Previewing…",
     "enableFailed": "Syncing did not start.",
     "changedSincePreview": "This rule changed since the preview.",
     "pauseAnyTime": "You can pause or remove the rule at any time."
@@ -68,7 +67,7 @@
       "other": "{count} events"
     },
     "undated": "Deleted in {source}",
-    "later": "That is everything in {source} today. Repeating events go on past their row, and events added or changed later sync on their own."
+    "later": "That is every event in {source} now. Repeating events continue past the dates shown, and new or changed events sync on their own."
   },
   "row": {
     "allDay": "All day",
@@ -167,10 +166,10 @@
     "allDayOff": "No all-day events",
     "birthdaysOn": "Birthdays",
     "birthdaysOff": "No birthdays",
-    "maybeAs": "Maybe as “{title}”",
+    "maybeAs": "Maybe events as “{title}”",
     "maybeSync": "Maybe events like accepted",
     "maybeOff": "No Maybe events",
-    "unansweredAs": "Unanswered as Maybe",
+    "unansweredAs": "Unanswered invitations as Maybe",
     "unansweredWait": "Invitations sync once answered",
     "unansweredOff": "No unanswered invitations",
     "declinedOff": "No declined events"

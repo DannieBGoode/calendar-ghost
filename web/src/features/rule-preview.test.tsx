@@ -189,9 +189,9 @@ describe("RulePreviewView", () => {
     const underTitle = [...container.querySelectorAll(".rule-preview-header > :not(h1)")].map((node) => node.textContent)
     expect(underTitle.join(" ")).not.toMatch(/Family|Work/)
     expect(container.querySelector(".rule-preview-settings")?.textContent).toBe(
-      "What this rule syncs: From the past 30 days · All-day events · No birthdays · Maybe as “Busy (tentative)” · Invitations sync once answered · No declined eventsChange",
+      "What this rule syncs: From the past 30 days · All-day events · No birthdays · Maybe events as “Busy (tentative)” · Invitations sync once answered · No declined eventsChange",
     )
-    expect(text).toContain("events added or changed later sync on their own")
+    expect(text).toContain("new or changed events sync on their own")
     const rows = [...container.querySelectorAll(".rule-preview-row")].map((row) => row.textContent)
     expect(rows).toEqual([
       "All dayMumNothing is writtenNot synced: birthday",
@@ -214,6 +214,26 @@ describe("RulePreviewView", () => {
     expect(button("All 2").disabled).toBe(false)
     expect(container.querySelectorAll(".rule-preview-row")).toHaveLength(1)
     expect(container.textContent).toContain("Showing 1 of 2")
+    // A filtered table is not every event, so it does not close by saying so.
+    expect(container.querySelector(".rule-preview-later")).toBeNull()
+  })
+
+  it("keeps the filters through a refresh, and drops the old numbers when one fails", async () => {
+    mockFetch({ status: 200, body: preview })
+    await renderPreview(testI18n())
+    act(() => button("Not synced 1").click())
+
+    act(() => button("Refresh").click())
+    await settle()
+    expect(button("Not synced 1").getAttribute("aria-pressed")).toBe("true")
+
+    mockFetch({ status: 503, body: { detail: "down", code: "provider_failed", params: { kind: "unavailable", provider: "google" } } })
+    act(() => button("Refresh").click())
+    await settle()
+    const footer = container.querySelector(".rule-preview-footer")?.textContent ?? ""
+    expect(footer).not.toContain("to add")
+    expect(footer).toContain("Available when the preview finishes")
+    expect(container.querySelector(".rule-preview-lead")?.textContent).not.toContain("A preview from")
   })
 
   it("starts syncing and returns to the rule", async () => {

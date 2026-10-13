@@ -101,8 +101,9 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
   `Swim class · This date only: cancelled  ⊘ Not synced: cancelled`. Its outcome is the planned
   action; for a series the run writes for the first time (or again), a changed date is "+ Add" and
   a cancelled or excluded one is "Not synced", since nothing is there to update or remove.
-- The table ends with "That is everything in Family today. Repeating events go on past their row,
-  and events added or changed later sync on their own."
+- The table ends with "That is every event in Family now. Repeating events continue past the dates
+  shown, and new or changed events sync on their own." A filtered table leaves this line out, since
+  it does not hold every event.
 - Times use the browser's time zone, named once above the table, in tabular numerals. An event that
   crosses midnight shows its end with the day ("22:00–01:00 Tue"). A multi-day all-day event shows
   its dates ("All day, 13–15 Oct").
@@ -130,11 +131,11 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
 A sticky footer spans the window on Quiet Surface with a top `quiet-border`. Its content aligns
 with the page column:
 
-- Left: "← Back to rule" (Rule Details).
-- Middle: "Previewed at 10:42 · Preview again", in muted text.
-- Right: the page's one primary action, "Start syncing to Work" (`{components.button-primary}`).
+- Left: "← Back to rule" (Rule Details), then the counts ("+ 13 to add · ⊘ 4 not synced").
+- Right: "You can pause or remove the rule at any time.", then the page's one primary action,
+  "Start syncing to Work" (`{components.button-primary}`).
 
-The button carries no count; the header's counts say what it will do, and no filter changes that.
+The button carries no count; the counts beside it say what it will do, and no filter changes them.
 While enabling, it reads "Starting…" and is disabled. Success returns to Rule Details, which
 announces the result as it does today. The page reserves bottom padding equal to the footer's
 height, so the footer never covers the last row or a focused control.
@@ -143,7 +144,7 @@ height, so the footer never covers the last row or a focused control.
 
 | State | What the person sees |
 |---|---|
-| Loading | Title and privacy line at once. In place of the counts line, the small ghost mark and "Reading Family…" ("Reading Family and Work…" when the rule has mappings). Six skeleton rows; no chips until counts exist. "Start syncing" disabled, with "Available when the preview finishes". No shimmer under reduced motion. |
+| Loading | Title and privacy line at once. In place of the lead, at its size so nothing below moves, the small ghost mark and "Reading Family…" ("Reading Family and Work…" when the rule has mappings). Refresh does the same and keeps the chosen filters. Six skeleton rows; no chips until counts exist. "Start syncing" disabled, with "Available when the preview finishes". No shimmer under reduced motion. |
 | Lapsed account | In place of the table, a Destructive Red panel: "Your Google account needs reauthorization", with one action, "Reauthorize account", which opens its Settings row. |
 | Provider unavailable or limiting | An Attention Ochre panel: "Google Calendar is not answering right now", with Likely cause when known, and "Preview again". Provider text only under the diagnostic disclosure. |
 | Rule changed or busy | A Quiet Surface panel: "This rule changed while it was being previewed", with "Preview again". |
@@ -153,7 +154,9 @@ height, so the footer never covers the last row or a focused control.
 | No rows match the filters | Inside the table: "No events match these filters", with "Clear filters". |
 | Enabling fails because the rule changed | The footer shows "This rule changed since the preview" in place of the timestamp, and "Preview again" becomes the primary action. |
 
-In every failure state, "Start syncing" is disabled.
+In every failure state, "Start syncing" is disabled with "Available when the preview finishes", and
+the footer drops the counts: a refresh that fails leaves no numbers or timestamp from the earlier
+preview on the page.
 
 ## Narrow screens
 
@@ -162,9 +165,9 @@ In every failure state, "Start syncing" is disabled.
   - Each row has three lines: time with the outcome sign on the right; "source title → destination
     title"; then muted recurrence, response, or reason.
   - The chips wrap; they never scroll sideways.
-  - In the footer, the button runs full width above "Back to rule" and the timestamp, with
-    safe-area padding.
-- Chips are at least 44px tall below 900px.
+  - In the footer, "Back to rule" and the counts come first, then the button at full width with
+    "You can pause or remove the rule at any time." under it, with safe-area padding.
+- Chips, the Kind and Earlier toggles, Refresh, and Change are at least 44px tall below 900px.
 
 ## Accessibility
 

@@ -11,10 +11,11 @@ import { PreviewEmpty, PreviewFailurePanel, PreviewSkeleton } from "@/features/r
 import { PreviewAccounts, PreviewSettings } from "@/features/rule-preview-rule"
 import { OutcomeSigns, PreviewTable } from "@/features/rule-preview-table"
 import { useI18n } from "@/i18n/provider"
+import type { I18n } from "@/i18n/translator"
 import { ApiError, api, type ConnectedAccount, type RuleDetail } from "@/lib/api"
 import { appPathForRule, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
-import { NO_FILTERS, layOut, matchesFilters, outcomeCounts, type PreviewFilters, type PreviewItem } from "@/lib/rule-preview"
+import { NO_FILTERS, isFiltered, layOut, matchesFilters, outcomeCounts, type PreviewFilters, type PreviewItem } from "@/lib/rule-preview"
 import { previewFailure } from "@/lib/rule-preview-failure"
 import { outcomeParts } from "@/lib/rule-preview-text"
 import { enabledMessage } from "@/lib/rule-run"
@@ -128,7 +129,10 @@ function RulePreviewPage({
   const i18n = useI18n()
   const names = useNames(detail, accounts, calendarsByAccount)
   const [announcement, setAnnouncement] = useState("")
-  const run = preview.isFetching ? undefined : preview.data
+  // Kept here, not in the results, so a refresh does not throw the reader's filters away.
+  const [filters, setFilters] = useState<PreviewFilters>(NO_FILTERS)
+  // A failed refresh keeps the last data in the query; its numbers no longer stand.
+  const run = preview.isFetching || preview.error ? undefined : preview.data
   const failure = !preview.isFetching && preview.error
     ? previewFailure(i18n, preview.error, {
         ruleState: detail.state,
@@ -145,9 +149,8 @@ function RulePreviewPage({
         heading={heading}
         detail={detail}
         names={names}
-        reading={preview.isFetching}
         accounts={<PreviewAccounts detail={detail} accounts={accounts} />}
-        lead={<PreviewLead run={run} onRetry={retry} />}
+        lead={<PreviewLead run={run} reading={preview.isFetching ? readingText(i18n, detail, names) : null} onRetry={retry} />}
         settings={<PreviewSettings detail={detail} onChange={openRule} />}
       />
       {failure ? (
@@ -157,6 +160,8 @@ function RulePreviewPage({
           run={run}
           names={names}
           lookbackDays={detail.initial_lookback_days}
+          filters={filters}
+          onFiltersChange={setFilters}
           onAnnounce={setAnnouncement}
         />
       ) : (
@@ -180,7 +185,6 @@ function PreviewHeader({
   heading,
   detail,
   names,
-  reading,
   accounts,
   lead,
   settings,
@@ -188,8 +192,6 @@ function PreviewHeader({
   heading: RefObject<HTMLHeadingElement | null>
   detail: RuleDetail
   names: Names
-  /** Whether the preview is reading the calendars now; a failed one is not. */
-  reading: boolean
   /** Which accounts and providers the rule connects. */
   accounts: ReactNode
   /** What this page is and when it was made, with a way to make it again. */
@@ -211,14 +213,6 @@ function PreviewHeader({
       </h1>
       {accounts}
       {lead}
-      {reading && (
-        <p className="rule-preview-reading">
-          <span className="rule-preview-reading-ghost"><GhostMark /></span>
-          {detail.mapping_count > 0
-            ? t("rulePreview.page.readingBoth", names)
-            : t("rulePreview.page.reading", { source: names.source })}
-        </p>
-      )}
       <p className="rule-preview-privacy" data-tone={details ? "attention" : "quiet"}>
         {details ? <Eye aria-hidden="true" /> : <Lock aria-hidden="true" />}
         {details ? t("rulePreview.privacy.details", { destination: names.destination }) : t("rulePreview.privacy.busyOnly")}
@@ -232,15 +226,18 @@ function PreviewResults({
   run,
   names,
   lookbackDays,
+  filters,
+  onFiltersChange,
   onAnnounce,
 }: {
   run: PreviewRun
   names: Names
   lookbackDays: number
+  filters: PreviewFilters
+  onFiltersChange: (filters: PreviewFilters) => void
   onAnnounce: (text: string) => void
 }) {
   const i18n = useI18n()
-  const [filters, setFilters] = useState<PreviewFilters>(NO_FILTERS)
   const now = run.completedAt
   // Placing a series at its next date steps through its rule, so it is not redone on every render.
   const shown = useMemo(() => run.items.filter((item) => matchesFilters(item, filters)), [run.items, filters])
@@ -252,7 +249,7 @@ function PreviewResults({
   }
   const written = run.items.some((item) => item.projection)
   const changeFilters = (next: PreviewFilters) => {
-    setFilters(next)
+    onFiltersChange(next)
     const count = run.items.filter((item) => matchesFilters(item, next)).length
     onAnnounce(i18n.t("rulePreview.filters.showing", { shown: i18n.format.number(count), total: i18n.format.number(run.items.length) }))
   }
@@ -265,7 +262,14 @@ function PreviewResults({
       )}
       <PreviewFilterBar items={run.items} filters={filters} shown={shown.length} onChange={changeFilters} />
       {shown.length ? (
-        <PreviewTable layout={layout} source={names.source} destination={names.destination} now={now} zone={zone} />
+        <PreviewTable
+          layout={layout}
+          source={names.source}
+          destination={names.destination}
+          now={now}
+          zone={zone}
+          complete={!isFiltered(filters)}
+        />
       ) : (
         <p className="rule-preview-no-match">{i18n.t("rulePreview.filters.noMatch")}</p>
       )}
@@ -329,7 +333,6 @@ function PreviewFooter({
         </a>
         <StartSummary
           run={run}
-          busy={busy}
           destination={names.destination}
           outcome={startFailure}
           onRetry={() => {
@@ -342,7 +345,7 @@ function PreviewFooter({
             destination={names.destination}
             ready={canStart}
             starting={enable.isPending}
-            busy={busy}
+            waiting={busy || failed}
             onStart={() => enable.mutate()}
           />
         )}
@@ -351,9 +354,27 @@ function PreviewFooter({
   )
 }
 
-/** That nothing is written yet, when the preview was made, and a way to make it again. */
-function PreviewLead({ run, onRetry }: { run: PreviewRun | undefined; onRetry: () => void }) {
+/** What the preview reads: the source, and the destination too once the rule has written there. */
+function readingText(i18n: I18n, detail: RuleDetail, names: Names): string {
+  return detail.mapping_count > 0
+    ? i18n.t("rulePreview.page.readingBoth", names)
+    : i18n.t("rulePreview.page.reading", { source: names.source })
+}
+
+/**
+ * That nothing is written yet, when the preview was made, and a way to make it again; while it
+ * reads, what it is reading, in the same place so nothing below moves.
+ */
+function PreviewLead({ run, reading, onRetry }: { run: PreviewRun | undefined; reading: string | null; onRetry: () => void }) {
   const i18n = useI18n()
+  if (reading) {
+    return (
+      <p className="rule-preview-lead rule-preview-reading">
+        <span className="rule-preview-reading-ghost"><GhostMark /></span>
+        {reading}
+      </p>
+    )
+  }
   if (!run) return <p className="rule-preview-lead">{i18n.t("rulePreview.page.lead")}</p>
   return (
     <p className="rule-preview-lead">
@@ -371,13 +392,11 @@ function PreviewLead({ run, onRetry }: { run: PreviewRun | undefined; onRetry: (
  */
 function StartSummary({
   run,
-  busy,
   destination,
   outcome,
   onRetry,
 }: {
   run: PreviewRun | undefined
-  busy: boolean
   destination: string
   outcome: StartFailure | null
   onRetry: () => void
@@ -396,7 +415,7 @@ function StartSummary({
       </p>
     )
   }
-  if (!run) return <p className="rule-preview-summary">{busy && t("rulePreview.page.previewing")}</p>
+  if (!run) return <p className="rule-preview-summary" />
   return (
     <div className="rule-preview-summary">
       <p className="rule-preview-counts" aria-label={t("rulePreview.counts.label", { destination })}>
@@ -411,13 +430,14 @@ function StartButton({
   destination,
   ready,
   starting,
-  busy,
+  waiting,
   onStart,
 }: {
   destination: string
   ready: boolean
   starting: boolean
-  busy: boolean
+  /** Whether Start waits on a preview that is reading or did not finish. */
+  waiting: boolean
   onStart: () => void
 }) {
   const { t } = useI18n()
@@ -427,7 +447,7 @@ function StartButton({
       <Button
         className="rule-preview-start-button"
         aria-disabled={blocked ? true : undefined}
-        aria-describedby={busy ? "rule-preview-start-note" : undefined}
+        aria-describedby={waiting ? "rule-preview-start-note" : undefined}
         onClick={() => !blocked && onStart()}
       >
         {starting ? (
@@ -438,10 +458,13 @@ function StartButton({
           t("rulePreview.page.startSyncing", { destination })
         )}
       </Button>
-      {busy && (
+      {waiting ? (
         <span id="rule-preview-start-note" className="rule-preview-start-note">
           {t("rulePreview.page.availableWhenDone")}
         </span>
+      ) : (
+        // Beside the counts on wide screens; here, under the button, where narrow screens put it.
+        <span className="rule-preview-start-note rule-preview-start-reassure">{t("rulePreview.page.pauseAnyTime")}</span>
       )}
     </div>
   )

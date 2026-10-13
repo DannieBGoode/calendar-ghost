@@ -5730,18 +5730,19 @@ thead + .incident-group th {
   color: var(--warning-foreground);
 }
 
+/* Takes the lead's place and size while the preview reads, so nothing under it moves. */
 .rule-preview-reading {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   color: var(--muted-foreground);
-  font-size: 0.875rem;
 }
 
 .rule-preview-reading-ghost {
   display: inline-flex;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-block: -0.125rem;
 }
 
 .rule-preview-privacy {
@@ -6155,7 +6156,14 @@ td.rule-preview-col-when {
   padding: 0.0625rem 0.375rem;
   color: var(--foreground);
   font-size: 0.8125rem;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, currentColor 35%, transparent);
+  text-underline-offset: 0.2em;
   vertical-align: baseline;
+}
+
+.rule-preview-inline-action:hover {
+  text-decoration-color: currentColor;
 }
 
 /* What Start syncing will do, on the same line as it, so the decision is made with the counts in
@@ -6176,9 +6184,18 @@ td.rule-preview-col-when {
   white-space: nowrap;
 }
 
+/* The reassurance sits beside the counts while there is room, and under the button after. */
+.rule-preview-start-reassure {
+  display: none;
+}
+
 @media (max-width: 1099px) {
   .rule-preview-consequence {
     display: none;
+  }
+
+  .rule-preview-start-reassure {
+    display: block;
   }
 }
 
@@ -6264,23 +6281,22 @@ td.rule-preview-col-when {
     margin-left: 0;
   }
 
-  .rule-preview-option {
-    min-height: 2.75rem;
-  }
-
   .rule-preview-start,
   .rule-preview-start-button {
     width: 100%;
   }
 
+  /* Back and the counts first, then the button and what it promises, so the decision follows the
+     summary at every width. */
   .rule-preview-start {
-    order: -1;
     align-items: stretch;
+    text-align: center;
   }
 
-  /* The counts stay beside the button; the sentence under them waits for a wider screen. */
-  .rule-preview-consequence {
-    display: none;
+  .rule-preview-option,
+  .rule-preview-kind-toggle,
+  .rule-preview-earlier-toggle {
+    min-height: 2.75rem;
   }
 
   /* A full touch target, with negative margins so the line it sits in keeps its height. */

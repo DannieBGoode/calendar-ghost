@@ -1,4 +1,4 @@
-import { SlidersHorizontal } from "lucide-react"
+import { ListFilter } from "lucide-react"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -140,7 +140,7 @@ export function PreviewFilterBar({
             aria-controls={openKinds ? "rule-preview-kinds" : undefined}
             onClick={() => setKindsOpen(!openKinds)}
           >
-            <SlidersHorizontal aria-hidden="true" />
+            <ListFilter aria-hidden="true" />
             {t("rulePreview.filters.kindToggle")}
             {chosen.size > 0 && (
               <>
