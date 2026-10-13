@@ -121,17 +121,19 @@ class FakeCalendars:
         if source in self.expired:
             self.expired.discard(source)
             cursor = None
+        # A cursor is a position in the calendar's feed. Reading from it moves nothing, as with a
+        # provider's sync token: only saving the next cursor does, so a reader may look ahead.
+        feed = self.feeds.setdefault(source, [])
         if cursor is None:
-            self.feeds.pop(source, None)
             items = tuple(
                 event
                 for event in self.events.values()
                 if event.reference.calendar == source and self._in_window(event, not_ended_before)
             )
         else:
-            items = tuple(self.feeds.pop(source, []))
+            items = tuple(feed[_position(cursor) :])
         return ProviderChangeSet(
-            items, f"cursor-{source.calendar_id.value}", complete=cursor is None
+            items, f"cursor-{source.calendar_id.value}@{len(feed)}", complete=cursor is None
         )
 
     @staticmethod
@@ -545,3 +547,9 @@ class ReaderOnlyCalendar:
         self, series: EventRef, not_ended_before: datetime
     ) -> Sequence[CalendarEvent]:
         return self._calendar.occurrence_exceptions(series, not_ended_before)
+
+
+def _position(cursor: str) -> int:
+    """Where a cursor this fake handed out points in its feed; any other reads from the start."""
+    _, _, position = cursor.rpartition("@")
+    return int(position) if position.isdigit() else 0

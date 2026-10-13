@@ -470,6 +470,48 @@ def test_a_source_event_deleted_after_a_run_shows_its_planned_removal() -> None:
     assert (item.planned_action, item.reason) == (SyncAction.DELETE, SyncReason.SOURCE_CANCELLED)
 
 
+def test_a_source_event_deleted_while_paused_shows_its_removal_though_the_window_omits_it() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    _pause(factory)
+    # A provider's fresh listing leaves a deleted event out; only the change feed reports it.
+    del calendars.events[event().reference]
+    calendars.report(replace(event(), status=EventStatus.CANCELLED, time=None, revision="gone"))
+
+    [item] = _preview(factory, calendars).execute(rule().id).items
+
+    assert (item.planned_action, item.reason) == (SyncAction.DELETE, SyncReason.SOURCE_CANCELLED)
+
+
+def test_a_source_event_moved_before_the_window_while_paused_shows_its_update() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    _pause(factory)
+    long_ago = replace(
+        event(),
+        time=replace(
+            event().time,
+            starts_at=NOW - timedelta(days=90),
+            ends_at=NOW - timedelta(days=90, hours=-1),
+        ),
+        revision="moved",
+    )
+    calendars.events[event().reference] = long_ago
+    calendars.report(long_ago)
+
+    [item] = _preview(factory, calendars).execute(rule().id).items
+
+    assert item.planned_action is SyncAction.UPDATE
+    # Reading the feed moved nothing: the next Sync Run still reads the same change.
+    assert calendars.changes(rule().source, factory.state.cursors[rule().id], NOW).events == (
+        long_ago,
+    )
+
+
 def test_a_projection_cancelled_in_the_destination_plans_as_missing() -> None:
     calendars = FakeCalendars()
     calendars.put(event())

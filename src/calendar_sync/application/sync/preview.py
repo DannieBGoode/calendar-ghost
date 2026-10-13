@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Literal
 
 from calendar_sync.application.shared.ports import Clock
@@ -160,7 +160,9 @@ class PreviewSyncRule:
 
     def _read(self, rule: SyncRule) -> tuple[_PreviewScope, tuple[PreviewItem, ...]]:
         cutoff = self.clock.now() - timedelta(days=rule.initial_lookback_days)
-        scope = self._classify(rule, self.provider.changes(rule.source, None, cutoff).events)
+        with self.unit_of_work() as uow:
+            cursor = uow.cursors.get(rule.id)
+        scope = self._classify(rule, self._source_events(rule, cursor, cutoff))
         with self.unit_of_work() as uow:
             mappings = {mapping.source: mapping for mapping in uow.mappings.for_rule(rule.id)}
             # A rule that never wrote has nothing in the destination to compare with.
@@ -182,6 +184,26 @@ class PreviewSyncRule:
                 if _shown(item := planner.item(event, parent, projects))
             )
         return scope, items
+
+    def _source_events(
+        self, rule: SyncRule, cursor: str | None, cutoff: datetime
+    ) -> tuple[CalendarEvent, ...]:
+        """Every source event in the window, and, for a rule that has run, every change its next
+        Sync Run will read from the saved cursor that the window no longer shows: an event deleted,
+        or moved before the window, while the rule was paused. Reading from the cursor moves
+        nothing; only a Sync Run saves the next one."""
+        listed = self.provider.changes(rule.source, None, cutoff).events
+        if cursor is None:
+            return listed
+        seen = {event.reference for event in listed}
+        # An event changed twice since the cursor is read in its latest form.
+        pending = {
+            event.reference: event
+            for event in self.provider.changes(rule.source, cursor, cutoff).events
+        }
+        return listed + tuple(
+            event for reference, event in pending.items() if reference not in seen
+        )
 
     def _previewable_rule(self, rule_id: SyncRuleId) -> SyncRule:
         with self.unit_of_work() as uow:

@@ -200,6 +200,7 @@ preview on the page.
 |---|---|
 | New rule, no mappings | One paged source listing, one live-occurrence check per series, a parent read for an occurrence whose series is not listed. No destination reads. |
 | Rule with mappings | The above, plus one paged `managed_events` listing of the destination, matched against mappings in memory, instead of `get_event` per mapped event. `get_occurrence` only for changed occurrences of mapped series. |
+| Rule that has run | The above, plus the source changes since the rule's saved cursor, read without saving the next one. A change the window no longer shows, such as an event deleted or moved before the window while the rule was paused, is planned like any other, so the preview shows every action the resumed rule's next Sync Run will take. |
 | Coming back to the page | None. |
 
 A mapped event missing from the destination listing plans as projection missing (+ Add), as a
