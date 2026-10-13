@@ -189,7 +189,7 @@ describe("RulePreviewView", () => {
     const underTitle = [...container.querySelectorAll(".rule-preview-header > :not(h1)")].map((node) => node.textContent)
     expect(underTitle.join(" ")).not.toMatch(/Family|Work/)
     expect(container.querySelector(".rule-preview-settings")?.textContent).toBe(
-      "What this rule syncs: From the past 30 days · All-day events · No birthdays · Maybe as “Busy (tentative)” · Invitations once answered · No declined eventsChange",
+      "What this rule syncs: From the past 30 days · All-day events · No birthdays · Maybe as “Busy (tentative)” · Invitations sync once answered · No declined eventsChange",
     )
     expect(text).toContain("events added or changed later sync on their own")
     const rows = [...container.querySelectorAll(".rule-preview-row")].map((row) => row.textContent)

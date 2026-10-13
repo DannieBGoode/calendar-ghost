@@ -194,7 +194,7 @@ function PreviewHeader({
   accounts: ReactNode
   /** What this page is and when it was made, with a way to make it again. */
   lead: ReactNode
-  /** The rule's choices, folded until asked. */
+  /** The rule's choices in a few words, with a way to change them. */
   settings: ReactNode
 }) {
   const i18n = useI18n()

@@ -1,4 +1,5 @@
 import { ArrowRight, SlidersHorizontal } from "lucide-react"
+import { Fragment } from "react"
 
 import { AccountAvatar } from "@/components/account-avatar"
 import { Button } from "@/components/ui/button"
@@ -87,20 +88,25 @@ export function PreviewSettings({ detail, onChange }: { detail: RuleDetail; onCh
       <SlidersHorizontal aria-hidden="true" />
       <span>
         <span className="sr-only">{t("rulePreview.rule.settings")} </span>
-        {settingsFacts(i18n, detail).join(" · ")}
+        {settingsFacts(i18n, detail).map((fact, index) => (
+          <Fragment key={fact}>
+            {index > 0 && " · "}
+            <span className="rule-preview-fact">{fact}</span>
+          </Fragment>
+        ))}
+        <Button variant="ghost" size="sm" className="rule-preview-inline-action" asChild>
+          <a
+            href={appPathForRule(detail.id)}
+            onClick={(event) => {
+              if (!isPlainLeftClick(event)) return
+              event.preventDefault()
+              onChange()
+            }}
+          >
+            {t("rulePreview.rule.change")}
+          </a>
+        </Button>
       </span>
-      <Button variant="ghost" size="sm" className="rule-preview-inline-action" asChild>
-        <a
-          href={appPathForRule(detail.id)}
-          onClick={(event) => {
-            if (!isPlainLeftClick(event)) return
-            event.preventDefault()
-            onChange()
-          }}
-        >
-          {t("rulePreview.rule.change")}
-        </a>
-      </Button>
     </p>
   )
 }

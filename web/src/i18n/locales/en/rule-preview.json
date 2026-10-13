@@ -168,10 +168,10 @@
     "birthdaysOn": "Birthdays",
     "birthdaysOff": "No birthdays",
     "maybeAs": "Maybe as “{title}”",
-    "maybeSync": "Maybe like accepted",
+    "maybeSync": "Maybe events like accepted",
     "maybeOff": "No Maybe events",
     "unansweredAs": "Unanswered as Maybe",
-    "unansweredWait": "Invitations once answered",
+    "unansweredWait": "Invitations sync once answered",
     "unansweredOff": "No unanswered invitations",
     "declinedOff": "No declined events"
   }
