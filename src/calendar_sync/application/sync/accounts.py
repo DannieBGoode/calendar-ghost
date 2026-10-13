@@ -18,9 +18,11 @@ from calendar_sync.application.sync.ports import (
     AccountCalendars,
     ConnectedAccountRepository,
     DiscoveredCalendar,
+    IncidentRepository,
     UnitOfWorkFactory,
 )
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState
+from calendar_sync.domain.causes import ADMINISTRATOR_CAUSES
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId
 from calendar_sync.domain.providers import AUTHORIZATION_FAILURES
 
@@ -102,6 +104,32 @@ class CheckAccountAccess:
             _lapse_if_refused(self.accounts, self.lapses, account_id, error, started)
             raise
         return AccessCheck(access, self.lapses.restored(account_id, accepted_at=started))
+
+
+@dataclass(slots=True)
+class RecheckAdministratorLapses:
+    """Check again each account an administrator's Cause stopped, such as an expired client
+    secret or a provider API turned off (ADR 0031).
+
+    Its owner cannot fix that Cause, so once the administrator has, the check passes and every
+    rule the lapse alone stopped restarts, without each owner choosing Check access. A check
+    that still fails changes nothing: the account stays lapsed and its open Incident notifies
+    nobody again. A lapse with a Cause the owner fixes is left for them.
+    """
+
+    check: CheckAccountAccess
+    incidents: IncidentRepository
+
+    def execute(self) -> int:
+        """How many rules restarted."""
+        resumed = 0
+        accounts = self.incidents.accounts_lapsed_by(ADMINISTRATOR_CAUSES)
+        for account_id in sorted(accounts, key=lambda account: account.value):
+            try:
+                resumed += self.check.execute(account_id).rules_resumed
+            except (AccountAccessCheckFailed, ConnectedAccountNotFound):
+                continue
+        return resumed
 
 
 def _lapse_if_refused(

@@ -303,8 +303,12 @@ Without its settings, the installation behaves as before and offers no Microsoft
 - `CALENDAR_SYNC_MICROSOFT_CLIENT_ID` and `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`: the
   application's client ID and a client secret. A secret expires on the date chosen when it was
   created, at most 24 months later; create the next one and put it here before then
-  ([rotating the secret](self-hosting.md#register-a-microsoft-entra-application)). Calendar Ghost
-  cannot read the expiry date and does not warn before it.
+  ([rotating the secret](self-hosting.md#register-a-microsoft-entra-application)).
+- `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES`: optional, the secret's **Expires** date from
+  Entra, such as `2027-04-12`. Calendar Ghost cannot read the date from Microsoft. With it,
+  Installation Health raises an installation Incident from 30 days before the date, which People,
+  `GET /api/v1/installation/health`, and the installation's email and webhook report. Change it
+  together with the secret.
 - `CALENDAR_SYNC_MICROSOFT_REDIRECT_URI`: the redirect URI registered on the application, by default
   `http://localhost:8000/api/v1/oauth/microsoft/callback`. Microsoft, like Google, accepts plain
   `http://` only for `localhost`, so a LAN host uses an SSH tunnel or an HTTPS name exactly as

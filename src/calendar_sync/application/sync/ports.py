@@ -14,6 +14,7 @@ from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditEntry
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
@@ -512,6 +513,10 @@ class IncidentRepository(Protocol):
 
     def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
         """Every account whose own Incident, the one its Lapsed Authorization opens, is open."""
+        ...
+
+    def accounts_lapsed_by(self, causes: Collection[Cause]) -> frozenset[ConnectedAccountId]:
+        """Every account whose own Incident is open with one of `causes`, as it last recorded."""
         ...
 
 

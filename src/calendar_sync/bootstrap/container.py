@@ -49,6 +49,7 @@ from calendar_sync.application.operations.activity import (
 )
 from calendar_sync.application.operations.installation_health import (
     GetInstallationHealth,
+    InstallationIncidentWatch,
     InstallationNotifications,
 )
 from calendar_sync.application.operations.operator_overview import OperatorOverview, UserStatuses
@@ -69,6 +70,7 @@ from calendar_sync.application.sync.accounts import (
     DisconnectConnectedAccount,
     DiscoverCalendars,
     ListConnectedAccounts,
+    RecheckAdministratorLapses,
 )
 from calendar_sync.application.sync.health import RuleHealth
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
@@ -408,6 +410,7 @@ def calendar_providers(
                 states,
                 settings.master_key,
                 clock,
+                secret_expires=settings.microsoft_client_secret_expires,
             ),
         )
     )
@@ -449,7 +452,12 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         account_calendars=adapters.account_calendars,
         scheduler=scheduler,
         scheduler_watch=(
-            SchedulerWatch(scheduler, adapters.installation_notifications, adapters.clock)
+            SchedulerWatch(
+                scheduler,
+                adapters.installation_notifications,
+                adapters.clock,
+                incidents=InstallationIncidentWatch(adapters.providers.client_secrets),
+            )
             if scheduler is not None and adapters.installation_notifications is not None
             else None
         ),
@@ -460,6 +468,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             adapters.clock,
             _failure_causes(adapters.installation_units),
             adapters.providers.guides,
+            adapters.providers.client_secrets,
         ),
         operator_overview=OperatorOverview(
             adapters.users, statuses, adapters.installation_units, adapters.clock
@@ -528,7 +537,12 @@ def _administration(
 
 def _scheduled_services(services: UserServices) -> ScheduledServices:
     assert services.execute_sync_rule is not None
-    return ScheduledServices(services.execute_sync_rule, services.rule_health)
+    check = services.check_account_access
+    return ScheduledServices(
+        services.execute_sync_rule,
+        services.rule_health,
+        RecheckAdministratorLapses(check, services.rule_health.incidents) if check else None,
+    )
 
 
 def _compose_user(

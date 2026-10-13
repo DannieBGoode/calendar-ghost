@@ -265,6 +265,8 @@
     },
     "countsLabel": "Show only",
     "schedulerStalled": "Scheduled synchronization stopped running {relative}.",
+    "secretExpiring": "The {provider} client secret expires on {date}. Put a new one in place before then, or every {provider} account stops.",
+    "secretExpired": "The {provider} client secret expired on {date}. Every {provider} account stopped; put a new secret in place to restart them.",
     "meanings": "What each sync status means",
     "hints": {
       "title": "Likely causes",

@@ -5,9 +5,9 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
-from threading import Barrier, Lock, Thread
+from threading import Barrier, Event, Lock, Thread
 from typing import Any, cast
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -16,6 +16,7 @@ from calendar_sync.application.operations.installation_health import (
     InstallationIncidentKind,
 )
 from calendar_sync.application.operations.ports import (
+    CauseSighting,
     InstallationUnitOfWork,
     InstallationUnitOfWorkFactory,
     SchedulerProgress,
@@ -40,7 +41,7 @@ from calendar_sync.application.sync.synchronization import ExecuteSyncRule, Sync
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
-from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.causes import ADMINISTRATOR_CAUSES, Cause
 from calendar_sync.domain.incidents import (
     IncidentCategory,
     IncidentMessage,
@@ -1179,6 +1180,58 @@ def test_a_pass_finishes_a_restoration_the_process_stopped_before(tmp_path: Path
     assert resumed.state is SyncRuleState.ENABLED
     assert incidents == [("resolved", "access_restored")]
     assert execute.calls == 1
+
+
+def test_a_check_waiting_on_the_provider_holds_up_no_rule() -> None:
+    # The check answers only once the rule has run, so a pass that ran checks before its rules,
+    # or after them, would wait for the full timeout.
+    ran = Event()
+
+    class WaitingFixes:
+        def execute(self) -> int:
+            assert ran.wait(timeout=5), "the rule never ran while the check waited"
+            return 0
+
+    class SignallingRule(RecordingExecuteRule):
+        def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+            ran.set()
+            return super().execute(rule_id, full=full)
+
+    units = _enabled_rules(1)
+    installation = InMemoryInstallationUnitOfWorkFactory(units.database)
+    execute = SignallingRule([None])
+    services = ScheduledServices(
+        cast(SyncRuns, execute), cast(RunHealth, RecordingHealth()), WaitingFixes()
+    )
+    sightings = [CauseSighting(USER, Cause.OAUTH_CLIENT_INVALID, datetime.now(UTC), True)]
+    with patch.object(InMemoryInstallationUnitOfWork, "failure_causes", lambda *_: sightings):
+        started = time.monotonic()
+        asyncio.run(_running(installation, lambda _owner: services, concurrency=2).run_once())
+
+    assert execute.calls == 1
+    assert time.monotonic() - started < 5
+
+
+def test_the_incidents_name_the_accounts_an_administrators_cause_stopped(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
+    accounts = store.for_user(USER)
+    work = accounts.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    home = accounts.save("Home", "home@example.test", "{}", provider=ProviderKind.GOOGLE)
+    unit_of_work = sqlite_units(database)
+    health = _rule_health(database, unit_of_work)
+    for account, cause in ((work, Cause.OAUTH_CLIENT_INVALID), (home, Cause.ACCESS_REVOKED)):
+        refused = ProviderFailure(
+            ProviderFailureKind.AUTHENTICATION, "refused", account_id=account.id, cause=cause
+        )
+        health.lapses.lapsed(account.id, refused, attempted_at=datetime.now(UTC))
+
+    incidents = SqliteIncidentRepository(database, add_user(database))
+
+    assert incidents.accounts_lapsed_by(ADMINISTRATOR_CAUSES) == {work.id}
+    assert incidents.accounts_lapsed_by(()) == frozenset()
 
 
 def test_a_lapse_committed_while_a_rule_resumes_keeps_it_stopped(
