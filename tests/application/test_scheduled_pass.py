@@ -241,6 +241,14 @@ def _checking(
     )
 
 
+def _pass_with_checks(scheduled: ScheduledPass) -> tuple[ScheduledRun, ...]:
+    """A pass as the scheduler runs it: its rules, and beside them the checks it chose."""
+    runs = scheduled.begin()
+    for owner in scheduled.checks_due():
+        scheduled.check_administrator_fixes(owner)
+    return runs
+
+
 def test_a_user_an_administrators_cause_stopped_is_checked_again_at_most_once_an_hour() -> None:
     third = UserId("third-user")
     sightings = [
@@ -253,11 +261,11 @@ def test_a_user_an_administrators_cause_stopped_is_checked_again_at_most_once_an
     clock = SteppingClock()
     scheduled = _checking(sightings, fixes, clock)
 
-    scheduled.begin()
+    _pass_with_checks(scheduled)
     clock.current = NOW + timedelta(minutes=59)
-    scheduled.begin()
+    _pass_with_checks(scheduled)
     clock.current = NOW + RECHECK_INTERVAL
-    scheduled.begin()
+    _pass_with_checks(scheduled)
 
     assert [fixes[user].calls for user in (USER, OTHER_USER, third)] == [2, 0, 0]
 
@@ -266,8 +274,12 @@ def test_a_check_that_fails_never_stops_the_pass(caplog: pytest.LogCaptureFixtur
     sightings = [CauseSighting(USER, Cause.OAUTH_CLIENT_INVALID, NOW, True)]
     fixes = {USER: Fixes(sqlite3.OperationalError("database is locked"))}
 
-    runs = _checking(sightings, fixes, SteppingClock()).begin()
+    scheduled = _checking(sightings, fixes, SteppingClock())
+
+    runs = _pass_with_checks(scheduled)
 
     assert runs == ()
     assert fixes[USER].calls == 1
+    # Each check is handed out once, so a pass never runs it twice.
+    assert scheduled.checks_due() == ()
     assert "Checking accounts an administrator's cause stopped failed" in caplog.text

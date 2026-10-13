@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
+from functools import partial
 
 from calendar_sync.application.operations.installation_health import (
     InstallationIncidentWatch,
@@ -88,7 +90,19 @@ class SyncScheduler:
             async with slots:
                 await asyncio.to_thread(self._pass.run, scheduled)
 
-        await asyncio.gather(*(run(scheduled) for scheduled in runs))
+        # Checks of accounts an administrator's Cause stopped share the same slots, so a provider
+        # that answers slowly, or not at all, holds up no rule.
+        async def check(one: Callable[[], None]) -> None:
+            async with slots:
+                await asyncio.to_thread(one)
+
+        await asyncio.gather(
+            *(run(scheduled) for scheduled in runs),
+            *(
+                check(partial(self._pass.check_administrator_fixes, owner))
+                for owner in self._pass.checks_due()
+            ),
+        )
         return frozenset(scheduled.scheduled.rule.id.value for scheduled in runs)
 
 

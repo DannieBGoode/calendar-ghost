@@ -146,8 +146,10 @@ retrying the disconnection completes it. The pass then checks again, through
 `RecheckAdministratorLapses` and the ordinary access check, every account an administrator's Cause
 lapsed, such as an expired client secret: its owner cannot fix that Cause, so once the
 administrator has, the check passes and the rules restart with no action from their owner. It
-checks each User at most once an hour (`RECHECK_INTERVAL`), and at once after a restart. A check
-that still fails changes nothing and notifies nobody again. Scheduled runs and Rule Removal share one retry helper in
+checks each User at most once an hour (`RECHECK_INTERVAL`), and at once after a restart. The
+checks run beside the pass's rules and share their concurrency limit, so a provider that answers
+slowly holds up no rule; the rules a passing check restarts run at the next pass. A check that
+still fails changes nothing and notifies nobody again. Scheduled runs and Rule Removal share one retry helper in
 `application/sync/retry.py`, which retries only temporary and rate-limited failures.
 
 A Sync Run is the `ExecuteSyncRule` use case in `application/sync/synchronization.py`. It holds the
