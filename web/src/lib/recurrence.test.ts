@@ -124,5 +124,17 @@ describe("nextOccurrence in the series' zone", () => {
     )
     expect(next).toEqual(new Date(Date.UTC(2026, 9, 21, 1, 0)))
   })
+
+  it("reads a quoted zone on an excluded time", () => {
+    // Tuesday 13 October 2026, 01:00 in Los Angeles.
+    const first = new Date(Date.UTC(2026, 9, 6, 8, 0))
+    const next = nextOccurrence(
+      readRepeat(["RRULE:FREQ=WEEKLY", 'EXDATE;TZID="America/Los_Angeles":20261013T010000']),
+      first,
+      new Date(Date.UTC(2026, 9, 10)),
+      "America/Los_Angeles",
+    )
+    expect(next).toEqual(new Date(Date.UTC(2026, 9, 20, 8, 0)))
+  })
 })
 

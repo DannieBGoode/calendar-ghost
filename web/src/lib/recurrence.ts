@@ -105,7 +105,8 @@ function skippedDates(lines: readonly string[]): Skip[] {
     .filter((line) => line.toUpperCase().startsWith("EXDATE"))
     .flatMap((line) => {
       const [head = "", values = ""] = line.split(/:(.*)/)
-      const timeZone = /TZID=([^;:]+)/i.exec(head)?.[1] ?? null
+      // A TZID may be quoted (TZID="America/Los_Angeles"); the quotes are not part of its name.
+      const timeZone = /TZID="?([^";:]+)"?/i.exec(head)?.[1] ?? null
       return values.split(",").map((value) => skipOf(value.trim(), timeZone))
     })
     .filter((skip): skip is Skip => skip !== null)
