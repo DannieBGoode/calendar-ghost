@@ -21,6 +21,11 @@ export const UNANSWERED_OPTIONS: { value: UnansweredInvitations; labelKey: Messa
 const BUSY_TENTATIVE_TITLE = "Busy (tentative)"
 const MAYBE_PREFIX = "Maybe: "
 
+/** The title a Maybe event's projection carries, in short: "Busy (tentative)", or "Maybe: …". */
+export function tentativeTitleShort(privacy: RulePolicyPayload["privacy_policy"]): string {
+  return privacy === "busy_only" ? BUSY_TENTATIVE_TITLE : `${MAYBE_PREFIX}…`
+}
+
 /** How a Maybe event's projection is titled, matching the domain's EventProjector. */
 function tentativeTitle(i18n: I18n, privacy: RulePolicyPayload["privacy_policy"]): string {
   if (privacy === "busy_only") {

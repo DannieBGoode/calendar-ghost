@@ -9,7 +9,7 @@
     "startSyncing": "Start syncing to {destination}",
     "starting": "Starting…",
     "availableWhenDone": "Available when the preview finishes",
-    "previewAgain": "Read again",
+    "previewAgain": "Refresh",
     "previewing": "Previewing…",
     "enableFailed": "Syncing did not start.",
     "changedSincePreview": "This rule changed since the preview.",
@@ -157,7 +157,22 @@
   },
   "rule": {
     "account": "{provider} · {email}",
-    "settings": "What this rule syncs",
-    "change": "Change settings"
+    "settings": "What this rule syncs:",
+    "change": "Change",
+    "since": {
+      "one": "From the past {count} day",
+      "other": "From the past {count} days"
+    },
+    "allDayOn": "All-day events",
+    "allDayOff": "No all-day events",
+    "birthdaysOn": "Birthdays",
+    "birthdaysOff": "No birthdays",
+    "maybeAs": "Maybe as “{title}”",
+    "maybeSync": "Maybe like accepted",
+    "maybeOff": "No Maybe events",
+    "unansweredAs": "Unanswered as Maybe",
+    "unansweredWait": "Invitations once answered",
+    "unansweredOff": "No unanswered invitations",
+    "declinedOff": "No declined events"
   }
 }

@@ -53,14 +53,15 @@ destination, or why it stays out.
   title already names the calendars, so nothing under it names them again; a rule within one
   account shows it once.
 - **What this is:** "A preview from 4:55 PM: nothing is written until you start syncing.", with
-  "Read again" at its end.
+  "Refresh" at its end. Not "Sync again": nothing has synced, and the word would promise a write.
 - **What is shared:** the policy's own line. Busy-Only: a lock and "Busy only: titles, descriptions,
   and locations stay private." Details: an eye in Attention Ochre and "Copies titles, descriptions,
   and locations to Work. Anyone who can see Work sees them." (Destructive and Privacy-Widening
   Changes).
-- **What this rule syncs:** one quiet line under the privacy line that opens to the rule's other
-  choices in Rule Details' words (all-day events, birthdays, Maybe, unanswered, declined, starting
-  point), with "Change settings" as an icon button at its end.
+- **What this rule syncs:** one quiet line under the privacy line, in its style, with each choice in
+  a few words: "From the past 30 days · All-day events · No birthdays · Maybe as “Busy (tentative)” ·
+  Unanswered as Maybe · No declined events", and "Change" as a text action at its end. Nothing to
+  open: the line is short enough to read in place.
 
 The counts ("+ 12 to add · ⊘ 3 not synced") sit in the sticky footer beside Start syncing, so the
 decision is made with them in view; they cover the whole preview, never the filtered view.
@@ -80,8 +81,9 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
 - What happens uses Activity's signs and reason words (`ChangeSign`, `activity-reasons.ts`): + Add,
   ~ Update, − Remove, ✓ Already up to date, ⊘ Not synced with its reason (all-day, birthday, you
   declined, you answered Maybe, you haven't answered, written by Calendar Ghost, no occurrence
-  left). Signs sit in Activity's small tinted discs, not bright filled circles. Most rows add, so
-  the word "Add" is in Muted Ink beside its green sign; Update, Remove, and blocked keep full weight.
+  left). Signs sit in Activity's small tinted discs, not bright filled circles. Update and Remove
+  are in semibold, so the rare rows that change or delete what is already there stand out among the
+  adds.
 - An excluded row is muted as a whole, in Muted Ink (which passes body contrast), so the rows that
   write read first.
 - Rows are one line where they fit. A recurrence or Invitation Response sits inline after the

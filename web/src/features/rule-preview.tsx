@@ -358,7 +358,7 @@ function PreviewLead({ run, onRetry }: { run: PreviewRun | undefined; onRetry: (
   return (
     <p className="rule-preview-lead">
       {i18n.t("rulePreview.page.leadAt", { time: i18n.format.time(run.completedAt) })}
-      <Button type="button" variant="ghost" size="sm" className="rule-preview-again" onClick={onRetry}>
+      <Button type="button" variant="ghost" size="sm" className="rule-preview-inline-action" onClick={onRetry}>
         {i18n.t("rulePreview.page.previewAgain")}
       </Button>
     </p>
@@ -389,7 +389,7 @@ function StartSummary({
       <p className="rule-preview-summary" role="alert">
         {outcome === "changed" ? t("rulePreview.page.changedSincePreview") : t("rulePreview.page.enableFailed")}
         {outcome === "changed" && (
-          <Button type="button" variant="ghost" size="sm" className="rule-preview-again" onClick={onRetry}>
+          <Button type="button" variant="ghost" size="sm" className="rule-preview-inline-action" onClick={onRetry}>
             {t("rulePreview.page.previewAgain")}
           </Button>
         )}

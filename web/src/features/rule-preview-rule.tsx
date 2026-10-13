@@ -1,10 +1,11 @@
-import { ArrowRight, ChevronDown, ListFilter, Settings2 } from "lucide-react"
+import { ArrowRight, SlidersHorizontal } from "lucide-react"
 
 import { AccountAvatar } from "@/components/account-avatar"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
+import type { I18n } from "@/i18n/translator"
 import type { ConnectedAccount, RuleDetail } from "@/lib/api"
-import { tentativeFact, unansweredFact } from "@/lib/invitation-responses"
+import { tentativeTitleShort } from "@/lib/invitation-responses"
 import { appPathForRule, isPlainLeftClick } from "@/lib/navigation"
 import { accountNoun } from "@/lib/providers"
 
@@ -50,49 +51,56 @@ export function PreviewAccounts({ detail, accounts }: { detail: RuleDetail; acco
   )
 }
 
-/** The choices this preview follows, in the words Rule Details uses, folded to one line until asked. */
+/** How the rule treats Maybe events and unanswered invitations, in a few words each. */
+function invitationFacts(i18n: I18n, detail: RuleDetail): string[] {
+  const { t } = i18n
+  const maybe = {
+    mark: t("rulePreview.rule.maybeAs", { title: tentativeTitleShort(detail.privacy_policy) }),
+    sync: t("rulePreview.rule.maybeSync"),
+    skip: t("rulePreview.rule.maybeOff"),
+  }[detail.tentative_events]
+  if (detail.unanswered_invitations === "wait") return [maybe, t("rulePreview.rule.unansweredWait")]
+  return [maybe, detail.tentative_events === "skip" ? t("rulePreview.rule.unansweredOff") : t("rulePreview.rule.unansweredAs")]
+}
+
+/** The rule's choices in a few words each, in the order Rule Details lists them. */
+function settingsFacts(i18n: I18n, detail: RuleDetail): string[] {
+  const { t } = i18n
+  return [
+    t("rulePreview.rule.since", { count: detail.initial_lookback_days }),
+    detail.sync_all_day_events ? t("rulePreview.rule.allDayOn") : t("rulePreview.rule.allDayOff"),
+    detail.sync_birthdays ? t("rulePreview.rule.birthdaysOn") : t("rulePreview.rule.birthdaysOff"),
+    ...invitationFacts(i18n, detail),
+    t("rulePreview.rule.declinedOff"),
+  ]
+}
+
+/**
+ * The choices this preview follows, on one quiet line under the privacy line, with the way to change
+ * them at its end.
+ */
 export function PreviewSettings({ detail, onChange }: { detail: RuleDetail; onChange: () => void }) {
   const i18n = useI18n()
   const { t } = i18n
-  const settings: [string, string][] = [
-    [t("ruleDetails.facts.allDay"), detail.sync_all_day_events ? t("ruleDetails.facts.allDayIncluded") : t("ruleDetails.facts.allDayExcluded")],
-    [t("ruleDetails.facts.birthdays"), detail.sync_birthdays ? t("ruleDetails.facts.birthdaysIncluded") : t("ruleDetails.facts.birthdaysExcluded")],
-    [t("ruleDetails.facts.tentative"), tentativeFact(i18n, detail)],
-    [t("ruleDetails.facts.unanswered"), unansweredFact(i18n, detail)],
-    [t("ruleDetails.facts.declined"), t("ruleDetails.facts.declinedValue")],
-    [t("ruleDetails.facts.startingPoint"), t("ruleDetails.facts.startingPointValue", { count: detail.initial_lookback_days })],
-  ]
   return (
-    <div className="rule-preview-settings">
-      <details className="inline-help">
-        <summary>
-          <ListFilter aria-hidden="true" />
-          <span>{t("rulePreview.rule.settings")}</span>
-          <ChevronDown className="inline-help-chevron" aria-hidden="true" />
-        </summary>
-        <dl>
-          {settings.map(([term, value]) => (
-            <div key={term}>
-              <dt>{term}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </details>
-      <Button variant="ghost" size="icon" className="rule-preview-change" asChild>
+    <p className="rule-preview-settings">
+      <SlidersHorizontal aria-hidden="true" />
+      <span>
+        <span className="sr-only">{t("rulePreview.rule.settings")} </span>
+        {settingsFacts(i18n, detail).join(" · ")}
+      </span>
+      <Button variant="ghost" size="sm" className="rule-preview-inline-action" asChild>
         <a
           href={appPathForRule(detail.id)}
-          aria-label={t("rulePreview.rule.change")}
-          title={t("rulePreview.rule.change")}
           onClick={(event) => {
             if (!isPlainLeftClick(event)) return
             event.preventDefault()
             onChange()
           }}
         >
-          <Settings2 aria-hidden="true" />
+          {t("rulePreview.rule.change")}
         </a>
       </Button>
-    </div>
+    </p>
   )
 }
