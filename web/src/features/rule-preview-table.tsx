@@ -82,7 +82,7 @@ const PreviewRow = memo(function PreviewRow({ placed }: { placed: PlacedItem }) 
         )}
       </td>
       <td role="cell" className="rule-preview-col-outcome">
-        <span className="activity-happened" data-tone={TONES[outcome]} data-emphasis={outcome === "update" || outcome === "remove" ? "true" : undefined}>
+        <span className="activity-happened" data-tone={TONES[outcome]} data-outcome={outcome}>
           <span className="activity-sign" data-mark={OUTCOME_MARKS[outcome]}>
             <ChangeSign mark={OUTCOME_MARKS[outcome]} />
           </span>

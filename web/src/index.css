@@ -5866,8 +5866,13 @@ thead + .incident-group th {
   width: 16rem;
 }
 
-/* Updates and removals are the rows a first look must not miss among the adds. */
-.rule-preview-col-outcome .activity-happened[data-emphasis="true"] .activity-effect {
+/* Most written rows add, so "Add" steps back beside its green sign; updates and removals, the
+   rows a first look must not miss, stand out in full ink and weight. */
+.rule-preview-col-outcome .activity-happened[data-outcome="add"] .activity-effect {
+  color: var(--muted-foreground);
+}
+
+.rule-preview-col-outcome .activity-happened:is([data-outcome="update"], [data-outcome="remove"]) .activity-effect {
   font-weight: 600;
 }
 

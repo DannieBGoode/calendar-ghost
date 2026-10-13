@@ -85,7 +85,7 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
   declined, you answered Maybe, you haven't answered, written by Calendar Ghost, no occurrence
   left). Signs sit in Activity's small tinted discs, not bright filled circles. Update and Remove
   are in semibold, so the rare rows that change or delete what is already there stand out among the
-  adds.
+  adds; "Add" itself is in Muted Ink beside its green sign, since most written rows add.
 - An excluded row is muted as a whole, in Muted Ink (which passes body contrast), so the rows that
   write read first.
 - Rows are one line where they fit. A recurrence or Invitation Response sits inline after the
