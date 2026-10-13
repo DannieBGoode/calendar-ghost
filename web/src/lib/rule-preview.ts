@@ -186,6 +186,17 @@ export function layOut(items: readonly PreviewItem[], now: Date): PreviewLayout 
   }
 }
 
+/** The layout with only the items that pass, dropping days left empty; nothing is placed again. */
+export function narrowLayout(layout: PreviewLayout, keep: (item: PreviewItem) => boolean): PreviewLayout {
+  const days = (list: readonly PreviewDay[]) =>
+    list.map((day) => ({ ...day, items: day.items.filter((placed) => keep(placed.item)) })).filter((day) => day.items.length > 0)
+  return {
+    undated: layout.undated.filter((placed) => keep(placed.item)),
+    earlier: days(layout.earlier),
+    upcoming: days(layout.upcoming),
+  }
+}
+
 export function isTomorrow(date: Date, now: Date): boolean {
   return dayKey(date) === dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1))
 }

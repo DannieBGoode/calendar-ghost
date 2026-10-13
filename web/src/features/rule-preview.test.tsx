@@ -210,8 +210,8 @@ describe("RulePreviewView", () => {
     // Counts follow the other choices, so a kind with nothing to show can't lead to an empty table.
     act(() => button("Will sync 1").click())
     act(() => button("Kind").click())
-    expect(button("Birthdays 0").disabled).toBe(true)
-    expect(button("All 2").disabled).toBe(false)
+    expect(button("Birthdays 0").getAttribute("aria-disabled")).toBe("true")
+    expect(button("All 2").getAttribute("aria-disabled")).toBeNull()
     expect(container.querySelectorAll(".rule-preview-row")).toHaveLength(1)
     expect(container.textContent).toContain("Showing 1 of 2")
     // A filtered table is not every event, so it does not close by saying so.

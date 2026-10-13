@@ -289,7 +289,7 @@ export function nextOccurrence(repeat: Repeat | null, first: Date, from: Date, t
   const zone = zoneOf(timeZone)
   const wall = zone.wall(first)
   let seen = 0
-  for (let step = 0; step < STEP_LIMIT; step += 1) {
+  for (let step = firstStep(repeat, wall, zone.wall(from)); step < STEP_LIMIT; step += 1) {
     const instants = period(repeat, wall, step)
       .map((day) => ({ day, at: zone.at({ ...wall, ...day }) }))
       .filter(({ at }) => at >= first)
@@ -301,6 +301,22 @@ export function nextOccurrence(repeat: Repeat | null, first: Date, from: Date, t
     }
   }
   return null
+}
+
+/**
+ * The step to start from: one before the step that holds `from`, so an old series is not walked
+ * from its first date. A COUNT is counted from the first date, so such a series starts at 0.
+ */
+function firstStep(repeat: Repeat, first: Day, from: Day): number {
+  if (repeat.count !== null) return 0
+  const days = (Date.UTC(from.year, from.month, from.day) - Date.UTC(first.year, first.month, first.day)) / 86_400_000
+  const units = {
+    DAILY: days,
+    WEEKLY: Math.floor(days / 7),
+    MONTHLY: (from.year - first.year) * 12 + from.month - first.month,
+    YEARLY: from.year - first.year,
+  }[repeat.frequency]
+  return Math.max(0, Math.floor(units / repeat.interval) - 1)
 }
 
 /** Whether a date falls after the series' UNTIL, or past its COUNT of `seen` dates so far. */

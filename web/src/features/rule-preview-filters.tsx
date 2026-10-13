@@ -57,14 +57,16 @@ function FilterOption({
   onToggle: () => void
 }) {
   const { t, format } = useI18n()
+  // Stays in the tab order, so keyboard and screen reader users meet it and hear its 0.
+  const empty = count === 0 && !pressed
   return (
     <button
       type="button"
       className="rule-preview-option"
       aria-pressed={pressed}
       aria-label={t("rulePreview.filters.chip", { label, count: format.number(count) })}
-      disabled={count === 0 && !pressed}
-      onClick={onToggle}
+      aria-disabled={empty ? true : undefined}
+      onClick={() => !empty && onToggle()}
     >
       <span>{label}</span>
       <CountBadge count={count} />

@@ -15,7 +15,7 @@ import type { I18n } from "@/i18n/translator"
 import { ApiError, api, type ConnectedAccount, type RuleDetail } from "@/lib/api"
 import { appPathForRule, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
-import { NO_FILTERS, isFiltered, layOut, matchesFilters, outcomeCounts, type PreviewFilters, type PreviewItem } from "@/lib/rule-preview"
+import { NO_FILTERS, isFiltered, layOut, narrowLayout, matchesFilters, outcomeCounts, type PreviewFilters, type PreviewItem } from "@/lib/rule-preview"
 import { previewFailure } from "@/lib/rule-preview-failure"
 import { outcomeParts } from "@/lib/rule-preview-text"
 import { enabledMessage } from "@/lib/rule-run"
@@ -29,7 +29,7 @@ type PreviewRun = { items: PreviewItem[]; completedAt: Date }
 /** Why starting the rule did not work: it changed since the preview, or something else. */
 type StartFailure = "changed" | "failed"
 
-/** The preview runs once per visit and is kept for the session; "Preview again" runs it anew. */
+/** The preview runs once per visit and is kept for the session; Refresh runs it anew. */
 function useRulePreview(ruleId: string) {
   const queryClient = useQueryClient()
   return useQuery({
@@ -140,7 +140,15 @@ function RulePreviewPage({
         accounts,
       })
     : null
-  const retry = () => void preview.refetch()
+  // The lead keeps its Refresh button while reading, so focus stays; these say what happened.
+  const retry = () => {
+    setAnnouncement(readingText(i18n, detail, names))
+    void preview.refetch().then((result) => {
+      if (result.data && !result.error) {
+        setAnnouncement(i18n.t("rulePreview.page.leadAt", { time: i18n.format.time(result.data.completedAt) }))
+      }
+    })
+  }
   const openRule = () => onOpenRule(detail.id)
   return (
     <div className="page-section rule-preview-page">
@@ -240,8 +248,9 @@ function PreviewResults({
   const i18n = useI18n()
   const now = run.completedAt
   // Placing a series at its next date steps through its rule, so it is not redone on every render.
+  const placed = useMemo(() => layOut(run.items, now), [run.items, now])
   const shown = useMemo(() => run.items.filter((item) => matchesFilters(item, filters)), [run.items, filters])
-  const layout = useMemo(() => layOut(shown, now), [shown, now])
+  const layout = useMemo(() => narrowLayout(placed, (item) => matchesFilters(item, filters)), [placed, filters])
   const zone = useMemo(() => timeZoneName(i18n.formatLocale, now), [i18n.formatLocale, now])
   if (!run.items.length) {
     const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - lookbackDays)
@@ -363,23 +372,30 @@ function readingText(i18n: I18n, detail: RuleDetail, names: Names): string {
 
 /**
  * That nothing is written yet, when the preview was made, and a way to make it again; while it
- * reads, what it is reading, in the same place so nothing below moves.
+ * reads, what it is reading, in the same place so nothing below moves. Refresh stays put while it
+ * reads, so focus does not fall back to the page.
  */
 function PreviewLead({ run, reading, onRetry }: { run: PreviewRun | undefined; reading: string | null; onRetry: () => void }) {
   const i18n = useI18n()
-  if (reading) {
-    return (
-      <p className="rule-preview-lead rule-preview-reading">
-        <span className="rule-preview-reading-ghost"><GhostMark /></span>
-        {reading}
-      </p>
-    )
-  }
-  if (!run) return <p className="rule-preview-lead">{i18n.t("rulePreview.page.lead")}</p>
+  const text = run ? i18n.t("rulePreview.page.leadAt", { time: i18n.format.time(run.completedAt) }) : i18n.t("rulePreview.page.lead")
   return (
-    <p className="rule-preview-lead">
-      {i18n.t("rulePreview.page.leadAt", { time: i18n.format.time(run.completedAt) })}
-      <Button type="button" variant="ghost" size="sm" className="rule-preview-inline-action" onClick={onRetry}>
+    <p className={reading ? "rule-preview-lead rule-preview-reading" : "rule-preview-lead"}>
+      {reading ? (
+        <>
+          <span className="rule-preview-reading-ghost"><GhostMark /></span>
+          {reading}
+        </>
+      ) : (
+        text
+      )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="rule-preview-inline-action"
+        aria-disabled={reading ? true : undefined}
+        onClick={() => !reading && onRetry()}
+      >
         {i18n.t("rulePreview.page.previewAgain")}
       </Button>
     </p>
@@ -418,7 +434,8 @@ function StartSummary({
   if (!run) return <p className="rule-preview-summary" />
   return (
     <div className="rule-preview-summary">
-      <p className="rule-preview-counts" aria-label={t("rulePreview.counts.label", { destination })}>
+      <p className="rule-preview-counts">
+        <span className="sr-only">{t("rulePreview.counts.label", { destination })}</span>
         <OutcomeSigns parts={outcomeParts(i18n, outcomeCounts(run.items))} />
       </p>
       <p className="rule-preview-consequence">{t("rulePreview.page.pauseAnyTime")}</p>

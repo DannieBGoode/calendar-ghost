@@ -21,7 +21,7 @@
     "current": "{count} already up to date",
     "blocked": "{count} blocked",
     "skipped": "{count} not synced",
-    "label": "What starting this rule writes to {destination}"
+    "label": "What starting this rule writes to {destination}:"
   },
   "privacy": {
     "busyOnly": "Busy only: titles, descriptions, and locations stay private.",

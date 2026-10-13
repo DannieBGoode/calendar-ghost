@@ -121,7 +121,8 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
   "Kind" toggle and stays open while a kind is chosen; chosen kinds combine as "any of".
 - Every count follows the other choices (faceted): Show counts within the chosen kinds, each kind
   within the Show choice, so a number always says what a click will show. An option that would
-  show nothing is disabled unless chosen, so no choice leads to an empty table.
+  show nothing cannot be pressed unless chosen, so no choice leads to an empty table. It stays in
+  the tab order (`aria-disabled`), so keyboard and screen reader users still meet it and its 0.
 - Counts sit in small badges after their labels, in tabular numerals.
 - A kind exists only when the whole preview has it, so options never vanish; "Showing 12 of 51"
   and "Clear filters" appear while a filter is set. Filters change only this view, never the rule.
@@ -138,7 +139,9 @@ with the page column:
 The button carries no count; the counts beside it say what it will do, and no filter changes them.
 While enabling, it reads "Starting…" and is disabled. Success returns to Rule Details, which
 announces the result as it does today. The page reserves bottom padding equal to the footer's
-height, so the footer never covers the last row or a focused control.
+height, so the footer never covers the last row, and scroll padding keeps a control focused by
+keyboard above it. On a window under 30rem tall, such as a phone at large text, the footer stops
+sticking and closes the page instead.
 
 ## States
 

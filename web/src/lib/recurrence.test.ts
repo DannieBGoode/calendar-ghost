@@ -62,6 +62,24 @@ describe("nextOccurrence", () => {
     expect(nextOccurrence(readRepeat(["RRULE:FREQ=MONTHLY;BYDAY=-1FR"]), firstTuesday, today)).toEqual(new Date(2025, 9, 31, 18, 0))
   })
 
+  it("starts an old series near the date asked for and finds the same date as walking it all", () => {
+    const longAgo = new Date(2016, 2, 7, 9, 30)
+    const from = new Date(2026, 9, 13, 12, 0)
+    const rules = [
+      "FREQ=DAILY",
+      "FREQ=DAILY;INTERVAL=3",
+      "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR",
+      "FREQ=MONTHLY;BYDAY=-1FR",
+      "FREQ=MONTHLY;BYMONTHDAY=31",
+      "FREQ=YEARLY;INTERVAL=4",
+    ]
+    for (const rule of rules) {
+      // A COUNT far beyond the dates asked for makes it walk from the first date, as before.
+      const walked = nextOccurrence(readRepeat([`RRULE:${rule};COUNT=100000`]), longAgo, from, "Europe/Madrid")
+      expect(nextOccurrence(readRepeat([`RRULE:${rule}`]), longAgo, from, "Europe/Madrid")).toEqual(walked)
+    }
+  })
+
   it("says when a series has ended", () => {
     expect(nextOccurrence(readRepeat(["RRULE:FREQ=WEEKLY;COUNT=3"]), firstTuesday, today)).toBe("ended")
     expect(nextOccurrence(readRepeat(["RRULE:FREQ=WEEKLY;UNTIL=20250930T000000Z"]), firstTuesday, today)).toBe("ended")
