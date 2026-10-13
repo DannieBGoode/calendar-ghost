@@ -305,3 +305,19 @@ def test_a_new_installation_has_only_its_first_user(tmp_path: Path) -> None:
         )
 
     assert refused.status_code == 401
+
+
+def test_preview_previews_a_paused_rule_from_its_synthetic_calendar(tmp_path: Path) -> None:
+    # Regression: ISSUE-001, the preview could not run a Rule Preview at all (503).
+    # Found by /qa on 2026-10-13
+    container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=Scenario.PAUSED)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
+        response = client.post("/api/v1/rules/preview-family-work/preview")
+
+    assert response.status_code == 200
+    items = {item["title"]: item for item in response.json()["items"]}
+    assert items["Dentist appointment"]["projection"]["title"] == "Busy"
+    assert items["Mum's birthday"]["reason"] == "birthday"
+    assert items["Lunch with Sam"]["reason"] == "declined"
