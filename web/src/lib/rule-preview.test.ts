@@ -99,7 +99,7 @@ describe("layOut", () => {
     const layout = layOut([deleted], now)
 
     expect(layout.undated.map((placed) => placed.item.source_event_id)).toEqual(["gone"])
-    expect(layout.undated[0] && whenText(i18n, layout.undated[0])).toBe("Deleted")
+    expect(layout.undated[0] && whenText(i18n, layout.undated[0], now)).toBe("Deleted")
   })
 
   it("dates a recurring multi-day all-day event from its next occurrence", () => {
@@ -115,7 +115,7 @@ describe("layOut", () => {
 
     const [placed] = layOut([retreat], now).upcoming[0]?.items ?? []
 
-    expect(placed && whenText(i18n, placed)).toBe("All day, Nov 1–Nov 3")
+    expect(placed && whenText(i18n, placed, now)).toBe("All day, Nov 1–Nov 3")
   })
 
   it("places a series that began weeks ago at its next date, not among earlier events", () => {
@@ -138,8 +138,26 @@ describe("layOut", () => {
       ["birthday"],
     ])
     const placedSwim = layout.upcoming[1]?.items[0]
-    expect(placedSwim && whenText(i18n, placedSwim)).toBe("6:00 PM–7:00 PM")
-    expect(placedSwim && sourceNotes(i18n, placedSwim)).toEqual(["Weekly on Tuesday", "since Sep 2"])
+    expect(placedSwim && whenText(i18n, placedSwim, now)).toBe("6:00 PM–7:00 PM")
+    expect(placedSwim && sourceNotes(i18n, placedSwim, now)).toEqual(["Weekly on Tuesday", "since Sep 2"])
+  })
+
+  it("names the year of a date outside the current one", () => {
+    const festival = item({ source_event_id: "festival", starts_at: null, ends_at: null, starts_on: "2030-07-04", ends_before: "2030-07-07" })
+    const choir = item({
+      source_event_id: "choir",
+      kind: "series",
+      starts_at: new Date(2024, 2, 5, 18, 0).toISOString(),
+      ends_at: new Date(2024, 2, 5, 19, 0).toISOString(),
+      recurrence: ["RRULE:FREQ=WEEKLY"],
+    })
+
+    const { upcoming } = layOut([festival, choir], now)
+    const placedChoir = upcoming[0]?.items[0]
+    const placedFestival = upcoming[1]?.items[0]
+
+    expect(placedFestival && whenText(i18n, placedFestival, now)).toBe("All day, Jul 4, 2030–Jul 6, 2030")
+    expect(placedChoir && sourceNotes(i18n, placedChoir, now)).toEqual(["Weekly on Tuesday", "since Mar 5, 2024"])
   })
 
   it("explains a moved occurrence on the date it moved to", () => {
@@ -153,6 +171,6 @@ describe("layOut", () => {
       reason: "occurrence_changed",
     })
     const [placed] = layOut([moved], now).upcoming[0]?.items ?? []
-    expect(placed && sourceNotes(i18n, placed)).toEqual(["This date only: moved from 6:00 PM"])
+    expect(placed && sourceNotes(i18n, placed, now)).toEqual(["This date only: moved from 6:00 PM"])
   })
 })

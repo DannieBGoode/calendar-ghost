@@ -295,7 +295,7 @@ function PreviewResults({
     const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - lookbackDays)
     return (
       <div className="rule-preview-results" aria-busy={busy} inert={busy}>
-        <PreviewEmpty source={names.source} from={from} />
+        <PreviewEmpty source={names.source} from={from} now={now} />
       </div>
     )
   }

@@ -201,6 +201,19 @@ describe("RulePreviewView", () => {
     expect(calls.filter((call) => call.startsWith("POST"))).toEqual(["POST /api/v1/rules/rule-1/preview"])
   })
 
+  it("names the year on days outside the current one", async () => {
+    const later = new Date(today.getFullYear() + 4, 6, 3, 9)
+    const [dentist] = preview.items
+    if (!dentist) throw new Error("no fixture")
+    const items = [{ ...dentist, starts_at: later.toISOString(), ends_at: new Date(later.getTime() + 3_600_000).toISOString() }]
+    mockFetch({ status: 200, body: { ...preview, items } })
+    await renderPreview(testI18n())
+
+    const headings = [...container.querySelectorAll(".rule-preview-day th")].map((each) => each.textContent)
+    expect(headings).toEqual([testI18n().format.date(later, { weekday: "short", day: "numeric", month: "short", year: "numeric" })])
+    expect(headings[0]).toContain(String(later.getFullYear()))
+  })
+
   it("combines Show with kinds in one row that keeps its shape", async () => {
     mockFetch({ status: 200, body: preview })
     await renderPreview(testI18n())
