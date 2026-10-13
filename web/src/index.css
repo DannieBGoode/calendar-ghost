@@ -5801,11 +5801,14 @@ thead + .incident-group th {
   gap: 0.5rem;
 }
 
+/* Strong enough to read as two groups at a glance: one choice on the left, kinds that add to it on
+   the right. */
 .rule-preview-filters-divider {
-  width: 1px;
-  height: 1.25rem;
-  margin-inline: 0.25rem;
-  background: var(--border);
+  width: 2px;
+  height: 1.75rem;
+  margin-inline: 0.5rem;
+  border-radius: 1px;
+  background: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
 }
 
 .rule-preview-table-wrap {
