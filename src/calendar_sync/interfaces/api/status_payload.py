@@ -4,7 +4,10 @@ accounts or calendars."""
 from __future__ import annotations
 
 from calendar_sync import __version__
-from calendar_sync.application.operations.installation_health import InstallationHealth
+from calendar_sync.application.operations.installation_health import (
+    InstallationHealth,
+    InstallationIncident,
+)
 from calendar_sync.application.operations.operator_overview import UserOverview
 from calendar_sync.application.operations.status import (
     Dashboard,
@@ -161,10 +164,7 @@ def installation_health_response(health: InstallationHealth) -> InstallationHeal
     return InstallationHealthResponse(
         status=health.status.value,
         needs_attention=health.needs_attention,
-        incidents=[
-            InstallationIncidentResponse(kind=incident.kind.value, since=incident.since.isoformat())
-            for incident in health.incidents
-        ],
+        incidents=[installation_incident_response(incident) for incident in health.incidents],
         users={verdict.value: count for verdict, count in health.users.items()},
         disabled_users=health.disabled_users,
         checked_at=health.checked_at.isoformat(),
@@ -197,4 +197,14 @@ def resource_use_response(overview: UserOverview) -> ResourceUseResponse:
             for calls in resources.provider_calls
         ],
         since=overview.calls_since.isoformat(),
+    )
+
+
+def installation_incident_response(incident: InstallationIncident) -> InstallationIncidentResponse:
+    secret = incident.secret
+    return InstallationIncidentResponse(
+        kind=incident.kind.value,
+        since=incident.since.isoformat(),
+        provider=secret.provider.value if secret is not None else None,
+        expires_on=secret.expires.isoformat() if secret is not None else None,
     )

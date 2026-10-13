@@ -773,8 +773,12 @@ class OwnAccountDeletionResponse(ApiResponse):
 
 
 class InstallationIncidentResponse(ApiResponse):
-    kind: Literal["scheduler_stalled"]
+    kind: Literal["scheduler_stalled", "client_secret_expiring"]
     since: str
+    provider: str | None = None
+    """For an expiring client secret, the Provider Kind it belongs to."""
+    expires_on: str | None = None
+    """For an expiring client secret, the date it expires, as the administrator recorded it."""
 
 
 class InstallationHintResponse(ApiResponse):

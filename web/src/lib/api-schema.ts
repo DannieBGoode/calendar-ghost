@@ -1371,11 +1371,15 @@ export interface components {
         };
         /** InstallationIncidentResponse */
         InstallationIncidentResponse: {
+            /** Expires On */
+            expires_on: string | null;
             /**
              * Kind
-             * @constant
+             * @enum {string}
              */
-            kind: "scheduler_stalled";
+            kind: "scheduler_stalled" | "client_secret_expiring";
+            /** Provider */
+            provider: string | null;
             /** Since */
             since: string;
         };

@@ -168,14 +168,16 @@ against one.
    recommends 180 days; the longest is 24 months. Copy the secret's **Value** at once, since it is
    shown only this one time, and not its **Secret ID**. It is
    `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`. Keep it out of source control and out of screenshots.
-7. Write down the secret's **Expires** date and set yourself a reminder before it. Calendar Ghost
-   cannot read the date, and does not warn you before the secret expires.
+7. Copy the secret's **Expires** date into `.env` as `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES`,
+   such as `2027-04-12`. Calendar Ghost cannot read the date from Microsoft. With it, People and
+   Installation Health warn you from 30 days before the secret expires, and so does the
+   installation's email or webhook if you set one up.
 
 To rotate the secret before it expires:
 
 1. Create a new client secret as in step 6, leaving the old one in place.
-2. Put the new **Value** in `.env` as `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET` and run
-   `docker compose up -d`.
+2. Put the new **Value** in `.env` as `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`, and its **Expires**
+   date as `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES`, then run `docker compose up -d`.
 3. Wait about two hours, so that every access token issued before the change has expired and has
    been renewed with the new secret. If **People** shows nothing that needs you, delete the old
    secret in **Certificates & secrets**.
@@ -184,6 +186,8 @@ Nobody needs to reauthorize: grants belong to the application, not to one secret
 expires first, every Microsoft account stops at once with the likely cause "Microsoft no longer
 accepts this installation's OAuth client";
 [the fix](troubleshooting.md#microsoft-no-longer-accepts-the-oauth-client) is the same rotation.
+After it, the first scheduled pass checks every stopped account again and restarts its rules, so
+nobody has to act.
 
 ## 3. Configure the installation
 
@@ -211,6 +215,7 @@ CALENDAR_SYNC_MICROSOFT_CLIENT_ID=PASTE_APPLICATION_CLIENT_ID_HERE
 CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET=PASTE_CLIENT_SECRET_VALUE_HERE
 CALENDAR_SYNC_MICROSOFT_REDIRECT_URI=http://localhost:8000/api/v1/oauth/microsoft/callback
 CALENDAR_SYNC_MICROSOFT_TENANT=common
+CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES=2027-04-12
 # Optional: make the UI's Source link point to the exact checkout being built.
 # CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/calendar-ghost/tree/<commit-or-tag>
 ```
@@ -304,7 +309,8 @@ their status.
 
 As an administrator, you may also let a token read Installation Health at
 `GET /api/v1/installation/health`: incidents about the installation itself, such as a stalled
-scheduler, and how many people are in each status. It names no rule, calendar, or person, which
+scheduler or a client secret about to expire, likely causes only you can fix, and how many people
+are in each status. It names no rule, calendar, or person, which
 makes it the right answer for a monitor that watches the installation for everyone. Tick **Also
 read Installation Health** when you issue the token; it stops working there if you stop being an
 administrator.
@@ -384,6 +390,22 @@ Headers: {"Authorization": "Bearer <token>"}
 Json Query: $.needs_attention
 Expected Value: false
 ```
+
+This monitor reads the status of the person who issued the token, so it alerts only when that
+person's own rules need attention. If other people use the installation, or you have no rules of
+a provider yourself, add a second monitor on Installation Health with an administrator's token
+that has **Also read Installation Health**:
+
+```text
+URL: https://ghost.example.lan/api/v1/installation/health
+Headers: {"Authorization": "Bearer <administrator token>"}
+Json Query: $.needs_attention
+Expected Value: false
+```
+
+It alerts for everyone, without naming anyone: a stalled scheduler, a client secret that expires
+within 30 days (when its date is in `.env`), and a cause only you can fix, such as an expired client
+secret or a turned-off Google Calendar API, as soon as it stops anyone's rules.
 
 **Homepage.** Add a `customapi` widget to the Calendar Ghost service:
 

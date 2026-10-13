@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Collection
 from datetime import datetime
 from pathlib import Path
 
 from calendar_sync.application.shared.ports import IdGenerator
 from calendar_sync.domain.access import UserId
-from calendar_sync.domain.causes import NO_CAUSE
+from calendar_sync.domain.causes import NO_CAUSE, Cause
 from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 from calendar_sync.domain.providers import ProviderFailureKind
@@ -210,6 +211,22 @@ class SqliteIncidentRepository:
                     self._user,
                 ),
             )
+
+    def accounts_lapsed_by(self, causes: Collection[Cause]) -> frozenset[ConnectedAccountId]:
+        if not causes:
+            return frozenset()
+        marks = ", ".join("?" * len(causes))
+        with transaction(self._database_path) as connection:
+            # Interpolates only `?` placeholders; values stay bound.
+            rows = connection.execute(
+                f"""
+                SELECT account_id FROM incidents
+                WHERE user_id = ? AND rule_id IS NULL AND account_id IS NOT NULL
+                    AND state = 'open' AND cause IN ({marks})
+                """,  # noqa: S608
+                (self._user, *(cause.value for cause in causes)),
+            ).fetchall()
+        return frozenset(ConnectedAccountId(str(row[0])) for row in rows)
 
     def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
         with transaction(self._database_path) as connection:

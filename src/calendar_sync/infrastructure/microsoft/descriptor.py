@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import httpx
 
 from calendar_sync.application.shared.ports import Clock
@@ -25,12 +27,13 @@ def microsoft_provider(
     master_key: str,
     clock: Clock,
     http: httpx.Client | None = None,
+    secret_expires: date | None = None,
 ) -> ProviderDescriptor:
     """Microsoft's descriptor. It offers nothing until the installation registers its Entra
     application, and no account can be stored without the installation master key."""
     configured = client.oauth.complete
     if accounts is None or not configured:
-        return ProviderDescriptor(MICROSOFT, configured=configured)
+        return ProviderDescriptor(MICROSOFT, configured=configured, secret_expires=secret_expires)
     oauth = MicrosoftOAuthService(
         client, accounts, states, master_key, http or httpx.Client(), clock
     )
@@ -40,4 +43,5 @@ def microsoft_provider(
         connection=ProviderConnection(oauth, client.oauth.redirect_uri),
         calendars=oauth,
         provider=OutlookCalendarProvider(oauth, oauth.graph, clock),
+        secret_expires=secret_expires,
     )

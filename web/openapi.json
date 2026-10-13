@@ -1177,10 +1177,35 @@
       },
       "InstallationIncidentResponse": {
         "properties": {
+          "expires_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires On"
+          },
           "kind": {
-            "const": "scheduler_stalled",
+            "enum": [
+              "scheduler_stalled",
+              "client_secret_expiring"
+            ],
             "title": "Kind",
             "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
           },
           "since": {
             "title": "Since",
@@ -1189,7 +1214,9 @@
         },
         "required": [
           "kind",
-          "since"
+          "since",
+          "provider",
+          "expires_on"
         ],
         "title": "InstallationIncidentResponse",
         "type": "object"
