@@ -63,6 +63,11 @@ class IncidentNotifier:
 def _installation_summary(incident: InstallationIncident) -> str:
     secret = incident.secret
     if incident.kind is InstallationIncidentKind.CLIENT_SECRET_EXPIRING and secret is not None:
+        if incident.expired:
+            return (
+                f"The {secret.name} client secret expired on {secret.expires.isoformat()}, so "
+                f"every {secret.name} account stopped; put a new one in place to restart them"
+            )
         return (
             f"The {secret.name} client secret expires on {secret.expires.isoformat()}; "
             "put a new one in place before then"

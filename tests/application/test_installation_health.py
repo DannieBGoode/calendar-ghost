@@ -248,9 +248,24 @@ def test_a_client_secret_that_expired_stays_an_incident_until_its_date_moves() -
     expired = secret(date(2026, 10, 1))
 
     (incident,) = installation_incidents(TICKING, NOW, (expired,))
+    (on_the_day,) = installation_incidents(TICKING, NOW, (secret(NOW.date()),))
 
     assert incident.kind is InstallationIncidentKind.CLIENT_SECRET_EXPIRING
     assert incident.secret == expired
+    assert incident.expired is True
+    # It expires at the end of its day, so on that day it is still about to.
+    assert on_the_day.expired is False
+
+
+def test_the_watch_reports_a_client_secret_again_when_it_expires() -> None:
+    watch = InstallationIncidentWatch((secret(date(2026, 10, 10)),))
+
+    # Without a scheduler nothing can stall, so only the secret is reported.
+    warned = watch.opened(None, NOW)
+    expired = watch.opened(None, NOW + timedelta(days=2))
+
+    assert [incident.expired for incident in warned] == [False]
+    assert [incident.expired for incident in expired] == [True]
 
 
 def test_an_expiring_client_secret_needs_the_administrator_but_stalls_nothing() -> None:

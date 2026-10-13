@@ -184,6 +184,27 @@ def test_the_installation_channels_hear_of_an_expiring_client_secret() -> None:
     ]
 
 
+def test_the_installation_channels_hear_that_a_client_secret_expired() -> None:
+    heard: list[IncidentNotification] = []
+
+    class Recording(NotificationChannel):
+        def send(self, incident: IncidentNotification) -> None:
+            heard.append(incident)
+
+    expired = InstallationIncident(
+        InstallationIncidentKind.CLIENT_SECRET_EXPIRING,
+        NOW,
+        secret=ClientSecretExpiry(ProviderKind.GOOGLE, "Example", date(2026, 8, 1)),
+        expired=True,
+    )
+    IncidentNotifier([Recording()]).installation_incident_opened(expired)
+
+    assert [each.summary for each in heard] == [
+        "The Example client secret expired on 2026-08-01, so every Example account stopped; "
+        "put a new one in place to restart them"
+    ]
+
+
 def test_an_installation_emails_rule_incidents_to_their_owner_and_never_to_its_webhook(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

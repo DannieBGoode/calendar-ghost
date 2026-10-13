@@ -67,6 +67,8 @@ class InstallationIncident:
     since: datetime
     secret: ClientSecretExpiry | None = None
     """For an expiring client secret, which one and when it expires."""
+    expired: bool = False
+    """Whether that secret already expired, so every account of its provider has stopped."""
 
 
 def installation_incidents(
@@ -77,14 +79,17 @@ def installation_incidents(
     """What is wrong with the installation itself: a scheduler that stopped completing passes,
     and each client secret that expires within SECRET_WARNING or already has. Without a
     scheduler, as without a master key, nothing can synchronize or stall."""
+    today = now.astimezone(UTC).date()
     incidents = [
         InstallationIncident(
             InstallationIncidentKind.CLIENT_SECRET_EXPIRING,
             datetime.combine(secret.expires - SECRET_WARNING, time(), UTC),
             secret=secret,
+            # A secret still works through the day its expiry date names.
+            expired=today > secret.expires,
         )
         for secret in secrets
-        if now.astimezone(UTC).date() >= secret.expires - SECRET_WARNING
+        if today >= secret.expires - SECRET_WARNING
     ]
     since = stalled_since(scheduler, now) if scheduler is not None else None
     if since is not None:
@@ -97,7 +102,7 @@ class InstallationIncidentWatch:
     """Which installation incidents opened since the last look, so each is reported once."""
 
     secrets: Sequence[ClientSecretExpiry] = ()
-    _open: frozenset[tuple[InstallationIncidentKind, ProviderKind | None]] = field(
+    _open: frozenset[tuple[InstallationIncidentKind, ProviderKind | None, bool]] = field(
         default_factory=frozenset
     )
 
@@ -110,9 +115,13 @@ class InstallationIncidentWatch:
         return opened
 
 
-def _key(incident: InstallationIncident) -> tuple[InstallationIncidentKind, ProviderKind | None]:
-    """One incident per kind, and per provider for a client secret."""
-    return incident.kind, incident.secret.provider if incident.secret is not None else None
+def _key(
+    incident: InstallationIncident,
+) -> tuple[InstallationIncidentKind, ProviderKind | None, bool]:
+    """One incident per kind, and per provider for a client secret, reported again once that
+    secret expires."""
+    provider = incident.secret.provider if incident.secret is not None else None
+    return incident.kind, provider, incident.expired
 
 
 class InstallationNotifications(Protocol):
