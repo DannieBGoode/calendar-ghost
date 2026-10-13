@@ -3071,6 +3071,22 @@ p {
   color: var(--muted-foreground);
 }
 
+/* An action inside a note, such as Preview again, that reads as part of the sentence. */
+.rule-note-action {
+  border-radius: 4px;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.rule-note-action:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 .rule-feedback {
   color: var(--success-foreground);
 }
@@ -6040,12 +6056,101 @@ td.rule-preview-col-when {
 
 .rule-preview-stamp {
   display: flex;
-  flex: 1;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem;
+  margin-top: -0.25rem;
   color: var(--muted-foreground);
   font-size: 0.8125rem;
+}
+
+/* The calendars under the title, each naming its provider in words beside the avatar's mark. */
+.rule-preview-calendars {
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+  row-gap: 0.5rem;
+}
+
+.rule-preview-calendars .rule-preview-role {
+  margin-left: 0.25rem;
+}
+
+/* The rule's choices, as Rule Details states them, quiet enough to read only when wanted. */
+.rule-preview-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem var(--panel-padding);
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  background: var(--surface);
+}
+
+.rule-preview-settings-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.rule-preview-settings h2 {
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.rule-preview-settings-heading a {
+  color: var(--primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.rule-preview-settings dl {
+  display: grid;
+  gap: 0.625rem 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+
+.rule-preview-settings dt {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.rule-preview-settings dd {
+  margin: 0.125rem 0 0;
+  font-size: 0.8125rem;
+}
+
+/* What Start syncing will do, beside it, so the decision is made with the counts in view. */
+.rule-preview-summary {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.125rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+p.rule-preview-summary {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.rule-preview-consequence {
+  max-width: 60ch;
+}
+
+/* Closes the table: the list ends, the rule does not. */
+.rule-preview-table .rule-preview-later td {
+  padding: 0.75rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  text-align: center;
 }
 
 .rule-preview-start {
@@ -6141,5 +6246,14 @@ td.rule-preview-col-when {
   .rule-preview-start {
     order: -1;
     align-items: stretch;
+  }
+
+  /* The counts stay beside the button; the sentence under them waits for a wider screen. */
+  .rule-preview-consequence {
+    display: none;
+  }
+
+  .rule-preview-again {
+    min-height: 2.75rem;
   }
 }

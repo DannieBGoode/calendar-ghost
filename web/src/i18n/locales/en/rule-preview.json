@@ -12,7 +12,8 @@
     "previewAgain": "Preview again",
     "previewing": "Previewing…",
     "enableFailed": "Syncing did not start.",
-    "changedSincePreview": "This rule changed since the preview."
+    "changedSincePreview": "This rule changed since the preview.",
+    "startConsequence": "Starting writes these to {destination} and keeps them in step. You can pause or remove the rule at any time."
   },
   "counts": {
     "add": "{count} to add",
@@ -62,7 +63,8 @@
       "one": "{count} event",
       "other": "{count} events"
     },
-    "undated": "Deleted in {source}"
+    "undated": "Deleted in {source}",
+    "later": "After {date}, new events sync as they appear."
   },
   "row": {
     "allDay": "All day",
@@ -149,5 +151,10 @@
       "other": "None of the {count} events in {source} will sync with these settings."
     },
     "changeWhatSyncs": "Change what syncs"
+  },
+  "rule": {
+    "account": "{provider} · {email}",
+    "settings": "What this rule syncs",
+    "change": "Change settings"
   }
 }

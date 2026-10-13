@@ -195,6 +195,13 @@ export function PreviewTable({
         {layout.upcoming.map((day) => (
           <DayRows key={day.key} day={day} heading={dayHeading(i18n, day, now)} />
         ))}
+        <tbody role="rowgroup" className="rule-preview-later">
+          <tr role="row">
+            <td role="cell" colSpan={COLUMNS}>
+              {t("rulePreview.table.later", { date: i18n.format.date(layout.upcoming.at(-1)?.date ?? now, DAY) })}
+            </td>
+          </tr>
+        </tbody>
       </table>
     </div>
   )

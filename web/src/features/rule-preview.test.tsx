@@ -100,7 +100,7 @@ const preview: RulePreview = {
 
 /** Calendar and event names come from the server; dates, times, and the time zone from locale data. */
 const zone = new Intl.DateTimeFormat("en-US", { timeZoneName: "short" }).formatToParts(today).find((part) => part.type === "timeZoneName")?.value ?? ""
-const FIXTURE_TEXT = ["Family", "Work", "Dentist", "Mum", "Busy", zone, ...dateWords()]
+const FIXTURE_TEXT = ["Family", "Work", "Dentist", "Mum", "Busy (tentative)", "Busy", account.email, "DA", zone, ...dateWords()]
 
 type Answer = { status: number; body: unknown }
 
@@ -180,6 +180,11 @@ describe("RulePreviewView", () => {
     expect(text).toContain("1 to add")
     expect(text).toContain("1 not synced")
     expect(text).toContain("Busy only: titles, descriptions, and locations stay private.")
+    // The calendars name their provider, and the rule's choices are on the page.
+    expect(text).toContain("Google account · dana@example.test")
+    expect(text).toContain("What this rule syncs")
+    expect(text).toContain("Birthdays from contactsNot synced")
+    expect(text).toContain("new events sync as they appear")
     const rows = [...container.querySelectorAll(".rule-preview-row")].map((row) => row.textContent)
     expect(rows).toEqual([
       "All dayMumNot writtenNot synced: birthday",

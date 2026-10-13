@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, ArrowRight, Eye, LoaderCircle, Lock } from "lucide-react"
-import { useEffect, useRef, useState, type RefObject } from "react"
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react"
 
 import { GhostMark } from "@/components/ghost-mark"
 import { PageSkeleton } from "@/components/page-skeleton"
@@ -8,6 +8,7 @@ import { LiveAnnouncement } from "@/components/rule-commands"
 import { Button } from "@/components/ui/button"
 import { PreviewFilterBar } from "@/features/rule-preview-filters"
 import { PreviewEmpty, PreviewFailurePanel, PreviewSkeleton } from "@/features/rule-preview-states"
+import { PreviewCalendars, PreviewSettings } from "@/features/rule-preview-rule"
 import { OutcomeSigns, PreviewTable } from "@/features/rule-preview-table"
 import { useI18n } from "@/i18n/provider"
 import { ApiError, api, type ConnectedAccount, type RuleDetail } from "@/lib/api"
@@ -140,7 +141,15 @@ function RulePreviewPage({
   return (
     <div className="page-section rule-preview-page">
       <LiveAnnouncement text={announcement} />
-      <PreviewHeader heading={heading} detail={detail} names={names} items={run?.items} reading={preview.isFetching} />
+      <PreviewHeader
+        heading={heading}
+        detail={detail}
+        names={names}
+        reading={preview.isFetching}
+        calendars={<PreviewCalendars detail={detail} accounts={accounts} calendars={calendarsByAccount} />}
+        stamp={<PreviewStamp run={run} onRetry={retry} />}
+      />
+      <PreviewSettings detail={detail} onChange={openRule} />
       {failure ? (
         <PreviewFailurePanel failure={failure} ruleId={detail.id} onRetry={retry} onOpenRule={openRule} onViewChange={onViewChange} />
       ) : run ? (
@@ -167,20 +176,24 @@ function RulePreviewPage({
   )
 }
 
-/** The rule, what this page is, what starting it does, and what it shares. */
+/** The rule and its calendars, what this page is, and what it shares. */
 function PreviewHeader({
   heading,
   detail,
   names,
-  items,
   reading,
+  calendars,
+  stamp,
 }: {
   heading: RefObject<HTMLHeadingElement | null>
   detail: RuleDetail
   names: Names
-  items: PreviewItem[] | undefined
   /** Whether the preview is reading the calendars now; a failed one is not. */
   reading: boolean
+  /** Which calendars, accounts, and providers the rule connects. */
+  calendars: ReactNode
+  /** When the preview was made, with a way to make it again. */
+  stamp: ReactNode
 }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -194,12 +207,9 @@ function PreviewHeader({
         </span>
         <span className="sr-only">{t("ruleDetails.page.heading", names)}</span>
       </h1>
+      {calendars}
       <p className="rule-preview-lead">{t("rulePreview.page.lead")}</p>
-      {items && (
-        <p className="rule-preview-counts" aria-label={t("rulePreview.counts.label")}>
-          <OutcomeSigns parts={outcomeParts(i18n, outcomeCounts(items))} />
-        </p>
-      )}
+      {stamp}
       {reading && (
         <p className="rule-preview-reading">
           <span className="rule-preview-reading-ghost"><GhostMark /></span>
@@ -319,9 +329,10 @@ function PreviewFooter({
         >
           <ArrowLeft aria-hidden="true" /> {i18n.t("rulePreview.page.back")}
         </a>
-        <PreviewStamp
+        <StartSummary
           run={run}
           busy={busy}
+          destination={names.destination}
           outcome={startFailure}
           onRetry={() => {
             enable.reset()
@@ -342,34 +353,59 @@ function PreviewFooter({
   )
 }
 
-/** When the preview was made and a way to make it again, or why starting did not work. */
-function PreviewStamp({
+/** When the preview was made, and a way to make it again. */
+function PreviewStamp({ run, onRetry }: { run: PreviewRun | undefined; onRetry: () => void }) {
+  const i18n = useI18n()
+  if (!run) return null
+  return (
+    <p className="rule-preview-stamp">
+      {i18n.t("rulePreview.page.previewedAt", { time: i18n.format.time(run.completedAt) })}
+      <Button type="button" variant="ghost" size="sm" className="rule-preview-again" onClick={onRetry}>
+        {i18n.t("rulePreview.page.previewAgain")}
+      </Button>
+    </p>
+  )
+}
+
+/**
+ * Beside Start syncing, what it will do, so the decision is made with the counts in view; or why
+ * starting did not work.
+ */
+function StartSummary({
   run,
   busy,
+  destination,
   outcome,
   onRetry,
 }: {
   run: PreviewRun | undefined
   busy: boolean
+  destination: string
   outcome: StartFailure | null
   onRetry: () => void
 }) {
   const i18n = useI18n()
   const { t } = i18n
-  let text: string | null = null
-  if (outcome === "changed") text = t("rulePreview.page.changedSincePreview")
-  else if (outcome === "failed") text = t("rulePreview.page.enableFailed")
-  else if (run) text = t("rulePreview.page.previewedAt", { time: i18n.format.time(run.completedAt) })
-  else if (busy) text = t("rulePreview.page.previewing")
+  if (outcome) {
+    return (
+      <p className="rule-preview-summary" role="alert">
+        {outcome === "changed" ? t("rulePreview.page.changedSincePreview") : t("rulePreview.page.enableFailed")}
+        {outcome === "changed" && (
+          <Button type="button" variant="ghost" size="sm" className="rule-preview-again" onClick={onRetry}>
+            {t("rulePreview.page.previewAgain")}
+          </Button>
+        )}
+      </p>
+    )
+  }
+  if (!run) return <p className="rule-preview-summary">{busy && t("rulePreview.page.previewing")}</p>
   return (
-    <p className="rule-preview-stamp" role={outcome ? "alert" : undefined}>
-      {text}
-      {(run !== undefined || outcome === "changed") && (
-        <Button type="button" variant="ghost" size="sm" onClick={onRetry}>
-          {t("rulePreview.page.previewAgain")}
-        </Button>
-      )}
-    </p>
+    <div className="rule-preview-summary">
+      <p className="rule-preview-counts" aria-label={t("rulePreview.counts.label")}>
+        <OutcomeSigns parts={outcomeParts(i18n, outcomeCounts(run.items))} />
+      </p>
+      <p className="rule-preview-consequence">{t("rulePreview.page.startConsequence", { destination })}</p>
+    </div>
   )
 }
 
