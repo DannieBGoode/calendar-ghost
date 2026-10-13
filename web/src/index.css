@@ -3742,6 +3742,7 @@ a.recent-change-rule:focus-visible {
 }
 
 .rule-details-page h1:focus,
+.rule-preview-page h1:focus,
 .rule-builder h2:focus,
 .disconnect-confirmation h3:focus,
 .disconnect-confirmation h4:focus {
