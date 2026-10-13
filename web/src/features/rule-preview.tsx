@@ -140,7 +140,7 @@ function RulePreviewPage({
   return (
     <div className="page-section rule-preview-page">
       <LiveAnnouncement text={announcement} />
-      <PreviewHeader heading={heading} detail={detail} names={names} items={run?.items} />
+      <PreviewHeader heading={heading} detail={detail} names={names} items={run?.items} reading={preview.isFetching} />
       {failure ? (
         <PreviewFailurePanel failure={failure} ruleId={detail.id} onRetry={retry} onOpenRule={openRule} onViewChange={onViewChange} />
       ) : run ? (
@@ -173,11 +173,14 @@ function PreviewHeader({
   detail,
   names,
   items,
+  reading,
 }: {
   heading: RefObject<HTMLHeadingElement | null>
   detail: RuleDetail
   names: Names
   items: PreviewItem[] | undefined
+  /** Whether the preview is reading the calendars now; a failed one is not. */
+  reading: boolean
 }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -192,11 +195,12 @@ function PreviewHeader({
         <span className="sr-only">{t("ruleDetails.page.heading", names)}</span>
       </h1>
       <p className="rule-preview-lead">{t("rulePreview.page.lead")}</p>
-      {items ? (
+      {items && (
         <p className="rule-preview-counts" aria-label={t("rulePreview.counts.label")}>
           <OutcomeSigns parts={outcomeParts(i18n, outcomeCounts(items))} />
         </p>
-      ) : (
+      )}
+      {reading && (
         <p className="rule-preview-reading">
           <span className="rule-preview-reading-ghost"><GhostMark /></span>
           {detail.mapping_count > 0

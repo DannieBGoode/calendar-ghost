@@ -217,6 +217,9 @@ describe("RulePreviewView", () => {
 
     expect(container.querySelector("[role=alert]")?.textContent).toContain("Reauthorize account")
     expect(button("Start syncing to Work").getAttribute("aria-disabled")).toBe("true")
+    // Regression: ISSUE-002, a failed preview still said it was reading the calendar.
+    // Found by /qa on 2026-10-13
+    expect(container.textContent).not.toContain("Reading Family")
   })
 
   it("leaves no text untranslated", async () => {
