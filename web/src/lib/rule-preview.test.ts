@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { testI18n } from "@/i18n/testing"
 
-import { facetCounts, layOut, matchesFilters, outcomeCounts, previewKinds, previewOutcome, type PreviewItem } from "./rule-preview"
+import { layOut, matchesView, outcomeCounts, previewKinds, previewOutcome, previewViews, type PreviewItem } from "./rule-preview"
 import { outcomeText, sourceNotes, whenText } from "./rule-preview-text"
 
 const i18n = testI18n()
@@ -59,30 +59,30 @@ describe("previewOutcome", () => {
   })
 })
 
-describe("filters", () => {
-  it("narrow by outcome and by any chosen kind", () => {
+describe("views", () => {
+  it("narrow by outcome or by one kind", () => {
     const declined = item({ source_event_id: "lunch", response: "declined", projection: null, planned_action: "ignore", reason: "declined" })
     expect(previewKinds(birthday)).toEqual(["allDay", "birthday"])
-    expect(matchesFilters(birthday, { show: "sync", kinds: [] })).toBe(false)
-    expect(matchesFilters(birthday, { show: "out", kinds: ["declined", "birthday"] })).toBe(true)
-    expect(matchesFilters(declined, { show: "all", kinds: ["allDay"] })).toBe(false)
+    expect(matchesView(birthday, "sync")).toBe(false)
+    expect(matchesView(birthday, "birthday")).toBe(true)
+    expect(matchesView(declined, "allDay")).toBe(false)
     expect([...outcomeCounts([item(), birthday, declined])]).toEqual([
       ["add", 1],
       ["skipped", 2],
     ])
   })
-})
 
-describe("facetCounts", () => {
-  it("counts each option beside the other choices, so a choice that leads nowhere shows 0", () => {
+  it("offers the outcome views always and a kind only when some row has it", () => {
     const items = [item(), birthday, item({ source_event_id: "standup", kind: "series", recurrence: ["RRULE:FREQ=WEEKLY"] })]
 
-    const willSync = facetCounts(items, { show: "sync", kinds: [] })
-    expect(willSync.kinds.get("birthday")).toBeUndefined()
-    expect(willSync.kinds.get("recurring")).toBe(1)
-
-    const birthdays = facetCounts(items, { show: "all", kinds: ["birthday"] })
-    expect(birthdays.show).toEqual({ all: 1, sync: 0, out: 1 })
+    expect(previewViews(items)).toEqual([
+      { view: "all", count: 3 },
+      { view: "sync", count: 2 },
+      { view: "out", count: 1 },
+      { view: "allDay", count: 1 },
+      { view: "birthday", count: 1 },
+      { view: "recurring", count: 1 },
+    ])
   })
 })
 

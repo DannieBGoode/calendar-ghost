@@ -33,9 +33,9 @@ export function previewOutcome(item: PreviewItem): PreviewOutcome {
   }
 }
 
-/** The kinds of event the Kind filter offers, in its order. */
+/** The kinds of event the preview can be narrowed to, in their order. */
 export type PreviewKind = "allDay" | "birthday" | "recurring" | "declined" | "maybe" | "unanswered"
-export const PREVIEW_KINDS: readonly PreviewKind[] = ["allDay", "birthday", "recurring", "declined", "maybe", "unanswered"]
+const PREVIEW_KINDS: readonly PreviewKind[] = ["allDay", "birthday", "recurring", "declined", "maybe", "unanswered"]
 
 const RESPONSE_KINDS: Partial<Record<PreviewItem["response"], PreviewKind>> = {
   declined: "declined",
@@ -53,54 +53,43 @@ export function previewKinds(item: PreviewItem): PreviewKind[] {
   ]
 }
 
-/** All, what the destination will hold, or what it will not. */
-export type PreviewShow = "all" | "sync" | "out"
-export type PreviewFilters = { show: PreviewShow; kinds: readonly PreviewKind[] }
-export const NO_FILTERS: PreviewFilters = { show: "all", kinds: [] }
-
-function matchesShow(item: PreviewItem, show: PreviewShow): boolean {
-  if (show === "sync") return item.projection !== null
-  if (show === "out") return item.projection === null
-  return true
-}
-
-function matchesKinds(item: PreviewItem, kinds: readonly PreviewKind[]): boolean {
-  if (!kinds.length) return true
-  const own = new Set(previewKinds(item))
-  return kinds.some((kind) => own.has(kind))
-}
-
-/** A row matches its Show choice and, when kinds are chosen, any one of them. */
-export function matchesFilters(item: PreviewItem, filters: PreviewFilters): boolean {
-  return matchesShow(item, filters.show) && matchesKinds(item, filters.kinds)
-}
-
-/** How many rows each option would show beside the other choices, so no choice leads nowhere. */
-export type FacetCounts = { show: Record<PreviewShow, number>; kinds: Map<PreviewKind, number> }
-
 /**
- * Show options count within the chosen kinds; each kind counts within the Show choice. Choosing
- * a kind adds its rows to the others chosen, so a kind's count is what it alone would show.
+ * One way to look at the preview, chosen one at a time: everything, what the destination will or
+ * will not hold, or one kind of event.
  */
-export function facetCounts(items: readonly PreviewItem[], filters: PreviewFilters): FacetCounts {
-  const ofKinds = items.filter((item) => matchesKinds(item, filters.kinds))
-  const ofShow = items.filter((item) => matchesShow(item, filters.show))
-  return {
-    show: {
-      all: ofKinds.length,
-      sync: ofKinds.filter((item) => matchesShow(item, "sync")).length,
-      out: ofKinds.filter((item) => matchesShow(item, "out")).length,
-    },
-    kinds: tally(ofShow, previewKinds),
+export type PreviewView = "all" | "sync" | "out" | PreviewKind
+const OUTCOME_VIEWS = ["all", "sync", "out"] as const
+
+export function matchesView(item: PreviewItem, view: PreviewView): boolean {
+  switch (view) {
+    case "all":
+      return true
+    case "sync":
+      return item.projection !== null
+    case "out":
+      return item.projection === null
+    default:
+      return previewKinds(item).includes(view)
   }
 }
 
-export function isFiltered(filters: PreviewFilters): boolean {
-  return filters.show !== "all" || filters.kinds.length > 0
+/**
+ * The views this preview offers, each with how many rows it shows: the three outcome views always,
+ * and a kind only when some row has it. One view applies at a time, so the counts never move.
+ */
+export function previewViews(items: readonly PreviewItem[]): { view: PreviewView; count: number }[] {
+  const kinds = tally(items, previewKinds)
+  return [
+    ...OUTCOME_VIEWS.map((view) => ({ view, count: items.filter((item) => matchesView(item, view)).length })),
+    ...PREVIEW_KINDS.flatMap((view) => {
+      const count = kinds.get(view) ?? 0
+      return count ? [{ view, count }] : []
+    }),
+  ]
 }
 
 /** How many items fall under each key; an item may count under several. */
-export function tally<K extends string>(items: readonly PreviewItem[], keys: (item: PreviewItem) => readonly K[]): Map<K, number> {
+function tally<K extends string>(items: readonly PreviewItem[], keys: (item: PreviewItem) => readonly K[]): Map<K, number> {
   const counts = new Map<K, number>()
   for (const item of items) for (const key of keys(item)) counts.set(key, (counts.get(key) ?? 0) + 1)
   return counts

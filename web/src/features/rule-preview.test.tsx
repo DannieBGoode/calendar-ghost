@@ -201,21 +201,23 @@ describe("RulePreviewView", () => {
     expect(calls.filter((call) => call.startsWith("POST"))).toEqual(["POST /api/v1/rules/rule-1/preview"])
   })
 
-  it("narrows the table to what will not sync", async () => {
+  it("narrows the table to one view at a time, with counts that never move", async () => {
     mockFetch({ status: 200, body: preview })
     await renderPreview(testI18n())
+    const views = () => [...container.querySelectorAll(".rule-preview-views [role=radio]")].map((each) => each.getAttribute("aria-label"))
+    const before = views()
+    expect(before).toEqual(["All 2", "Will sync 1", "Not synced 1", "All-day 1", "Birthdays 1"])
 
     act(() => button("Not synced 1").click())
-
     expect(button("Not synced 1").getAttribute("aria-checked")).toBe("true")
-    // Counts follow the other choices, so a kind with nothing to show can't lead to an empty table.
-    act(() => button("Will sync 1").click())
-    act(() => button("Kind").click())
-    expect(button("Birthdays 0").getAttribute("aria-disabled")).toBe("true")
-    expect(button("All 2").getAttribute("aria-disabled")).toBeNull()
+    act(() => button("Birthdays 1").click())
+
+    expect(button("Birthdays 1").getAttribute("aria-checked")).toBe("true")
+    expect(button("Not synced 1").getAttribute("aria-checked")).toBe("false")
     expect(container.querySelectorAll(".rule-preview-row")).toHaveLength(1)
-    expect(container.textContent).toContain("Showing 1 of 2")
-    // A filtered table is not every event, so it does not close by saying so.
+    // Nothing beside the views appears or changes, so the page does not shift as they change.
+    expect(views()).toEqual(before)
+    // A narrowed table is not every event, so it does not close by saying so.
     expect(container.querySelector(".rule-preview-later")).toBeNull()
   })
 
