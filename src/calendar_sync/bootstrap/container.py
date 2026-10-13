@@ -70,6 +70,7 @@ from calendar_sync.application.sync.accounts import (
     DisconnectConnectedAccount,
     DiscoverCalendars,
     ListConnectedAccounts,
+    RecheckAdministratorLapses,
 )
 from calendar_sync.application.sync.health import RuleHealth
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
@@ -536,7 +537,12 @@ def _administration(
 
 def _scheduled_services(services: UserServices) -> ScheduledServices:
     assert services.execute_sync_rule is not None
-    return ScheduledServices(services.execute_sync_rule, services.rule_health)
+    check = services.check_account_access
+    return ScheduledServices(
+        services.execute_sync_rule,
+        services.rule_health,
+        RecheckAdministratorLapses(check, services.rule_health.incidents) if check else None,
+    )
 
 
 def _compose_user(

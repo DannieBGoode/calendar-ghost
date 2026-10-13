@@ -11,6 +11,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   before it, an installation Incident needs the administrator on People and in
   `GET /api/v1/installation/health`, and goes to the installation's email and webhook. Calendar
   Ghost cannot read the date from Microsoft, so without the setting nothing changes.
+- Accounts an administrator's Cause stopped restart on their own once it is fixed, such as an
+  expired client secret, a Google OAuth client that was reset, or the Google Calendar API turned
+  off. The scheduled pass checks each such account again, at most once an hour per person and at
+  once after a restart, and a check that passes restarts its rules. Before, each person had to
+  choose **Check access**. A check that still fails changes nothing and notifies nobody again.
 
 ## [0.2.0] - 2026-10-12
 

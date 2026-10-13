@@ -34,7 +34,7 @@ from calendar_sync.application.sync.ports import (
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditEntry
-from calendar_sync.domain.causes import WITHOUT_CAUSE
+from calendar_sync.domain.causes import WITHOUT_CAUSE, Cause
 from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
@@ -711,6 +711,16 @@ class InMemoryIncidentRepository:
             while_authorized
         ):
             incident.resolve(at, resolution)
+
+    def accounts_lapsed_by(self, causes: Collection[Cause]) -> frozenset[ConnectedAccountId]:
+        return frozenset(
+            incident.report.account_id
+            for incident in self._database.incidents_of(self._user).values()
+            if incident.open
+            and incident.report.rule_id is None
+            and incident.report.account_id is not None
+            and incident.report.cause in causes
+        )
 
     def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
         return frozenset(

@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import cast
 
 import pytest
 
-from calendar_sync.application.operations.ports import InstallationUnitOfWorkFactory
+from calendar_sync.application.operations.ports import CauseSighting, InstallationUnitOfWorkFactory
 from calendar_sync.application.operations.scheduled_pass import (
+    RECHECK_INTERVAL,
     ScheduledPass,
     ScheduledRun,
     ScheduledServices,
@@ -22,6 +23,7 @@ from calendar_sync.application.sync.health import RunHealth
 from calendar_sync.application.sync.ports import ScheduledRule
 from calendar_sync.application.sync.synchronization import SyncRunResult
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
@@ -29,7 +31,7 @@ from calendar_sync.infrastructure.persistence.memory_installation import (
     InMemoryInstallationUnitOfWorkFactory,
 )
 from tests.fake_calendar import FixedClock
-from tests.helpers import endpoint, rule
+from tests.helpers import NOW, endpoint, rule
 from tests.scheduled_fakes import RecordingExecuteRule, RecordingHealth
 from tests.users import OTHER_USER, USER, memory_units, rule_accounts
 
@@ -169,3 +171,103 @@ def test_rules_take_turns_between_users() -> None:
     ordered = fairly_ordered([*many, *few])
 
     assert [item.rule.id.value for item in ordered] == ["mine-0", "theirs", "mine-1", "mine-2"]
+
+
+class Installation:
+    """Every User's records as a pass reads them, with the failures they are stopped by."""
+
+    def __init__(self, sightings: list[CauseSighting]) -> None:
+        self.sightings = sightings
+
+    def __enter__(self) -> Installation:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def commit(self) -> None:
+        return None
+
+    def forget_change_values(self, before: datetime) -> None:
+        return None
+
+    def forget_provider_calls(self, before: object) -> None:
+        return None
+
+    def users_with_unfinished_lapses(self) -> tuple[UserId, ...]:
+        return ()
+
+    def failure_causes(self, since: datetime) -> list[CauseSighting]:
+        return self.sightings
+
+    def scheduled_rules(self) -> tuple[ScheduledRule, ...]:
+        return ()
+
+
+class SteppingClock:
+    def __init__(self) -> None:
+        self.current = NOW
+
+    def now(self) -> datetime:
+        return self.current
+
+
+class Fixes:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.calls = 0
+        self.error = error
+
+    def execute(self) -> int:
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return 1
+
+
+def _checking(
+    sightings: list[CauseSighting], fixes: dict[UserId, Fixes], clock: SteppingClock
+) -> ScheduledPass:
+    installation = Installation(sightings)
+
+    def services_for(owner: UserId) -> ScheduledServices:
+        return ScheduledServices(
+            cast(SyncRuns, RecordingExecuteRule([])),
+            cast(RunHealth, RecordingHealth()),
+            fixes.get(owner),
+        )
+
+    return ScheduledPass(
+        cast(InstallationUnitOfWorkFactory, lambda: installation), services_for, clock
+    )
+
+
+def test_a_user_an_administrators_cause_stopped_is_checked_again_at_most_once_an_hour() -> None:
+    third = UserId("third-user")
+    sightings = [
+        CauseSighting(USER, Cause.OAUTH_CLIENT_INVALID, NOW, True),
+        # The owner fixes this one, and this administrator's one is no longer open.
+        CauseSighting(OTHER_USER, Cause.ACCESS_REVOKED, NOW, True),
+        CauseSighting(third, Cause.API_DISABLED, NOW, False),
+    ]
+    fixes = {USER: Fixes(), OTHER_USER: Fixes(), third: Fixes()}
+    clock = SteppingClock()
+    scheduled = _checking(sightings, fixes, clock)
+
+    scheduled.begin()
+    clock.current = NOW + timedelta(minutes=59)
+    scheduled.begin()
+    clock.current = NOW + RECHECK_INTERVAL
+    scheduled.begin()
+
+    assert [fixes[user].calls for user in (USER, OTHER_USER, third)] == [2, 0, 0]
+
+
+def test_a_check_that_fails_never_stops_the_pass(caplog: pytest.LogCaptureFixture) -> None:
+    sightings = [CauseSighting(USER, Cause.OAUTH_CLIENT_INVALID, NOW, True)]
+    fixes = {USER: Fixes(sqlite3.OperationalError("database is locked"))}
+
+    runs = _checking(sightings, fixes, SteppingClock()).begin()
+
+    assert runs == ()
+    assert fixes[USER].calls == 1
+    assert "Checking accounts an administrator's cause stopped failed" in caplog.text

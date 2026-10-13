@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import replace
 from datetime import datetime, timedelta
 
@@ -223,6 +224,16 @@ class Incidents:
             if report.key in self.open_keys
             and report.rule_id is None
             and report.account_id is not None
+        )
+
+    def accounts_lapsed_by(self, causes: Collection[Cause]) -> frozenset[ConnectedAccountId]:
+        return frozenset(
+            report.account_id
+            for report in self.reports
+            if report.key in self.open_keys
+            and report.rule_id is None
+            and report.account_id is not None
+            and report.cause in causes
         )
 
 

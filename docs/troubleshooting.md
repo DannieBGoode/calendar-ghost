@@ -276,9 +276,10 @@ APIs & services**, and look for **Google Calendar API**. If it is missing, or it
 
 **Fix.** Choose **Enable** on the Google Calendar API page, and wait a few minutes for Google to
 apply it. Google refused each affected account while the API was off, so their rules stay stopped
-until each account is checked again: each person's Overview says Google Calendar is temporarily
-unavailable and offers **Check access** on their Google account in **Settings → Connections** to
-try again, and a check that passes restarts every rule it stopped, with no preview.
+until each account is checked again. Calendar Ghost does that on its own within an hour, and a
+check that passes restarts every rule it stopped, with no preview. Meanwhile each person's Overview
+says Google Calendar is temporarily unavailable and offers **Check access** on their Google account
+in **Settings → Connections** to try at once.
 
 ### The Google Cloud project's daily quota is used up
 
@@ -303,10 +304,12 @@ no longer accepts this installation's OAuth client", and reauthorizing fails too
 `CALENDAR_SYNC_GOOGLE_CLIENT_ID`. It may have been deleted, or its secret reset, so that
 `CALENDAR_SYNC_GOOGLE_CLIENT_SECRET` no longer matches. Do not post either value publicly.
 
-**Fix.** Put the client's current ID and secret in `.env` and run `docker compose up -d`. Each
-person's Overview, which says Google Calendar is temporarily unavailable, offers **Check access** on
-their Google account; a check that passes restarts their rules. If you had to create a new client, Google's grants to the old one do not carry over:
-each person's dashboard asks them to choose **Reauthorize account** once.
+**Fix.** Put the client's current ID and secret in `.env` and run `docker compose up -d`. The first
+scheduled pass after the restart checks every stopped Google account again, and each check that
+passes restarts its rules. Each person's Overview, which says Google Calendar is temporarily
+unavailable, also offers **Check access** on their Google account. If you had to create a new
+client, Google's grants to the old one do not carry over: each person's dashboard asks them to
+choose **Reauthorize account** once.
 
 ### Google accounts stop working 7 days after connecting
 
@@ -340,11 +343,13 @@ logs name Microsoft's code, such as `AADSTS7000222` for an expired secret
 ([Reading the logs](#reading-the-logs)). Do not post either value publicly.
 
 **Fix.** Choose **New client secret**, copy its **Value** (shown only once), put it in `.env` as
-`CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`, and run `docker compose up -d`. Each person's Overview
-offers **Check access** on their Microsoft account; a check that passes restarts their rules. If
-you had to register a new application, Microsoft's grants to the old one do not carry over: each
-person reauthorizes once. To avoid this, add a reminder for the secret's expiry date and create
-the next secret before it.
+`CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`, put its **Expires** date in
+`CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES`, and run `docker compose up -d`. The first scheduled
+pass after the restart checks every stopped Microsoft account again, and each check that passes
+restarts its rules; each person's Overview also offers **Check access** on their Microsoft account.
+If you had to register a new application, Microsoft's grants to the old one do not carry over: each
+person reauthorizes once. With the expiry date in `.env`, People warns you 30 days before the next
+secret expires, so you can create its successor in time.
 
 ## Problems you fix yourself
 

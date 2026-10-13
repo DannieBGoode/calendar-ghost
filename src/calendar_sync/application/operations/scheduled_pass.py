@@ -1,9 +1,9 @@
 """A scheduled pass: what the scheduler does with every User's enabled rules each interval.
 
 The scheduler adapter decides only when a pass starts and how many rules run at once. A pass
-expires what is kept only for a while, finishes interrupted lapses, chooses whose daily full pass
-is due, runs each rule with its owner's services and retries, and records how each run went
-(ADR 0029).
+expires what is kept only for a while, finishes interrupted lapses, checks again the accounts an
+administrator's Cause stopped, chooses whose daily full pass is due, runs each rule with its
+owner's services and retries, and records how each run went (ADR 0029).
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime, timedelta
 from itertools import zip_longest
 from typing import Protocol
 
@@ -26,14 +26,27 @@ from calendar_sync.application.sync.retry import with_retries
 from calendar_sync.application.sync.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.application.sync.synchronization import SyncRunResult
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.causes import ADMINISTRATOR_CAUSES
 from calendar_sync.domain.model import SyncRule, SyncRuleId
 from calendar_sync.domain.providers import ProviderFailureKind
 
 logger = logging.getLogger(__name__)
 
+RECHECK_INTERVAL = timedelta(hours=1)
+"""How often a User's accounts an administrator's Cause stopped are checked again: often enough
+that fixing it restarts them soon, rarely enough not to press the provider while it is not fixed.
+The first pass after a start checks at once, as putting a new client secret in place restarts the
+installation."""
+
 
 class SyncRuns(Protocol):
     def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult: ...
+
+
+class AdministratorFixes(Protocol):
+    def execute(self) -> int:
+        """Check again the accounts an administrator's Cause stopped; how many rules restarted."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +55,8 @@ class ScheduledServices:
 
     execute_rule: SyncRuns
     health: RunHealth
+    administrator_fixes: AdministratorFixes | None = None
+    """None where no access check can run, as without the installation master key."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +72,8 @@ class ScheduledPass:
     installation: InstallationUnitOfWorkFactory
     services_for: Callable[[UserId], ScheduledServices]
     clock: Clock
+    _checked: dict[UserId, datetime] = field(default_factory=dict)
+    """When each User's accounts an administrator's Cause stopped were last checked again."""
 
     def begin(self) -> tuple[ScheduledRun, ...]:
         """Prepare a pass, then list its runs: every enabled rule of every User who is not
@@ -71,6 +88,18 @@ class ScheduledPass:
             # Before listing the pass's rules, so a rule resumed here runs in this same pass.
             for owner in installation.users_with_unfinished_lapses():
                 self._finish_lapses(owner)
+            # Also before listing, so the rules of an account that passes run in this same pass.
+            # A check reads the provider with no write transaction open.
+            stopped = {
+                sighting.user
+                for sighting in installation.failure_causes(now - RECHECK_INTERVAL)
+                if sighting.open and sighting.cause in ADMINISTRATOR_CAUSES
+            }
+            for owner in sorted(stopped, key=lambda user: user.value):
+                if now - self._checked.get(owner, datetime.min.replace(tzinfo=UTC)) >= (
+                    RECHECK_INTERVAL
+                ):
+                    self._check_administrator_fixes(owner, now)
             # Each rule's daily full pass is due from its own last one, so a restart or another
             # rule's failure never re-lists calendars that already completed today's pass.
             return tuple(
@@ -103,6 +132,18 @@ class ScheduledPass:
         listed = full or result.listed_in_full
         _record_success(services.health, rule, floor if listed else None, result.run_id)
         return True
+
+    def _check_administrator_fixes(self, owner: UserId, now: datetime) -> None:
+        """Check one User's accounts again; a failure waits for the next interval."""
+        self._checked[owner] = now
+        try:
+            fixes = self.services_for(owner).administrator_fixes
+            if fixes is not None:
+                fixes.execute()
+        except Exception:
+            logger.exception(
+                "Checking accounts an administrator's cause stopped failed; trying again later"
+            )
 
     def _finish_lapses(self, owner: UserId) -> None:
         """Finish what an interrupted lapse or restoration left; a failure waits for a pass."""

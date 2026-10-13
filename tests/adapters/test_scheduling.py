@@ -40,7 +40,7 @@ from calendar_sync.application.sync.synchronization import ExecuteSyncRule, Sync
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
-from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.causes import ADMINISTRATOR_CAUSES, Cause
 from calendar_sync.domain.incidents import (
     IncidentCategory,
     IncidentMessage,
@@ -1179,6 +1179,28 @@ def test_a_pass_finishes_a_restoration_the_process_stopped_before(tmp_path: Path
     assert resumed.state is SyncRuleState.ENABLED
     assert incidents == [("resolved", "access_restored")]
     assert execute.calls == 1
+
+
+def test_the_incidents_name_the_accounts_an_administrators_cause_stopped(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
+    accounts = store.for_user(USER)
+    work = accounts.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    home = accounts.save("Home", "home@example.test", "{}", provider=ProviderKind.GOOGLE)
+    unit_of_work = sqlite_units(database)
+    health = _rule_health(database, unit_of_work)
+    for account, cause in ((work, Cause.OAUTH_CLIENT_INVALID), (home, Cause.ACCESS_REVOKED)):
+        refused = ProviderFailure(
+            ProviderFailureKind.AUTHENTICATION, "refused", account_id=account.id, cause=cause
+        )
+        health.lapses.lapsed(account.id, refused, attempted_at=datetime.now(UTC))
+
+    incidents = SqliteIncidentRepository(database, add_user(database))
+
+    assert incidents.accounts_lapsed_by(ADMINISTRATOR_CAUSES) == {work.id}
+    assert incidents.accounts_lapsed_by(()) == frozenset()
 
 
 def test_a_lapse_committed_while_a_rule_resumes_keeps_it_stopped(

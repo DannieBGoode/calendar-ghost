@@ -186,6 +186,8 @@ Nobody needs to reauthorize: grants belong to the application, not to one secret
 expires first, every Microsoft account stops at once with the likely cause "Microsoft no longer
 accepts this installation's OAuth client";
 [the fix](troubleshooting.md#microsoft-no-longer-accepts-the-oauth-client) is the same rotation.
+After it, the first scheduled pass checks every stopped account again and restarts its rules, so
+nobody has to act.
 
 ## 3. Configure the installation
 
