@@ -147,6 +147,6 @@ describe("layOut", () => {
       reason: "occurrence_changed",
     })
     const [placed] = layOut([moved], now).upcoming[0]?.items ?? []
-    expect(placed && sourceNotes(i18n, placed)).toEqual(["Moved from 6:00 PM"])
+    expect(placed && sourceNotes(i18n, placed)).toEqual(["This date only: moved from 6:00 PM"])
   })
 })

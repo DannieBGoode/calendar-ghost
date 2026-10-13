@@ -1,6 +1,7 @@
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Settings2 } from "lucide-react"
 
 import { AccountAvatar } from "@/components/account-avatar"
+import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import type { ConnectedAccount, RuleDetail } from "@/lib/api"
 import { tentativeFact, unansweredFact } from "@/lib/invitation-responses"
@@ -91,19 +92,7 @@ export function PreviewSettings({ detail, onChange }: { detail: RuleDetail; onCh
   ]
   return (
     <section className="rule-preview-settings" aria-labelledby="rule-preview-settings-title">
-      <div className="rule-preview-settings-heading">
-        <h2 id="rule-preview-settings-title">{t("rulePreview.rule.settings")}</h2>
-        <a
-          href={appPathForRule(detail.id)}
-          onClick={(event) => {
-            if (!isPlainLeftClick(event)) return
-            event.preventDefault()
-            onChange()
-          }}
-        >
-          {t("rulePreview.rule.change")}
-        </a>
-      </div>
+      <h2 id="rule-preview-settings-title">{t("rulePreview.rule.settings")}</h2>
       <dl>
         {settings.map(([term, value]) => (
           <div key={term}>
@@ -112,6 +101,18 @@ export function PreviewSettings({ detail, onChange }: { detail: RuleDetail; onCh
           </div>
         ))}
       </dl>
+      <Button variant="outline" size="sm" asChild>
+        <a
+          href={appPathForRule(detail.id)}
+          onClick={(event) => {
+            if (!isPlainLeftClick(event)) return
+            event.preventDefault()
+            onChange()
+          }}
+        >
+          <Settings2 aria-hidden="true" /> {t("rulePreview.rule.change")}
+        </a>
+      </Button>
     </section>
   )
 }

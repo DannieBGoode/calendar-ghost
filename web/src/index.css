@@ -6146,23 +6146,13 @@ td.rule-preview-col-when {
   background: var(--surface);
 }
 
-.rule-preview-settings-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-}
-
 .rule-preview-settings h2 {
   font-size: 0.875rem;
   font-weight: 650;
 }
 
-.rule-preview-settings-heading a {
-  color: var(--primary);
-  font-size: 0.8125rem;
-  font-weight: 600;
+.rule-preview-settings > a {
+  align-self: flex-start;
 }
 
 .rule-preview-settings dl {
@@ -6182,26 +6172,28 @@ td.rule-preview-col-when {
   font-size: 0.8125rem;
 }
 
-/* What Start syncing will do, beside it, so the decision is made with the counts in view. */
+/* What Start syncing will do, on the same line as it, so the decision is made with the counts in
+   view: Back, the counts, then the reassurance right beside the button. */
 .rule-preview-summary {
   display: flex;
   min-width: 0;
   flex: 1;
-  flex-direction: column;
-  gap: 0.125rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1.5rem;
   color: var(--muted-foreground);
   font-size: 0.8125rem;
 }
 
-p.rule-preview-summary {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem;
+.rule-preview-consequence {
+  margin-left: auto;
+  white-space: nowrap;
 }
 
-.rule-preview-consequence {
-  max-width: 60ch;
+@media (max-width: 1099px) {
+  .rule-preview-consequence {
+    display: none;
+  }
 }
 
 /* Closes the table: the list ends, the rule does not. */

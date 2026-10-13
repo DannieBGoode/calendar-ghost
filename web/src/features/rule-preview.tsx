@@ -147,7 +147,7 @@ function RulePreviewPage({
         names={names}
         reading={preview.isFetching}
         calendars={<PreviewCalendars detail={detail} accounts={accounts} calendars={calendarsByAccount} />}
-        stamp={<PreviewStamp run={run} onRetry={retry} />}
+        stamp={<PreviewStamp run={run} source={names.source} onRetry={retry} />}
       />
       <PreviewSettings detail={detail} onChange={openRule} />
       {failure ? (
@@ -349,12 +349,12 @@ function PreviewFooter({
 }
 
 /** When the preview was made, and a way to make it again. */
-function PreviewStamp({ run, onRetry }: { run: PreviewRun | undefined; onRetry: () => void }) {
+function PreviewStamp({ run, source, onRetry }: { run: PreviewRun | undefined; source: string; onRetry: () => void }) {
   const i18n = useI18n()
   if (!run) return null
   return (
     <p className="rule-preview-stamp">
-      {i18n.t("rulePreview.page.previewedAt", { time: i18n.format.time(run.completedAt) })}
+      {i18n.t("rulePreview.page.previewedAt", { source, time: i18n.format.time(run.completedAt) })}
       <Button type="button" variant="ghost" size="sm" className="rule-preview-again" onClick={onRetry}>
         {i18n.t("rulePreview.page.previewAgain")}
       </Button>
@@ -396,10 +396,10 @@ function StartSummary({
   if (!run) return <p className="rule-preview-summary">{busy && t("rulePreview.page.previewing")}</p>
   return (
     <div className="rule-preview-summary">
-      <p className="rule-preview-counts" aria-label={t("rulePreview.counts.label")}>
+      <p className="rule-preview-counts" aria-label={t("rulePreview.counts.label", { destination })}>
         <OutcomeSigns parts={outcomeParts(i18n, outcomeCounts(run.items))} />
       </p>
-      <p className="rule-preview-consequence">{t("rulePreview.page.startConsequence", { destination })}</p>
+      <p className="rule-preview-consequence">{t("rulePreview.page.pauseAnyTime")}</p>
     </div>
   )
 }

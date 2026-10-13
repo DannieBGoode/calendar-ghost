@@ -15,7 +15,8 @@ destination, or why it stays out.
   The browser tab reads "Preview · Family → Work".
 - Every "Preview rule" and "Preview to restart" opens it, from a rule row, Rule Details, or the end
   of the rule builder. The page runs the preview as it loads.
-- The count line beside "Start syncing" on rows and Rule Details links to it ("See what will sync").
+- "Start syncing" exists only on this page. A previewed rule's row and Rule Details read "Ready to
+  start" and offer "Review and start", which opens this page.
 - The browser keeps the result for the session (no refetch on focus or reconnect); "Preview again"
   runs it on purpose. A reload runs it again, which is cheap and side-effect-free. Any change to
   the rule (policy, calendars, pause, enable, removal) forgets the kept result, so the next visit
@@ -50,13 +51,14 @@ destination, or why it stays out.
 - **Calendars:** each calendar with its account avatar (the provider's mark on its corner) and, in
   words, its provider and address: "Family source · Google account · sam@family.example".
 - **What this is:** "A preview: nothing is written to Work until you start syncing.", then
-  "Previewed at 4:55 PM · Preview again".
+  "Read Family at 4:55 PM · Read again".
 - **What is shared:** the policy's own line. Busy-Only: a lock and "Busy only: titles, descriptions,
   and locations stay private." Details: an eye in Attention Ochre and "Copies titles, descriptions,
   and locations to Work. Anyone who can see Work sees them." (Destructive and Privacy-Widening
   Changes).
 - **What this rule syncs:** a quiet panel with the rule's other choices in Rule Details' words
-  (all-day events, birthdays, Maybe, unanswered, declined, starting point) and "Change settings".
+  (all-day events, birthdays, Maybe, unanswered, declined, starting point), closed by an outline
+  "Change settings" button.
 
 The counts ("+ 12 to add · ⊘ 3 not synced") sit in the sticky footer beside Start syncing, so the
 decision is made with them in view; they cover the whole preview, never the filtered view.
@@ -90,8 +92,8 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
   zone, with its recurrence in words and when it began. A rule the page cannot step exactly
   (BYSETPOS, RDATE, a day filter its frequency does not use) reads "Repeats" and sits under Today. Only a series that has fully ended sits in the Earlier group.
 - A changed occurrence is its own row on its own date, labelled with what changed:
-  `19:00  Swim class · Moved from 18:00  →  Busy, 19:00  ~ Update`, or
-  `Swim class · Cancelled this week  →  Not written  − Remove`. Its outcome is the planned action.
+  `19:00  Swim class · This date only: moved from 18:00  → Busy, 19:00  ~ Update`, or
+  `Swim class · This date only: cancelled  − Remove`. Its outcome is the planned action.
 - Times use the browser's time zone, named once above the table, in tabular numerals. An event that
   crosses midnight shows its end with the day ("22:00–01:00 Tue"). A multi-day all-day event shows
   its dates ("All day, 13–15 Oct").

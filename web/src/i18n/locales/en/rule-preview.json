@@ -8,12 +8,12 @@
     "startSyncing": "Start syncing to {destination}",
     "starting": "Starting…",
     "availableWhenDone": "Available when the preview finishes",
-    "previewedAt": "Previewed at {time}",
-    "previewAgain": "Preview again",
+    "previewedAt": "Read {source} at {time}",
+    "previewAgain": "Read again",
     "previewing": "Previewing…",
     "enableFailed": "Syncing did not start.",
     "changedSincePreview": "This rule changed since the preview.",
-    "startConsequence": "Starting writes these to {destination} and keeps them in step. You can pause or remove the rule at any time."
+    "pauseAnyTime": "You can pause or remove the rule at any time."
   },
   "counts": {
     "add": "{count} to add",
@@ -22,7 +22,7 @@
     "current": "{count} already up to date",
     "blocked": "{count} blocked",
     "skipped": "{count} not synced",
-    "label": "What starting this rule will do"
+    "label": "What starting this rule writes to {destination}"
   },
   "privacy": {
     "busyOnly": "Busy only: titles, descriptions, and locations stay private.",
@@ -78,9 +78,9 @@
     "notWritten": "Nothing is written",
     "untitled": "(No title)",
     "since": "since {date}",
-    "moved": "Moved from {time}",
-    "cancelledOnce": "Cancelled this time",
-    "changedOnce": "Changed this time",
+    "moved": "This date only: moved from {time}",
+    "cancelledOnce": "This date only: cancelled",
+    "changedOnce": "This date only: changed",
     "declined": "You declined",
     "maybe": "You answered Maybe",
     "unanswered": "You haven't answered",
