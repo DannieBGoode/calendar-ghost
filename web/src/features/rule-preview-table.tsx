@@ -114,17 +114,25 @@ function EarlierRows({ days }: { days: PreviewDay[] }) {
   const [open, setOpen] = useState(() => counts.has("remove") || counts.has("blocked"))
   const first = days[0]
   if (!first) return null
+  const title = i18n.t("rulePreview.table.earlier", { date: i18n.format.date(first.date, { day: "numeric", month: "short" }) })
+  const countText = i18n.t("rulePreview.table.earlierCount", { count: items.length })
+  const parts = outcomeParts(i18n, counts)
+  // Spoken as phrases; the visible counts sit in separate boxes with no punctuation between.
+  const name = i18n.t("rulePreview.table.earlierName", {
+    title,
+    counts: i18n.format.unitList([countText, ...parts.map((part) => part.text)]),
+  })
   return (
     <>
       <tbody role="rowgroup" className="rule-preview-earlier">
         <tr role="row">
           <th scope="rowgroup" role="rowheader" colSpan={COLUMNS}>
-            <button type="button" className="rule-preview-earlier-toggle" aria-expanded={open} aria-controls="rule-preview-earlier-days" onClick={() => setOpen((value) => !value)}>
+            <button type="button" className="rule-preview-earlier-toggle" aria-label={name} aria-expanded={open} aria-controls="rule-preview-earlier-days" onClick={() => setOpen((value) => !value)}>
               <ChevronRight aria-hidden="true" className="rule-preview-chevron" />
-              <span>{i18n.t("rulePreview.table.earlier", { date: i18n.format.date(first.date, { day: "numeric", month: "short" }) })}</span>
+              <span>{title}</span>
               <span className="rule-preview-earlier-counts">
-                {i18n.t("rulePreview.table.earlierCount", { count: items.length })}
-                <OutcomeSigns parts={outcomeParts(i18n, counts)} />
+                {countText}
+                <OutcomeSigns parts={parts} />
               </span>
             </button>
           </th>

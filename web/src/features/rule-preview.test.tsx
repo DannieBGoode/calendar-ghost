@@ -222,6 +222,18 @@ describe("RulePreviewView", () => {
     expect(container.textContent).not.toContain("Reading Family")
   })
 
+  it("names the Earlier group in separate phrases for screen readers", async () => {
+    // Regression: ISSUE-005, the toggle's name ran its parts together ("Oct 7 1 event 1 to add").
+    // Found by /qa on 2026-10-13
+    const lastWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6, 19)
+    const past = { ...preview.items[0], source_event_id: "book-club", title: "Book club", starts_at: lastWeek.toISOString(), ends_at: lastWeek.toISOString() }
+    mockFetch({ status: 200, body: { ...preview, items: [past, ...preview.items] } })
+    await renderPreview(testI18n())
+
+    const toggle = container.querySelector(".rule-preview-earlier-toggle")
+    expect(toggle?.getAttribute("aria-label")).toMatch(/^Earlier, from .+: 1 event, 1 to add$/)
+  })
+
   it("leaves no text untranslated", async () => {
     mockFetch({ status: 200, body: preview })
     await renderPreview(pseudoI18n())

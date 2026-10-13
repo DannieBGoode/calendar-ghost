@@ -57,6 +57,7 @@
     "today": "Today · {date}",
     "tomorrow": "Tomorrow · {date}",
     "earlier": "Earlier, from {date}",
+    "earlierName": "{title}: {counts}",
     "earlierCount": {
       "one": "{count} event",
       "other": "{count} events"
