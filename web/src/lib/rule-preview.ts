@@ -114,6 +114,10 @@ export const outcomeCounts = (items: readonly PreviewItem[]) => tally(items, (it
  */
 export type PlacedItem = { item: PreviewItem; at: Date | null; allDay: boolean; since: Date | null }
 type DatedItem = PlacedItem & { at: Date }
+/** One finished preview: what it found, and when, which every date on the page is read against. */
+export type PreviewRun = { items: PreviewItem[]; completedAt: Date }
+/** The two calendars' names, as the page shows them. */
+export type PreviewNames = { source: string; destination: string }
 export type PreviewDay = { key: string; date: Date; items: PlacedItem[] }
 /** Deleted events without a date, days before today (collapsed under Earlier), and today onward. */
 export type PreviewLayout = { undated: PlacedItem[]; earlier: PreviewDay[]; upcoming: PreviewDay[] }

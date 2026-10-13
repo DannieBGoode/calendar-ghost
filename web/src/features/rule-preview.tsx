@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, ArrowRight, Eye, LoaderCircle, Lock } from "lucide-react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { ArrowRight, Eye, Lock } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react"
 
 import { GhostMark } from "@/components/ghost-mark"
@@ -7,27 +7,32 @@ import { PageSkeleton } from "@/components/page-skeleton"
 import { LiveAnnouncement } from "@/components/rule-commands"
 import { Button } from "@/components/ui/button"
 import { PreviewFilterBar } from "@/features/rule-preview-filters"
+import { PreviewFooter } from "@/features/rule-preview-footer"
 import { PreviewEmpty, PreviewFailurePanel, PreviewSkeleton } from "@/features/rule-preview-states"
 import { PreviewAccounts, PreviewSettings } from "@/features/rule-preview-rule"
-import { OutcomeSigns, PreviewTable } from "@/features/rule-preview-table"
+import { PreviewTable } from "@/features/rule-preview-table"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import { ApiError, api, type ConnectedAccount, type RuleDetail } from "@/lib/api"
-import { appPathForRule, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
+import { documentTitle } from "@/lib/brand"
+import { type OpenRule, type ViewChange } from "@/lib/navigation"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
-import { NO_FILTERS, isFiltered, isToday, layOut, narrowLayout, matchesFilters, outcomeCounts, type PreviewFilters, type PreviewItem } from "@/lib/rule-preview"
+import {
+  NO_FILTERS,
+  isFiltered,
+  isToday,
+  layOut,
+  matchesFilters,
+  narrowLayout,
+  type PreviewFilters,
+  type PreviewNames,
+  type PreviewRun,
+} from "@/lib/rule-preview"
 import { previewFailure } from "@/lib/rule-preview-failure"
-import { outcomeParts } from "@/lib/rule-preview-text"
-import { enabledMessage } from "@/lib/rule-run"
 import { RULE_CHANGE_QUERIES, rulePreviewKey } from "@/lib/use-rule-commands"
 import { useRuleCalendars, type CalendarsByAccount } from "@/lib/use-rule-calendars"
 
-type Names = { source: string; destination: string }
-/** What enabling answers when the rule is no longer the one previewed. */
-const CHANGED_CODES = ["rule_not_executable", "invalid_state_transition"]
-type PreviewRun = { items: PreviewItem[]; completedAt: Date }
-/** Why starting the rule did not work: it changed since the preview, or something else. */
-type StartFailure = "changed" | "failed"
+type Names = PreviewNames
 
 /** The preview runs once per visit and is kept for the session; Refresh runs it anew. */
 function useRulePreview(ruleId: string) {
@@ -142,6 +147,10 @@ function RulePreviewPage({
       })
     : null
   const refresh = useRef<HTMLButtonElement>(null)
+  // Refines the shell's "Preview" with the rule, so tabs and history tell previews apart.
+  useEffect(() => {
+    document.title = documentTitle(i18n, i18n.t("rulePreview.page.documentTitleRule", names))
+  }, [i18n, names])
   // Focus moves to the lead's Refresh, which stays while reading, so a retry from a panel or the
   // footer, which then leave, never drops it to the page; the announcements say what happened.
   const retry = () => {
@@ -313,102 +322,6 @@ function timeZoneName(locale: string, at: Date): string {
   return parts.find((part) => part.type === "timeZoneName")?.value ?? Intl.DateTimeFormat().resolvedOptions().timeZone
 }
 
-/**
- * Keeps `--rule-preview-footer` on the page at the footer's height, which grows with text size and
- * with what it holds, so focus moved by keyboard always stops above it.
- */
-function useFooterHeight() {
-  const footer = useRef<HTMLElement>(null)
-  useEffect(() => {
-    const element = footer.current
-    if (!element) return
-    const root = document.documentElement
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) root.style.setProperty("--rule-preview-footer", `${entry.borderBoxSize[0]?.blockSize ?? element.offsetHeight}px`)
-    })
-    observer.observe(element)
-    return () => {
-      observer.disconnect()
-      root.style.removeProperty("--rule-preview-footer")
-    }
-  }, [])
-  return footer
-}
-
-/** Back to the rule, when the preview was made, and the page's one primary action. */
-function PreviewFooter({
-  detail,
-  names,
-  run,
-  busy,
-  failed,
-  onRetry,
-  onOpenRule,
-}: {
-  detail: RuleDetail
-  names: Names
-  run: PreviewRun | undefined
-  busy: boolean
-  failed: boolean
-  onRetry: () => void
-  onOpenRule: OpenRule
-}) {
-  const i18n = useI18n()
-  const queryClient = useQueryClient()
-  const enable = useMutation({
-    mutationFn: () => api.enableRule(detail.id),
-    onError: () => void queryClient.invalidateQueries({ queryKey: ["rule", detail.id] }),
-    onSuccess: async () => {
-      queryClient.removeQueries({ queryKey: rulePreviewKey(detail.id) })
-      await Promise.all(
-        [...RULE_CHANGE_QUERIES, ["rule", detail.id]].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-      )
-      onOpenRule(detail.id, { notice: enabledMessage(i18n, names.destination) })
-    },
-  })
-  // Another tab or a scheduled run moved the rule on; its details are refetched below.
-  const changed = enable.error instanceof ApiError && CHANGED_CODES.includes(enable.error.code ?? "")
-  const canStart = run !== undefined && !failed && !changed && detail.state === "dry_run_validated"
-  const startFailure: StartFailure | null = enable.error ? (changed ? "changed" : "failed") : null
-  const footer = useFooterHeight()
-  return (
-    <footer ref={footer} className="rule-preview-footer">
-      <div className="rule-preview-footer-inner">
-        <a
-          className="back-link"
-          href={appPathForRule(detail.id)}
-          onClick={(event) => {
-            if (!isPlainLeftClick(event)) return
-            event.preventDefault()
-            onOpenRule(detail.id)
-          }}
-        >
-          <ArrowLeft aria-hidden="true" /> {i18n.t("rulePreview.page.back")}
-        </a>
-        <StartSummary
-          run={run}
-          destination={names.destination}
-          outcome={startFailure}
-          onRetry={() => {
-            enable.reset()
-            onRetry()
-          }}
-        />
-        {detail.state !== "enabled" && (
-          <StartButton
-            destination={names.destination}
-            sharesDetails={detail.privacy_policy === "copy_details"}
-            ready={canStart}
-            starting={enable.isPending}
-            waiting={busy}
-            onStart={() => enable.mutate()}
-          />
-        )}
-      </div>
-    </footer>
-  )
-}
-
 /** What the preview reads: the source, and the destination too once the rule has written there. */
 function readingText(i18n: I18n, detail: RuleDetail, names: Names): string {
   return detail.mapping_count > 0
@@ -463,92 +376,5 @@ function PreviewLead({
         {i18n.t("rulePreview.page.previewAgain")}
       </Button>
     </p>
-  )
-}
-
-/**
- * Beside Start syncing, what it will do, so the decision is made with the counts in view; or why
- * starting did not work.
- */
-function StartSummary({
-  run,
-  destination,
-  outcome,
-  onRetry,
-}: {
-  run: PreviewRun | undefined
-  destination: string
-  outcome: StartFailure | null
-  onRetry: () => void
-}) {
-  const i18n = useI18n()
-  const { t } = i18n
-  if (outcome) {
-    return (
-      <p className="rule-preview-summary" role="alert">
-        {outcome === "changed" ? t("rulePreview.page.changedSincePreview") : t("rulePreview.page.enableFailed")}
-        {outcome === "changed" && (
-          <Button type="button" variant="ghost" size="sm" className="rule-preview-inline-action" onClick={onRetry}>
-            {t("rulePreview.page.previewAgain")}
-          </Button>
-        )}
-      </p>
-    )
-  }
-  if (!run) return <p className="rule-preview-summary" />
-  return (
-    <div className="rule-preview-summary">
-      <p className="rule-preview-counts">
-        <span className="sr-only">{t("rulePreview.counts.label", { destination })}</span>
-        <OutcomeSigns parts={outcomeParts(i18n, outcomeCounts(run.items))} />
-      </p>
-      <p className="rule-preview-consequence">{t("rulePreview.page.pauseAnyTime")}</p>
-    </div>
-  )
-}
-
-function StartButton({
-  destination,
-  sharesDetails,
-  ready,
-  starting,
-  waiting,
-  onStart,
-}: {
-  destination: string
-  sharesDetails: boolean
-  ready: boolean
-  starting: boolean
-  /** Whether Start waits on a preview that is reading; a failed one says why in its own panel. */
-  waiting: boolean
-  onStart: () => void
-}) {
-  const { t } = useI18n()
-  const blocked = !ready || starting
-  return (
-    <div className="rule-preview-start">
-      <Button
-        className="rule-preview-start-button"
-        aria-disabled={blocked ? true : undefined}
-        aria-describedby={waiting ? "rule-preview-start-note" : undefined}
-        onClick={() => !blocked && onStart()}
-      >
-        {starting ? (
-          <>
-            <LoaderCircle aria-hidden="true" className="work-spinner" /> {t("rulePreview.page.starting")}
-          </>
-        ) : (
-          t(sharesDetails ? "rulePreview.page.startSyncingDetails" : "rulePreview.page.startSyncing", { destination })
-        )}
-      </Button>
-      {waiting ? (
-        <span id="rule-preview-start-note" className="rule-preview-start-note">
-          {t("rulePreview.page.availableWhenDone")}
-        </span>
-      ) : (
-        // Beside the counts on wide screens; here, under the button, where narrow screens put it.
-        ready && <span className="rule-preview-start-note rule-preview-start-reassure">{t("rulePreview.page.pauseAnyTime")}</span>
-      )}
-    </div>
   )
 }

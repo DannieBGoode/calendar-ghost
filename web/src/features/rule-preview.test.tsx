@@ -233,6 +233,24 @@ describe("RulePreviewView", () => {
     expect(document.activeElement).toBe(button("Will sync 1"))
   })
 
+  it("puts Refresh in Start's place when the rule changed since the preview", async () => {
+    mockFetch({ status: 200, body: preview })
+    const answer = vi.mocked(fetch).getMockImplementation()
+    vi.mocked(fetch).mockImplementation((input, init) =>
+      (input instanceof Request ? input.url : input.toString()).endsWith("/enable")
+        ? Promise.resolve(jsonResponse({ status: 409, body: { detail: "changed", code: "rule_not_executable", params: {} } }))
+        : (answer?.(input, init) ?? Promise.reject(new Error("no answer"))),
+    )
+    await renderPreview(testI18n())
+
+    act(() => button("Start syncing to Work").click())
+    await settle()
+
+    expect(container.querySelector(".rule-preview-footer")?.textContent).toContain("This rule changed since the preview.")
+    expect(container.querySelector(".rule-preview-start-button")?.textContent).toBe("Refresh")
+    expect(document.activeElement).toBe(container.querySelector(".rule-preview-start-button"))
+  })
+
   it("names the decision's effect when the rule copies details", async () => {
     mockFetch({ status: 200, body: preview }, { ...previewedRule, privacy_policy: "copy_details" })
     await renderPreview(testI18n())

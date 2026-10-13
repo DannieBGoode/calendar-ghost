@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { ConnectedAccount, RuleDetail } from "@/lib/api"
-import { tentativeTitleShort } from "@/lib/invitation-responses"
+import { tentativeMark } from "@/lib/invitation-responses"
 import { appPathForRule, isPlainLeftClick } from "@/lib/navigation"
 import { accountNoun } from "@/lib/providers"
 
@@ -14,7 +14,7 @@ import { accountNoun } from "@/lib/providers"
 function Email({ address }: { address: string }) {
   const at = address.indexOf("@") + 1
   return (
-    <span className="rule-preview-email">
+    <span className="rule-preview-email" title={address}>
       {at > 0 ? (
         <>
           {address.slice(0, at)}
@@ -78,8 +78,9 @@ export function PreviewAccounts({ detail, accounts }: { detail: RuleDetail; acco
 /** How the rule treats Maybe events and unanswered invitations, in a few words each. */
 function invitationFacts(i18n: I18n, detail: RuleDetail): string[] {
   const { t } = i18n
+  const mark = tentativeMark(detail.privacy_policy)
   const maybe = {
-    mark: t("rulePreview.rule.maybeAs", { title: tentativeTitleShort(detail.privacy_policy) }),
+    mark: "title" in mark ? t("rulePreview.rule.maybeAs", mark) : t("rulePreview.rule.maybePrefixed", mark),
     sync: t("rulePreview.rule.maybeSync"),
     skip: t("rulePreview.rule.maybeOff"),
   }[detail.tentative_events]

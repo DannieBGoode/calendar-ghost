@@ -12,7 +12,7 @@ destination, or why it stays out.
 ## Where it lives
 
 - Its own page, `/rules/<id>/preview`, inside the app shell, titled with the rule ("Family → Work").
-  The browser tab reads "Preview · Family → Work".
+  The browser tab reads "Family → Work – Preview – Calendar Ghost".
 - Every "Preview rule" and "Preview to restart" opens it, from a rule row, Rule Details, or the end
   of the rule builder. The page runs the preview as it loads.
 - "Start syncing" exists only on this page. A previewed rule's row and Rule Details read "Ready to
@@ -52,7 +52,7 @@ destination, or why it stays out.
   its corner) and, in words, its provider and address: "Google account · sam@family.example". The
   title already names the calendars, so nothing under it names them again; a rule within one
   account shows it once. Below 900px both accounts share one row, provider over address, and a
-  long address shortens with an ellipsis (its full text in a tooltip).
+  long address breaks after its "@" (under 23rem the two accounts stack instead).
 - **What this is:** "Previewed at 4:55 PM. Nothing is written until you start syncing." (with the
   date, "Previewed Tue, Oct 13 at 4:55 PM", once the preview is not from today), with
   "Refresh" at its end. Not "Sync again": nothing has synced, and the word would promise a write.
@@ -121,7 +121,8 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
 - **Show** is one joined segmented control (All · Will sync · Not synced), single-choice, read as a radio group: one tab stop, with the arrow keys, Home, and End moving the
   choice.
 - **Kind** (All-day · Birthdays · Recurring · Declined · Maybe · Not answered) folds behind a
-  "Kind" toggle and stays open while a kind is chosen; chosen kinds combine as "any of".
+  "Kind" toggle, opens on its own when the page loads with a kind chosen, and otherwise follows the
+  toggle, whose badge counts the chosen kinds while folded; chosen kinds combine as "any of".
 - Every count follows the other choices (faceted): Show counts within the chosen kinds, each kind
   within the Show choice, so a number always says what a click will show. An option that would
   show nothing cannot be pressed unless chosen, so no choice leads to an empty table. It stays in
@@ -146,7 +147,7 @@ The button carries no count; the counts beside it say what it will do, and no fi
 While enabling, it reads "Starting…" and is disabled. Success returns to Rule Details, which
 announces the result as it does today. The page reserves bottom padding equal to the footer's
 height, so the footer never covers the last row, and scroll padding, kept at the footer's measured
-height, keeps a control focused by keyboard above it. On a window under 30rem tall, such as a phone at large text, the footer stops
+height, keeps a control focused by keyboard above it. On a window under 36rem tall, such as a phone at large text, the footer stops
 sticking and closes the page instead.
 
 ## States
@@ -161,7 +162,7 @@ sticking and closes the page instead.
 | Nothing in the window | The ghost mark (empty state) and "Family has no events from 13 Sep onward. Once you start syncing, new events sync as they appear." "Start syncing" stays enabled. |
 | Every event excluded | The table as usual, all muted, above it: "None of Family's 9 events will sync with these settings", with "Change what syncs" (the rule's policy editor). "Start syncing" stays enabled, because future events may qualify. |
 | No rows match the filters | Inside the table: "No events match these filters", with "Clear filters". |
-| Enabling fails because the rule changed | The footer shows "This rule changed since the preview" in place of the timestamp, and "Preview again" becomes the primary action. |
+| Enabling fails because the rule changed | The footer shows "This rule changed since the preview." in place of the counts, and "Refresh" takes Start's place as the primary button, with focus. |
 
 In every failure state, "Start syncing" is disabled, and the footer drops the counts. Only a preview
 that is reading says "Available when the preview finishes"; a failed one leaves the next step to its
@@ -177,7 +178,9 @@ preview on the page.
   - The chips wrap; they never scroll sideways.
   - In the footer, "Back to rule" and the counts come first, then the button at full width with
     "You can pause or remove the rule at any time." under it, with safe-area padding.
-- Chips, the Kind and Earlier toggles, Refresh, and Change are at least 44px tall below 900px.
+- Chips, the Kind and Earlier toggles, Back to rule, and Start are at least 44px tall below 900px.
+  Refresh and Change, text actions inside a sentence, are at least 24px (WCAG 2.5.8), so they do
+  not push their lines apart.
 
 ## Accessibility
 

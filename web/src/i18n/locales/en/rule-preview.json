@@ -1,6 +1,7 @@
 {
   "page": {
     "documentTitle": "Preview",
+    "documentTitleRule": "{source} → {destination} – Preview",
     "lead": "A preview: nothing is written until you start syncing.",
     "leadAt": "Previewed at {time}. Nothing is written until you start syncing.",
     "leadOn": "Previewed {date} at {time}. Nothing is written until you start syncing.",
@@ -169,6 +170,7 @@
     "birthdaysOn": "Birthdays",
     "birthdaysOff": "No birthdays",
     "maybeAs": "Maybe events as “{title}”",
+    "maybePrefixed": "Maybe events titled “{prefix}” and their title",
     "maybeSync": "Maybe events like accepted",
     "maybeOff": "No Maybe events",
     "unansweredAs": "Unanswered invitations as Maybe",
