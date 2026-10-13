@@ -6,7 +6,6 @@ import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
 import { api, type RuleDetail, type RuleSummary, type RunningWork } from "@/lib/api"
-import { previewSummary } from "@/lib/rule-preview"
 import {
   enabledMessage,
   pausedMessage,
@@ -15,7 +14,10 @@ import {
 } from "@/lib/rule-run"
 import { withoutKey } from "@/lib/utils"
 
+/** Work a rule can be busy with; a preview runs on its own page, so it is never run from here. */
 export type RuleCommand = "preview" | "enable" | "sync" | "reconcile" | "pause"
+/** The commands this hook runs. */
+export type RunnableCommand = Exclude<RuleCommand, "preview">
 export type RuleFeedback = { tone: "success" | "error"; text: string }
 
 const COMMAND_WORK: Partial<Record<RuleCommand, RunningWork["kind"]>> = {
@@ -38,8 +40,7 @@ export function clearCompletedWork<T extends { running: RunningWork | null }>(
   return { ...rule, running: null }
 }
 
-const FAILED: Record<RuleCommand, MessageKey> = {
-  preview: "ruleDetails.commands.failed.preview",
+const FAILED: Record<RunnableCommand, MessageKey> = {
   enable: "ruleDetails.commands.failed.enable",
   sync: "ruleDetails.commands.failed.sync",
   reconcile: "ruleDetails.commands.failed.reconcile",
@@ -50,6 +51,14 @@ const FAILED: Record<RuleCommand, MessageKey> = {
  * Everything a rule command or change can alter. Incidents are among them: a successful run
  * resolves one, and a recovery preview can move one back to the account still to reauthorize.
  */
+/**
+ * A rule's preview page result, kept for the session. Any change to the rule makes it a preview
+ * of something else, so changes forget it and the page previews again when next opened.
+ */
+export function rulePreviewKey(ruleId: string) {
+  return ["rule-preview", ruleId] as const
+}
+
 export const RULE_CHANGE_QUERIES = [
   ["rules"],
   ["dashboard"],
@@ -68,10 +77,8 @@ export const PENDING_LABELS: Record<RuleCommand, MessageKey> = {
 }
 
 /** What a command did, in the active language. */
-async function execute(i18n: I18n, ruleId: string, command: RuleCommand, destination: string): Promise<string> {
+async function execute(i18n: I18n, ruleId: string, command: RunnableCommand, destination: string): Promise<string> {
   switch (command) {
-    case "preview":
-      return previewSummary(i18n, await api.previewRule(ruleId))
     case "enable":
       await api.enableRule(ruleId)
       return enabledMessage(i18n, destination)
@@ -118,11 +125,11 @@ export function useRuleCommands() {
 
   /**
    * `focusTarget` receives focus afterwards if the control that started the command is gone,
-   * as when a successful preview replaces its own button, so keyboard focus is never stranded.
+   * as when starting a rule replaces its own button, so keyboard focus is never stranded.
    */
   async function run(
     ruleId: string,
-    command: RuleCommand,
+    command: RunnableCommand,
     destination: string,
     focusTarget?: () => HTMLElement | null,
   ) {
@@ -134,15 +141,14 @@ export function useRuleCommands() {
     try {
       const text = await execute(i18n, ruleId, command, destination)
       completed = true
-      // A passed preview shows its result in the review that replaces the Preview button.
-      if (command === "preview") announce(text)
-      else notify(ruleId, { tone: "success", text })
+      notify(ruleId, { tone: "success", text })
     } catch (error) {
       const failed = i18n.t(FAILED[command])
       // Two sentences: what did not happen, then why.
       const text = error instanceof Error ? `${failed} ${apiErrorMessage(i18n, error)}` : failed
       notify(ruleId, { tone: "error", text })
     } finally {
+      queryClient.removeQueries({ queryKey: rulePreviewKey(ruleId) })
       // Stay pending until the refreshed rule arrives, so the row never flashes its old state.
       await Promise.all(
         [...RULE_CHANGE_QUERIES, ["rule", ruleId]].map((queryKey) => queryClient.invalidateQueries({ queryKey })),

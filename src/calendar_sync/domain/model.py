@@ -241,7 +241,15 @@ class SyncRuleState(StrEnum):
     REMOVING = "disabled"
 
 
-_PREVIEWABLE = frozenset({SyncRuleState.DRAFT, SyncRuleState.PAUSED, SyncRuleState.DEGRADED})
+# A previewed rule may preview again, so its preview can be refreshed before it is enabled.
+_PREVIEWABLE = frozenset(
+    {
+        SyncRuleState.DRAFT,
+        SyncRuleState.PREVIEWED,
+        SyncRuleState.PAUSED,
+        SyncRuleState.DEGRADED,
+    }
+)
 # States that could still write, or be enabled, without a disconnected account's authorization.
 _DEGRADED_ON_DISCONNECT = frozenset({SyncRuleState.PREVIEWED, SyncRuleState.ENABLED})
 

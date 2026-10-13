@@ -20,7 +20,7 @@ from calendar_sync.application.sync.errors import (
 )
 from calendar_sync.application.sync.locking import RuleWork
 from calendar_sync.application.sync.ports import RulePreviewSummary
-from calendar_sync.application.sync.preview import PreviewSyncRule
+from calendar_sync.application.sync.preview import PreviewItem, PreviewSyncRule
 from calendar_sync.application.sync.reconciliation import ReconcileNow
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.rules import (
@@ -35,16 +35,19 @@ from calendar_sync.application.sync.rules import (
 from calendar_sync.application.sync.synchronization import SyncNow
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
+    AllDayRange,
     AllDaySyncPolicy,
     BirthdayPolicy,
     CalendarEndpoint,
     CalendarId,
     ConnectedAccountId,
+    EventStatus,
     ProjectionContent,
     ProjectionHandling,
     SyncRule,
     SyncRuleId,
     TentativeEventPolicy,
+    TimedInterval,
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
@@ -57,6 +60,7 @@ from calendar_sync.interfaces.api.schemas import (
     DriftResponse,
     NamedCalendarEndpointResponse,
     PreviewItemResponse,
+    PreviewProjectionResponse,
     PreviewSummaryResponse,
     ProjectionChoice,
     ReconcileResultResponse,
@@ -239,16 +243,39 @@ async def preview_rule(rule_id: str, services: Services) -> RulePreviewResponse:
         excluded_events=preview.excluded_events,
         recurring_series=preview.recurring_series,
         occurrence_changes=preview.occurrence_changes,
-        sample=[
-            PreviewItemResponse(
-                source_event_id=item.source_event_id,
-                projected_title=item.projected_title,
-                all_day=item.all_day,
-                kind=item.kind,
-                planned_action=item.planned_action.value,
-            )
-            for item in preview.sample
-        ],
+        items=[_preview_item(item) for item in preview.items],
+    )
+
+
+def _preview_item(item: PreviewItem) -> PreviewItemResponse:
+    source, projection = item.source, item.projection
+    time, occurrence = source.time, source.occurrence
+    timed = time if isinstance(time, TimedInterval) else None
+    all_day = time if isinstance(time, AllDayRange) else None
+    return PreviewItemResponse(
+        source_event_id=source.reference.event_id.value,
+        kind=item.kind,
+        title=source.title,
+        starts_at=timed.starts_at.isoformat() if timed else None,
+        ends_at=timed.ends_at.isoformat() if timed else None,
+        time_zone=timed.time_zone if timed else None,
+        starts_on=all_day.starts_on.isoformat() if all_day else None,
+        ends_before=all_day.ends_before.isoformat() if all_day else None,
+        recurrence=list(source.recurrence.lines) if source.recurrence else None,
+        series_event_id=occurrence.series_event_id.value if occurrence else None,
+        original_start=occurrence.original_start.isoformat() if occurrence else None,
+        cancelled=source.status is EventStatus.CANCELLED,
+        response=source.response.value,
+        birthday=source.is_birthday,
+        planned_action=item.planned_action.value,
+        reason=item.reason.value,
+        projection=PreviewProjectionResponse(
+            title=projection.title,
+            carries_details=projection.carries_details,
+            recurrence=list(projection.recurrence.lines) if projection.recurrence else None,
+        )
+        if projection
+        else None,
     )
 
 

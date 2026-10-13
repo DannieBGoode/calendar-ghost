@@ -27,6 +27,8 @@ export const DEFAULT_ACTIVITY_TAB: ActivityTab = "history"
 export type AppLocation = {
   view: AppView
   ruleId: string | null
+  /** The rule's preview page, under its details. */
+  rulePreview?: boolean
   settingsTab?: SettingsTab
   /** One person's page under People. */
   personId?: string
@@ -52,6 +54,8 @@ export type ViewOptions = {
 }
 export type ViewChange = (view: AppView, options?: ViewOptions) => void
 export type OpenRule = (ruleId: string, options?: ViewOptions) => void
+/** Opens a rule's preview page, which previews the rule as it opens. */
+export type OpenRulePreview = (ruleId: string) => void
 export type OpenSettingsTab = (tab: SettingsTab) => void
 export type OpenPerson = (personId: string) => void
 
@@ -81,6 +85,7 @@ const PATH_VIEWS = new Map(
   Object.entries(APP_VIEW_PATHS).map(([view, path]) => [path, view as AppView]),
 )
 const RULE_PATH = /^\/rules\/([^/]+)$/
+const RULE_PREVIEW_PATH = /^\/rules\/([^/]+)\/preview$/
 const PERSON_PATH = /^\/people\/([^/]+)$/
 const INVITATIONS_PATH = "/people/invitations"
 const INCIDENTS_PATH = "/activity/incidents"
@@ -115,6 +120,8 @@ export function appLocationFromPathname(pathname: string): AppLocation {
   const normalized = normalize(pathname)
   const ruleId = ruleIdFromPath(normalized)
   if (ruleId !== null) return { view: "rules", ruleId }
+  const previewedRuleId = idFromPath(RULE_PREVIEW_PATH, normalized)
+  if (previewedRuleId !== null) return { view: "rules", ruleId: previewedRuleId, rulePreview: true }
   if (normalized === INVITATIONS_PATH) return { view: "people", ruleId: null, peopleTab: "invitations" }
   if (normalized === INCIDENTS_PATH) return { view: "activity", ruleId: null, activityTab: "incidents" }
   const incidentId = idFromPath(INCIDENT_PATH, normalized)
@@ -150,6 +157,10 @@ export function appPathForRule(ruleId: string): string {
   return `${APP_VIEW_PATHS.rules}/${encodeURIComponent(ruleId)}`
 }
 
+export function appPathForRulePreview(ruleId: string): string {
+  return `${appPathForRule(ruleId)}/preview`
+}
+
 export function appPathForPeopleTab(tab: PeopleTab): string {
   return tab === "invitations" ? INVITATIONS_PATH : APP_VIEW_PATHS.people
 }
@@ -176,8 +187,12 @@ function activityPathForLocation(location: AppLocation): string {
   return appPathForActivityTab(location.activityTab ?? DEFAULT_ACTIVITY_TAB)
 }
 
+function rulePath(ruleId: string, preview: boolean | undefined): string {
+  return preview ? appPathForRulePreview(ruleId) : appPathForRule(ruleId)
+}
+
 export function appPathForLocation(location: AppLocation): string {
-  if (location.ruleId !== null) return appPathForRule(location.ruleId)
+  if (location.ruleId !== null) return rulePath(location.ruleId, location.rulePreview)
   if (location.view === "people" && location.personId) return appPathForPerson(location.personId)
   if (location.view === "people" && location.peopleTab) return appPathForPeopleTab(location.peopleTab)
   if (location.view === "activity") return activityPathForLocation(location)
@@ -192,6 +207,7 @@ export function isKnownAppPath(pathname: string): boolean {
     normalized === INCIDENTS_PATH ||
     idFromPath(INCIDENT_PATH, normalized) !== null ||
     ruleIdFromPath(normalized) !== null ||
+    idFromPath(RULE_PREVIEW_PATH, normalized) !== null ||
     idFromPath(PERSON_PATH, normalized) !== null ||
     settingsTabFromPath(normalized) !== null
   )

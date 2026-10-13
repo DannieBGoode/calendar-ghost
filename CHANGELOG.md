@@ -4,6 +4,19 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Changed
+
+- Preview rule opens its own page, `/rules/<id>/preview`. It lists every event in the rule's
+  starting window beside what the destination will hold ("Busy", "Busy (tentative)", or the title
+  under Details Projection), with Activity's signs for what happens and the reason for each event
+  that stays out ("Not synced: birthday"). Filters narrow it to what will or will not sync and to
+  all-day, birthday, recurring, declined, Maybe, or unanswered events. A recurring series shows at
+  its next date, and earlier events fold away unless one would be removed. "Start syncing" sits in
+  a footer that stays in view. A new rule's builder ends there, and a previewed rule can be
+  previewed again ("See what will sync").
+- A preview reads the destination through one listing of the rule's projections instead of one
+  request per mapped event, and returns every event instead of a sample of 10.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added

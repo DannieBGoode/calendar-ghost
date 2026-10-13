@@ -79,7 +79,8 @@ Draft -> Previewed ----> Enabled -> Paused
 any state -> Removing (Rule Removal incomplete) -> removed
 ```
 
-Only a successfully previewed configuration can become Enabled. An Enabled Rule can be Paused from
+Only a successfully previewed configuration can become Enabled, and a Previewed rule may be previewed
+again, which refreshes what its preview shows. An Enabled Rule can be Paused from
 the Web UI. A Material Rule Change returns Enabled and Paused rules to Paused, Draft and
 Previewed rules to Draft, and keeps Degraded rules Degraded, so the rule must pass a new
 preview. Rule Removal first moves the rule to Removing, which cannot synchronize, preview, change

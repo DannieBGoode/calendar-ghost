@@ -331,7 +331,7 @@ _Avoid_: OAuth secret, administrator password, database password
 ## Rule Lifecycle
 
 **Rule Preview**:
-A side-effect-free evaluation showing eligible source events, excluded events, destination projections, and planned actions. A new or materially changed rule must pass preview before it can be enabled. It writes nothing to any calendar; locally it records only the rule's validated state and the preview's counts, so enabling can restate what will be written.
+A side-effect-free evaluation of every source event in the rule's Initial Sync Window, each beside the projection it would write and its planned action, or beside the reason the rule excludes it. A new or materially changed rule must pass preview before it can be enabled. It writes nothing to any calendar; locally it records only the rule's validated state and the preview's counts, so enabling can restate what will be written. The events it lists stay with the person who asked for it and are never stored.
 _Avoid_: Test sync, simulation
 
 **Material Rule Change**:
@@ -404,7 +404,7 @@ diagnostics keep the glossary terms above.
 | Details Projection | "Copy title, description, and location" |
 | Invitation Response | "you answered Maybe", "you declined", "you haven't answered"; "Your response" in a change |
 | Material Rule Change | "A change stops the rule from writing until you preview it again" |
-| Rule Preview, then enable | "Preview rule", then "Start syncing" |
+| Rule Preview, then enable | "Preview rule", then "Start syncing"; each previewed event "Will sync" (with Add, Update, Remove, or Already up to date) or "Not synced", with its reason ("Not synced: birthday") |
 | Degraded Rule | "Stopped", with the cause and its one next step: "Reauthorize account" when an account it uses has Lapsed Authorization, otherwise "Preview to restart" |
 | Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote from the starting point onward and reports any that still differ; never "repaired" for what the check only reported |
 | Connected Account | named by its Provider Kind: "Google account" or "Microsoft account"; "calendar account" where no one provider is meant. Its row in Settings says which ("Microsoft account · dana@contoso.example") |

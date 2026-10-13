@@ -7,14 +7,16 @@ import pytest
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import CalendarReader, UnitOfWorkFactory
-from calendar_sync.application.sync.preview import PreviewSyncRule
+from calendar_sync.application.sync.preview import PreviewProjection, PreviewSyncRule
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     ConnectedAccountId,
     EventStatus,
     InvitationResponse,
     ManagedOrigin,
+    ProjectionContent,
     SyncAction,
+    SyncReason,
     SyncRuleId,
     SyncRuleState,
     TentativeEventPolicy,
@@ -65,7 +67,9 @@ def test_preview_is_side_effect_free_and_unlocks_enablement() -> None:
     preview = use_case.execute(draft.id)
 
     assert preview.eligible_events == 1
-    assert preview.sample[0].projected_title == "Busy"
+    [item] = preview.items
+    assert item.projection is not None
+    assert item.projection.title == "Busy"
     assert provider.destination is None
     assert unit_of_work.state.rules[draft.id].state is SyncRuleState.PREVIEWED
     # Counts are kept so enabling can restate them after a reload; content never is.
@@ -180,10 +184,19 @@ def test_preview_counts_series_and_occurrence_changes_with_planned_actions() -> 
     assert preview.recurring_series == 1
     assert preview.occurrence_changes == 2
     assert preview.excluded_events == 2
-    assert [(item.kind, item.planned_action) for item in preview.sample] == [
-        ("series", SyncAction.CREATE),
-        ("occurrence", SyncAction.UPDATE),
-        ("occurrence", SyncAction.DELETE),
+    assert [(item.kind, item.planned_action, item.reason) for item in preview.items] == [
+        ("series", SyncAction.CREATE, SyncReason.SOURCE_CREATED),
+        ("occurrence", SyncAction.UPDATE, SyncReason.OCCURRENCE_CHANGED),
+        ("occurrence", SyncAction.DELETE, SyncReason.OCCURRENCE_CANCELLED),
+        ("series", SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE),
+        ("occurrence", SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE),
+    ]
+    assert [item.projection is not None for item in preview.items] == [
+        True,
+        True,
+        False,
+        False,
+        False,
     ]
     assert calendars.writes == []
     assert factory.state.mappings == {}
@@ -208,6 +221,11 @@ def test_preview_of_an_occurrence_whose_destination_series_was_deleted_does_not_
     preview = _preview(factory, calendars).execute(rule().id)
 
     assert preview.occurrence_changes == 1
+    # The run writes the series again with the change in it, so nothing is blocked.
+    assert [(item.kind, item.planned_action, item.reason) for item in preview.items] == [
+        ("series", SyncAction.CREATE, SyncReason.PROJECTION_MISSING),
+        ("occurrence", SyncAction.UPDATE, SyncReason.OCCURRENCE_CHANGED),
+    ]
 
 
 def test_preview_excludes_a_series_whose_every_occurrence_is_cancelled() -> None:
@@ -222,7 +240,10 @@ def test_preview_excludes_a_series_whose_every_occurrence_is_cancelled() -> None
     assert preview.recurring_series == 0
     assert preview.occurrence_changes == 0
     assert preview.excluded_events == 2
-    assert preview.sample == ()
+    assert [(item.kind, item.reason, item.projection) for item in preview.items] == [
+        ("series", SyncReason.SERIES_WITHOUT_OCCURRENCES, None),
+        ("occurrence", SyncReason.SERIES_WITHOUT_OCCURRENCES, None),
+    ]
 
 
 def test_preview_under_an_all_day_exclusion_skips_a_series_left_with_only_all_day_occurrences() -> (
@@ -256,7 +277,7 @@ def test_preview_excludes_a_series_whose_every_occurrence_is_declined() -> None:
     preview = _preview(factory, calendars).execute(rule().id)
 
     assert preview.recurring_series == 0
-    assert preview.sample == ()
+    assert all(item.projection is None for item in preview.items)
 
 
 def test_preview_excludes_declined_events_and_follows_the_rules_response_choices() -> None:
@@ -282,11 +303,24 @@ def test_preview_excludes_declined_events_and_follows_the_rules_response_choices
     skipping = _preview(enabled_rule_factory(strict), calendars).execute(rule().id)
 
     assert (marking.eligible_events, marking.excluded_events) == (3, 1)
-    assert sorted(item.projected_title for item in marking.sample) == [
-        "Busy",
-        "Busy (tentative)",
-        "Busy (tentative)",
+    assert sorted(
+        (item.source.reference.event_id.value, item.projection and item.projection.title)
+        for item in marking.items
+    ) == [
+        ("accepted", "Busy"),
+        ("declined", None),
+        ("maybe", "Busy (tentative)"),
+        ("unanswered", "Busy (tentative)"),
     ]
+    assert {
+        item.source.reference.event_id.value: item.reason
+        for item in skipping.items
+        if item.projection is None
+    } == {
+        "declined": SyncReason.DECLINED,
+        "maybe": SyncReason.TENTATIVE_EXCLUDED,
+        "unanswered": SyncReason.AWAITING_RESPONSE,
+    }
     assert (skipping.eligible_events, skipping.excluded_events) == (1, 3)
 
 
@@ -327,4 +361,145 @@ def test_preview_counts_an_occurrence_whose_series_is_not_shown_as_a_single_even
 
     assert (preview.eligible_events, preview.excluded_events) == (1, 0)
     assert (preview.recurring_series, preview.occurrence_changes) == (0, 0)
-    assert preview.sample[0].kind == "single"
+    assert preview.items[0].kind == "single"
+
+
+def test_preview_lists_every_source_event_with_what_the_destination_would_hold() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event("meeting", title="Dentist"))
+    calendars.put(replace(event("birthday", title="Mum"), is_birthday=True))
+    details = replace(
+        rule(state=SyncRuleState.DRAFT),
+        transformation=TransformationPolicy(content=ProjectionContent.DETAILS),
+    )
+
+    preview = _preview(enabled_rule_factory(details), calendars).execute(rule().id)
+
+    by_id = {item.source.reference.event_id.value: item for item in preview.items}
+    assert by_id["meeting"].source.title == "Dentist"
+    assert by_id["meeting"].projection == PreviewProjection("Dentist", True, None)
+    assert (by_id["birthday"].planned_action, by_id["birthday"].reason) == (
+        SyncAction.IGNORE,
+        SyncReason.BIRTHDAY,
+    )
+    assert by_id["birthday"].projection is None
+
+
+def test_a_repreview_reads_the_destination_once_instead_of_each_mapped_event() -> None:
+    calendars = FakeCalendars()
+    for index in range(3):
+        calendars.put(event(f"event-{index}"))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    _pause(factory)
+    calendars.put(replace(event("event-0"), response=InvitationResponse.DECLINED))
+    calendars.reads.clear()
+
+    preview = _preview(factory, calendars).execute(rule().id)
+
+    assert calendars.reads == []
+    assert calendars.managed_listings == [rule().destination]
+    by_id = {item.source.reference.event_id.value: item for item in preview.items}
+    assert (by_id["event-0"].planned_action, by_id["event-0"].reason) == (
+        SyncAction.DELETE,
+        SyncReason.DECLINED_REMOVED,
+    )
+    assert by_id["event-1"].reason is SyncReason.PROJECTION_CURRENT
+    assert by_id["event-1"].projection is not None
+
+
+def test_a_mapped_projection_missing_from_the_listing_is_read_on_its_own() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    _pause(factory)
+    destination = factory.state.mappings[(rule().id, event().reference)].destination
+    del calendars.events[destination]
+    calendars.reads.clear()
+
+    [item] = _preview(factory, calendars).execute(rule().id).items
+
+    assert calendars.reads == [destination]
+    assert (item.planned_action, item.reason) == (SyncAction.CREATE, SyncReason.PROJECTION_MISSING)
+
+
+def test_a_new_rule_reads_nothing_from_the_destination() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+
+    _preview(enabled_rule_factory(rule(state=SyncRuleState.DRAFT)), calendars).execute(rule().id)
+
+    assert calendars.managed_listings == []
+    assert calendars.reads == []
+
+
+def _pause(factory: UnitOfWorkFactory) -> None:
+    with factory() as uow:
+        current = uow.rules.get(rule().id)
+        assert current is not None
+        uow.rules.save(current.pause())
+        uow.commit()
+
+
+def test_a_declined_occurrence_of_a_new_series_plans_its_removal_from_the_series() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
+    calendars.put(replace(occurrence(master, 1), response=InvitationResponse.DECLINED))
+
+    preview = _preview(enabled_rule_factory(rule(state=SyncRuleState.DRAFT)), calendars).execute(
+        rule().id
+    )
+
+    declined = next(item for item in preview.items if item.kind == "occurrence")
+    assert (declined.planned_action, declined.reason) == (
+        SyncAction.DELETE,
+        SyncReason.DECLINED_REMOVED,
+    )
+    assert declined.projection is None
+
+
+def test_a_source_event_deleted_after_a_run_shows_its_planned_removal() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    _pause(factory)
+    calendars.put(replace(event(), status=EventStatus.CANCELLED, time=None, revision="gone"))
+
+    [item] = _preview(factory, calendars).execute(rule().id).items
+
+    assert (item.planned_action, item.reason) == (SyncAction.DELETE, SyncReason.SOURCE_CANCELLED)
+
+
+def test_a_projection_cancelled_in_the_destination_plans_as_missing() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    _pause(factory)
+    destination = factory.state.mappings[(rule().id, event().reference)].destination
+    calendars.events[destination] = replace(
+        calendars.events[destination], status=EventStatus.CANCELLED, time=None
+    )
+
+    [item] = _preview(factory, calendars).execute(rule().id).items
+
+    assert (item.planned_action, item.reason) == (SyncAction.CREATE, SyncReason.PROJECTION_MISSING)
+
+
+def test_removing_an_excluded_series_counts_one_removal_not_one_per_occurrence() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
+    calendars.put(occurrence(master, 1, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    _pause(factory)
+    calendars.put(replace(master, response=InvitationResponse.DECLINED, revision="declined"))
+
+    preview = _preview(factory, calendars).execute(rule().id)
+
+    assert [(item.kind, item.planned_action, item.reason) for item in preview.items] == [
+        ("series", SyncAction.DELETE, SyncReason.DECLINED_REMOVED),
+        ("occurrence", SyncAction.IGNORE, SyncReason.DECLINED_REMOVED),
+    ]

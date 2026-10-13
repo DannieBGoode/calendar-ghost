@@ -285,7 +285,7 @@ async function renderRulesList(
         children: createElement(
           QueryClientProvider,
           { client: queryClient },
-          createElement(RulesView, { notice: null, createRule: false, onViewChange, onOpenRule: () => undefined }),
+          createElement(RulesView, { notice: null, createRule: false, onViewChange, onOpenRule: () => undefined, onOpenRulePreview: () => undefined }),
         ),
       }),
     )

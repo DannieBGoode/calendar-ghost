@@ -210,7 +210,7 @@ async function renderDetails(i18n: I18n, rule: RuleDetail | null, notice: string
     root?.render(
       <StaticI18nProvider i18n={i18n}>
         <QueryClientProvider client={queryClient}>
-          <RuleDetailsView ruleId="rule-1" notice={notice} onViewChange={() => undefined} onOpenRule={() => undefined} />
+          <RuleDetailsView ruleId="rule-1" notice={notice} onViewChange={() => undefined} onOpenRule={() => undefined} onOpenRulePreview={() => undefined} />
         </QueryClientProvider>
       </StaticI18nProvider>,
     )

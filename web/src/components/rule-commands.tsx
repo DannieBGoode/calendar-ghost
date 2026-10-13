@@ -5,12 +5,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import type { PreviewSummary } from "@/lib/api"
-import { accountSearch, connectionsPath, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
+import { accountSearch, appPathForRulePreview, connectionsPath, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
 import { ruleStateLabel } from "@/lib/rule-change"
 import { previewReadyLabel } from "@/lib/rule-run"
 import { workDescription, workLabel, workMeta, type RuleWork, type RuleWorkKind } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
-import { PENDING_LABELS, type RuleCommand, type RuleFeedback } from "@/lib/use-rule-commands"
+import { PENDING_LABELS, type RuleCommand, type RuleFeedback, type RunnableCommand } from "@/lib/use-rule-commands"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
@@ -63,19 +63,24 @@ export function RuleStatusBadge({
  * command runs the button is aria-disabled rather than disabled, so it keeps keyboard focus.
  */
 export function RuleNextAction({
+  ruleId,
   state,
   reauthorize,
   pending,
   describedBy,
   onRun,
+  onPreview,
   onViewChange,
 }: {
+  ruleId: string
   state: string
   /** An account of the rule to reauthorize first; its Settings row is the next step. */
   reauthorize: { id: string } | undefined
   pending: RuleCommand | undefined
   describedBy?: string | undefined
-  onRun: (command: RuleCommand) => void
+  onRun: (command: RunnableCommand) => void
+  /** Opens the rule's preview page, which previews it. */
+  onPreview: () => void
   onViewChange: ViewChange
 }) {
   const { t } = useI18n()
@@ -117,14 +122,18 @@ export function RuleNextAction({
   }
   if (!PREVIEWABLE_STATES.includes(state)) return null
   return (
-    <Button
-      variant="outline"
-      aria-disabled={pending !== undefined || undefined}
-      aria-describedby={describedBy}
-      onClick={() => pending === undefined && onRun("preview")}
-    >
-      {/* The badge and work note say it is previewing; the label stays so it does not echo them. */}
-      {state === "degraded" ? t("ruleDetails.commands.previewToRestart") : t("ruleDetails.commands.preview")}
+    <Button variant="outline" asChild>
+      <a
+        href={appPathForRulePreview(ruleId)}
+        aria-describedby={describedBy}
+        onClick={(event) => {
+          if (!isPlainLeftClick(event)) return
+          event.preventDefault()
+          onPreview()
+        }}
+      >
+        {state === "degraded" ? t("ruleDetails.commands.previewToRestart") : t("ruleDetails.commands.preview")}
+      </a>
     </Button>
   )
 }
@@ -146,7 +155,7 @@ export function RuleCommandMenu({
   destination: string
   /** Keeps list rows aligned when a rule has no routine commands. */
   reserveSpace?: boolean
-  onRun: (command: RuleCommand) => void
+  onRun: (command: RunnableCommand) => void
 }) {
   const { t } = useI18n()
   const busy = pending !== undefined
@@ -182,21 +191,35 @@ export function RuleCommandMenu({
   return <OverflowMenu label={t("ruleDetails.commands.moreActions", { source, destination })} items={items} />
 }
 
-/** What the latest preview found, which the Start syncing button refers to. */
+/** What the latest preview found, which the Start syncing button refers to, and a way to see it. */
 export function PreviewReadyNote({
   id,
+  ruleId,
   preview,
   destination,
+  onPreview,
 }: {
   id: string
+  ruleId: string
   preview: PreviewSummary | null | undefined
   destination: string
+  onPreview: () => void
 }) {
   const i18n = useI18n()
   const now = useNow()
   return (
-    <p id={id} className="rule-note">
-      {previewReadyLabel(i18n, preview, destination, now)}
+    <p className="rule-note">
+      <span id={id}>{previewReadyLabel(i18n, preview, destination, now)}</span>{" "}
+      <a
+        href={appPathForRulePreview(ruleId)}
+        onClick={(event) => {
+          if (!isPlainLeftClick(event)) return
+          event.preventDefault()
+          onPreview()
+        }}
+      >
+        {i18n.t("ruleDetails.run.seeWhatWillSync")}
+      </a>
     </p>
   )
 }

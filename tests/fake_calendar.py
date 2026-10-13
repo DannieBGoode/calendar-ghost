@@ -90,6 +90,7 @@ class FakeCalendars:
     invited guests to."""
     exception_listings: list[EventRef] = field(default_factory=list)
     listings: list[CalendarEndpoint] = field(default_factory=list)
+    managed_listings: list[CalendarEndpoint] = field(default_factory=list)
     """Calendars listed in full by `list_events`, in order."""
     """Every series whose exceptions were listed, in order."""
 
@@ -454,6 +455,7 @@ class FakeCalendars:
     def managed_events(
         self, destination: CalendarEndpoint, rule_id: SyncRuleId, not_ended_before: datetime
     ) -> tuple[CalendarEvent, ...]:
+        self.managed_listings.append(destination)
         return tuple(
             event
             for event in self.events.values()

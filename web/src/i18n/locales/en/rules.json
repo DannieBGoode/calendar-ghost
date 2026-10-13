@@ -9,7 +9,6 @@
     "connectAccountHint": "<link>Connect a calendar account</link> first.",
     "reviewInActivity": "Review in Activity",
     "dismiss": "Dismiss",
-    "draftSavedNotice": "Draft saved. Preview it to see exactly what will be written before anything changes.",
     "empty": {
       "title": "No rules yet",
       "connectFirst": "Connect a calendar account in Settings, then create your first rule here.",

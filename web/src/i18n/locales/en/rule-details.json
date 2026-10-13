@@ -312,6 +312,7 @@
       }
     },
     "previewNone": "Start syncing to show events in {destination}.",
+    "seeWhatWillSync": "See what will sync",
     "previewed": {
       "one": "Previewed {when}: {count} event will appear in {destination}.",
       "other": "Previewed {when}: {count} events will appear in {destination}."
@@ -331,18 +332,6 @@
       "unknown": "A sync could not finish {when}, so Calendar Ghost stopped this rule to be safe.",
       "noFailure": "Calendar Ghost stopped this rule to be safe.",
       "next": "Nothing was lost. Preview it to check both calendars, then start syncing again."
-    }
-  },
-  "preview": {
-    "summary": "Preview found {eligible} eligible and {excluded} excluded events.",
-    "summaryIncluding": "Preview found {eligible} eligible and {excluded} excluded events, including {details}.",
-    "recurringSeries": {
-      "one": "{count} recurring series",
-      "other": "{count} recurring series"
-    },
-    "changedOccurrences": {
-      "one": "{count} changed occurrence",
-      "other": "{count} changed occurrences"
     }
   },
   "work": {
@@ -371,7 +360,6 @@
   },
   "commands": {
     "failed": {
-      "preview": "Preview did not complete.",
       "enable": "The rule was not enabled.",
       "sync": "Sync did not complete.",
       "reconcile": "Reconciliation did not complete.",
