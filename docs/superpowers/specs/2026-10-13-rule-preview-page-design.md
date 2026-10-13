@@ -306,11 +306,11 @@ Parallelization: sequential implementation, no parallelization opportunity (one 
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | n/a | n/a |
 | Outside Review | `codex exec` via `/codex review` (code) | Independent 2nd opinion | 1 | completed | 10 findings (1 P1, 9 P2), 10/10 fixed |
 | Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open (all fixed) | 12 issues, 0 critical gaps |
 | Design Review | `/plan-design-review` | UI/UX gaps | 1 | clean | score: 5/10 → 9/10, 22 decisions |
-| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | n/a | n/a |
 
 - **OUTSIDE COVERAGE:** Codex (gpt-6.1-sol) code review of the working tree completed with 10 findings; design-phase Codex review completed earlier.
 - **CROSS-MODEL:** Both Claude and Codex found the stale preview cache (E1). Codex alone found the planning mismatches with a Sync Run (O1 to O4) and the recurrence issues (O5, O6, O9).
