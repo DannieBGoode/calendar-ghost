@@ -81,7 +81,7 @@ function PreviewRow({ placed }: { placed: PlacedItem }) {
         )}
       </td>
       <td role="cell" className="rule-preview-col-outcome">
-        <span className="activity-happened" data-tone={TONES[outcome]}>
+        <span className="activity-happened" data-tone={TONES[outcome]} data-routine={outcome === "add" ? "true" : undefined}>
           <span className="activity-sign" data-mark={OUTCOME_MARKS[outcome]}>
             <ChangeSign mark={OUTCOME_MARKS[outcome]} />
           </span>

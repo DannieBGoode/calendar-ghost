@@ -8,7 +8,7 @@ import { LiveAnnouncement } from "@/components/rule-commands"
 import { Button } from "@/components/ui/button"
 import { PreviewFilterBar } from "@/features/rule-preview-filters"
 import { PreviewEmpty, PreviewFailurePanel, PreviewSkeleton } from "@/features/rule-preview-states"
-import { PreviewCalendars, PreviewSettings } from "@/features/rule-preview-rule"
+import { PreviewAccounts, PreviewSettings } from "@/features/rule-preview-rule"
 import { OutcomeSigns, PreviewTable } from "@/features/rule-preview-table"
 import { useI18n } from "@/i18n/provider"
 import { ApiError, api, type ConnectedAccount, type RuleDetail } from "@/lib/api"
@@ -146,10 +146,10 @@ function RulePreviewPage({
         detail={detail}
         names={names}
         reading={preview.isFetching}
-        calendars={<PreviewCalendars detail={detail} accounts={accounts} calendars={calendarsByAccount} />}
-        stamp={<PreviewStamp run={run} source={names.source} onRetry={retry} />}
+        accounts={<PreviewAccounts detail={detail} accounts={accounts} />}
+        lead={<PreviewLead run={run} onRetry={retry} />}
+        settings={<PreviewSettings detail={detail} onChange={openRule} />}
       />
-      <PreviewSettings detail={detail} onChange={openRule} />
       {failure ? (
         <PreviewFailurePanel failure={failure} ruleId={detail.id} onRetry={retry} onOpenRule={openRule} onViewChange={onViewChange} />
       ) : run ? (
@@ -175,24 +175,27 @@ function RulePreviewPage({
   )
 }
 
-/** The rule and its calendars, what this page is, and what it shares. */
+/** The rule and its accounts, what this page is, what it shares, and what it follows. */
 function PreviewHeader({
   heading,
   detail,
   names,
   reading,
-  calendars,
-  stamp,
+  accounts,
+  lead,
+  settings,
 }: {
   heading: RefObject<HTMLHeadingElement | null>
   detail: RuleDetail
   names: Names
   /** Whether the preview is reading the calendars now; a failed one is not. */
   reading: boolean
-  /** Which calendars, accounts, and providers the rule connects. */
-  calendars: ReactNode
-  /** When the preview was made, with a way to make it again. */
-  stamp: ReactNode
+  /** Which accounts and providers the rule connects. */
+  accounts: ReactNode
+  /** What this page is and when it was made, with a way to make it again. */
+  lead: ReactNode
+  /** The rule's choices, folded until asked. */
+  settings: ReactNode
 }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -206,9 +209,8 @@ function PreviewHeader({
         </span>
         <span className="sr-only">{t("ruleDetails.page.heading", names)}</span>
       </h1>
-      {calendars}
-      <p className="rule-preview-lead">{t("rulePreview.page.lead", { destination: names.destination })}</p>
-      {stamp}
+      {accounts}
+      {lead}
       {reading && (
         <p className="rule-preview-reading">
           <span className="rule-preview-reading-ghost"><GhostMark /></span>
@@ -221,6 +223,7 @@ function PreviewHeader({
         {details ? <Eye aria-hidden="true" /> : <Lock aria-hidden="true" />}
         {details ? t("rulePreview.privacy.details", { destination: names.destination }) : t("rulePreview.privacy.busyOnly")}
       </p>
+      {settings}
     </header>
   )
 }
@@ -348,13 +351,13 @@ function PreviewFooter({
   )
 }
 
-/** When the preview was made, and a way to make it again. */
-function PreviewStamp({ run, source, onRetry }: { run: PreviewRun | undefined; source: string; onRetry: () => void }) {
+/** That nothing is written yet, when the preview was made, and a way to make it again. */
+function PreviewLead({ run, onRetry }: { run: PreviewRun | undefined; onRetry: () => void }) {
   const i18n = useI18n()
-  if (!run) return null
+  if (!run) return <p className="rule-preview-lead">{i18n.t("rulePreview.page.lead")}</p>
   return (
-    <p className="rule-preview-stamp">
-      {i18n.t("rulePreview.page.previewedAt", { source, time: i18n.format.time(run.completedAt) })}
+    <p className="rule-preview-lead">
+      {i18n.t("rulePreview.page.leadAt", { time: i18n.format.time(run.completedAt) })}
       <Button type="button" variant="ghost" size="sm" className="rule-preview-again" onClick={onRetry}>
         {i18n.t("rulePreview.page.previewAgain")}
       </Button>

@@ -5697,7 +5697,11 @@ thead + .incident-group th {
 }
 
 .rule-preview-lead {
+  display: flex;
   max-width: 66ch;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .rule-preview-counts {
@@ -5851,6 +5855,11 @@ thead + .incident-group th {
 
 .rule-preview-col-outcome {
   width: 16rem;
+}
+
+/* Most rows add, so their word steps back and the rows that differ stand out; the sign stays. */
+.rule-preview-col-outcome .activity-happened[data-routine="true"] .activity-effect {
+  color: var(--muted-foreground);
 }
 
 /* The arrow leads into what the destination holds, right beside it, never across an empty gap. */
@@ -6114,55 +6123,39 @@ td.rule-preview-col-when {
   gap: 0.75rem 1.5rem;
 }
 
-.rule-preview-stamp {
-  display: flex;
+/* The accounts under the title, in its order, each naming its provider beside the avatar's mark. */
+.rule-preview-accounts {
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem;
-  margin-top: -0.25rem;
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-}
-
-/* The calendars under the title, each naming its provider in words beside the avatar's mark. */
-.rule-preview-calendars {
-  flex-wrap: wrap;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   row-gap: 0.5rem;
 }
 
-.rule-preview-calendars .rule-preview-role {
-  margin-left: 0.25rem;
-}
-
-/* The rule's choices, as Rule Details states them, quiet enough to read only when wanted. */
+/* The rule's choices, one quiet line under the privacy line until opened, with the way to change
+   them at its end. */
 .rule-preview-settings {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem var(--panel-padding);
-  border: 1px solid var(--border);
-  border-radius: var(--panel-radius);
-  background: var(--surface);
+  align-items: flex-start;
+  gap: 0.25rem;
+  margin-top: -0.25rem;
 }
 
-.rule-preview-settings h2 {
-  font-size: 0.875rem;
-  font-weight: 650;
+.rule-preview-settings .inline-help {
+  font-size: 0.8125rem;
 }
 
-/* The heading and, in its corner, the one way to change what the panel lists. */
-.rule-preview-settings-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin: -0.5rem -0.5rem -0.25rem 0;
+.rule-preview-settings summary {
+  padding-block: 0.4rem;
+}
+
+.rule-preview-settings summary > svg:first-child {
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 .rule-preview-settings dl {
   display: grid;
   gap: 0.625rem 1.5rem;
+  padding: 0.5rem 0 0.25rem 1.375rem;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
 }
 
@@ -6174,7 +6167,11 @@ td.rule-preview-col-when {
 
 .rule-preview-settings dd {
   margin: 0.125rem 0 0;
-  font-size: 0.8125rem;
+}
+
+.rule-preview-change {
+  flex: none;
+  color: var(--muted-foreground);
 }
 
 /* What Start syncing will do, on the same line as it, so the decision is made with the counts in

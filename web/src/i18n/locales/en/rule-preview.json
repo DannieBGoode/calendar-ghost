@@ -1,14 +1,14 @@
 {
   "page": {
     "documentTitle": "Preview",
-    "lead": "A preview: nothing is written to {destination} until you start syncing.",
+    "lead": "A preview: nothing is written until you start syncing.",
+    "leadAt": "A preview from {time}: nothing is written until you start syncing.",
     "back": "Back to rule",
     "reading": "Reading {source}…",
     "readingBoth": "Reading {source} and {destination}…",
     "startSyncing": "Start syncing to {destination}",
     "starting": "Starting…",
     "availableWhenDone": "Available when the preview finishes",
-    "previewedAt": "Read {source} at {time}",
     "previewAgain": "Read again",
     "previewing": "Previewing…",
     "enableFailed": "Syncing did not start.",

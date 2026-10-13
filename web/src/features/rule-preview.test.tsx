@@ -178,13 +178,16 @@ describe("RulePreviewView", () => {
     await renderPreview(testI18n())
 
     const text = container.textContent
-    expect(text).toContain("A preview: nothing is written to Work until you start syncing.")
+    expect(text).toMatch(/A preview from .+: nothing is written until you start syncing\./)
     expect(text).toContain("1 to add")
     expect(text).toContain("1 not synced")
     expect(text).toContain("Busy only: titles, descriptions, and locations stay private.")
-    // The calendars name their provider, and the rule's choices are on the page.
+    // The accounts name their provider, and the rule's choices are on the page, folded.
     expect(text).toContain("Google account · dana@example.test")
     expect(text).toContain("What this rule syncs")
+    // The title names the calendars; the header does not name them again.
+    const underTitle = [...container.querySelectorAll(".rule-preview-header > :not(h1)")].map((node) => node.textContent)
+    expect(underTitle.join(" ")).not.toMatch(/Family|Work/)
     expect(text).toContain("Birthdays from contactsNot synced")
     expect(text).toContain("events added or changed later sync on their own")
     const rows = [...container.querySelectorAll(".rule-preview-row")].map((row) => row.textContent)

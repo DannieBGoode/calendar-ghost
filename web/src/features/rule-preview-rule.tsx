@@ -1,4 +1,4 @@
-import { ArrowRight, Settings2 } from "lucide-react"
+import { ArrowRight, ChevronDown, ListFilter, Settings2 } from "lucide-react"
 
 import { AccountAvatar } from "@/components/account-avatar"
 import { Button } from "@/components/ui/button"
@@ -7,78 +7,50 @@ import type { ConnectedAccount, RuleDetail } from "@/lib/api"
 import { tentativeFact, unansweredFact } from "@/lib/invitation-responses"
 import { appPathForRule, isPlainLeftClick } from "@/lib/navigation"
 import { accountNoun } from "@/lib/providers"
-import { ruleEndpointLabel } from "@/lib/rule-endpoint"
-import type { CalendarsByAccount } from "@/lib/use-rule-calendars"
 
-/** One calendar with its account, naming the provider in words beside the avatar's mark. */
-function PreviewCalendar({
-  endpoint,
-  account,
-  calendars,
-  roleLabel,
-}: {
-  endpoint: RuleDetail["source"]
-  account: ConnectedAccount | undefined
-  calendars: CalendarsByAccount
-  roleLabel: string
-}) {
+/** One account the rule reads or writes, naming its provider in words beside the avatar's mark. */
+function PreviewAccount({ account, fallback }: { account: ConnectedAccount | undefined; fallback: string }) {
   const i18n = useI18n()
-  const label = ruleEndpointLabel(i18n, endpoint, account, calendars.get(endpoint.connected_account_id))
-  const owner = account
-    ? i18n.t("rulePreview.rule.account", { provider: accountNoun(i18n, account.provider), email: account.email })
-    : label.account
   return (
     <span className="rule-endpoint">
       <AccountAvatar
         displayName={account?.display_name ?? ""}
-        email={account?.email ?? endpoint.connected_account_id}
+        email={account?.email ?? fallback}
         avatarUrl={account?.avatar_url}
         provider={account?.provider}
         compact
       />
-      <span className="rule-endpoint-copy">
-        <span className="rule-endpoint-calendar">
-          {label.calendar} <span className="rule-preview-role">{roleLabel}</span>
-        </span>
-        <span className="rule-endpoint-account">{owner}</span>
+      <span className="rule-endpoint-account">
+        {account
+          ? i18n.t("rulePreview.rule.account", { provider: accountNoun(i18n, account.provider), email: account.email })
+          : fallback}
       </span>
     </span>
   )
 }
 
-/** Which calendars the rule connects, on which accounts and providers. */
-export function PreviewCalendars({
-  detail,
-  accounts,
-  calendars,
-}: {
-  detail: RuleDetail
-  accounts: ConnectedAccount[]
-  calendars: CalendarsByAccount
-}) {
-  const { t } = useI18n()
-  const accountOf = (endpoint: RuleDetail["source"]) =>
-    accounts.find((account) => account.id === endpoint.connected_account_id)
+/**
+ * The accounts and providers under the title, in its order; the title already names the calendars.
+ * A rule within one account shows it once.
+ */
+export function PreviewAccounts({ detail, accounts }: { detail: RuleDetail; accounts: ConnectedAccount[] }) {
+  const sourceId = detail.source.connected_account_id
+  const destinationId = detail.destination.connected_account_id
+  const accountOf = (id: string) => accounts.find((account) => account.id === id)
   return (
-    <p className="rule-direction rule-preview-calendars">
-      <PreviewCalendar
-        endpoint={detail.source}
-        account={accountOf(detail.source)}
-        calendars={calendars}
-        roleLabel={t("rulePreview.table.source")}
-      />
-      <ArrowRight aria-hidden="true" />
-      <PreviewCalendar
-        endpoint={detail.destination}
-        account={accountOf(detail.destination)}
-        calendars={calendars}
-        roleLabel={t("rulePreview.table.destination")}
-      />
+    <p className="rule-direction rule-preview-accounts">
+      <PreviewAccount account={accountOf(sourceId)} fallback={sourceId} />
+      {destinationId !== sourceId && (
+        <>
+          <ArrowRight aria-hidden="true" />
+          <PreviewAccount account={accountOf(destinationId)} fallback={destinationId} />
+        </>
+      )}
     </p>
   )
 }
 
-/** The choices this preview follows, in the words Rule Details uses, with a way to change them. */
+/** The choices this preview follows, in the words Rule Details uses, folded to one line until asked. */
 export function PreviewSettings({ detail, onChange }: { detail: RuleDetail; onChange: () => void }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -91,32 +63,36 @@ export function PreviewSettings({ detail, onChange }: { detail: RuleDetail; onCh
     [t("ruleDetails.facts.startingPoint"), t("ruleDetails.facts.startingPointValue", { count: detail.initial_lookback_days })],
   ]
   return (
-    <section className="rule-preview-settings" aria-labelledby="rule-preview-settings-title">
-      <div className="rule-preview-settings-heading">
-        <h2 id="rule-preview-settings-title">{t("rulePreview.rule.settings")}</h2>
-        <Button variant="ghost" size="icon" asChild>
-          <a
-            href={appPathForRule(detail.id)}
-            aria-label={t("rulePreview.rule.change")}
-            title={t("rulePreview.rule.change")}
-            onClick={(event) => {
-              if (!isPlainLeftClick(event)) return
-              event.preventDefault()
-              onChange()
-            }}
-          >
-            <Settings2 aria-hidden="true" />
-          </a>
-        </Button>
-      </div>
-      <dl>
-        {settings.map(([term, value]) => (
-          <div key={term}>
-            <dt>{term}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
+    <div className="rule-preview-settings">
+      <details className="inline-help">
+        <summary>
+          <ListFilter aria-hidden="true" />
+          <span>{t("rulePreview.rule.settings")}</span>
+          <ChevronDown className="inline-help-chevron" aria-hidden="true" />
+        </summary>
+        <dl>
+          {settings.map(([term, value]) => (
+            <div key={term}>
+              <dt>{term}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+      <Button variant="ghost" size="icon" className="rule-preview-change" asChild>
+        <a
+          href={appPathForRule(detail.id)}
+          aria-label={t("rulePreview.rule.change")}
+          title={t("rulePreview.rule.change")}
+          onClick={(event) => {
+            if (!isPlainLeftClick(event)) return
+            event.preventDefault()
+            onChange()
+          }}
+        >
+          <Settings2 aria-hidden="true" />
+        </a>
+      </Button>
+    </div>
   )
 }
