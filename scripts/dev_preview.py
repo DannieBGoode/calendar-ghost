@@ -79,12 +79,14 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     InvitationResponse,
+    OccurrenceIdentity,
     Recurrence,
     SyncReason,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
     TimedInterval,
+    occurrence_start,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
@@ -291,7 +293,35 @@ class PreviewCalendar:
             for event in events
             if event is not None and not event.ended_before(not_ended_before)
         )
-        return ProviderChangeSet(listed, "preview", complete=True)
+        return ProviderChangeSet(
+            (*listed, *self._changed_dates(calendar)), "preview", complete=True
+        )
+
+    def _changed_dates(self, calendar: CalendarEndpoint) -> tuple[CalendarEvent, ...]:
+        """Two dates of the weekly gym series edited on their own: one moved, one cancelled."""
+        series = self.get_event(EventRef(calendar, EventId("gym")))
+        if series is None or not isinstance(series.time, TimedInterval):
+            return ()
+        moved_slot = series.time.starts_at + timedelta(weeks=1)
+        cancelled_slot = series.time.starts_at + timedelta(weeks=2)
+        moved_to = moved_slot + timedelta(hours=2)
+        return (
+            replace(
+                series,
+                reference=EventRef(calendar, EventId("gym_moved")),
+                time=TimedInterval(moved_to, moved_to + timedelta(hours=1)),
+                recurrence=None,
+                occurrence=OccurrenceIdentity(EventId("gym"), occurrence_start(moved_slot)),
+            ),
+            replace(
+                series,
+                reference=EventRef(calendar, EventId("gym_cancelled")),
+                time=None,
+                status=EventStatus.CANCELLED,
+                recurrence=None,
+                occurrence=OccurrenceIdentity(EventId("gym"), occurrence_start(cancelled_slot)),
+            ),
+        )
 
     def has_live_occurrences(self, *_: object) -> bool:
         return True

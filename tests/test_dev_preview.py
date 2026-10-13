@@ -321,3 +321,7 @@ def test_preview_previews_a_paused_rule_from_its_synthetic_calendar(tmp_path: Pa
     assert items["Dentist appointment"]["projection"]["title"] == "Busy"
     assert items["Mum's birthday"]["reason"] == "birthday"
     assert items["Lunch with Sam"]["reason"] == "declined"
+    # A weekly series with two dates edited on their own, as the preview shows them.
+    gym = [item for item in response.json()["items"] if item["title"] == "Gym with Alex"]
+    assert sorted(item["kind"] for item in gym) == ["occurrence", "occurrence", "series"]
+    assert sorted(item["cancelled"] for item in gym) == [False, False, True]
