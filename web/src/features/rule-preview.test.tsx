@@ -99,7 +99,7 @@ const preview: RulePreview = {
 }
 
 /** Calendar and event names come from the server; dates, times, and the time zone from locale data. */
-const zone = new Intl.DateTimeFormat("en-US", { timeZoneName: "short" }).formatToParts(today).find((part) => part.type === "timeZoneName")?.value ?? ""
+const zone = new Intl.DateTimeFormat("en-US", { timeZoneName: "shortGeneric" }).formatToParts(today).find((part) => part.type === "timeZoneName")?.value ?? ""
 const FIXTURE_TEXT = ["Family", "Work", "Dentist", "Mum", "Busy (tentative)", "Busy", account.email, "DA", zone, ...dateWords()]
 
 type Answer = { status: number; body: unknown }
@@ -178,12 +178,12 @@ describe("RulePreviewView", () => {
     await renderPreview(testI18n())
 
     const text = container.textContent
-    expect(text).toMatch(/A preview from .+: nothing is written until you start syncing\./)
+    expect(text).toMatch(/Previewed at .+\. Nothing is written until you start syncing\./)
     expect(text).toContain("1 to add")
     expect(text).toContain("1 not synced")
     expect(text).toContain("Busy only: titles, descriptions, and locations stay private.")
     // The accounts name their provider, and the rule's choices are on the page, folded.
-    expect(text).toContain("Google account · dana@example.test")
+    expect([...container.querySelectorAll(".rule-preview-account")].map((each) => each.textContent)).toEqual(["Google accountdana@example.test"])
     expect(text).toContain("What this rule syncs")
     // The title names the calendars; the header does not name them again.
     const underTitle = [...container.querySelectorAll(".rule-preview-header > :not(h1)")].map((node) => node.textContent)
@@ -194,8 +194,8 @@ describe("RulePreviewView", () => {
     expect(text).toContain("new or changed events sync on their own")
     const rows = [...container.querySelectorAll(".rule-preview-row")].map((row) => row.textContent)
     expect(rows).toEqual([
-      "All dayMumNothing is writtenNot synced: birthday",
-      expect.stringMatching(/^9:00 AM–10:00 AMDentistBusyAdd$/),
+      "All dayMum Nothing is writtenNot synced: birthday",
+      expect.stringMatching(/^9:00 AM–10:00 AMDentist Busy Add$/),
     ])
     expect(calls.filter((call) => call.startsWith("POST"))).toEqual(["POST /api/v1/rules/rule-1/preview"])
   })
@@ -206,7 +206,7 @@ describe("RulePreviewView", () => {
 
     act(() => button("Not synced 1").click())
 
-    expect(button("Not synced 1").getAttribute("aria-pressed")).toBe("true")
+    expect(button("Not synced 1").getAttribute("aria-checked")).toBe("true")
     // Counts follow the other choices, so a kind with nothing to show can't lead to an empty table.
     act(() => button("Will sync 1").click())
     act(() => button("Kind").click())
@@ -218,6 +218,14 @@ describe("RulePreviewView", () => {
     expect(container.querySelector(".rule-preview-later")).toBeNull()
   })
 
+  it("names the decision's effect when the rule copies details", async () => {
+    mockFetch({ status: 200, body: preview }, { ...previewedRule, privacy_policy: "copy_details" })
+    await renderPreview(testI18n())
+
+    expect(button("Start syncing and share details with Work")).toBeTruthy()
+    expect(container.querySelector(".rule-preview-footer")?.textContent).toContain("Shares titles and details with Work")
+  })
+
   it("keeps the filters through a refresh, and drops the old numbers when one fails", async () => {
     mockFetch({ status: 200, body: preview })
     await renderPreview(testI18n())
@@ -225,7 +233,7 @@ describe("RulePreviewView", () => {
 
     act(() => button("Refresh").click())
     await settle()
-    expect(button("Not synced 1").getAttribute("aria-pressed")).toBe("true")
+    expect(button("Not synced 1").getAttribute("aria-checked")).toBe("true")
 
     mockFetch({ status: 503, body: { detail: "down", code: "provider_failed", params: { kind: "unavailable", provider: "google" } } })
     act(() => button("Refresh").click())
@@ -233,7 +241,7 @@ describe("RulePreviewView", () => {
     const footer = container.querySelector(".rule-preview-footer")?.textContent ?? ""
     expect(footer).not.toContain("to add")
     expect(footer).toContain("Available when the preview finishes")
-    expect(container.querySelector(".rule-preview-lead")?.textContent).not.toContain("A preview from")
+    expect(container.querySelector(".rule-preview-lead")?.textContent).not.toContain("Previewed at")
   })
 
   it("starts syncing and returns to the rule", async () => {

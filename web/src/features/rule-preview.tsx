@@ -133,15 +133,19 @@ function RulePreviewPage({
   const [filters, setFilters] = useState<PreviewFilters>(NO_FILTERS)
   // A failed refresh keeps the last data in the query; its numbers no longer stand.
   const run = preview.isFetching || preview.error ? undefined : preview.data
-  const failure = !preview.isFetching && preview.error
+  // A failure stays on screen while Refresh retries it, so its own button keeps focus meaningful.
+  const failure = preview.error
     ? previewFailure(i18n, preview.error, {
         ruleState: detail.state,
         ruleAccounts: [detail.source.connected_account_id, detail.destination.connected_account_id],
         accounts,
       })
     : null
-  // The lead keeps its Refresh button while reading, so focus stays; these say what happened.
+  const refresh = useRef<HTMLButtonElement>(null)
+  // Focus moves to the lead's Refresh, which stays while reading, so a retry from a panel or the
+  // footer, which then leave, never drops it to the page; the announcements say what happened.
   const retry = () => {
+    refresh.current?.focus()
     setAnnouncement(readingText(i18n, detail, names))
     void preview.refetch().then((result) => {
       if (result.data && !result.error) {
@@ -158,14 +162,23 @@ function RulePreviewPage({
         detail={detail}
         names={names}
         accounts={<PreviewAccounts detail={detail} accounts={accounts} />}
-        lead={<PreviewLead run={run} reading={preview.isFetching ? readingText(i18n, detail, names) : null} onRetry={retry} />}
+        lead={
+          <PreviewLead
+            run={run}
+            reading={preview.isFetching ? readingText(i18n, detail, names) : null}
+            refreshRef={refresh}
+            onRetry={retry}
+          />
+        }
         settings={<PreviewSettings detail={detail} onChange={openRule} />}
       />
       {failure ? (
-        <PreviewFailurePanel failure={failure} ruleId={detail.id} onRetry={retry} onOpenRule={openRule} onViewChange={onViewChange} />
-      ) : run ? (
+        <PreviewFailurePanel failure={failure} ruleId={detail.id} busy={preview.isFetching} onRetry={retry} onOpenRule={openRule} onViewChange={onViewChange} />
+      ) : preview.data ? (
+        // While Refresh reads, the last results stay, dimmed, so the reader keeps their place.
         <PreviewResults
-          run={run}
+          run={preview.data}
+          busy={preview.isFetching}
           names={names}
           lookbackDays={detail.initial_lookback_days}
           filters={filters}
@@ -234,11 +247,14 @@ function PreviewResults({
   run,
   names,
   lookbackDays,
+  busy,
   filters,
   onFiltersChange,
   onAnnounce,
 }: {
   run: PreviewRun
+  /** Whether a refresh is reading; the results shown are the last ones until it finishes. */
+  busy: boolean
   names: Names
   lookbackDays: number
   filters: PreviewFilters
@@ -254,7 +270,11 @@ function PreviewResults({
   const zone = useMemo(() => timeZoneName(i18n.formatLocale, now), [i18n.formatLocale, now])
   if (!run.items.length) {
     const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - lookbackDays)
-    return <PreviewEmpty source={names.source} from={from} />
+    return (
+      <div className="rule-preview-results" aria-busy={busy}>
+        <PreviewEmpty source={names.source} from={from} />
+      </div>
+    )
   }
   const written = run.items.some((item) => item.projection)
   const changeFilters = (next: PreviewFilters) => {
@@ -263,7 +283,7 @@ function PreviewResults({
     onAnnounce(i18n.t("rulePreview.filters.showing", { shown: i18n.format.number(count), total: i18n.format.number(run.items.length) }))
   }
   return (
-    <>
+    <div className="rule-preview-results" aria-busy={busy}>
       {!written && (
         <p className="rule-preview-note-line">
           {i18n.t("rulePreview.states.allExcluded", { count: run.items.length, source: names.source })}
@@ -282,12 +302,13 @@ function PreviewResults({
       ) : (
         <p className="rule-preview-no-match">{i18n.t("rulePreview.filters.noMatch")}</p>
       )}
-    </>
+    </div>
   )
 }
 
+/** The zone's name without its offset, such as "Spain Time", so it holds across a DST change. */
 function timeZoneName(locale: string, at: Date): string {
-  const parts = new Intl.DateTimeFormat(locale, { timeZoneName: "short" }).formatToParts(at)
+  const parts = new Intl.DateTimeFormat(locale, { timeZoneName: "shortGeneric" }).formatToParts(at)
   return parts.find((part) => part.type === "timeZoneName")?.value ?? Intl.DateTimeFormat().resolvedOptions().timeZone
 }
 
@@ -343,6 +364,7 @@ function PreviewFooter({
         <StartSummary
           run={run}
           destination={names.destination}
+          sharesDetails={detail.privacy_policy === "copy_details"}
           outcome={startFailure}
           onRetry={() => {
             enable.reset()
@@ -352,6 +374,7 @@ function PreviewFooter({
         {detail.state !== "enabled" && (
           <StartButton
             destination={names.destination}
+            sharesDetails={detail.privacy_policy === "copy_details"}
             ready={canStart}
             starting={enable.isPending}
             waiting={busy || failed}
@@ -375,7 +398,17 @@ function readingText(i18n: I18n, detail: RuleDetail, names: Names): string {
  * reads, what it is reading, in the same place so nothing below moves. Refresh stays put while it
  * reads, so focus does not fall back to the page.
  */
-function PreviewLead({ run, reading, onRetry }: { run: PreviewRun | undefined; reading: string | null; onRetry: () => void }) {
+function PreviewLead({
+  run,
+  reading,
+  refreshRef,
+  onRetry,
+}: {
+  run: PreviewRun | undefined
+  reading: string | null
+  refreshRef: RefObject<HTMLButtonElement | null>
+  onRetry: () => void
+}) {
   const i18n = useI18n()
   const text = run ? i18n.t("rulePreview.page.leadAt", { time: i18n.format.time(run.completedAt) }) : i18n.t("rulePreview.page.lead")
   return (
@@ -389,6 +422,7 @@ function PreviewLead({ run, reading, onRetry }: { run: PreviewRun | undefined; r
         text
       )}
       <Button
+        ref={refreshRef}
         type="button"
         variant="ghost"
         size="sm"
@@ -409,11 +443,14 @@ function PreviewLead({ run, reading, onRetry }: { run: PreviewRun | undefined; r
 function StartSummary({
   run,
   destination,
+  sharesDetails,
   outcome,
   onRetry,
 }: {
   run: PreviewRun | undefined
   destination: string
+  /** Whether starting copies titles and details, which the decision must say beside the button. */
+  sharesDetails: boolean
   outcome: StartFailure | null
   onRetry: () => void
 }) {
@@ -438,6 +475,12 @@ function StartSummary({
         <span className="sr-only">{t("rulePreview.counts.label", { destination })}</span>
         <OutcomeSigns parts={outcomeParts(i18n, outcomeCounts(run.items))} />
       </p>
+      {sharesDetails && (
+        <p className="rule-preview-shares">
+          <Eye aria-hidden="true" />
+          {t("rulePreview.page.sharesDetails", { destination })}
+        </p>
+      )}
       <p className="rule-preview-consequence">{t("rulePreview.page.pauseAnyTime")}</p>
     </div>
   )
@@ -445,12 +488,14 @@ function StartSummary({
 
 function StartButton({
   destination,
+  sharesDetails,
   ready,
   starting,
   waiting,
   onStart,
 }: {
   destination: string
+  sharesDetails: boolean
   ready: boolean
   starting: boolean
   /** Whether Start waits on a preview that is reading or did not finish. */
@@ -472,7 +517,7 @@ function StartButton({
             <LoaderCircle aria-hidden="true" className="work-spinner" /> {t("rulePreview.page.starting")}
           </>
         ) : (
-          t("rulePreview.page.startSyncing", { destination })
+          t(sharesDetails ? "rulePreview.page.startSyncingDetails" : "rulePreview.page.startSyncing", { destination })
         )}
       </Button>
       {waiting ? (

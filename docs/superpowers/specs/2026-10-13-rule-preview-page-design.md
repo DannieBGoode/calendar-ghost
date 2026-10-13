@@ -51,8 +51,9 @@ destination, or why it stays out.
 - **Accounts:** under the title, in its order, each account with its avatar (the provider's mark on
   its corner) and, in words, its provider and address: "Google account · sam@family.example". The
   title already names the calendars, so nothing under it names them again; a rule within one
-  account shows it once.
-- **What this is:** "A preview from 4:55 PM: nothing is written until you start syncing.", with
+  account shows it once. Below 900px both accounts share one row, provider over address, and a
+  long address shortens with an ellipsis (its full text in a tooltip).
+- **What this is:** "Previewed at 4:55 PM. Nothing is written until you start syncing.", with
   "Refresh" at its end. Not "Sync again": nothing has synced, and the word would promise a write.
 - **What is shared:** the policy's own line. Busy-Only: a lock and "Busy only: titles, descriptions,
   and locations stay private." Details: an eye in Attention Ochre and "Copies titles, descriptions,
@@ -104,7 +105,7 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
 - The table ends with "That is every event in Family now. Repeating events continue past the dates
   shown, and new or changed events sync on their own." A filtered table leaves this line out, since
   it does not hold every event.
-- Times use the browser's time zone, named once above the table, in tabular numerals. An event that
+- Times use the browser's time zone, named once above the table by its generic name ("Spain Time", not "GMT+2", which a DST change would make wrong for later rows), in tabular numerals. An event that
   crosses midnight shows its end with the day ("22:00–01:00 Tue"). A multi-day all-day event shows
   its dates ("All day, 13–15 Oct").
 - A source event deleted since the last run has no date left, but the run will remove its
@@ -116,7 +117,7 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
 
 ## Filters
 
-- **Show** is one joined segmented control (All · Will sync · Not synced), single-choice.
+- **Show** is one joined segmented control (All · Will sync · Not synced), single-choice, read as a radio group.
 - **Kind** (All-day · Birthdays · Recurring · Declined · Maybe · Not answered) folds behind a
   "Kind" toggle and stays open while a kind is chosen; chosen kinds combine as "any of".
 - Every count follows the other choices (faceted): Show counts within the chosen kinds, each kind
@@ -135,6 +136,9 @@ with the page column:
 - Left: "← Back to rule" (Rule Details), then the counts ("+ 13 to add · ⊘ 4 not synced").
 - Right: "You can pause or remove the rule at any time.", then the page's one primary action,
   "Start syncing to Work" (`{components.button-primary}`).
+- When the rule copies details, the decision says so where it is made: an Attention Ochre line with
+  the eye, "Shares titles and details with Work", and the button reads "Start syncing and share
+  details with Work" (Destructive and Privacy-Widening Changes).
 
 The button carries no count; the counts beside it say what it will do, and no filter changes them.
 While enabling, it reads "Starting…" and is disabled. Success returns to Rule Details, which
@@ -147,7 +151,7 @@ sticking and closes the page instead.
 
 | State | What the person sees |
 |---|---|
-| Loading | Title and privacy line at once. In place of the lead, at its size so nothing below moves, the small ghost mark and "Reading Family…" ("Reading Family and Work…" when the rule has mappings). Refresh does the same and keeps the chosen filters. Six skeleton rows; no chips until counts exist. "Start syncing" disabled, with "Available when the preview finishes". No shimmer under reduced motion. |
+| Loading | Title and privacy line at once. In place of the lead, at its size so nothing below moves, the small ghost mark and "Reading Family…" ("Reading Family and Work…" when the rule has mappings). Refresh does the same; the last results stay, dimmed and `aria-busy`, so filters, Kind, and Earlier keep their state and the page does not jump. A failure panel stays while its retry reads, and focus moves to the lead's Refresh, so it never falls to the page. Six skeleton rows; no chips until counts exist. "Start syncing" disabled, with "Available when the preview finishes". No shimmer under reduced motion. |
 | Lapsed account | In place of the table, a Destructive Red panel: "Your Google account needs reauthorization", with one action, "Reauthorize account", which opens its Settings row. |
 | Provider unavailable or limiting | An Attention Ochre panel: "Google Calendar is not answering right now", with Likely cause when known, and "Preview again". Provider text only under the diagnostic disclosure. |
 | Rule changed or busy | A Quiet Surface panel: "This rule changed while it was being previewed", with "Preview again". |

@@ -40,9 +40,9 @@ function navigationLink(href: string, label: string, onFollow: () => void) {
   )
 }
 
-function retryButton(i18n: I18n, onRetry: () => void) {
+function retryButton(i18n: I18n, busy: boolean, onRetry: () => void) {
   return (
-    <Button variant="outline" onClick={onRetry}>
+    <Button variant="outline" aria-disabled={busy ? true : undefined} onClick={() => !busy && onRetry()}>
       <RefreshCw aria-hidden="true" /> {i18n.t("rulePreview.page.previewAgain")}
     </Button>
   )
@@ -52,12 +52,15 @@ function retryButton(i18n: I18n, onRetry: () => void) {
 export function PreviewFailurePanel({
   failure,
   ruleId,
+  busy,
   onRetry,
   onOpenRule,
   onViewChange,
 }: {
   failure: PreviewFailure
   ruleId: string
+  /** Whether a retry is reading now; the panel stays until it finishes. */
+  busy: boolean
   onRetry: () => void
   onOpenRule: () => void
   onViewChange: ViewChange
@@ -76,10 +79,10 @@ export function PreviewFailurePanel({
     }
     case "unavailable":
       return (
-        <Panel variant="attention" icon={<CircleAlert aria-hidden="true" />} title={t("rulePreview.states.unavailableTitle", providerWords(i18n, failure.provider))} body={t("rulePreview.states.unavailableBody")} action={retryButton(i18n, onRetry)} />
+        <Panel variant="attention" icon={<CircleAlert aria-hidden="true" />} title={t("rulePreview.states.unavailableTitle", providerWords(i18n, failure.provider))} body={t("rulePreview.states.unavailableBody")} action={retryButton(i18n, busy, onRetry)} />
       )
     case "changed":
-      return <Panel variant="quiet" icon={<CircleAlert aria-hidden="true" />} title={t("rulePreview.states.changedTitle")} body={t("rulePreview.states.changedBody")} action={retryButton(i18n, onRetry)} />
+      return <Panel variant="quiet" icon={<CircleAlert aria-hidden="true" />} title={t("rulePreview.states.changedTitle")} body={t("rulePreview.states.changedBody")} action={retryButton(i18n, busy, onRetry)} />
     case "syncing":
       return (
         <Panel variant="quiet" icon={<CircleAlert aria-hidden="true" />} title={t("rulePreview.states.syncingTitle")} body={t("rulePreview.states.syncingBody")}
@@ -87,7 +90,7 @@ export function PreviewFailurePanel({
         />
       )
     case "failed":
-      return <Panel variant="attention" icon={<CircleAlert aria-hidden="true" />} title={t("rulePreview.states.failedTitle")} body={failure.message} action={retryButton(i18n, onRetry)} />
+      return <Panel variant="attention" icon={<CircleAlert aria-hidden="true" />} title={t("rulePreview.states.failedTitle")} body={failure.message} action={retryButton(i18n, busy, onRetry)} />
   }
 }
 

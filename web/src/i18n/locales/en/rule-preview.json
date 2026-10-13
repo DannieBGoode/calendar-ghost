@@ -2,15 +2,17 @@
   "page": {
     "documentTitle": "Preview",
     "lead": "A preview: nothing is written until you start syncing.",
-    "leadAt": "A preview from {time}: nothing is written until you start syncing.",
+    "leadAt": "Previewed at {time}. Nothing is written until you start syncing.",
     "back": "Back to rule",
     "reading": "Reading {source}…",
     "readingBoth": "Reading {source} and {destination}…",
     "startSyncing": "Start syncing to {destination}",
+    "startSyncingDetails": "Start syncing and share details with {destination}",
     "starting": "Starting…",
     "availableWhenDone": "Available when the preview finishes",
     "previewAgain": "Refresh",
-    "enableFailed": "Syncing did not start.",
+    "enableFailed": "Syncing did not start. Try again in a moment.",
+    "sharesDetails": "Shares titles and details with {destination}",
     "changedSincePreview": "This rule changed since the preview.",
     "pauseAnyTime": "You can pause or remove the rule at any time."
   },
@@ -155,7 +157,6 @@
     }
   },
   "rule": {
-    "account": "{provider} · {email}",
     "settings": "What this rule syncs:",
     "change": "Change",
     "since": {

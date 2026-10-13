@@ -1,5 +1,5 @@
 import { ArrowRight, ChevronRight } from "lucide-react"
-import { useState } from "react"
+import { memo, useState } from "react"
 
 import { ChangeSign } from "@/components/change-sign"
 import { useI18n } from "@/i18n/provider"
@@ -57,7 +57,8 @@ function Notes({ notes }: { notes: string[] }) {
   return <span className="rule-preview-note">{notes.join(" · ")}</span>
 }
 
-function PreviewRow({ placed }: { placed: PlacedItem }) {
+/** Kept while filters change, since narrowing reuses the same placed rows. */
+const PreviewRow = memo(function PreviewRow({ placed }: { placed: PlacedItem }) {
   const i18n = useI18n()
   const { item } = placed
   const outcome = previewOutcome(item)
@@ -65,14 +66,14 @@ function PreviewRow({ placed }: { placed: PlacedItem }) {
     <tr role="row" className="rule-preview-row" data-written={item.projection ? "true" : "false"}>
       <td role="cell" className="rule-preview-col-when">{whenText(i18n, placed)}</td>
       <td role="cell" className="rule-preview-col-source">
-        <span className="rule-preview-title">{item.title || i18n.t("rulePreview.row.untitled")}</span>
+        <span className="rule-preview-title">{item.title || i18n.t("rulePreview.row.untitled")}</span>{" "}
         <Notes notes={sourceNotes(i18n, placed)} />
       </td>
       <td role="cell" className="rule-preview-col-destination">
         {item.projection ? (
           <>
             <ArrowRight aria-hidden="true" className="rule-preview-into" />
-            <span className="rule-preview-title">{item.projection.title}</span>
+            <span className="rule-preview-title">{item.projection.title}</span>{" "}
             <Notes notes={destinationNotes(i18n, placed)} />
           </>
         ) : (
@@ -90,7 +91,7 @@ function PreviewRow({ placed }: { placed: PlacedItem }) {
       </td>
     </tr>
   )
-}
+})
 
 function DayRows({ day, heading }: { day: PreviewDay; heading: string }) {
   return (

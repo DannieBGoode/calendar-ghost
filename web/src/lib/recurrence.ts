@@ -161,10 +161,17 @@ function namedZone(timeZone: string): Zone {
 }
 
 /** The series' zone when the browser knows it, otherwise the browser's own. */
+/** One Zone per name, since building its formatter costs far more than using it. */
+const ZONES = new Map<string, Zone>()
+
 function zoneOf(timeZone: string | null | undefined): Zone {
   if (!timeZone) return LOCAL
+  const known = ZONES.get(timeZone)
+  if (known) return known
   try {
-    return namedZone(timeZone)
+    const zone = namedZone(timeZone)
+    ZONES.set(timeZone, zone)
+    return zone
   } catch {
     return LOCAL
   }

@@ -1,10 +1,11 @@
 import { ListFilter } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState, type RefObject } from "react"
 
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
 import {
+  NO_FILTERS,
   PREVIEW_KINDS,
   facetCounts,
   isFiltered,
@@ -49,11 +50,14 @@ function FilterOption({
   label,
   count,
   pressed,
+  radio = false,
   onToggle,
 }: {
   label: string
   count: number
   pressed: boolean
+  /** One choice of several, which a press cannot undo, rather than an on/off toggle. */
+  radio?: boolean
   onToggle: () => void
 }) {
   const { t, format } = useI18n()
@@ -63,7 +67,9 @@ function FilterOption({
     <button
       type="button"
       className="rule-preview-option"
-      aria-pressed={pressed}
+      role={radio ? "radio" : undefined}
+      aria-checked={radio ? pressed : undefined}
+      aria-pressed={radio ? undefined : pressed}
       aria-label={t("rulePreview.filters.chip", { label, count: format.number(count) })}
       aria-disabled={empty ? true : undefined}
       onClick={() => !empty && onToggle()}
@@ -78,21 +84,24 @@ function FilterOption({
 function ShowChoice({
   counts,
   show,
+  groupRef,
   onChange,
 }: {
   counts: Record<PreviewShow, number>
   show: PreviewShow
+  groupRef: RefObject<HTMLDivElement | null>
   onChange: (show: PreviewShow) => void
 }) {
   const { t } = useI18n()
   return (
-    <div className="rule-preview-segments" role="group" aria-label={t("rulePreview.filters.show")}>
+    <div ref={groupRef} className="rule-preview-segments" role="radiogroup" aria-label={t("rulePreview.filters.show")}>
       {(["all", "sync", "out"] as const).map((each) => (
         <FilterOption
           key={each}
           label={t(SHOW_WORDS[each])}
           count={counts[each]}
           pressed={show === each}
+          radio
           onToggle={() => onChange(each)}
         />
       ))}
@@ -117,11 +126,19 @@ export function PreviewFilterBar({
   onChange: (filters: PreviewFilters) => void
 }) {
   const { t, format } = useI18n()
-  const [kindsOpen, setKindsOpen] = useState(false)
+  // Opens with chosen kinds, then follows the toggle alone, so it always answers and never folds
+  // away under the chip just unpressed.
+  const [openKinds, setOpenKinds] = useState(filters.kinds.length > 0)
+  const showGroup = useRef<HTMLDivElement>(null)
   const counts = facetCounts(items, filters)
   const kinds = PREVIEW_KINDS.filter((kind) => tally(items, previewKinds).has(kind))
   const chosen = new Set(filters.kinds)
-  const openKinds = kindsOpen || chosen.size > 0
+
+  function clear() {
+    // The line holding Clear leaves with the filters, so focus goes to the choice it reset.
+    showGroup.current?.querySelector<HTMLButtonElement>("[role=radio]")?.focus()
+    onChange(NO_FILTERS)
+  }
 
   function toggleKind(kind: PreviewKind) {
     const next = chosen.has(kind) ? filters.kinds.filter((each) => each !== kind) : [...filters.kinds, kind]
@@ -131,7 +148,12 @@ export function PreviewFilterBar({
   return (
     <div className="rule-preview-filters">
       <div className="rule-preview-filter-row">
-        <ShowChoice counts={counts.show} show={filters.show} onChange={(show) => onChange({ ...filters, show })} />
+        <ShowChoice
+          counts={counts.show}
+          show={filters.show}
+          groupRef={showGroup}
+          onChange={(show) => onChange({ ...filters, show })}
+        />
         {kinds.length > 0 && (
           <Button
             type="button"
@@ -140,7 +162,7 @@ export function PreviewFilterBar({
             className="rule-preview-kind-toggle"
             aria-expanded={openKinds}
             aria-controls={openKinds ? "rule-preview-kinds" : undefined}
-            onClick={() => setKindsOpen(!openKinds)}
+            onClick={() => setOpenKinds(!openKinds)}
           >
             <ListFilter aria-hidden="true" />
             {t("rulePreview.filters.kindToggle")}
@@ -169,7 +191,7 @@ export function PreviewFilterBar({
       {isFiltered(filters) && (
         <p className="rule-preview-showing">
           {t("rulePreview.filters.showing", { shown: format.number(shown), total: format.number(items.length) })}
-          <Button type="button" variant="ghost" size="sm" className="rule-preview-clear" onClick={() => onChange({ show: "all", kinds: [] })}>
+          <Button type="button" variant="ghost" size="sm" className="rule-preview-clear" onClick={clear}>
             {t("rulePreview.filters.clear")}
           </Button>
         </p>

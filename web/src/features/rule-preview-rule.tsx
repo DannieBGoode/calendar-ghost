@@ -22,11 +22,16 @@ function PreviewAccount({ account, fallback }: { account: ConnectedAccount | und
         provider={account?.provider}
         compact
       />
-      <span className="rule-endpoint-account">
-        {account
-          ? i18n.t("rulePreview.rule.account", { provider: accountNoun(i18n, account.provider), email: account.email })
-          : fallback}
-      </span>
+      {account ? (
+        // Provider and address apart, so a narrow screen can put them on two lines and shorten
+        // only the address.
+        <span className="rule-endpoint-account rule-preview-account">
+          <span>{accountNoun(i18n, account.provider)}</span>
+          <span className="rule-preview-email" title={account.email}>{account.email}</span>
+        </span>
+      ) : (
+        <span className="rule-endpoint-account">{fallback}</span>
+      )}
     </span>
   )
 }
