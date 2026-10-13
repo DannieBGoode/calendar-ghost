@@ -324,6 +324,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
             </a>
           </Button>
           <RuleCommandMenu
+            ruleId={rule.id}
             state={state}
             unauthorized={unauthorized.length > 0}
             pending={pending}
@@ -331,6 +332,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
             destination={destination.name}
             reserveSpace
             onRun={run}
+            onPreview={onPreview}
           />
         </div>
       </div>

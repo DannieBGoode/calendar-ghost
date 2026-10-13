@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query"
 import { CheckCircle2, CircleAlert, CircleDot, CirclePause, LoaderCircle, ShieldAlert } from "lucide-react"
 
 import { OverflowMenu, type OverflowMenuItem } from "@/components/overflow-menu"
@@ -10,7 +11,7 @@ import { ruleStateLabel } from "@/lib/rule-change"
 import { previewReadyLabel } from "@/lib/rule-run"
 import { workDescription, workLabel, workMeta, type RuleWork, type RuleWorkKind } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
-import { PENDING_LABELS, type RuleCommand, type RuleFeedback, type RunnableCommand } from "@/lib/use-rule-commands"
+import { PENDING_LABELS, rulePreviewKey, type RuleCommand, type RuleFeedback, type RunnableCommand } from "@/lib/use-rule-commands"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
@@ -138,7 +139,17 @@ export function RuleNextAction({
   )
 }
 
+/** Opens a rule's preview page for a fresh preview, never one kept from earlier in the session. */
+function useFreshPreview(ruleId: string, onPreview: () => void) {
+  const queryClient = useQueryClient()
+  return () => {
+    queryClient.removeQueries({ queryKey: rulePreviewKey(ruleId) })
+    onPreview()
+  }
+}
+
 export function RuleCommandMenu({
+  ruleId,
   state,
   unauthorized,
   pending,
@@ -146,7 +157,9 @@ export function RuleCommandMenu({
   destination,
   reserveSpace = false,
   onRun,
+  onPreview,
 }: {
+  ruleId: string
   state: string
   /** Whether an account of the rule needs reauthorization, so running it now would fail. */
   unauthorized: boolean
@@ -156,10 +169,22 @@ export function RuleCommandMenu({
   /** Keeps list rows aligned when a rule has no routine commands. */
   reserveSpace?: boolean
   onRun: (command: RunnableCommand) => void
+  /** Opens the rule's preview page. */
+  onPreview: () => void
 }) {
   const { t } = useI18n()
+  const previewAgain = useFreshPreview(ruleId, onPreview)
   const busy = pending !== undefined
   const items: OverflowMenuItem[] = []
+  if (state === "dry_run_validated") {
+    items.push({
+      id: "preview",
+      label: t("ruleDetails.commands.previewAgain"),
+      description: t("ruleDetails.commands.previewAgainDescription", { destination }),
+      disabled: busy,
+      onSelect: previewAgain,
+    })
+  }
   if (state === "enabled" && !unauthorized) {
     items.push(
       {
@@ -207,19 +232,13 @@ export function PreviewReadyNote({
 }) {
   const i18n = useI18n()
   const now = useNow()
+  const previewAgain = useFreshPreview(ruleId, onPreview)
   return (
     <p className="rule-note">
       <span id={id}>{previewReadyLabel(i18n, preview, destination, now)}</span>{" "}
-      <a
-        href={appPathForRulePreview(ruleId)}
-        onClick={(event) => {
-          if (!isPlainLeftClick(event)) return
-          event.preventDefault()
-          onPreview()
-        }}
-      >
-        {i18n.t("ruleDetails.run.seeWhatWillSync")}
-      </a>
+      <button type="button" className="rule-note-action" onClick={previewAgain}>
+        {i18n.t("ruleDetails.commands.previewAgain")}
+      </button>
     </p>
   )
 }

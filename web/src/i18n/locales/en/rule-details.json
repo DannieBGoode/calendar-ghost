@@ -312,7 +312,6 @@
       }
     },
     "previewNone": "Start syncing to show events in {destination}.",
-    "seeWhatWillSync": "See what will sync",
     "previewed": {
       "one": "Previewed {when}: {count} event will appear in {destination}.",
       "other": "Previewed {when}: {count} events will appear in {destination}."
@@ -376,6 +375,8 @@
     "startSyncing": "Start syncing",
     "previewToRestart": "Preview to restart",
     "preview": "Preview rule",
+    "previewAgain": "Preview again",
+    "previewAgainDescription": "Read the calendars again to see every event this rule will write to {destination}. Nothing is written.",
     "syncNow": "Sync now",
     "syncNowDescription": "Apply changes made in {source} since the last run. Runs by itself every five minutes.",
     "reconcileNow": "Reconcile now",

@@ -256,12 +256,14 @@ function RuleDetailsPage({
             onViewChange={onViewChange}
           />
           <RuleCommandMenu
+            ruleId={detail.id}
             state={displayState}
             unauthorized={unauthorized !== undefined}
             pending={pending}
             source={sourceName}
             destination={destinationName}
             onRun={run}
+            onPreview={onPreview}
           />
         </div>
       </div>
