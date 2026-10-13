@@ -114,7 +114,12 @@ def test_a_rule_can_be_previewed_exactly_when_it_can_be_marked_previewed(
     state: SyncRuleState,
 ) -> None:
     candidate = rule(state=state)
-    previewable = state in {SyncRuleState.DRAFT, SyncRuleState.PAUSED, SyncRuleState.DEGRADED}
+    previewable = state in {
+        SyncRuleState.DRAFT,
+        SyncRuleState.PREVIEWED,
+        SyncRuleState.PAUSED,
+        SyncRuleState.DEGRADED,
+    }
 
     assert candidate.can_preview is previewable
     if previewable:

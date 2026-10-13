@@ -3,6 +3,7 @@ import { OverviewView } from "@/features/overview"
 import { PeopleView } from "@/features/people-page"
 import { PersonView } from "@/features/person-page"
 import { RuleDetailsView } from "@/features/rule-details"
+import { RulePreviewView } from "@/features/rule-preview"
 import { RulesView } from "@/features/rules"
 import { SettingsPage } from "@/features/settings"
 import { peopleReturnSearch } from "@/lib/use-people"
@@ -12,6 +13,7 @@ import {
   type AppLocation,
   type OpenPerson,
   type OpenRule,
+  type OpenRulePreview,
   type OpenSettingsTab,
   type ViewChange,
   type ViewOptions,
@@ -24,6 +26,7 @@ export function Dashboard({
   visit,
   onViewChange,
   onOpenRule,
+  onOpenRulePreview,
   onOpenSettingsTab,
   onOpenPerson,
 }: {
@@ -32,27 +35,19 @@ export function Dashboard({
   visit: number
   onViewChange: ViewChange
   onOpenRule: OpenRule
+  onOpenRulePreview: OpenRulePreview
   onOpenSettingsTab: OpenSettingsTab
   onOpenPerson: OpenPerson
 }) {
   const view = location.view
-  if (view === "rules" && location.ruleId !== null) {
-    return (
-      <RuleDetailsView
-        ruleId={location.ruleId}
-        notice={arrival.notice ?? null}
-        onViewChange={onViewChange}
-        onOpenRule={onOpenRule}
-      />
-    )
-  }
   if (view === "rules") {
     return (
-      <RulesView
-        notice={arrival.notice ? { text: arrival.notice, attention: arrival.noticeTone === "attention" } : null}
-        createRule={arrival.createRule === true}
+      <RulesRoute
+        location={location}
+        arrival={arrival}
         onViewChange={onViewChange}
         onOpenRule={onOpenRule}
+        onOpenRulePreview={onOpenRulePreview}
       />
     )
   }
@@ -124,4 +119,43 @@ function PeopleRoute({
   }
   // Remounted on every arrival so its search, filters, and page match the address.
   return <PeopleView key={visit} tab={peopleTab ?? DEFAULT_PEOPLE_TAB} notice={notice ?? null} onOpenPerson={onOpenPerson} />
+}
+
+/** Rules, one rule's details, or its preview page. */
+function RulesRoute({
+  location: { ruleId, rulePreview },
+  arrival,
+  onViewChange,
+  onOpenRule,
+  onOpenRulePreview,
+}: {
+  location: AppLocation
+  arrival: ViewOptions
+  onViewChange: ViewChange
+  onOpenRule: OpenRule
+  onOpenRulePreview: OpenRulePreview
+}) {
+  if (ruleId !== null && rulePreview) {
+    return <RulePreviewView key={ruleId} ruleId={ruleId} onViewChange={onViewChange} onOpenRule={onOpenRule} />
+  }
+  if (ruleId !== null) {
+    return (
+      <RuleDetailsView
+        ruleId={ruleId}
+        notice={arrival.notice ?? null}
+        onViewChange={onViewChange}
+        onOpenRule={onOpenRule}
+        onOpenRulePreview={onOpenRulePreview}
+      />
+    )
+  }
+  return (
+    <RulesView
+      notice={arrival.notice ? { text: arrival.notice, attention: arrival.noticeTone === "attention" } : null}
+      createRule={arrival.createRule === true}
+      onViewChange={onViewChange}
+      onOpenRule={onOpenRule}
+      onOpenRulePreview={onOpenRulePreview}
+    />
+  )
 }

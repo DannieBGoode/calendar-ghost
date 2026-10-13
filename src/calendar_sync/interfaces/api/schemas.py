@@ -196,12 +196,42 @@ class ReconcileResultResponse(SyncResultResponse):
     """Blocked by the reconciliation itself, beside the sync's own `conflicts`."""
 
 
+class PreviewProjectionResponse(ApiResponse):
+    """What the destination would hold for a previewed event."""
+
+    title: str
+    carries_details: bool
+    """It copies the event's description or location (Details Projection)."""
+    recurrence: list[str] | None
+    """iCalendar recurrence lines, for the interface to describe in the reader's language."""
+
+
 class PreviewItemResponse(ApiResponse):
+    """One source event and what the rule would do with it; shown once, never stored."""
+
     source_event_id: str
-    projected_title: str
-    all_day: bool
     kind: Literal["single", "series", "occurrence"]
+    title: str
+    starts_at: str | None
+    """A timed event's start, as an ISO 8601 instant; None for an all-day or cancelled event."""
+    ends_at: str | None
+    time_zone: str | None
+    """The IANA zone a timed series repeats in, so its dates are stepped there; None otherwise."""
+    starts_on: str | None
+    """An all-day event's first day, as an ISO 8601 date."""
+    ends_before: str | None
+    """The day after an all-day event's last day."""
+    recurrence: list[str] | None
+    series_event_id: str | None
+    original_start: str | None
+    """An occurrence's regular start in its series: an instant, or a date for an all-day series."""
+    cancelled: bool
+    response: Literal["accepted", "tentative", "declined", "needs_action"]
+    birthday: bool
     planned_action: Literal["create", "update", "delete", "ignore", "conflict"]
+    reason: str
+    projection: PreviewProjectionResponse | None
+    """None when the destination would hold nothing for this event."""
 
 
 class RulePreviewResponse(ApiResponse):
@@ -210,7 +240,7 @@ class RulePreviewResponse(ApiResponse):
     excluded_events: int
     recurring_series: int
     occurrence_changes: int
-    sample: list[PreviewItemResponse]
+    items: list[PreviewItemResponse]
 
 
 class RuleWorkResponse(ApiResponse):

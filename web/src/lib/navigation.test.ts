@@ -11,6 +11,7 @@ import {
   appPathForPeopleTab,
   appPathForPerson,
   appPathForRule,
+  appPathForRulePreview,
   appPathForSettingsTab,
   appPathForView,
   connectionsPath,
@@ -191,5 +192,15 @@ describe("isViewingRule", () => {
     expect(isViewingRule("rule-a", "/rules/rule-b")).toBe(false)
     expect(isViewingRule("rule-a", "/rules")).toBe(false)
     expect(isViewingRule("rule-a", "/activity")).toBe(false)
+  })
+})
+
+describe("rule preview URLs", () => {
+  it("round-trips a rule's preview page under its details", () => {
+    expect(appPathForRulePreview("rule 1")).toBe("/rules/rule%201/preview")
+    expect(appLocationFromPathname("/rules/rule%201/preview")).toEqual({ view: "rules", ruleId: "rule 1", rulePreview: true })
+    expect(appPathForLocation({ view: "rules", ruleId: "rule 1", rulePreview: true })).toBe("/rules/rule%201/preview")
+    expect(isKnownAppPath("/rules/rule-1/preview/")).toBe(true)
+    expect(appLocationFromPathname("/rules/rule-1")).toEqual({ view: "rules", ruleId: "rule-1" })
   })
 })

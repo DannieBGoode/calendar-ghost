@@ -92,7 +92,7 @@
   },
   "state": {
     "draft": "Draft",
-    "dryRunValidated": "Preview passed",
+    "dryRunValidated": "Ready to start",
     "enabled": "Enabled",
     "paused": "Paused",
     "degraded": "Stopped",
@@ -333,18 +333,6 @@
       "next": "Nothing was lost. Preview it to check both calendars, then start syncing again."
     }
   },
-  "preview": {
-    "summary": "Preview found {eligible} eligible and {excluded} excluded events.",
-    "summaryIncluding": "Preview found {eligible} eligible and {excluded} excluded events, including {details}.",
-    "recurringSeries": {
-      "one": "{count} recurring series",
-      "other": "{count} recurring series"
-    },
-    "changedOccurrences": {
-      "one": "{count} changed occurrence",
-      "other": "{count} changed occurrences"
-    }
-  },
   "work": {
     "label": {
       "preview": "Previewing",
@@ -371,23 +359,14 @@
   },
   "commands": {
     "failed": {
-      "preview": "Preview did not complete.",
-      "enable": "The rule was not enabled.",
       "sync": "Sync did not complete.",
       "reconcile": "Reconciliation did not complete.",
       "pause": "The rule was not paused."
     },
-    "pending": {
-      "preview": "Previewing…",
-      "enable": "Enabling…",
-      "sync": "Syncing…",
-      "reconcile": "Reconciling…",
-      "pause": "Pausing…"
-    },
     "reauthorize": "Reauthorize account",
-    "startSyncing": "Start syncing",
     "previewToRestart": "Preview to restart",
     "preview": "Preview rule",
+    "reviewAndStart": "Review and start",
     "syncNow": "Sync now",
     "syncNowDescription": "Apply changes made in {source} since the last run. Runs by itself every five minutes.",
     "reconcileNow": "Reconcile now",

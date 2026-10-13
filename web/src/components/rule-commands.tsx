@@ -5,12 +5,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import type { PreviewSummary } from "@/lib/api"
-import { accountSearch, connectionsPath, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
+import { accountSearch, appPathForRulePreview, connectionsPath, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
 import { ruleStateLabel } from "@/lib/rule-change"
 import { previewReadyLabel } from "@/lib/rule-run"
 import { workDescription, workLabel, workMeta, type RuleWork, type RuleWorkKind } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
-import { PENDING_LABELS, type RuleCommand, type RuleFeedback } from "@/lib/use-rule-commands"
+import type { RuleCommand, RuleFeedback, RunnableCommand } from "@/lib/use-rule-commands"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
@@ -58,24 +58,22 @@ export function RuleStatusBadge({
   )
 }
 
-/**
- * The one visible next step for a rule; routine commands live in the overflow menu. While a
- * command runs the button is aria-disabled rather than disabled, so it keeps keyboard focus.
- */
+/** The one visible next step for a rule; routine commands live in the overflow menu. */
 export function RuleNextAction({
+  ruleId,
   state,
   reauthorize,
-  pending,
   describedBy,
-  onRun,
+  onPreview,
   onViewChange,
 }: {
+  ruleId: string
   state: string
   /** An account of the rule to reauthorize first; its Settings row is the next step. */
   reauthorize: { id: string } | undefined
-  pending: RuleCommand | undefined
   describedBy?: string | undefined
-  onRun: (command: RuleCommand) => void
+  /** Opens the rule's preview page, where it is previewed and started. */
+  onPreview: () => void
   onViewChange: ViewChange
 }) {
   const { t } = useI18n()
@@ -98,33 +96,38 @@ export function RuleNextAction({
       </Button>
     )
   }
+  // A previewed rule starts only from its preview, where the events it will write are in view.
   if (state === "dry_run_validated") {
     return (
-      <Button
-        aria-disabled={pending !== undefined || undefined}
-        aria-describedby={describedBy}
-        onClick={() => pending === undefined && onRun("enable")}
-      >
-        {pending === "enable" ? (
-          <>
-            <LoaderCircle aria-hidden="true" className="work-spinner" /> {t(PENDING_LABELS.enable)}
-          </>
-        ) : (
-          t("ruleDetails.commands.startSyncing")
-        )}
+      <Button asChild>
+        <a
+          href={appPathForRulePreview(ruleId)}
+          aria-describedby={describedBy}
+          onClick={(event) => {
+            if (!isPlainLeftClick(event)) return
+            event.preventDefault()
+            onPreview()
+          }}
+        >
+          {t("ruleDetails.commands.reviewAndStart")}
+        </a>
       </Button>
     )
   }
   if (!PREVIEWABLE_STATES.includes(state)) return null
   return (
-    <Button
-      variant="outline"
-      aria-disabled={pending !== undefined || undefined}
-      aria-describedby={describedBy}
-      onClick={() => pending === undefined && onRun("preview")}
-    >
-      {/* The badge and work note say it is previewing; the label stays so it does not echo them. */}
-      {state === "degraded" ? t("ruleDetails.commands.previewToRestart") : t("ruleDetails.commands.preview")}
+    <Button variant="outline" asChild>
+      <a
+        href={appPathForRulePreview(ruleId)}
+        aria-describedby={describedBy}
+        onClick={(event) => {
+          if (!isPlainLeftClick(event)) return
+          event.preventDefault()
+          onPreview()
+        }}
+      >
+        {state === "degraded" ? t("ruleDetails.commands.previewToRestart") : t("ruleDetails.commands.preview")}
+      </a>
     </Button>
   )
 }
@@ -146,7 +149,7 @@ export function RuleCommandMenu({
   destination: string
   /** Keeps list rows aligned when a rule has no routine commands. */
   reserveSpace?: boolean
-  onRun: (command: RuleCommand) => void
+  onRun: (command: RunnableCommand) => void
 }) {
   const { t } = useI18n()
   const busy = pending !== undefined
@@ -182,7 +185,7 @@ export function RuleCommandMenu({
   return <OverflowMenu label={t("ruleDetails.commands.moreActions", { source, destination })} items={items} />
 }
 
-/** What the latest preview found, which the Start syncing button refers to. */
+/** What the latest preview found, which Review and start leads back to. */
 export function PreviewReadyNote({
   id,
   preview,

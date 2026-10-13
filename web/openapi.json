@@ -1646,10 +1646,37 @@
         "type": "object"
       },
       "PreviewItemResponse": {
+        "description": "One source event and what the rule would do with it; shown once, never stored.",
         "properties": {
-          "all_day": {
-            "title": "All Day",
+          "birthday": {
+            "title": "Birthday",
             "type": "boolean"
+          },
+          "cancelled": {
+            "title": "Cancelled",
+            "type": "boolean"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "ends_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends Before"
           },
           "kind": {
             "enum": [
@@ -1659,6 +1686,17 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "original_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Start"
           },
           "planned_action": {
             "enum": [
@@ -1671,23 +1709,151 @@
             "title": "Planned Action",
             "type": "string"
           },
-          "projected_title": {
-            "title": "Projected Title",
+          "projection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviewProjectionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "title": "Reason",
             "type": "string"
+          },
+          "recurrence": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence"
+          },
+          "response": {
+            "enum": [
+              "accepted",
+              "tentative",
+              "declined",
+              "needs_action"
+            ],
+            "title": "Response",
+            "type": "string"
+          },
+          "series_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Event Id"
           },
           "source_event_id": {
             "title": "Source Event Id",
+            "type": "string"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          },
+          "starts_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts On"
+          },
+          "time_zone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Zone"
+          },
+          "title": {
+            "title": "Title",
             "type": "string"
           }
         },
         "required": [
           "source_event_id",
-          "projected_title",
-          "all_day",
           "kind",
-          "planned_action"
+          "title",
+          "starts_at",
+          "ends_at",
+          "time_zone",
+          "starts_on",
+          "ends_before",
+          "recurrence",
+          "series_event_id",
+          "original_start",
+          "cancelled",
+          "response",
+          "birthday",
+          "planned_action",
+          "reason",
+          "projection"
         ],
         "title": "PreviewItemResponse",
+        "type": "object"
+      },
+      "PreviewProjectionResponse": {
+        "description": "What the destination would hold for a previewed event.",
+        "properties": {
+          "carries_details": {
+            "title": "Carries Details",
+            "type": "boolean"
+          },
+          "recurrence": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recurrence"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "carries_details",
+          "recurrence"
+        ],
+        "title": "PreviewProjectionResponse",
         "type": "object"
       },
       "PreviewSummaryResponse": {
@@ -2451,6 +2617,13 @@
             "title": "Excluded Events",
             "type": "integer"
           },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
           "occurrence_changes": {
             "title": "Occurrence Changes",
             "type": "integer"
@@ -2462,13 +2635,6 @@
           "rule_id": {
             "title": "Rule Id",
             "type": "string"
-          },
-          "sample": {
-            "items": {
-              "$ref": "#/components/schemas/PreviewItemResponse"
-            },
-            "title": "Sample",
-            "type": "array"
           }
         },
         "required": [
@@ -2477,7 +2643,7 @@
           "excluded_events",
           "recurring_series",
           "occurrence_changes",
-          "sample"
+          "items"
         ],
         "title": "RulePreviewResponse",
         "type": "object"

@@ -135,12 +135,14 @@ function AuthenticatedApp() {
   // A layout effect runs before the new view's own effects, so a view that focuses its heading
   // (Rule Details, the rule builder) refines this rather than being overridden by it.
   useLayoutEffect(() => {
-    const title = location.ruleId
-      ? t("app.ruleTitle")
-      : t(navItems.find((item) => item.id === view)?.labelKey ?? "app.nav.overview")
+    const title = location.rulePreview
+      ? t("rulePreview.page.documentTitle")
+      : location.ruleId
+        ? t("app.ruleTitle")
+        : t(navItems.find((item) => item.id === view)?.labelKey ?? "app.nav.overview")
     document.title = documentTitle(i18n, title)
     if (navigated.current) main.current?.focus({ preventScroll: true })
-  }, [view, location.ruleId, i18n, t])
+  }, [view, location.ruleId, location.rulePreview, i18n, t])
 
   useEffect(() => {
     // The live region stays mounted across views; filling it after arrival makes the notice
@@ -186,6 +188,10 @@ function AuthenticatedApp() {
     navigate({ view: "rules", ruleId }, options)
   }
 
+  function openRulePreview(ruleId: string) {
+    navigate({ view: "rules", ruleId, rulePreview: true })
+  }
+
   function openPerson(personId: string) {
     navigate({ view: "people", ruleId: null, personId })
   }
@@ -219,7 +225,7 @@ function AuthenticatedApp() {
           <Button ref={menuButton} className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-controls="primary-nav" aria-label={mobileNav ? t("app.nav.close") : t("app.nav.open")}>{mobileNav ? <X /> : <Menu />}</Button>
         </div>
       </header>
-      <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} onOpenSettingsTab={openSettingsTab} onOpenPerson={openPerson} /></main>
+      <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} onOpenRulePreview={openRulePreview} onOpenSettingsTab={openSettingsTab} onOpenPerson={openPerson} /></main>
       <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
       <AppFooter />
     </div>

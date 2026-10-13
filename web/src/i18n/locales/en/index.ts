@@ -5,10 +5,11 @@ import common from "./common.json"
 import overview from "./overview.json"
 import people from "./people.json"
 import ruleDetails from "./rule-details.json"
+import rulePreview from "./rule-preview.json"
 import rules from "./rules.json"
 import settings from "./settings.json"
 
 /** The source catalog: every other language mirrors these keys and placeholders. */
-const en = { common, app, auth, overview, rules, ruleDetails, activity, people, settings }
+const en = { common, app, auth, overview, rules, ruleDetails, rulePreview, activity, people, settings }
 
 export default en

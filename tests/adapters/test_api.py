@@ -3245,10 +3245,22 @@ def test_preview_reports_recurring_series_and_planned_actions(tmp_path: Path) ->
     assert body["excluded_events"] == 0
     assert body["recurring_series"] == 1
     assert body["occurrence_changes"] == 1
-    assert [(item["kind"], item["planned_action"]) for item in body["sample"]] == [
-        ("series", "create"),
-        ("occurrence", "delete"),
-    ]
+    assert master.recurrence is not None
+    series_item, cancelled = body["items"]
+    assert (series_item["kind"], series_item["planned_action"]) == ("series", "create")
+    assert series_item["title"] == "Weekly private sync"
+    assert series_item["starts_at"] == week_start(0).isoformat()
+    assert series_item["recurrence"] == list(master.recurrence.lines)
+    assert series_item["projection"] == {
+        "title": "Busy",
+        "carries_details": False,
+        "recurrence": list(master.recurrence.lines),
+    }
+    assert (cancelled["kind"], cancelled["planned_action"]) == ("occurrence", "ignore")
+    assert (cancelled["reason"], cancelled["cancelled"]) == ("occurrence_cancelled", True)
+    assert cancelled["series_event_id"] == master.reference.event_id.value
+    assert cancelled["original_start"] == week_start(1).isoformat()
+    assert cancelled["projection"] is None
 
 
 class _ConnectedAccounts:

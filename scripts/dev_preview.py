@@ -45,9 +45,12 @@ from calendar_sync.application.sync.ports import (
     AccountCalendars,
     CalendarAccess,
     CalendarProvider,
+    CalendarReader,
     ConnectedAccountRepository,
     DiscoveredCalendar,
+    ProviderChangeSet,
 )
+from calendar_sync.application.sync.preview import PreviewSyncRule
 from calendar_sync.application.sync.provider_descriptors import (
     ProviderConnection,
     ProviderDescriptor,
@@ -76,15 +79,22 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     InvitationResponse,
+    OccurrenceIdentity,
     Recurrence,
     SyncReason,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
     TimedInterval,
+    occurrence_start,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
+from calendar_sync.domain.services import (
+    EventProjector,
+    ProjectionFingerprinter,
+    SyncDecisionService,
+)
 from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteActivityQueries
@@ -218,6 +228,8 @@ class SyntheticEvent:
     hour: int | None = 9
     status: EventStatus = EventStatus.CONFIRMED
     recurring: bool = False
+    response: InvitationResponse = InvitationResponse.ACCEPTED
+    birthday: bool = False
 
 
 # Event identifiers the seed refers to; "deleted-event" is deliberately absent.
@@ -233,6 +245,11 @@ EVENTS = {
     "holiday": SyntheticEvent("Bank holiday", 9, None),
     "yoga": SyntheticEvent("Yoga", 10, 7, recurring=True),
     "standup": SyntheticEvent("Team standup", 1, 9, recurring=True),
+    # Rows a Rule Preview shows apart: past, declined, answered Maybe, and a provider birthday.
+    "book-club": SyntheticEvent("Book club", -6, 19),
+    "lunch": SyntheticEvent("Lunch with Sam", 1, 13, response=InvitationResponse.DECLINED),
+    "review": SyntheticEvent("Design review", 2, 14, response=InvitationResponse.TENTATIVE),
+    "birthday": SyntheticEvent("Mum's birthday", 4, None, birthday=True),
 }
 
 
@@ -262,7 +279,52 @@ class PreviewCalendar:
             status=synthetic.status,
             recurrence=Recurrence(("RRULE:FREQ=WEEKLY",)) if synthetic.recurring else None,
             web_link="https://calendar.google.com/calendar/",
+            response=synthetic.response,
+            is_birthday=synthetic.birthday,
         )
+
+    def changes(
+        self, calendar: CalendarEndpoint, _cursor: str | None, not_ended_before: datetime
+    ) -> ProviderChangeSet:
+        """Every synthetic event, as each calendar's first listing, so a Rule Preview has rows."""
+        events = (self.get_event(EventRef(calendar, EventId(event_id))) for event_id in EVENTS)
+        listed = tuple(
+            event
+            for event in events
+            if event is not None and not event.ended_before(not_ended_before)
+        )
+        return ProviderChangeSet(
+            (*listed, *self._changed_dates(calendar)), "preview", complete=True
+        )
+
+    def _changed_dates(self, calendar: CalendarEndpoint) -> tuple[CalendarEvent, ...]:
+        """Two dates of the weekly gym series edited on their own: one moved, one cancelled."""
+        series = self.get_event(EventRef(calendar, EventId("gym")))
+        if series is None or not isinstance(series.time, TimedInterval):
+            return ()
+        moved_slot = series.time.starts_at + timedelta(weeks=1)
+        cancelled_slot = series.time.starts_at + timedelta(weeks=2)
+        moved_to = moved_slot + timedelta(hours=2)
+        return (
+            replace(
+                series,
+                reference=EventRef(calendar, EventId("gym_moved")),
+                time=TimedInterval(moved_to, moved_to + timedelta(hours=1)),
+                recurrence=None,
+                occurrence=OccurrenceIdentity(EventId("gym"), occurrence_start(moved_slot)),
+            ),
+            replace(
+                series,
+                reference=EventRef(calendar, EventId("gym_cancelled")),
+                time=None,
+                status=EventStatus.CANCELLED,
+                recurrence=None,
+                occurrence=OccurrenceIdentity(EventId("gym"), occurrence_start(cancelled_slot)),
+            ),
+        )
+
+    def has_live_occurrences(self, *_: object) -> bool:
+        return True
 
     def __getattr__(self, name: str) -> Any:
         def refuse(*_: object, **__: object) -> NoReturn:
@@ -435,6 +497,15 @@ def build_preview_container(
                 LapsedAuthorizations(
                     units, adapters.incidents(user), adapters.clock, adapters.locks
                 ),
+            ),
+            # Previews read the synthetic calendar and write nothing to it.
+            preview_sync_rule=PreviewSyncRule(
+                units,
+                cast(CalendarReader, PreviewCalendar(moment)),
+                EventProjector(),
+                adapters.clock,
+                SyncDecisionService(EventProjector(), ProjectionFingerprinter()),
+                adapters.locks,
             ),
             # The preview has no scheduler (no master key is ever configured here); a heartbeat
             # that always reports a recent pass keeps each scenario's own health visible instead

@@ -1,0 +1,175 @@
+{
+  "page": {
+    "documentTitle": "Preview",
+    "documentTitleRule": "{source} → {destination} – Preview",
+    "lead": "A preview: nothing is written until you start syncing.",
+    "leadAt": "Previewed at {time}. Nothing is written until you start syncing.",
+    "leadOn": "Previewed {date} at {time}. Nothing is written until you start syncing.",
+    "back": "Back to rule",
+    "reading": "Reading {source}…",
+    "readingBoth": "Reading {source} and {destination}…",
+    "startSyncing": "Start syncing to {destination}",
+    "startSyncingDetails": "Start syncing and share details with {destination}",
+    "starting": "Starting…",
+    "availableWhenDone": "Available when the preview finishes",
+    "previewAgain": "Refresh",
+    "enableFailed": "Syncing did not start. Try again in a moment.",
+    "changedSincePreview": "This rule changed since the preview.",
+    "pauseAnyTime": "You can pause or remove the rule at any time."
+  },
+  "counts": {
+    "add": "{count} to add",
+    "update": "{count} to update",
+    "remove": "{count} to remove",
+    "current": "{count} already up to date",
+    "blocked": "{count} blocked",
+    "skipped": "{count} not synced",
+    "label": "What starting this rule writes to {destination}:"
+  },
+  "privacy": {
+    "busyOnly": "Busy only: titles, descriptions, and locations stay private.",
+    "details": "Copies titles, descriptions, and locations to {destination}. Anyone who can see {destination} sees them.",
+    "withDetails": "with description and location"
+  },
+  "filters": {
+    "show": "Show",
+    "kind": "Kind",
+    "chip": "{label} {count}",
+    "all": "All",
+    "sync": "Will sync",
+    "out": "Not synced",
+    "kinds": {
+      "allDay": "All-day",
+      "birthday": "Birthdays",
+      "recurring": "Recurring",
+      "declined": "Declined",
+      "maybe": "Maybe",
+      "unanswered": "Not answered"
+    },
+    "showing": "Showing {shown} of {total}",
+    "noMatch": "No events match these filters."
+  },
+  "table": {
+    "caption": "What {source} → {destination} will write to {destination}",
+    "when": "When",
+    "source": "source",
+    "destination": "destination",
+    "outcome": "What happens",
+    "today": "Today · {date}",
+    "tomorrow": "Tomorrow · {date}",
+    "earlier": "Earlier, from {date}",
+    "earlierName": "{title}: {counts}",
+    "earlierCount": {
+      "one": "{count} event",
+      "other": "{count} events"
+    },
+    "undated": "Deleted in {source}",
+    "later": "That is every event in {source} now. Repeating events continue past the dates shown, and new or changed events sync on their own."
+  },
+  "row": {
+    "allDay": "All day",
+    "allDayDays": "All day, {range}",
+    "timeRange": "{start}–{end}",
+    "endsNextDay": "{start}–{end} {day}",
+    "notWritten": "Nothing is written",
+    "untitled": "(No title)",
+    "since": "since {date}",
+    "moved": "This date only: moved from {time}",
+    "cancelledOnce": "This date only: cancelled",
+    "changedOnce": "This date only: changed",
+    "declined": "You declined",
+    "maybe": "You answered Maybe",
+    "unanswered": "You haven't answered",
+    "birthday": "Birthday",
+    "noDate": "Deleted"
+  },
+  "outcome": {
+    "add": "Add",
+    "update": "Update",
+    "remove": "Remove",
+    "current": "Already up to date",
+    "blocked": "Blocked",
+    "skipped": "Not synced",
+    "withReason": "{outcome}: {reason}"
+  },
+  "reason": {
+    "allDay": "all-day event",
+    "birthday": "birthday",
+    "declined": "you declined",
+    "maybe": "you answered Maybe",
+    "unanswered": "you haven't answered",
+    "managed": "written by Calendar Ghost",
+    "noDatesLeft": "no dates left",
+    "cancelled": "cancelled",
+    "beforeWindow": "before the starting point"
+  },
+  "repeat": {
+    "unknown": "Repeats",
+    "daily": {
+      "one": "Every day",
+      "other": "Every {count} days"
+    },
+    "weekdays": "Every weekday",
+    "weekly": {
+      "one": "Weekly on {days}",
+      "other": "Every {count} weeks on {days}"
+    },
+    "monthly": {
+      "one": "Monthly on {day}",
+      "other": "Every {count} months on {day}"
+    },
+    "yearly": {
+      "one": "Yearly on {date}",
+      "other": "Every {count} years on {date}"
+    },
+    "nthWeekday": "the {ordinal} {weekday}",
+    "dayOfMonth": "day {day}",
+    "ordinal": {
+      "first": "first",
+      "second": "second",
+      "third": "third",
+      "fourth": "fourth",
+      "last": "last"
+    }
+  },
+  "states": {
+    "lapsedTitle": "{account} needs reauthorization",
+    "lapsedTitleProvider": "Your {account} needs reauthorization",
+    "lapsedBody": "The preview could not read it. Nothing was written.",
+    "reauthorize": "Reauthorize account",
+    "unavailableTitle": "{Calendar} is not answering right now",
+    "unavailableBody": "Nothing was written. Try the preview again in a few minutes.",
+    "changedTitle": "This rule changed while it was being previewed",
+    "changedBody": "Preview it again to see what it will do now.",
+    "syncingTitle": "This rule is already syncing",
+    "syncingBody": "A preview is for a rule before it starts. Its Activity shows what it wrote.",
+    "openRule": "Open rule",
+    "failedTitle": "The preview did not finish",
+    "emptyTitle": "{source} has no events from {date} onward",
+    "emptyBody": "Once you start syncing, new events sync as they appear.",
+    "allExcluded": {
+      "one": "The {count} event in {source} will not sync with these settings. Change them above.",
+      "other": "None of the {count} events in {source} will sync with these settings. Change them above."
+    }
+  },
+  "rule": {
+    "settings": "What this rule syncs:",
+    "change": "Change",
+    "since": {
+      "one": "From the past {count} day",
+      "other": "From the past {count} days"
+    },
+    "allDayOn": "All-day events",
+    "allDayOff": "No all-day events",
+    "birthdaysOn": "Birthdays",
+    "birthdaysOff": "No birthdays",
+    "maybeAs": "Maybe events as “{title}”",
+    "maybePrefixed": "Maybe events titled “{prefix}” and their title",
+    "maybeSync": "Maybe events like accepted",
+    "maybeOff": "No Maybe events",
+    "unansweredAs": "Unanswered invitations as Maybe",
+    "unansweredWait": "Invitations sync once answered",
+    "unansweredOff": "No unanswered invitations",
+    "declinedOff": "No declined events"
+  }
+}

@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { ArrowLeft, ArrowRight, RefreshCw, ShieldAlert } from "lucide-react"
 import { useEffect, useRef, type RefObject } from "react"
 
@@ -24,33 +24,34 @@ import {
   ApiError,
   api,
   type ConnectedAccount,
-  type DiscoveredCalendar,
   type RuleDetail,
 } from "@/lib/api"
-import { appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
+import { appPathForView, isPlainLeftClick, type OpenRule, type OpenRulePreview, type ViewChange } from "@/lib/navigation"
 import { needsReauthorization } from "@/lib/account-summary"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 import { REMOVAL_REFRESH_MS, reportedRemoval, useActiveRemoval, type ActiveRemoval } from "@/lib/rule-removal"
 import { recoveryExplanation } from "@/lib/rule-run"
 import { busyCommand, ruleWork, workRefreshInterval, type RuleWork } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
+import { useRuleCalendars, type CalendarsByAccount } from "@/lib/use-rule-calendars"
 import { useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
 type RuleCommands = ReturnType<typeof useRuleCommands>
-type CalendarsByAccount = Map<string, DiscoveredCalendar[] | undefined>
 
 export function RuleDetailsView({
   ruleId,
   notice,
   onViewChange,
   onOpenRule,
+  onOpenRulePreview,
 }: {
   ruleId: string
   notice: string | null
   onViewChange: ViewChange
   onOpenRule: OpenRule
+  onOpenRulePreview: OpenRulePreview
 }) {
   const { t } = useI18n()
   const now = useNow()
@@ -100,34 +101,9 @@ export function RuleDetailsView({
       notice={notice}
       onViewChange={onViewChange}
       onOpenRule={onOpenRule}
+      onPreview={() => onOpenRulePreview(rule.data.id)}
     />
   )
-}
-
-/** Calendar names for the rule's connected accounts, and whether the heading can name both yet. */
-function useRuleCalendars(detail: RuleDetail | undefined, accounts: ConnectedAccount[] | undefined) {
-  const accountIds = detail
-    ? [...new Set([detail.source.connected_account_id, detail.destination.connected_account_id])]
-    : []
-  const connectedIds = accountIds.filter(
-    (id) => accounts?.find((account) => account.id === id)?.state === "connected",
-  )
-  const calendarQueries = useQueries({
-    queries: connectedIds.map((accountId) => ({
-      queryKey: ["calendars", accountId],
-      queryFn: () => api.calendars(accountId),
-      staleTime: 5 * 60 * 1000,
-    })),
-  })
-  const calendarsByAccount: CalendarsByAccount = new Map(
-    connectedIds.map((accountId, index) => [accountId, calendarQueries[index]?.data]),
-  )
-
-  // Wait for calendar names so the focused heading never announces placeholder names; names
-  // recorded when Google last listed the calendars serve until it answers again.
-  const namesRecorded = Boolean(detail?.source.calendar_name && detail.destination.calendar_name)
-  const namesReady = namesRecorded || calendarQueries.every((query) => !query.isPending)
-  return { calendarsByAccount, namesReady }
 }
 
 function BackToRules({ onViewChange }: { onViewChange: ViewChange }) {
@@ -198,6 +174,7 @@ function RuleDetailsPage({
   notice,
   onViewChange,
   onOpenRule,
+  onPreview,
 }: {
   detail: RuleDetail
   refreshFailed: boolean
@@ -210,6 +187,7 @@ function RuleDetailsPage({
   notice: string | null
   onViewChange: ViewChange
   onOpenRule: OpenRule
+  onPreview: () => void
 }) {
   const i18n = useI18n()
   // A failed refresh keeps stale data, which must not keep a finished removal on screen.
@@ -268,11 +246,11 @@ function RuleDetailsPage({
             working={work?.kind}
           />
           <RuleNextAction
+            ruleId={detail.id}
             state={displayState}
             reauthorize={unauthorized}
-            pending={pending}
             describedBy={displayState === "dry_run_validated" ? "rule-preview-ready" : undefined}
-            onRun={run}
+            onPreview={onPreview}
             onViewChange={onViewChange}
           />
           <RuleCommandMenu

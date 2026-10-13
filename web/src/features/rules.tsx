@@ -27,6 +27,7 @@ import {
   connectionsPath,
   isPlainLeftClick,
   type OpenRule,
+  type OpenRulePreview,
   type ViewChange,
 } from "@/lib/navigation"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
@@ -56,6 +57,7 @@ type RulesViewProps = {
   createRule: boolean
   onViewChange: ViewChange
   onOpenRule: OpenRule
+  onOpenRulePreview: OpenRulePreview
 }
 
 export function RulesView({
@@ -63,6 +65,7 @@ export function RulesView({
   createRule,
   onViewChange,
   onOpenRule,
+  onOpenRulePreview,
 }: RulesViewProps) {
   const { t } = useI18n()
   const now = useNow()
@@ -117,11 +120,8 @@ export function RulesView({
           accounts={connected}
           onCreated={(rule) => {
             setBuilderChoice(false)
-            commands.notify(rule.id, {
-              tone: "success",
-              text: t("rules.list.draftSavedNotice"),
-            })
-            createButton.current?.focus()
+            // A new rule's next step is its preview, which shows what it will write.
+            onOpenRulePreview(rule.id)
           }}
         />
       )}
@@ -140,6 +140,7 @@ export function RulesView({
               now={now}
               onViewChange={onViewChange}
               onOpenRule={onOpenRule}
+              onPreview={() => onOpenRulePreview(rule.id)}
             />
           ))}
         </ul>
@@ -265,9 +266,10 @@ type RuleRowProps = {
   now: number
   onViewChange: ViewChange
   onOpenRule: OpenRule
+  onPreview: () => void
 }
 
-function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange, onOpenRule }: RuleRowProps) {
+function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange, onOpenRule, onPreview }: RuleRowProps) {
   const { t } = useI18n()
   const { source, destination, unauthorized } = endpoints
   const stopped = rule.state === "degraded" || unauthorized.length > 0
@@ -299,11 +301,11 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
         <div className="rule-actions">
           <RuleStatusBadge state={state} stopped={stopped} working={work?.kind} />
           <RuleNextAction
+            ruleId={rule.id}
             state={state}
             reauthorize={unauthorized[0]}
-            pending={pending}
             describedBy={state === "dry_run_validated" ? `${headingId} ${previewId}` : headingId}
-            onRun={run}
+            onPreview={onPreview}
             onViewChange={onViewChange}
           />
           <Button variant="ghost" asChild>

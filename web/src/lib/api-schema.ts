@@ -1516,24 +1516,65 @@ export interface components {
              */
             verdict: "stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy";
         };
-        /** PreviewItemResponse */
+        /**
+         * PreviewItemResponse
+         * @description One source event and what the rule would do with it; shown once, never stored.
+         */
         PreviewItemResponse: {
-            /** All Day */
-            all_day: boolean;
+            /** Birthday */
+            birthday: boolean;
+            /** Cancelled */
+            cancelled: boolean;
+            /** Ends At */
+            ends_at: string | null;
+            /** Ends Before */
+            ends_before: string | null;
             /**
              * Kind
              * @enum {string}
              */
             kind: "single" | "series" | "occurrence";
+            /** Original Start */
+            original_start: string | null;
             /**
              * Planned Action
              * @enum {string}
              */
             planned_action: "create" | "update" | "delete" | "ignore" | "conflict";
-            /** Projected Title */
-            projected_title: string;
+            projection: components["schemas"]["PreviewProjectionResponse"] | null;
+            /** Reason */
+            reason: string;
+            /** Recurrence */
+            recurrence: string[] | null;
+            /**
+             * Response
+             * @enum {string}
+             */
+            response: "accepted" | "tentative" | "declined" | "needs_action";
+            /** Series Event Id */
+            series_event_id: string | null;
             /** Source Event Id */
             source_event_id: string;
+            /** Starts At */
+            starts_at: string | null;
+            /** Starts On */
+            starts_on: string | null;
+            /** Time Zone */
+            time_zone: string | null;
+            /** Title */
+            title: string;
+        };
+        /**
+         * PreviewProjectionResponse
+         * @description What the destination would hold for a previewed event.
+         */
+        PreviewProjectionResponse: {
+            /** Carries Details */
+            carries_details: boolean;
+            /** Recurrence */
+            recurrence: string[] | null;
+            /** Title */
+            title: string;
         };
         /** PreviewSummaryResponse */
         PreviewSummaryResponse: {
@@ -1800,14 +1841,14 @@ export interface components {
             eligible_events: number;
             /** Excluded Events */
             excluded_events: number;
+            /** Items */
+            items: components["schemas"]["PreviewItemResponse"][];
             /** Occurrence Changes */
             occurrence_changes: number;
             /** Recurring Series */
             recurring_series: number;
             /** Rule Id */
             rule_id: string;
-            /** Sample */
-            sample: components["schemas"]["PreviewItemResponse"][];
         };
         /** RuleReplacementResponse */
         RuleReplacementResponse: {
