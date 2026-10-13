@@ -26,6 +26,7 @@ import {
   narrowLayout,
   type PreviewNames,
   type PreviewRun,
+  previewSettings,
   type PreviewFilters,
 } from "@/lib/rule-preview"
 import { previewFailure } from "@/lib/rule-preview-failure"
@@ -34,15 +35,19 @@ import { useRuleCalendars, type CalendarsByAccount } from "@/lib/use-rule-calend
 
 type Names = PreviewNames
 
-/** The preview runs once per visit and is kept for the session; Refresh runs it anew. */
-function useRulePreview(ruleId: string) {
+/**
+ * The preview runs once per visit and is kept for the session; Refresh runs it anew. It waits for
+ * the rule, so each run records the settings it was made with.
+ */
+function useRulePreview(ruleId: string, settings: string | null) {
   const queryClient = useQueryClient()
   return useQuery({
     queryKey: rulePreviewKey(ruleId),
+    enabled: settings !== null,
     queryFn: async (): Promise<PreviewRun> => {
       try {
         const result = await api.previewRule(ruleId)
-        return { items: result.items, completedAt: new Date() }
+        return { items: result.items, completedAt: new Date(), settings: settings ?? "" }
       } finally {
         // A preview validates the rule, and a lapsed account it meets changes Settings too.
         void Promise.all(
@@ -83,7 +88,7 @@ export function RulePreviewView({
   const { t } = useI18n()
   const rule = useQuery({ queryKey: ["rule", ruleId], queryFn: () => api.rule(ruleId), retry: false })
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
-  const preview = useRulePreview(ruleId)
+  const preview = useRulePreview(ruleId, rule.data ? previewSettings(rule.data) : null)
   const { calendarsByAccount, namesReady } = useRuleCalendars(rule.data, accounts.data)
   const heading = useRef<HTMLHeadingElement>(null)
   const ready = Boolean(rule.data) && namesReady
@@ -136,8 +141,11 @@ function RulePreviewPage({
   const [announcement, setAnnouncement] = useState("")
   // Kept here, not in the results, so a refresh does not throw the reader's filters away.
   const [filters, setFilters] = useState<PreviewFilters>(NO_FILTERS)
-  // A failed refresh keeps the last data in the query; its numbers no longer stand.
-  const run = preview.isFetching || preview.error ? undefined : preview.data
+  // Another tab may change the rule; its refetched settings then no longer match this preview's.
+  const outdated = preview.data !== undefined && preview.data.settings !== previewSettings(detail)
+  // A failed refresh keeps the last data in the query; its numbers no longer stand, nor do an
+  // outdated preview's.
+  const run = preview.isFetching || preview.error || outdated ? undefined : preview.data
   // A failure stays on screen while Refresh retries it, so its own button keeps focus meaningful.
   const failure = preview.error
     ? previewFailure(i18n, preview.error, {
@@ -147,6 +155,12 @@ function RulePreviewPage({
       })
     : null
   const refresh = useRef<HTMLButtonElement>(null)
+  // A preview of settings the rule no longer has is read again at once, never started from.
+  // A failure stops it there: its panel offers Refresh rather than a loop of failing reads.
+  const { isFetching, isError, refetch } = preview
+  useEffect(() => {
+    if (outdated && !isFetching && !isError) void refetch()
+  }, [outdated, isFetching, isError, refetch])
   // Refines the shell's "Preview" with the rule, so tabs and history tell previews apart.
   useEffect(() => {
     document.title = documentTitle(i18n, i18n.t("rulePreview.page.documentTitleRule", names))

@@ -12,9 +12,14 @@ export type Repeat = {
   byMonthDay: number[]
   count: number | null
   until: Date | null
-  /** Days the series skips (EXDATE), as "YYYYMMDD" in the series' own calendar. */
-  skipped: ReadonlySet<string>
+  /**
+   * Dates the series skips (EXDATE): a calendar day ("YYYYMMDD") for a date or a floating time, read
+   * in the series' own zone, or the instant for a time in UTC or a named zone.
+   */
+  skipped: readonly Skip[]
 }
+
+type Skip = { day: string } | { at: Date }
 
 /** A calendar day; `month` counts from 0, as Date does. */
 type Day = { year: number; month: number; day: number }
@@ -76,15 +81,34 @@ function limits(parts: Map<string, string>): Pick<Repeat, "count" | "until"> {
   return { count: count ? Number(count) : null, until: until ? untilDate(until) : null }
 }
 
-/** "YYYYMMDD" for every EXDATE value, whatever its time or zone parameter. */
-function skippedDays(lines: readonly string[]): Set<string> {
-  return new Set(
-    lines
-      .filter((line) => line.toUpperCase().startsWith("EXDATE"))
-      .flatMap((line) => (line.split(":")[1] ?? "").split(","))
-      .map((value) => value.slice(0, 8))
-      .filter((value) => /^\d{8}$/.test(value)),
-  )
+const EXDATE_TIME = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/
+
+/** A wall time from its parts as written: year, month from 1, day, hour, minute, second. */
+function wallOf([year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0]: number[]): WallTime {
+  return { year, month: month - 1, day, hour, minute, second }
+}
+
+/**
+ * One EXDATE value: in UTC ("…Z") or a named zone (TZID) it is an instant, which the series' zone
+ * may put on another day; a date, or a time with no zone, is that day where the series is.
+ */
+function skipOf(value: string, timeZone: string | null): Skip | null {
+  const time = EXDATE_TIME.exec(value)
+  if (!time) return /^\d{8}$/.test(value) ? { day: value } : null
+  const wall = wallOf(time.slice(1, 7).map(Number))
+  if (time[7]) return { at: new Date(Date.UTC(wall.year, wall.month, wall.day, wall.hour, wall.minute, wall.second)) }
+  return timeZone ? { at: zoneOf(timeZone).at(wall) } : { day: value.slice(0, 8) }
+}
+
+function skippedDates(lines: readonly string[]): Skip[] {
+  return lines
+    .filter((line) => line.toUpperCase().startsWith("EXDATE"))
+    .flatMap((line) => {
+      const [head = "", values = ""] = line.split(/:(.*)/)
+      const timeZone = /TZID=([^;:]+)/i.exec(head)?.[1] ?? null
+      return values.split(",").map((value) => skipOf(value.trim(), timeZone))
+    })
+    .filter((skip): skip is Skip => skip !== null)
 }
 
 /** Whether the rule uses only parts the stepping below honors; anything else would misplace it. */
@@ -113,7 +137,7 @@ export function readRepeat(lines: readonly string[] | null | undefined): Repeat 
     byDay: byDay as WeekdayRule[],
     byMonthDay: list(parts, "BYMONTHDAY").map(Number).filter((day) => Number.isInteger(day) && day !== 0),
     ...limits(parts),
-    skipped: skippedDays(lines),
+    skipped: skippedDates(lines),
   }
 }
 
@@ -203,13 +227,22 @@ function weekdays(repeat: Repeat, first: Day): number[] {
   return [...new Set(days)].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7))
 }
 
-function monthlyDay(i18n: I18n, repeat: Repeat, first: Day): string {
-  const [byDay] = repeat.byDay
-  const ordinal = byDay?.ordinal != null ? ORDINALS[String(byDay.ordinal)] : undefined
-  if (byDay && ordinal) {
-    return i18n.t("rulePreview.repeat.nthWeekday", { ordinal: i18n.t(ordinal), weekday: weekdayName(i18n, byDay.weekday) })
+/**
+ * Every day a monthly rule falls on, as "the second Tuesday and the last Friday" or "day 1 and day
+ * 15"; null when the words cannot say it exactly, as every Monday of the month or a day counted
+ * from the month's end, so no description understates the dates a series takes.
+ */
+function monthlyDays(i18n: I18n, repeat: Repeat, first: Day): string | null {
+  if (repeat.byDay.length) {
+    const days = repeat.byDay.map((rule) => {
+      const ordinal = rule.ordinal != null ? ORDINALS[String(rule.ordinal)] : undefined
+      return ordinal ? i18n.t("rulePreview.repeat.nthWeekday", { ordinal: i18n.t(ordinal), weekday: weekdayName(i18n, rule.weekday) }) : null
+    })
+    return days.every((each) => each !== null) ? i18n.format.list(days) : null
   }
-  return i18n.t("rulePreview.repeat.dayOfMonth", { day: repeat.byMonthDay[0] ?? first.day })
+  const days = repeat.byMonthDay.length ? repeat.byMonthDay : [first.day]
+  if (days.some((day) => day < 0)) return null
+  return i18n.format.list(days.map((day) => i18n.t("rulePreview.repeat.dayOfMonth", { day })))
 }
 
 /** "Weekly on Tuesday", "Every 2 weeks on Monday and Thursday", "Monthly on the last Friday". */
@@ -225,8 +258,10 @@ export function describeRepeat(i18n: I18n, repeat: Repeat | null, first: Date, t
       if (count === 1 && days.join() === "1,2,3,4,5") return i18n.t("rulePreview.repeat.weekdays")
       return i18n.t("rulePreview.repeat.weekly", { count, days: i18n.format.list(days.map((each) => weekdayName(i18n, each))) })
     }
-    case "MONTHLY":
-      return i18n.t("rulePreview.repeat.monthly", { count, day: monthlyDay(i18n, repeat, day) })
+    case "MONTHLY": {
+      const days = monthlyDays(i18n, repeat, day)
+      return days ? i18n.t("rulePreview.repeat.monthly", { count, day: days }) : i18n.t("rulePreview.repeat.unknown")
+    }
     case "YEARLY":
       return i18n.t("rulePreview.repeat.yearly", {
         count,
@@ -296,6 +331,8 @@ export function nextOccurrence(repeat: Repeat | null, first: Date, from: Date, t
   const zone = zoneOf(timeZone)
   const wall = zone.wall(first)
   let seen = 0
+  // Every skipped date as a day where the series is, so an instant on its zone's day matches.
+  const skipped = new Set(repeat.skipped.map((skip) => ("day" in skip ? skip.day : dayKey(zone.wall(skip.at)))))
   const start = firstStep(repeat, wall, zone.wall(from))
   for (let step = start; step < start + STEP_LIMIT; step += 1) {
     const instants = period(repeat, wall, step)
@@ -305,7 +342,7 @@ export function nextOccurrence(repeat: Repeat | null, first: Date, from: Date, t
     for (const { day, at } of instants) {
       if (pastEnd(repeat, at, seen)) return "ended"
       seen += 1
-      if (at >= from && !repeat.skipped.has(dayKey(day))) return at
+      if (at >= from && !skipped.has(dayKey(day))) return at
     }
   }
   return null

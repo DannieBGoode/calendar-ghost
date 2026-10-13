@@ -1,5 +1,5 @@
 import type { ChangeMark } from "@/lib/activity"
-import type { RulePreview } from "@/lib/api"
+import type { RuleDetail, RulePreview } from "@/lib/api"
 import { nextOccurrence, readRepeat } from "@/lib/recurrence"
 
 export type PreviewItem = RulePreview["items"][number]
@@ -80,10 +80,13 @@ export function isFiltered(filters: PreviewFilters): boolean {
   return filters.show !== "all" || filters.kinds.length > 0
 }
 
-/** The kinds this preview has at all, in their order; the row never offers one no event has. */
-export function offeredKinds(items: readonly PreviewItem[]): PreviewKind[] {
+/**
+ * The kinds this preview has, in their order, and any still chosen: a refresh that finds no more
+ * birthdays leaves Birthdays in place, at 0, so it can still be unpressed.
+ */
+export function offeredKinds(items: readonly PreviewItem[], chosen: readonly PreviewKind[] = []): PreviewKind[] {
   const present = tally(items, previewKinds)
-  return PREVIEW_KINDS.filter((kind) => present.has(kind))
+  return PREVIEW_KINDS.filter((kind) => present.has(kind) || chosen.includes(kind))
 }
 
 /** How many rows each option would show beside the other choices. */
@@ -121,8 +124,27 @@ export const outcomeCounts = (items: readonly PreviewItem[]) => tally(items, (it
  */
 export type PlacedItem = { item: PreviewItem; at: Date | null; allDay: boolean; since: Date | null }
 type DatedItem = PlacedItem & { at: Date }
-/** One finished preview: what it found, and when, which every date on the page is read against. */
-export type PreviewRun = { items: PreviewItem[]; completedAt: Date }
+/**
+ * One finished preview: what it found, when, which every date on the page is read against, and
+ * the rule settings it was made with, so a preview of other settings is never started from.
+ */
+export type PreviewRun = { items: PreviewItem[]; completedAt: Date; settings: string }
+
+/** The rule's settings a preview depends on, as one comparable value; its state and runs are not. */
+export function previewSettings(detail: RuleDetail): string {
+  return JSON.stringify([
+    detail.source.connected_account_id,
+    detail.source.calendar_id,
+    detail.destination.connected_account_id,
+    detail.destination.calendar_id,
+    detail.privacy_policy,
+    detail.sync_all_day_events,
+    detail.sync_birthdays,
+    detail.tentative_events,
+    detail.unanswered_invitations,
+    detail.initial_lookback_days,
+  ])
+}
 /** The two calendars' names, as the page shows them. */
 export type PreviewNames = { source: string; destination: string }
 export type PreviewDay = { key: string; date: Date; items: PlacedItem[] }

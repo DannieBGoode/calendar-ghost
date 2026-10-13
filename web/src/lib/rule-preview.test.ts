@@ -74,6 +74,8 @@ describe("filters", () => {
 
   it("offers only the kinds the preview has", () => {
     expect(offeredKinds([item(), birthday])).toEqual(["allDay", "birthday"])
+    // A chosen kind a refresh no longer finds stays, so it can still be unpressed.
+    expect(offeredKinds([item()], ["birthday"])).toEqual(["birthday"])
   })
 })
 

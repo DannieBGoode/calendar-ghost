@@ -108,7 +108,7 @@ export function PreviewFilterBar({
 }) {
   const { t, format } = useI18n()
   const counts = facetCounts(items, filters)
-  const kinds = offeredKinds(items)
+  const kinds = offeredKinds(items, filters.kinds)
   const chosen = new Set(filters.kinds)
 
   function toggleKind(kind: PreviewKind) {

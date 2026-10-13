@@ -20,7 +20,7 @@ describe("readRepeat", () => {
       byMonthDay: [],
       count: 10,
       until: null,
-      skipped: new Set(),
+      skipped: [],
     })
   })
 
@@ -43,6 +43,11 @@ describe("describeRepeat", () => {
     ["RRULE:FREQ=DAILY", "Every day"],
     ["RRULE:FREQ=MONTHLY;BYDAY=-1FR", "Monthly on the last Friday"],
     ["RRULE:FREQ=MONTHLY", "Monthly on day 2"],
+    ["RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15", "Monthly on day 1 and day 15"],
+    ["RRULE:FREQ=MONTHLY;BYDAY=2TU,-1FR", "Monthly on the second Tuesday and the last Friday"],
+    // Every Monday of the month, or a day counted from its end, has no exact words here.
+    ["RRULE:FREQ=MONTHLY;BYDAY=MO", "Repeats"],
+    ["RRULE:FREQ=MONTHLY;BYMONTHDAY=-1", "Repeats"],
     ["RRULE:FREQ=YEARLY", "Yearly on September 2"],
     ["RRULE:FREQ=HOURLY", "Repeats"],
   ])("puts %s into words", (line, words) => {
@@ -106,6 +111,18 @@ describe("nextOccurrence in the series' zone", () => {
       new Date(2025, 9, 13),
     )
     expect(next).toEqual(new Date(2025, 9, 21, 18, 0))
+  })
+
+  it("reads an excluded time in UTC on the series' own day", () => {
+    // Tuesday 13 October 2026, 18:00 in Los Angeles, is already 14 October in UTC.
+    const first = new Date(Date.UTC(2026, 9, 7, 1, 0))
+    const next = nextOccurrence(
+      readRepeat(["RRULE:FREQ=WEEKLY", "EXDATE:20261014T010000Z"]),
+      first,
+      new Date(Date.UTC(2026, 9, 10)),
+      "America/Los_Angeles",
+    )
+    expect(next).toEqual(new Date(Date.UTC(2026, 9, 21, 1, 0)))
   })
 })
 
