@@ -107,8 +107,12 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
 - **Show** is one joined segmented control (All · Will sync · Not synced), single-choice.
 - **Kind** (All-day · Birthdays · Recurring · Declined · Maybe · Not answered) folds behind a
   "Kind" toggle and stays open while a kind is chosen; chosen kinds combine as "any of".
-- A chip exists only when the whole preview has its kind; "Showing 12 of 51" and "Clear filters"
-  appear while a filter is set. Filters change only this view, never the rule.
+- Every count follows the other choices (faceted): Show counts within the chosen kinds, each kind
+  within the Show choice, so a number always says what a click will show. An option that would
+  show nothing is disabled unless chosen, so no choice leads to an empty table.
+- Counts sit in small badges after their labels, in tabular numerals.
+- A kind exists only when the whole preview has it, so options never vanish; "Showing 12 of 51"
+  and "Clear filters" appear while a filter is set. Filters change only this view, never the rule.
 
 ## Start syncing
 

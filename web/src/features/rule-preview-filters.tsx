@@ -6,6 +6,7 @@ import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
 import {
   PREVIEW_KINDS,
+  facetCounts,
   isFiltered,
   previewKinds,
   tally,
@@ -30,12 +31,44 @@ const KIND_WORDS: Record<PreviewKind, MessageKey> = {
   unanswered: "rulePreview.filters.kinds.unanswered",
 }
 
-function FilterChip({ label, count, pressed, onToggle }: { label: string; count: number; pressed: boolean; onToggle: () => void }) {
+/** A count set apart from its label, so labels line up and numbers read as numbers. */
+function CountBadge({ count }: { count: number }) {
+  const { format } = useI18n()
+  return (
+    <span className="rule-preview-count-badge" aria-hidden="true">
+      {format.number(count)}
+    </span>
+  )
+}
+
+/**
+ * A choice with how many rows it would show beside the other choices. One that would show none is
+ * disabled, unless chosen, so it can always be undone.
+ */
+function FilterOption({
+  label,
+  count,
+  pressed,
+  onToggle,
+}: {
+  label: string
+  count: number
+  pressed: boolean
+  onToggle: () => void
+}) {
   const { t, format } = useI18n()
   return (
-    <Button type="button" variant="outline" className="health-count" aria-pressed={pressed} onClick={onToggle}>
-      {t("rulePreview.filters.chip", { label, count: format.number(count) })}
-    </Button>
+    <button
+      type="button"
+      className="rule-preview-option"
+      aria-pressed={pressed}
+      aria-label={t("rulePreview.filters.chip", { label, count: format.number(count) })}
+      disabled={count === 0 && !pressed}
+      onClick={onToggle}
+    >
+      <span>{label}</span>
+      <CountBadge count={count} />
+    </button>
   )
 }
 
@@ -49,14 +82,17 @@ function ShowChoice({
   show: PreviewShow
   onChange: (show: PreviewShow) => void
 }) {
-  const { t, format } = useI18n()
-  const shows = (["all", "sync", "out"] as const).filter((each) => each === "all" || counts[each] > 0)
+  const { t } = useI18n()
   return (
     <div className="rule-preview-segments" role="group" aria-label={t("rulePreview.filters.show")}>
-      {shows.map((each) => (
-        <button key={each} type="button" aria-pressed={show === each} onClick={() => onChange(each)}>
-          {t("rulePreview.filters.chip", { label: t(SHOW_WORDS[each]), count: format.number(counts[each]) })}
-        </button>
+      {(["all", "sync", "out"] as const).map((each) => (
+        <FilterOption
+          key={each}
+          label={t(SHOW_WORDS[each])}
+          count={counts[each]}
+          pressed={show === each}
+          onToggle={() => onChange(each)}
+        />
       ))}
     </div>
   )
@@ -64,7 +100,8 @@ function ShowChoice({
 
 /**
  * Show narrows to what the destination will or will not hold; Kind, folded until wanted, to any of
- * the chosen kinds. A kind exists only when the whole preview has it, so chips never vanish.
+ * the chosen kinds. Every count follows the other choices, so a number always says what a click
+ * will show. A kind exists only when the whole preview has it, so options never vanish.
  */
 export function PreviewFilterBar({
   items,
@@ -79,10 +116,8 @@ export function PreviewFilterBar({
 }) {
   const { t, format } = useI18n()
   const [kindsOpen, setKindsOpen] = useState(false)
-  const synced = items.filter((item) => item.projection).length
-  const showCounts: Record<PreviewShow, number> = { all: items.length, sync: synced, out: items.length - synced }
-  const kindCounts = tally(items, previewKinds)
-  const kinds = PREVIEW_KINDS.filter((kind) => kindCounts.has(kind))
+  const counts = facetCounts(items, filters)
+  const kinds = PREVIEW_KINDS.filter((kind) => tally(items, previewKinds).has(kind))
   const chosen = new Set(filters.kinds)
   const openKinds = kindsOpen || chosen.size > 0
 
@@ -94,7 +129,7 @@ export function PreviewFilterBar({
   return (
     <div className="rule-preview-filters">
       <div className="rule-preview-filter-row">
-        <ShowChoice counts={showCounts} show={filters.show} onChange={(show) => onChange({ ...filters, show })} />
+        <ShowChoice counts={counts.show} show={filters.show} onChange={(show) => onChange({ ...filters, show })} />
         {kinds.length > 0 && (
           <Button
             type="button"
@@ -102,22 +137,27 @@ export function PreviewFilterBar({
             size="sm"
             className="rule-preview-kind-toggle"
             aria-expanded={openKinds}
-            aria-controls="rule-preview-kinds"
+            aria-controls={openKinds ? "rule-preview-kinds" : undefined}
             onClick={() => setKindsOpen(!openKinds)}
           >
             <SlidersHorizontal aria-hidden="true" />
             {t("rulePreview.filters.kindToggle")}
-            {chosen.size > 0 && <span className="rule-preview-kind-count">{t("rulePreview.filters.kindActive", { count: chosen.size })}</span>}
+            {chosen.size > 0 && (
+              <>
+                <CountBadge count={chosen.size} />
+                <span className="sr-only">{t("rulePreview.filters.kindActive", { count: chosen.size })}</span>
+              </>
+            )}
           </Button>
         )}
       </div>
       {openKinds && (
         <div id="rule-preview-kinds" className="rule-preview-filter-row" role="group" aria-label={t("rulePreview.filters.kind")}>
           {kinds.map((kind) => (
-            <FilterChip
+            <FilterOption
               key={kind}
               label={t(KIND_WORDS[kind])}
-              count={kindCounts.get(kind) ?? 0}
+              count={counts.kinds.get(kind) ?? 0}
               pressed={chosen.has(kind)}
               onToggle={() => toggleKind(kind)}
             />

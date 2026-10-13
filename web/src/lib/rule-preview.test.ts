@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { testI18n } from "@/i18n/testing"
 
-import { layOut, matchesFilters, outcomeCounts, previewKinds, previewOutcome, type PreviewItem } from "./rule-preview"
+import { facetCounts, layOut, matchesFilters, outcomeCounts, previewKinds, previewOutcome, type PreviewItem } from "./rule-preview"
 import { outcomeText, sourceNotes, whenText } from "./rule-preview-text"
 
 const i18n = testI18n()
@@ -70,6 +70,19 @@ describe("filters", () => {
       ["add", 1],
       ["skipped", 2],
     ])
+  })
+})
+
+describe("facetCounts", () => {
+  it("counts each option beside the other choices, so a choice that leads nowhere shows 0", () => {
+    const items = [item(), birthday, item({ source_event_id: "standup", kind: "series", recurrence: ["RRULE:FREQ=WEEKLY"] })]
+
+    const willSync = facetCounts(items, { show: "sync", kinds: [] })
+    expect(willSync.kinds.get("birthday")).toBeUndefined()
+    expect(willSync.kinds.get("recurring")).toBe(1)
+
+    const birthdays = facetCounts(items, { show: "all", kinds: ["birthday"] })
+    expect(birthdays.show).toEqual({ all: 1, sync: 0, out: 1 })
   })
 })
 

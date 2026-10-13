@@ -153,7 +153,9 @@ async function renderPreview(i18n: I18n, onOpenRule: OpenRule = () => undefined)
 }
 
 function button(name: string): HTMLButtonElement {
-  const found = [...container.querySelectorAll("button")].find((each) => each.textContent.trim() === name)
+  const found = [...container.querySelectorAll("button")].find(
+    (each) => (each.getAttribute("aria-label") ?? each.textContent.trim()) === name,
+  )
   if (!found) throw new Error(`no button named ${name}`)
   return found
 }
@@ -200,6 +202,11 @@ describe("RulePreviewView", () => {
     act(() => button("Not synced 1").click())
 
     expect(button("Not synced 1").getAttribute("aria-pressed")).toBe("true")
+    // Counts follow the other choices, so a kind with nothing to show can't lead to an empty table.
+    act(() => button("Will sync 1").click())
+    act(() => button("Kind").click())
+    expect(button("Birthdays 0").disabled).toBe(true)
+    expect(button("All 2").disabled).toBe(false)
     expect(container.querySelectorAll(".rule-preview-row")).toHaveLength(1)
     expect(container.textContent).toContain("Showing 1 of 2")
   })

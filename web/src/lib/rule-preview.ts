@@ -58,13 +58,41 @@ export type PreviewShow = "all" | "sync" | "out"
 export type PreviewFilters = { show: PreviewShow; kinds: readonly PreviewKind[] }
 export const NO_FILTERS: PreviewFilters = { show: "all", kinds: [] }
 
+function matchesShow(item: PreviewItem, show: PreviewShow): boolean {
+  if (show === "sync") return item.projection !== null
+  if (show === "out") return item.projection === null
+  return true
+}
+
+function matchesKinds(item: PreviewItem, kinds: readonly PreviewKind[]): boolean {
+  if (!kinds.length) return true
+  const own = new Set(previewKinds(item))
+  return kinds.some((kind) => own.has(kind))
+}
+
 /** A row matches its Show choice and, when kinds are chosen, any one of them. */
 export function matchesFilters(item: PreviewItem, filters: PreviewFilters): boolean {
-  if (filters.show === "sync" && !item.projection) return false
-  if (filters.show === "out" && item.projection) return false
-  if (!filters.kinds.length) return true
-  const kinds = new Set(previewKinds(item))
-  return filters.kinds.some((kind) => kinds.has(kind))
+  return matchesShow(item, filters.show) && matchesKinds(item, filters.kinds)
+}
+
+/** How many rows each option would show beside the other choices, so no choice leads nowhere. */
+export type FacetCounts = { show: Record<PreviewShow, number>; kinds: Map<PreviewKind, number> }
+
+/**
+ * Show options count within the chosen kinds; each kind counts within the Show choice. Choosing
+ * a kind adds its rows to the others chosen, so a kind's count is what it alone would show.
+ */
+export function facetCounts(items: readonly PreviewItem[], filters: PreviewFilters): FacetCounts {
+  const ofKinds = items.filter((item) => matchesKinds(item, filters.kinds))
+  const ofShow = items.filter((item) => matchesShow(item, filters.show))
+  return {
+    show: {
+      all: ofKinds.length,
+      sync: ofKinds.filter((item) => matchesShow(item, "sync")).length,
+      out: ofKinds.filter((item) => matchesShow(item, "out")).length,
+    },
+    kinds: tally(ofShow, previewKinds),
+  }
 }
 
 export function isFiltered(filters: PreviewFilters): boolean {
