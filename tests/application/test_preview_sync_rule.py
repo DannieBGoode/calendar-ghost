@@ -20,6 +20,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
     TentativeEventPolicy,
+    TimedInterval,
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
@@ -491,14 +492,9 @@ def test_a_source_event_moved_before_the_window_while_paused_shows_its_update() 
     factory = enabled_rule_factory()
     sync_use_case(factory, calendars).execute(rule().id)
     _pause(factory)
+    starts = NOW - timedelta(days=90)
     long_ago = replace(
-        event(),
-        time=replace(
-            event().time,
-            starts_at=NOW - timedelta(days=90),
-            ends_at=NOW - timedelta(days=90, hours=-1),
-        ),
-        revision="moved",
+        event(), time=TimedInterval(starts, starts + timedelta(hours=1)), revision="moved"
     )
     calendars.events[event().reference] = long_ago
     calendars.report(long_ago)
