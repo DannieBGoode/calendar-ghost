@@ -327,7 +327,7 @@ screen each row becomes a card that labels its values, and the panel replaces th
 
 ### Rule Rows
 
-Each rule row shows its direction, policy, last run, status badge, and at most one visible next step (preview, start syncing, or reauthorize). Routine commands such as Sync Now, Reconcile Now, and Pause live in a "More actions" menu whose items explain what each does and when it runs by itself. Command results appear on the row that ran them and are announced through one persistent live region.
+Each rule row shows its direction, policy, last run, status badge, and at most one visible next step (preview, review and start, or reauthorize). A rule starts only from its preview page, where the events it will write are in view; a previewed rule reads "Ready to start". Routine commands such as Sync Now, Reconcile Now, and Pause live in a "More actions" menu whose items explain what each does and when it runs by itself. Command results appear on the row that ran them and are announced through one persistent live region.
 
 ### Page Titles
 

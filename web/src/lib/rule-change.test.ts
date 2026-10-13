@@ -128,7 +128,7 @@ describe("rule replacement copy", () => {
 describe("state and outcome labels", () => {
   it("labels removal in progress", () => {
     expect(ruleStateLabel(i18n, "disabled")).toBe("Removal incomplete")
-    expect(ruleStateLabel(i18n, "dry_run_validated")).toBe("Preview passed")
+    expect(ruleStateLabel(i18n, "dry_run_validated")).toBe("Ready to start")
     expect(ruleStateLabel(i18n, "some_new_state")).toBe("some new state")
   })
 

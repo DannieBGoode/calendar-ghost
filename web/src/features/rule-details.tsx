@@ -249,21 +249,17 @@ function RuleDetailsPage({
             ruleId={detail.id}
             state={displayState}
             reauthorize={unauthorized}
-            pending={pending}
             describedBy={displayState === "dry_run_validated" ? "rule-preview-ready" : undefined}
-            onRun={run}
             onPreview={onPreview}
             onViewChange={onViewChange}
           />
           <RuleCommandMenu
-            ruleId={detail.id}
             state={displayState}
             unauthorized={unauthorized !== undefined}
             pending={pending}
             source={sourceName}
             destination={destinationName}
             onRun={run}
-            onPreview={onPreview}
           />
         </div>
       </div>
@@ -277,7 +273,6 @@ function RuleDetailsPage({
         sourceName={sourceName}
         destinationName={destinationName}
         now={now}
-        onPreview={onPreview}
       />
       <RuleFacts detail={detail} destinationName={destinationName} />
       <RuleRuns
@@ -359,7 +354,6 @@ function RuleNotes({
   sourceName,
   destinationName,
   now,
-  onPreview,
 }: {
   detail: RuleDetail
   displayState: string
@@ -369,7 +363,6 @@ function RuleNotes({
   sourceName: string
   destinationName: string
   now: number
-  onPreview: () => void
 }) {
   const i18n = useI18n()
   const stopped = displayState === "degraded" && !unauthorized
@@ -388,13 +381,7 @@ function RuleNotes({
         </div>
       )}
       {displayState === "dry_run_validated" && (
-        <PreviewReadyNote
-          id="rule-preview-ready"
-          ruleId={detail.id}
-          preview={detail.latest_preview}
-          destination={destinationName}
-          onPreview={onPreview}
-        />
+        <PreviewReadyNote id="rule-preview-ready" preview={detail.latest_preview} destination={destinationName} />
       )}
       {/* Removal shows its own progress in the removal section. */}
       {work && work.kind !== "removal" ? (

@@ -404,7 +404,7 @@ diagnostics keep the glossary terms above.
 | Details Projection | "Copy title, description, and location" |
 | Invitation Response | "you answered Maybe", "you declined", "you haven't answered"; "Your response" in a change |
 | Material Rule Change | "A change stops the rule from writing until you preview it again" |
-| Rule Preview, then enable | "Preview rule", then "Start syncing"; each previewed event "Will sync" (with Add, Update, Remove, or Already up to date) or "Not synced", with its reason ("Not synced: birthday") |
+| Rule Preview, then enable | "Preview rule", then "Start syncing", which exists only on the preview page; a previewed rule reads "Ready to start" with "Review and start". Each previewed event "Will sync" (with Add, Update, Remove, or Already up to date) or "Not synced", with its reason ("Not synced: birthday") |
 | Degraded Rule | "Stopped", with the cause and its one next step: "Reauthorize account" when an account it uses has Lapsed Authorization, otherwise "Preview to restart" |
 | Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote from the starting point onward and reports any that still differ; never "repaired" for what the check only reported |
 | Connected Account | named by its Provider Kind: "Google account" or "Microsoft account"; "calendar account" where no one provider is meant. Its row in Settings says which ("Microsoft account · dana@contoso.example") |

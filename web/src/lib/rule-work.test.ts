@@ -55,7 +55,7 @@ describe("ruleWork", () => {
   })
 
   it("treats quick lifecycle commands as button states, not work", () => {
-    expect(ruleWork({ pending: "enable", running: null })).toBeNull()
+    expect(ruleWork({ pending: "pause", running: null })).toBeNull()
     expect(ruleWork({ pending: "pause", running: null })).toBeNull()
   })
 
@@ -155,7 +155,7 @@ describe("busyCommand", () => {
     expect(busyCommand(undefined, ruleWork({ pending: undefined, running: running({ kind: "reconciliation" }) }))).toBe(
       "reconcile",
     )
-    expect(busyCommand("enable", null)).toBe("enable")
+    expect(busyCommand("pause", null)).toBe("pause")
     expect(busyCommand(undefined, null)).toBeUndefined()
   })
 })

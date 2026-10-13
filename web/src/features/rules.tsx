@@ -304,9 +304,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
             ruleId={rule.id}
             state={state}
             reauthorize={unauthorized[0]}
-            pending={pending}
             describedBy={state === "dry_run_validated" ? `${headingId} ${previewId}` : headingId}
-            onRun={run}
             onPreview={onPreview}
             onViewChange={onViewChange}
           />
@@ -324,7 +322,6 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
             </a>
           </Button>
           <RuleCommandMenu
-            ruleId={rule.id}
             state={state}
             unauthorized={unauthorized.length > 0}
             pending={pending}
@@ -332,7 +329,6 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
             destination={destination.name}
             reserveSpace
             onRun={run}
-            onPreview={onPreview}
           />
         </div>
       </div>
@@ -344,7 +340,6 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
         work={work}
         feedback={commands.feedback[rule.id]}
         previewId={previewId}
-        onPreview={onPreview}
       />
     </li>
   )
@@ -403,7 +398,6 @@ function RuleNotes({
   work,
   feedback,
   previewId,
-  onPreview,
 }: {
   rule: RuleSummary
   endpoints: RuleEndpoints
@@ -412,7 +406,6 @@ function RuleNotes({
   work: RuleWork | null
   feedback: RuleFeedback | undefined
   previewId: string
-  onPreview: () => void
 }) {
   const { t, format } = useI18n()
   const { source, destination, unauthorized } = endpoints
@@ -429,13 +422,7 @@ function RuleNotes({
         </p>
       )}
       {state === "dry_run_validated" && (
-        <PreviewReadyNote
-          id={previewId}
-          ruleId={rule.id}
-          preview={rule.latest_preview}
-          destination={destination.name}
-          onPreview={onPreview}
-        />
+        <PreviewReadyNote id={previewId} preview={rule.latest_preview} destination={destination.name} />
       )}
       {work ? (
         <RuleWorkNote work={work} source={source.name} destination={destination.name} />

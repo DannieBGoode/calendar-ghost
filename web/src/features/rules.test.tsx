@@ -305,8 +305,9 @@ describe("RulesView", () => {
     expect(text).toContain("Last synced just now")
     expect(text).toContain("Last sync failed just now: Google Calendar was temporarily unavailable")
     expect(text).toContain("Previewed just now: 3 events will appear in Work D1, 1 excluded.")
-    // A previewed rule can be previewed again from its row, not only before its first preview.
-    expect(text).toContain("Preview again")
+    // A previewed rule starts only from its preview, so its row leads there.
+    expect(text).toContain("Ready to startReview and start")
+    expect(text).not.toContain("Start syncing")
     expect(text).toMatch(/2 of 8 checked · Running for \d+ s · It keeps running if you leave this page\./)
     expect(text).toContain("Preview to restart")
     expect(container.querySelector('[aria-label="More actions for Work A to Work B1"]')).not.toBeNull()

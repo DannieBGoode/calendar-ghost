@@ -7,15 +7,17 @@ import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
 import { api, type RuleDetail, type RuleSummary, type RunningWork } from "@/lib/api"
 import {
-  enabledMessage,
   pausedMessage,
   reconcileResultMessage,
   syncResultMessage,
 } from "@/lib/rule-run"
 import { withoutKey } from "@/lib/utils"
 
-/** Work a rule can be busy with; a preview runs on its own page, so it is never run from here. */
-export type RuleCommand = "preview" | "enable" | "sync" | "reconcile" | "pause"
+/**
+ * Work a rule can be busy with. A preview runs on its own page, and starting a rule happens only
+ * there, after its events were seen, so neither is run from here.
+ */
+export type RuleCommand = "preview" | "sync" | "reconcile" | "pause"
 /** The commands this hook runs. */
 export type RunnableCommand = Exclude<RuleCommand, "preview">
 export type RuleFeedback = { tone: "success" | "error"; text: string }
@@ -41,7 +43,6 @@ export function clearCompletedWork<T extends { running: RunningWork | null }>(
 }
 
 const FAILED: Record<RunnableCommand, MessageKey> = {
-  enable: "ruleDetails.commands.failed.enable",
   sync: "ruleDetails.commands.failed.sync",
   reconcile: "ruleDetails.commands.failed.reconcile",
   pause: "ruleDetails.commands.failed.pause",
@@ -68,20 +69,9 @@ export const RULE_CHANGE_QUERIES = [
   ["incidents"],
 ] as const
 
-export const PENDING_LABELS: Record<RuleCommand, MessageKey> = {
-  preview: "ruleDetails.commands.pending.preview",
-  enable: "ruleDetails.commands.pending.enable",
-  sync: "ruleDetails.commands.pending.sync",
-  reconcile: "ruleDetails.commands.pending.reconcile",
-  pause: "ruleDetails.commands.pending.pause",
-}
-
 /** What a command did, in the active language. */
 async function execute(i18n: I18n, ruleId: string, command: RunnableCommand, destination: string): Promise<string> {
   switch (command) {
-    case "enable":
-      await api.enableRule(ruleId)
-      return enabledMessage(i18n, destination)
     case "sync":
       return syncResultMessage(i18n, await api.syncRule(ruleId))
     case "reconcile":

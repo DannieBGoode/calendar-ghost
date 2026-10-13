@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query"
 import { CheckCircle2, CircleAlert, CircleDot, CirclePause, LoaderCircle, ShieldAlert } from "lucide-react"
 
 import { OverflowMenu, type OverflowMenuItem } from "@/components/overflow-menu"
@@ -11,7 +10,7 @@ import { ruleStateLabel } from "@/lib/rule-change"
 import { previewReadyLabel } from "@/lib/rule-run"
 import { workDescription, workLabel, workMeta, type RuleWork, type RuleWorkKind } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
-import { PENDING_LABELS, rulePreviewKey, type RuleCommand, type RuleFeedback, type RunnableCommand } from "@/lib/use-rule-commands"
+import type { RuleCommand, RuleFeedback, RunnableCommand } from "@/lib/use-rule-commands"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
@@ -59,17 +58,12 @@ export function RuleStatusBadge({
   )
 }
 
-/**
- * The one visible next step for a rule; routine commands live in the overflow menu. While a
- * command runs the button is aria-disabled rather than disabled, so it keeps keyboard focus.
- */
+/** The one visible next step for a rule; routine commands live in the overflow menu. */
 export function RuleNextAction({
   ruleId,
   state,
   reauthorize,
-  pending,
   describedBy,
-  onRun,
   onPreview,
   onViewChange,
 }: {
@@ -77,10 +71,8 @@ export function RuleNextAction({
   state: string
   /** An account of the rule to reauthorize first; its Settings row is the next step. */
   reauthorize: { id: string } | undefined
-  pending: RuleCommand | undefined
   describedBy?: string | undefined
-  onRun: (command: RunnableCommand) => void
-  /** Opens the rule's preview page, which previews it. */
+  /** Opens the rule's preview page, where it is previewed and started. */
   onPreview: () => void
   onViewChange: ViewChange
 }) {
@@ -104,20 +96,21 @@ export function RuleNextAction({
       </Button>
     )
   }
+  // A previewed rule starts only from its preview, where the events it will write are in view.
   if (state === "dry_run_validated") {
     return (
-      <Button
-        aria-disabled={pending !== undefined || undefined}
-        aria-describedby={describedBy}
-        onClick={() => pending === undefined && onRun("enable")}
-      >
-        {pending === "enable" ? (
-          <>
-            <LoaderCircle aria-hidden="true" className="work-spinner" /> {t(PENDING_LABELS.enable)}
-          </>
-        ) : (
-          t("ruleDetails.commands.startSyncing")
-        )}
+      <Button asChild>
+        <a
+          href={appPathForRulePreview(ruleId)}
+          aria-describedby={describedBy}
+          onClick={(event) => {
+            if (!isPlainLeftClick(event)) return
+            event.preventDefault()
+            onPreview()
+          }}
+        >
+          {t("ruleDetails.commands.reviewAndStart")}
+        </a>
       </Button>
     )
   }
@@ -139,17 +132,7 @@ export function RuleNextAction({
   )
 }
 
-/** Opens a rule's preview page for a fresh preview, never one kept from earlier in the session. */
-function useFreshPreview(ruleId: string, onPreview: () => void) {
-  const queryClient = useQueryClient()
-  return () => {
-    queryClient.removeQueries({ queryKey: rulePreviewKey(ruleId) })
-    onPreview()
-  }
-}
-
 export function RuleCommandMenu({
-  ruleId,
   state,
   unauthorized,
   pending,
@@ -157,9 +140,7 @@ export function RuleCommandMenu({
   destination,
   reserveSpace = false,
   onRun,
-  onPreview,
 }: {
-  ruleId: string
   state: string
   /** Whether an account of the rule needs reauthorization, so running it now would fail. */
   unauthorized: boolean
@@ -169,22 +150,10 @@ export function RuleCommandMenu({
   /** Keeps list rows aligned when a rule has no routine commands. */
   reserveSpace?: boolean
   onRun: (command: RunnableCommand) => void
-  /** Opens the rule's preview page. */
-  onPreview: () => void
 }) {
   const { t } = useI18n()
-  const previewAgain = useFreshPreview(ruleId, onPreview)
   const busy = pending !== undefined
   const items: OverflowMenuItem[] = []
-  if (state === "dry_run_validated") {
-    items.push({
-      id: "preview",
-      label: t("ruleDetails.commands.previewAgain"),
-      description: t("ruleDetails.commands.previewAgainDescription", { destination }),
-      disabled: busy,
-      onSelect: previewAgain,
-    })
-  }
   if (state === "enabled" && !unauthorized) {
     items.push(
       {
@@ -216,29 +185,21 @@ export function RuleCommandMenu({
   return <OverflowMenu label={t("ruleDetails.commands.moreActions", { source, destination })} items={items} />
 }
 
-/** What the latest preview found, which the Start syncing button refers to, and a way to see it. */
+/** What the latest preview found, which Review and start leads back to. */
 export function PreviewReadyNote({
   id,
-  ruleId,
   preview,
   destination,
-  onPreview,
 }: {
   id: string
-  ruleId: string
   preview: PreviewSummary | null | undefined
   destination: string
-  onPreview: () => void
 }) {
   const i18n = useI18n()
   const now = useNow()
-  const previewAgain = useFreshPreview(ruleId, onPreview)
   return (
-    <p className="rule-note">
-      <span id={id}>{previewReadyLabel(i18n, preview, destination, now)}</span>{" "}
-      <button type="button" className="rule-note-action" onClick={previewAgain}>
-        {i18n.t("ruleDetails.commands.previewAgain")}
-      </button>
+    <p id={id} className="rule-note">
+      {previewReadyLabel(i18n, preview, destination, now)}
     </p>
   )
 }
