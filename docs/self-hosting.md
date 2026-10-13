@@ -309,7 +309,8 @@ their status.
 
 As an administrator, you may also let a token read Installation Health at
 `GET /api/v1/installation/health`: incidents about the installation itself, such as a stalled
-scheduler, and how many people are in each status. It names no rule, calendar, or person, which
+scheduler or a client secret about to expire, likely causes only you can fix, and how many people
+are in each status. It names no rule, calendar, or person, which
 makes it the right answer for a monitor that watches the installation for everyone. Tick **Also
 read Installation Health** when you issue the token; it stops working there if you stop being an
 administrator.
@@ -389,6 +390,22 @@ Headers: {"Authorization": "Bearer <token>"}
 Json Query: $.needs_attention
 Expected Value: false
 ```
+
+This monitor reads the status of the person who issued the token, so it alerts only when that
+person's own rules need attention. If other people use the installation, or you have no rules of
+a provider yourself, add a second monitor on Installation Health with an administrator's token
+that has **Also read Installation Health**:
+
+```text
+URL: https://ghost.example.lan/api/v1/installation/health
+Headers: {"Authorization": "Bearer <administrator token>"}
+Json Query: $.needs_attention
+Expected Value: false
+```
+
+It alerts for everyone, without naming anyone: a stalled scheduler, a client secret that expires
+within 30 days (when its date is in `.env`), and a cause only you can fix, such as an expired client
+secret or a turned-off Google Calendar API, as soon as it stops anyone's rules.
 
 **Homepage.** Add a `customapi` widget to the Calendar Ghost service:
 
