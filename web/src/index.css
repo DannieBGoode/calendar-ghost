@@ -6080,7 +6080,8 @@ td.rule-preview-col-when {
     width: auto;
   }
 
-  .rule-preview-row {
+  /* Beats the display: block above, which a bare row class would lose to. */
+  .rule-preview-table .rule-preview-row {
     display: grid;
     grid-template-areas:
       "when outcome"
