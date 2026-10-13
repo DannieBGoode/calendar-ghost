@@ -57,6 +57,16 @@ const RESPONSE_WORDS: Partial<Record<PreviewItem["response"], MessageKey>> = {
   needs_action: "rulePreview.row.unanswered",
 }
 
+/** Reasons that name the event's Invitation Response, so its row need not name it twice. */
+const RESPONSE_REASONS = new Set([
+  "declined",
+  "declined_removed",
+  "tentative_excluded",
+  "tentative_excluded_removed",
+  "awaiting_response",
+  "awaiting_response_removed",
+])
+
 /** "Add", or "Not synced: birthday" when the outcome has a reason worth naming. */
 export function outcomeText(i18n: I18n, item: PreviewItem): string {
   const outcome = i18n.t(OUTCOME_WORDS[previewOutcome(item)])
@@ -120,6 +130,12 @@ function occurrenceNote(i18n: I18n, item: PreviewItem): string {
   return i18n.t("rulePreview.row.moved", { time })
 }
 
+/** The Invitation Response to name, unless the outcome already gives it ("Not synced: you declined"). */
+function responseNote(item: PreviewItem): MessageKey | undefined {
+  if (item.projection === null && RESPONSE_REASONS.has(item.reason)) return undefined
+  return RESPONSE_WORDS[item.response]
+}
+
 /** What else the source row says: its recurrence, a change to one date, or your response. */
 export function sourceNotes(i18n: I18n, placed: PlacedItem): string[] {
   const { item, since } = placed
@@ -130,7 +146,7 @@ export function sourceNotes(i18n: I18n, placed: PlacedItem): string[] {
     if (since) notes.push(i18n.t("rulePreview.row.since", { date: i18n.format.date(since, SHORT_DAY) }))
   }
   if (item.kind === "occurrence") notes.push(occurrenceNote(i18n, item))
-  const response = RESPONSE_WORDS[item.response]
+  const response = responseNote(item)
   if (response) notes.push(i18n.t(response))
   // An excluded birthday already says so in its outcome.
   if (item.birthday && item.projection) notes.push(i18n.t("rulePreview.row.birthday"))

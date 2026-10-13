@@ -17,7 +17,7 @@ import {
 } from "@/lib/rule-preview"
 import { destinationNotes, outcomeParts, outcomeText, sourceNotes, whenText } from "@/lib/rule-preview-text"
 
-const COLUMNS = 5
+const COLUMNS = 4
 const DAY: Intl.DateTimeFormatOptions = { weekday: "short", day: "numeric", month: "short" }
 
 /** Removals and blocks are the outcomes nobody should miss; the rest are quiet. */
@@ -68,17 +68,16 @@ function PreviewRow({ placed }: { placed: PlacedItem }) {
         <span className="rule-preview-title">{item.title || i18n.t("rulePreview.row.untitled")}</span>
         <Notes notes={sourceNotes(i18n, placed)} />
       </td>
-      <td role="cell" className="rule-preview-col-arrow" aria-hidden="true">
-        {item.projection && <ArrowRight />}
-      </td>
       <td role="cell" className="rule-preview-col-destination">
         {item.projection ? (
           <>
+            <ArrowRight aria-hidden="true" className="rule-preview-into" />
             <span className="rule-preview-title">{item.projection.title}</span>
             <Notes notes={destinationNotes(i18n, placed)} />
           </>
         ) : (
-          <span className="rule-preview-not-written">{i18n.t("rulePreview.row.notWritten")}</span>
+          // The outcome beside it says why; sighted readers see an empty cell, others hear this.
+          <span className="sr-only">{i18n.t("rulePreview.row.notWritten")}</span>
         )}
       </td>
       <td role="cell" className="rule-preview-col-outcome">
@@ -127,7 +126,7 @@ function EarlierRows({ days }: { days: PreviewDay[] }) {
       <tbody role="rowgroup" className="rule-preview-earlier">
         <tr role="row">
           <th scope="rowgroup" role="rowheader" colSpan={COLUMNS}>
-            <button type="button" className="rule-preview-earlier-toggle" aria-label={name} aria-expanded={open} aria-controls="rule-preview-earlier-days" onClick={() => setOpen((value) => !value)}>
+            <button type="button" className="rule-preview-earlier-toggle" aria-label={name} aria-expanded={open} aria-controls={open ? "rule-preview-earlier-days" : undefined} onClick={() => setOpen((value) => !value)}>
               <ChevronRight aria-hidden="true" className="rule-preview-chevron" />
               <span>{title}</span>
               <span className="rule-preview-earlier-counts">
@@ -159,11 +158,14 @@ export function PreviewTable({
   source,
   destination,
   now,
+  zone,
 }: {
   layout: PreviewLayout
   source: string
   destination: string
   now: Date
+  /** The browser's time zone, such as "GMT+2", which every time in the table is in. */
+  zone: string
 }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -174,12 +176,14 @@ export function PreviewTable({
         <caption className="sr-only">{t("rulePreview.table.caption", { source, destination })}</caption>
         <thead role="rowgroup">
           <tr role="row">
-            <th scope="col" role="columnheader" className="rule-preview-col-when">{t("rulePreview.table.when")}</th>
+            <th scope="col" role="columnheader" className="rule-preview-col-when">
+              {t("rulePreview.table.when")} <span className="rule-preview-role">{zone}</span>
+            </th>
             <th scope="col" role="columnheader" className="rule-preview-col-source">
               {source} <span className="rule-preview-role">{t("rulePreview.table.source")}</span>
             </th>
-            <th scope="col" role="columnheader" className="rule-preview-col-arrow" aria-hidden="true"><ArrowRight /></th>
             <th scope="col" role="columnheader" className="rule-preview-col-destination">
+              <ArrowRight aria-hidden="true" className="rule-preview-into" />
               {destination} <span className="rule-preview-role">{t("rulePreview.table.destination")}</span>
             </th>
             <th scope="col" role="columnheader" className="rule-preview-col-outcome">{t("rulePreview.table.outcome")}</th>

@@ -1,7 +1,7 @@
 {
   "page": {
     "documentTitle": "Preview",
-    "lead": "Preview. Nothing is written until you start syncing.",
+    "lead": "A preview: nothing is written to {destination} until you start syncing.",
     "back": "Back to rule",
     "reading": "Reading {source}…",
     "readingBoth": "Reading {source} and {destination}…",
@@ -47,7 +47,11 @@
     "showing": "Showing {shown} of {total}",
     "clear": "Clear filters",
     "noMatch": "No events match these filters.",
-    "timeZone": "Times in your time zone ({zone})"
+    "kindToggle": "Kind",
+    "kindActive": {
+      "one": "{count} chosen",
+      "other": "{count} chosen"
+    }
   },
   "table": {
     "caption": "What {source} → {destination} will write to {destination}",
@@ -71,7 +75,7 @@
     "allDayDays": "All day, {range}",
     "timeRange": "{start}–{end}",
     "endsNextDay": "{start}–{end} {day}",
-    "notWritten": "Not written",
+    "notWritten": "Nothing is written",
     "untitled": "(No title)",
     "since": "since {date}",
     "moved": "Moved from {time}",
@@ -147,10 +151,9 @@
     "emptyTitle": "{source} has no events from {date} onward",
     "emptyBody": "Once you start syncing, new events sync as they appear.",
     "allExcluded": {
-      "one": "The {count} event in {source} will not sync with these settings.",
-      "other": "None of the {count} events in {source} will sync with these settings."
-    },
-    "changeWhatSyncs": "Change what syncs"
+      "one": "The {count} event in {source} will not sync with these settings. Change them above.",
+      "other": "None of the {count} events in {source} will sync with these settings. Change them above."
+    }
   },
   "rule": {
     "account": "{provider} · {email}",

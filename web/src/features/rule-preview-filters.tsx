@@ -1,3 +1,6 @@
+import { SlidersHorizontal } from "lucide-react"
+import { useState } from "react"
+
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
@@ -36,9 +39,32 @@ function FilterChip({ label, count, pressed, onToggle }: { label: string; count:
   )
 }
 
+/** One choice of three, joined so it reads as a single control rather than three toggles. */
+function ShowChoice({
+  counts,
+  show,
+  onChange,
+}: {
+  counts: Record<PreviewShow, number>
+  show: PreviewShow
+  onChange: (show: PreviewShow) => void
+}) {
+  const { t, format } = useI18n()
+  const shows = (["all", "sync", "out"] as const).filter((each) => each === "all" || counts[each] > 0)
+  return (
+    <div className="rule-preview-segments" role="group" aria-label={t("rulePreview.filters.show")}>
+      {shows.map((each) => (
+        <button key={each} type="button" aria-pressed={show === each} onClick={() => onChange(each)}>
+          {t("rulePreview.filters.chip", { label: t(SHOW_WORDS[each]), count: format.number(counts[each]) })}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /**
- * Show narrows to what the destination will or will not hold; Kind to any of the chosen kinds.
- * A chip exists only when the whole preview has its kind, so chips never vanish while filtering.
+ * Show narrows to what the destination will or will not hold; Kind, folded until wanted, to any of
+ * the chosen kinds. A kind exists only when the whole preview has it, so chips never vanish.
  */
 export function PreviewFilterBar({
   items,
@@ -52,35 +78,41 @@ export function PreviewFilterBar({
   onChange: (filters: PreviewFilters) => void
 }) {
   const { t, format } = useI18n()
+  const [kindsOpen, setKindsOpen] = useState(false)
   const synced = items.filter((item) => item.projection).length
   const showCounts: Record<PreviewShow, number> = { all: items.length, sync: synced, out: items.length - synced }
   const kindCounts = tally(items, previewKinds)
   const kinds = PREVIEW_KINDS.filter((kind) => kindCounts.has(kind))
   const chosen = new Set(filters.kinds)
-  const shows = (["all", "sync", "out"] as const).filter((show) => show === "all" || showCounts[show] > 0)
+  const openKinds = kindsOpen || chosen.size > 0
 
   function toggleKind(kind: PreviewKind) {
-    const kinds = chosen.has(kind) ? filters.kinds.filter((each) => each !== kind) : [...filters.kinds, kind]
-    onChange({ ...filters, kinds })
+    const next = chosen.has(kind) ? filters.kinds.filter((each) => each !== kind) : [...filters.kinds, kind]
+    onChange({ ...filters, kinds: next })
   }
 
   return (
     <div className="rule-preview-filters">
-      <div className="rule-preview-filter-row" role="group" aria-labelledby="rule-preview-show">
-        <span id="rule-preview-show" className="rule-preview-filter-label">{t("rulePreview.filters.show")}</span>
-        {shows.map((show) => (
-          <FilterChip
-            key={show}
-            label={t(SHOW_WORDS[show])}
-            count={showCounts[show]}
-            pressed={filters.show === show}
-            onToggle={() => onChange({ ...filters, show })}
-          />
-        ))}
+      <div className="rule-preview-filter-row">
+        <ShowChoice counts={showCounts} show={filters.show} onChange={(show) => onChange({ ...filters, show })} />
+        {kinds.length > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="rule-preview-kind-toggle"
+            aria-expanded={openKinds}
+            aria-controls="rule-preview-kinds"
+            onClick={() => setKindsOpen(!openKinds)}
+          >
+            <SlidersHorizontal aria-hidden="true" />
+            {t("rulePreview.filters.kindToggle")}
+            {chosen.size > 0 && <span className="rule-preview-kind-count">{t("rulePreview.filters.kindActive", { count: chosen.size })}</span>}
+          </Button>
+        )}
       </div>
-      {kinds.length > 0 && (
-        <div className="rule-preview-filter-row" role="group" aria-labelledby="rule-preview-kind">
-          <span id="rule-preview-kind" className="rule-preview-filter-label">{t("rulePreview.filters.kind")}</span>
+      {openKinds && (
+        <div id="rule-preview-kinds" className="rule-preview-filter-row" role="group" aria-label={t("rulePreview.filters.kind")}>
           {kinds.map((kind) => (
             <FilterChip
               key={kind}

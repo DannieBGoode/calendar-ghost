@@ -176,7 +176,7 @@ describe("RulePreviewView", () => {
     await renderPreview(testI18n())
 
     const text = container.textContent
-    expect(text).toContain("Preview. Nothing is written until you start syncing.")
+    expect(text).toContain("A preview: nothing is written to Work until you start syncing.")
     expect(text).toContain("1 to add")
     expect(text).toContain("1 not synced")
     expect(text).toContain("Busy only: titles, descriptions, and locations stay private.")
@@ -187,7 +187,7 @@ describe("RulePreviewView", () => {
     expect(text).toContain("new events sync as they appear")
     const rows = [...container.querySelectorAll(".rule-preview-row")].map((row) => row.textContent)
     expect(rows).toEqual([
-      "All dayMumNot writtenNot synced: birthday",
+      "All dayMumNothing is writtenNot synced: birthday",
       expect.stringMatching(/^9:00 AM–10:00 AMDentistBusyAdd$/),
     ])
     expect(calls.filter((call) => call.startsWith("POST"))).toEqual(["POST /api/v1/rules/rule-1/preview"])

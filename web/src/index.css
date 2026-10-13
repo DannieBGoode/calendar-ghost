@@ -5786,13 +5786,6 @@ thead + .incident-group th {
   gap: 0.5rem;
 }
 
-.rule-preview-filter-label {
-  min-width: 3rem;
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
 .rule-preview-showing {
   display: flex;
   flex-wrap: wrap;
@@ -5801,12 +5794,6 @@ thead + .incident-group th {
   color: var(--muted-foreground);
   font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
-}
-
-.rule-preview-zone {
-  margin-bottom: -0.5rem;
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
 }
 
 .rule-preview-table-wrap {
@@ -5859,24 +5846,63 @@ thead + .incident-group th {
 }
 
 .rule-preview-col-when {
-  width: 9.5rem;
-}
-
-.rule-preview-col-arrow {
-  width: 2.25rem;
-  color: var(--muted-foreground);
-  text-align: center;
-}
-
-.rule-preview-col-arrow svg {
-  display: inline-block;
-  width: 0.875rem;
-  height: 0.875rem;
-  vertical-align: -0.1em;
+  width: 10rem;
 }
 
 .rule-preview-col-outcome {
   width: 16rem;
+}
+
+/* The arrow leads into what the destination holds, right beside it, never across an empty gap. */
+.rule-preview-into {
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-right: 0.5rem;
+  color: var(--muted-foreground);
+  vertical-align: -0.1em;
+}
+
+/* Show is one choice of three, so it reads as one joined control, unlike the Kind toggles. */
+.rule-preview-segments {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.rule-preview-segments button {
+  min-height: 2rem;
+  padding: 0 0.875rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+
+.rule-preview-segments button + button {
+  border-left: 1px solid var(--border);
+}
+
+.rule-preview-segments button:hover {
+  color: var(--foreground);
+}
+
+.rule-preview-segments button[aria-pressed="true"] {
+  background: var(--primary-soft);
+  color: var(--foreground);
+}
+
+.rule-preview-segments button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.rule-preview-kind-count {
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
 }
 
 td.rule-preview-col-when {
@@ -5894,10 +5920,6 @@ td.rule-preview-col-when {
   margin-left: 0.5rem;
   color: var(--muted-foreground);
   font-size: 0.8125rem;
-}
-
-.rule-preview-not-written {
-  color: var(--muted-foreground);
 }
 
 /* Rows the destination will not hold step back, so what it will hold reads first. */
@@ -6216,17 +6238,9 @@ p.rule-preview-summary {
     grid-area: source;
   }
 
-  .rule-preview-row .rule-preview-col-arrow {
-    display: none;
-  }
-
   .rule-preview-row .rule-preview-col-destination {
     grid-area: destination;
     color: var(--muted-foreground);
-  }
-
-  .rule-preview-row .rule-preview-col-destination::before {
-    content: "→ " / "";
   }
 
   .rule-preview-note {
@@ -6234,8 +6248,9 @@ p.rule-preview-summary {
     margin-left: 0;
   }
 
-  .rule-preview-filter-row .health-count.health-count {
-    height: 2.75rem;
+  .rule-preview-filter-row .health-count.health-count,
+  .rule-preview-segments button {
+    min-height: 2.75rem;
   }
 
   .rule-preview-start,

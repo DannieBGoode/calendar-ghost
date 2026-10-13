@@ -46,32 +46,33 @@ destination, or why it stays out.
 
 ## Header
 
-Four quiet lines, the page's 3-second answer, in this order:
-
 - **Title:** "Family → Work", `{typography.headline}`, with no label above it (Page Titles).
-- **What this is:** "Preview. Nothing is written until you start syncing.", in body text and Calm Ink.
-- **What changes:** "+ 38 to add · ~ 3 to update · − 1 to remove · ⊘ 9 not synced", in
-  `{typography.label}` with Activity's `ChangeSign` marks. Zero counts are left out. The counts
-  cover the whole preview, never the filtered view.
-- **What is shared:** the policy's own line, in supporting text with an icon.
-  - Busy-Only Projection: a lock icon in Muted Ink, "Busy only: titles, descriptions, and locations
-    stay private."
-  - Details Projection: an eye icon in Attention Ochre ink, "Copies titles, descriptions, and
-    locations to Work. Anyone who can see Work sees them." This follows the Destructive and
-    Privacy-Widening Changes rule. In the table, a destination cell whose source has a description
-    or location adds a muted "with description and location" under the title.
+- **Calendars:** each calendar with its account avatar (the provider's mark on its corner) and, in
+  words, its provider and address: "Family source · Google account · sam@family.example".
+- **What this is:** "A preview: nothing is written to Work until you start syncing.", then
+  "Previewed at 4:55 PM · Preview again".
+- **What is shared:** the policy's own line. Busy-Only: a lock and "Busy only: titles, descriptions,
+  and locations stay private." Details: an eye in Attention Ochre and "Copies titles, descriptions,
+  and locations to Work. Anyone who can see Work sees them." (Destructive and Privacy-Widening
+  Changes).
+- **What this rule syncs:** a quiet panel with the rule's other choices in Rule Details' words
+  (all-day events, birthdays, Maybe, unanswered, declined, starting point) and "Change settings".
+
+The counts ("+ 12 to add · ⊘ 3 not synced") sit in the sticky footer beside Start syncing, so the
+decision is made with them in view; they cover the whole preview, never the filtered view.
 
 ## The table
 
-One table, two column groups headed by the calendars' names. The header reads
-`When | Family source | → | Work destination | What happens`. The arrow states the direction once,
-and the arrow in each row repeats it. There are no colored calendar dots, because the words carry it.
+One table, four columns: `When (GMT+2) | Family source | → Work destination | What happens`. The
+When header names the time zone. Each written row starts its destination cell with the arrow, so
+the arrow sits beside what it leads to. There are no colored calendar dots.
 
 - The destination shows exactly what will be written: the policy's title ("Busy", "Busy
   (tentative)", or the title under Details Projection) and its recurrence. Its time is the
   source's, so it is not repeated.
-- An excluded row's destination cell reads "Not written" in Muted Ink, never a bare dash, so a
-  screen reader says what it means.
+- An excluded row's destination cell is empty to the eye and says "Nothing is written" to screen
+  readers; its outcome gives the reason once ("Not synced: you declined"), so the source cell does
+  not repeat the response.
 - What happens uses Activity's signs and reason words (`ChangeSign`, `activity-reasons.ts`): + Add,
   ~ Update, − Remove, ✓ Already up to date, ⊘ Not synced with its reason (all-day, birthday, you
   declined, you answered Maybe, you haven't answered, written by Calendar Ghost, no occurrence
@@ -103,20 +104,11 @@ and the arrow in each row repeats it. There are no colored calendar dots, becaus
 
 ## Filters
 
-The chips are the pill toggles People uses for "Show only" (`.health-count` in `people-health.tsx`):
-`aria-pressed`, pressed on Lantern Indigo's soft tint with an indigo outline. They are never filled
-in Lantern Indigo, which stays reserved for the one primary action (Quiet Indicator Rule).
-
-1. **Show** (single-select): All · Will sync · Not synced.
-2. **Kind** (multi-select; a row matches any selected kind): All-day · Birthdays · Recurring ·
-   Declined · Maybe · Not answered. The words follow the Invitation Response wording in
-   `CONTEXT.md`.
-
-- The defaults are All, with no kind selected.
-- A chip appears only when the whole preview has rows of its kind. Chips never disappear while you
-  filter.
-- Under the chips: "Showing 12 of 51", and "Clear filters" whenever a filter is set.
-- Filters change only this view, never the rule.
+- **Show** is one joined segmented control (All · Will sync · Not synced), single-choice.
+- **Kind** (All-day · Birthdays · Recurring · Declined · Maybe · Not answered) folds behind a
+  "Kind" toggle and stays open while a kind is chosen; chosen kinds combine as "any of".
+- A chip exists only when the whole preview has its kind; "Showing 12 of 51" and "Clear filters"
+  appear while a filter is set. Filters change only this view, never the rule.
 
 ## Start syncing
 

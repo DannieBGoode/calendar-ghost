@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, ArrowRight, Eye, LoaderCircle, Lock } from "lucide-react"
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react"
 
 import { GhostMark } from "@/components/ghost-mark"
 import { PageSkeleton } from "@/components/page-skeleton"
@@ -158,7 +158,6 @@ function RulePreviewPage({
           names={names}
           lookbackDays={detail.initial_lookback_days}
           onAnnounce={setAnnouncement}
-          onChangeRule={openRule}
         />
       ) : (
         <PreviewSkeleton />
@@ -208,7 +207,7 @@ function PreviewHeader({
         <span className="sr-only">{t("ruleDetails.page.heading", names)}</span>
       </h1>
       {calendars}
-      <p className="rule-preview-lead">{t("rulePreview.page.lead")}</p>
+      <p className="rule-preview-lead">{t("rulePreview.page.lead", { destination: names.destination })}</p>
       {stamp}
       {reading && (
         <p className="rule-preview-reading">
@@ -231,19 +230,19 @@ function PreviewResults({
   names,
   lookbackDays,
   onAnnounce,
-  onChangeRule,
 }: {
   run: PreviewRun
   names: Names
   lookbackDays: number
   onAnnounce: (text: string) => void
-  /** Opens the rule, where its policy says what syncs. */
-  onChangeRule: () => void
 }) {
   const i18n = useI18n()
   const [filters, setFilters] = useState<PreviewFilters>(NO_FILTERS)
   const now = run.completedAt
-  const shown = run.items.filter((item) => matchesFilters(item, filters))
+  // Placing a series at its next date steps through its rule, so it is not redone on every render.
+  const shown = useMemo(() => run.items.filter((item) => matchesFilters(item, filters)), [run.items, filters])
+  const layout = useMemo(() => layOut(shown, now), [shown, now])
+  const zone = useMemo(() => timeZoneName(i18n.formatLocale, now), [i18n.formatLocale, now])
   if (!run.items.length) {
     const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - lookbackDays)
     return <PreviewEmpty source={names.source} from={from} />
@@ -258,16 +257,12 @@ function PreviewResults({
     <>
       {!written && (
         <p className="rule-preview-note-line">
-          {i18n.t("rulePreview.states.allExcluded", { count: run.items.length, source: names.source })}{" "}
-          <Button type="button" variant="ghost" size="sm" onClick={onChangeRule}>
-            {i18n.t("rulePreview.states.changeWhatSyncs")}
-          </Button>
+          {i18n.t("rulePreview.states.allExcluded", { count: run.items.length, source: names.source })}
         </p>
       )}
       <PreviewFilterBar items={run.items} filters={filters} shown={shown.length} onChange={changeFilters} />
-      <p className="rule-preview-zone">{i18n.t("rulePreview.filters.timeZone", { zone: timeZoneName(i18n.formatLocale, now) })}</p>
       {shown.length ? (
-        <PreviewTable layout={layOut(shown, now)} source={names.source} destination={names.destination} now={now} />
+        <PreviewTable layout={layout} source={names.source} destination={names.destination} now={now} zone={zone} />
       ) : (
         <p className="rule-preview-no-match">{i18n.t("rulePreview.filters.noMatch")}</p>
       )}
