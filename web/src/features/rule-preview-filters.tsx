@@ -1,5 +1,5 @@
 import { ListFilter } from "lucide-react"
-import { useRef, useState, type RefObject } from "react"
+import { useRef, useState, type KeyboardEvent, type RefObject } from "react"
 
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
@@ -16,6 +16,8 @@ import {
   type PreviewKind,
   type PreviewShow,
 } from "@/lib/rule-preview"
+
+const SHOWS: readonly PreviewShow[] = ["all", "sync", "out"]
 
 const SHOW_WORDS: Record<PreviewShow, MessageKey> = {
   all: "rulePreview.filters.all",
@@ -52,6 +54,7 @@ function FilterOption({
   pressed,
   radio = false,
   onToggle,
+  onKeyDown,
 }: {
   label: string
   count: number
@@ -59,6 +62,7 @@ function FilterOption({
   /** One choice of several, which a press cannot undo, rather than an on/off toggle. */
   radio?: boolean
   onToggle: () => void
+  onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void
 }) {
   const { t, format } = useI18n()
   // Stays in the tab order, so keyboard and screen reader users meet it and hear its 0.
@@ -70,6 +74,9 @@ function FilterOption({
       role={radio ? "radio" : undefined}
       aria-checked={radio ? pressed : undefined}
       aria-pressed={radio ? undefined : pressed}
+      // In a radio group only the chosen one is a tab stop; the arrow keys move between them.
+      tabIndex={radio && !pressed ? -1 : undefined}
+      onKeyDown={onKeyDown}
       aria-label={t("rulePreview.filters.chip", { label, count: format.number(count) })}
       aria-disabled={empty ? true : undefined}
       onClick={() => !empty && onToggle()}
@@ -93,9 +100,20 @@ function ShowChoice({
   onChange: (show: PreviewShow) => void
 }) {
   const { t } = useI18n()
+  // The arrow keys, Home, and End choose and focus the next one that would show something.
+  function move(event: KeyboardEvent<HTMLButtonElement>, from: number) {
+    const open = SHOWS.filter((each) => counts[each] > 0 || each === show)
+    const at = open.indexOf(SHOWS[from] ?? "all")
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
+    const target = event.key === "Home" ? open[0] : event.key === "End" ? open.at(-1) : step ? open[(at + step + open.length) % open.length] : undefined
+    if (!target) return
+    event.preventDefault()
+    onChange(target)
+    groupRef.current?.querySelectorAll<HTMLButtonElement>("[role=radio]")[SHOWS.indexOf(target)]?.focus()
+  }
   return (
     <div ref={groupRef} className="rule-preview-segments" role="radiogroup" aria-label={t("rulePreview.filters.show")}>
-      {(["all", "sync", "out"] as const).map((each) => (
+      {SHOWS.map((each, index) => (
         <FilterOption
           key={each}
           label={t(SHOW_WORDS[each])}
@@ -103,6 +121,7 @@ function ShowChoice({
           pressed={show === each}
           radio
           onToggle={() => onChange(each)}
+          onKeyDown={(event) => move(event, index)}
         />
       ))}
     </div>

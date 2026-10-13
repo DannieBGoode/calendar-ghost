@@ -160,10 +160,10 @@ function namedZone(timeZone: string): Zone {
   }
 }
 
-/** The series' zone when the browser knows it, otherwise the browser's own. */
 /** One Zone per name, since building its formatter costs far more than using it. */
 const ZONES = new Map<string, Zone>()
 
+/** The series' zone when the browser knows it, otherwise the browser's own. */
 function zoneOf(timeZone: string | null | undefined): Zone {
   if (!timeZone) return LOCAL
   const known = ZONES.get(timeZone)
@@ -296,7 +296,8 @@ export function nextOccurrence(repeat: Repeat | null, first: Date, from: Date, t
   const zone = zoneOf(timeZone)
   const wall = zone.wall(first)
   let seen = 0
-  for (let step = firstStep(repeat, wall, zone.wall(from)); step < STEP_LIMIT; step += 1) {
+  const start = firstStep(repeat, wall, zone.wall(from))
+  for (let step = start; step < start + STEP_LIMIT; step += 1) {
     const instants = period(repeat, wall, step)
       .map((day) => ({ day, at: zone.at({ ...wall, ...day }) }))
       .filter(({ at }) => at >= first)

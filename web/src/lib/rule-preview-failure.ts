@@ -5,7 +5,7 @@ import { ApiError, type ConnectedAccount } from "@/lib/api"
 
 /** Why a preview did not finish, sorted by the one step that helps. */
 export type PreviewFailure =
-  | { kind: "lapsed"; account: ConnectedAccount | undefined }
+  | { kind: "lapsed"; account: ConnectedAccount | undefined; provider: string | null }
   | { kind: "unavailable"; provider: string | null }
   | { kind: "changed" }
   | { kind: "syncing" }
@@ -32,7 +32,7 @@ export function previewFailure(
   if (error instanceof ApiError && error.code === "provider_failed") {
     const failureKind = typeof error.params.kind === "string" ? error.params.kind : ""
     const provider = typeof error.params.provider === "string" ? error.params.provider : null
-    if (LAPSED_KINDS.includes(failureKind)) return { kind: "lapsed", account: lapsedAccount(accounts, ruleAccounts, provider) }
+    if (LAPSED_KINDS.includes(failureKind)) return { kind: "lapsed", account: lapsedAccount(accounts, ruleAccounts, provider), provider }
     return { kind: "unavailable", provider }
   }
   return { kind: "failed", message: apiErrorMessage(i18n, error) }

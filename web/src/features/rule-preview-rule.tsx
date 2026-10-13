@@ -10,6 +10,24 @@ import { tentativeTitleShort } from "@/lib/invitation-responses"
 import { appPathForRule, isPlainLeftClick } from "@/lib/navigation"
 import { accountNoun } from "@/lib/providers"
 
+/** An address that may break after its "@" on a narrow screen, never in the middle of a word. */
+function Email({ address }: { address: string }) {
+  const at = address.indexOf("@") + 1
+  return (
+    <span className="rule-preview-email">
+      {at > 0 ? (
+        <>
+          {address.slice(0, at)}
+          <wbr />
+          {address.slice(at)}
+        </>
+      ) : (
+        address
+      )}
+    </span>
+  )
+}
+
 /** One account the rule reads or writes, naming its provider in words beside the avatar's mark. */
 function PreviewAccount({ account, fallback }: { account: ConnectedAccount | undefined; fallback: string }) {
   const i18n = useI18n()
@@ -27,7 +45,7 @@ function PreviewAccount({ account, fallback }: { account: ConnectedAccount | und
         // only the address.
         <span className="rule-endpoint-account rule-preview-account">
           <span>{accountNoun(i18n, account.provider)}</span>
-          <span className="rule-preview-email" title={account.email}>{account.email}</span>
+          <Email address={account.email} />
         </span>
       ) : (
         <span className="rule-endpoint-account">{fallback}</span>

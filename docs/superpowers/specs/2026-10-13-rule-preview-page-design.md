@@ -53,7 +53,8 @@ destination, or why it stays out.
   title already names the calendars, so nothing under it names them again; a rule within one
   account shows it once. Below 900px both accounts share one row, provider over address, and a
   long address shortens with an ellipsis (its full text in a tooltip).
-- **What this is:** "Previewed at 4:55 PM. Nothing is written until you start syncing.", with
+- **What this is:** "Previewed at 4:55 PM. Nothing is written until you start syncing." (with the
+  date, "Previewed Tue, Oct 13 at 4:55 PM", once the preview is not from today), with
   "Refresh" at its end. Not "Sync again": nothing has synced, and the word would promise a write.
 - **What is shared:** the policy's own line. Busy-Only: a lock and "Busy only: titles, descriptions,
   and locations stay private." Details: an eye in Attention Ochre and "Copies titles, descriptions,
@@ -117,7 +118,8 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
 
 ## Filters
 
-- **Show** is one joined segmented control (All · Will sync · Not synced), single-choice, read as a radio group.
+- **Show** is one joined segmented control (All · Will sync · Not synced), single-choice, read as a radio group: one tab stop, with the arrow keys, Home, and End moving the
+  choice.
 - **Kind** (All-day · Birthdays · Recurring · Declined · Maybe · Not answered) folds behind a
   "Kind" toggle and stays open while a kind is chosen; chosen kinds combine as "any of".
 - Every count follows the other choices (faceted): Show counts within the chosen kinds, each kind
@@ -136,22 +138,22 @@ with the page column:
 - Left: "← Back to rule" (Rule Details), then the counts ("+ 13 to add · ⊘ 4 not synced").
 - Right: "You can pause or remove the rule at any time.", then the page's one primary action,
   "Start syncing to Work" (`{components.button-primary}`).
-- When the rule copies details, the decision says so where it is made: an Attention Ochre line with
-  the eye, "Shares titles and details with Work", and the button reads "Start syncing and share
-  details with Work" (Destructive and Privacy-Widening Changes).
+- When the rule copies details, the button names the effect where the decision is made: "Start
+  syncing and share details with Work" (Destructive and Privacy-Widening Changes), with the header's
+  ochre privacy line above.
 
 The button carries no count; the counts beside it say what it will do, and no filter changes them.
 While enabling, it reads "Starting…" and is disabled. Success returns to Rule Details, which
 announces the result as it does today. The page reserves bottom padding equal to the footer's
-height, so the footer never covers the last row, and scroll padding keeps a control focused by
-keyboard above it. On a window under 30rem tall, such as a phone at large text, the footer stops
+height, so the footer never covers the last row, and scroll padding, kept at the footer's measured
+height, keeps a control focused by keyboard above it. On a window under 30rem tall, such as a phone at large text, the footer stops
 sticking and closes the page instead.
 
 ## States
 
 | State | What the person sees |
 |---|---|
-| Loading | Title and privacy line at once. In place of the lead, at its size so nothing below moves, the small ghost mark and "Reading Family…" ("Reading Family and Work…" when the rule has mappings). Refresh does the same; the last results stay, dimmed and `aria-busy`, so filters, Kind, and Earlier keep their state and the page does not jump. A failure panel stays while its retry reads, and focus moves to the lead's Refresh, so it never falls to the page. Six skeleton rows; no chips until counts exist. "Start syncing" disabled, with "Available when the preview finishes". No shimmer under reduced motion. |
+| Loading | Title and privacy line at once. In place of the lead, at its size so nothing below moves, the small ghost mark and "Reading Family…" ("Reading Family and Work…" when the rule has mappings). Refresh does the same; the last results stay, dimmed, `aria-busy`, and inert, so filters, Kind, and Earlier keep their state and the page does not jump. A failure panel stays while its retry reads, and focus moves to the lead's Refresh, so it never falls to the page. Six skeleton rows; no chips until counts exist. "Start syncing" disabled, with "Available when the preview finishes". No shimmer under reduced motion. |
 | Lapsed account | In place of the table, a Destructive Red panel: "Your Google account needs reauthorization", with one action, "Reauthorize account", which opens its Settings row. |
 | Provider unavailable or limiting | An Attention Ochre panel: "Google Calendar is not answering right now", with Likely cause when known, and "Preview again". Provider text only under the diagnostic disclosure. |
 | Rule changed or busy | A Quiet Surface panel: "This rule changed while it was being previewed", with "Preview again". |
@@ -161,8 +163,9 @@ sticking and closes the page instead.
 | No rows match the filters | Inside the table: "No events match these filters", with "Clear filters". |
 | Enabling fails because the rule changed | The footer shows "This rule changed since the preview" in place of the timestamp, and "Preview again" becomes the primary action. |
 
-In every failure state, "Start syncing" is disabled with "Available when the preview finishes", and
-the footer drops the counts: a refresh that fails leaves no numbers or timestamp from the earlier
+In every failure state, "Start syncing" is disabled, and the footer drops the counts. Only a preview
+that is reading says "Available when the preview finishes"; a failed one leaves the next step to its
+panel, and a retry that fails again is announced: a refresh that fails leaves no numbers or timestamp from the earlier
 preview on the page.
 
 ## Narrow screens

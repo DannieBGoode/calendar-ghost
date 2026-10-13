@@ -15,7 +15,7 @@ import type { I18n } from "@/i18n/translator"
 import { ApiError, api, type ConnectedAccount, type RuleDetail } from "@/lib/api"
 import { appPathForRule, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
-import { NO_FILTERS, isFiltered, layOut, narrowLayout, matchesFilters, outcomeCounts, type PreviewFilters, type PreviewItem } from "@/lib/rule-preview"
+import { NO_FILTERS, isFiltered, isToday, layOut, narrowLayout, matchesFilters, outcomeCounts, type PreviewFilters, type PreviewItem } from "@/lib/rule-preview"
 import { previewFailure } from "@/lib/rule-preview-failure"
 import { outcomeParts } from "@/lib/rule-preview-text"
 import { enabledMessage } from "@/lib/rule-run"
@@ -148,9 +148,9 @@ function RulePreviewPage({
     refresh.current?.focus()
     setAnnouncement(readingText(i18n, detail, names))
     void preview.refetch().then((result) => {
-      if (result.data && !result.error) {
-        setAnnouncement(i18n.t("rulePreview.page.leadAt", { time: i18n.format.time(result.data.completedAt) }))
-      }
+      // The failure panel may be the same one as before, which a screen reader would not read again.
+      if (result.error) setAnnouncement(i18n.t("rulePreview.states.failedTitle"))
+      else if (result.data) setAnnouncement(leadText(i18n, result.data))
     })
   }
   const openRule = () => onOpenRule(detail.id)
@@ -271,7 +271,7 @@ function PreviewResults({
   if (!run.items.length) {
     const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - lookbackDays)
     return (
-      <div className="rule-preview-results" aria-busy={busy}>
+      <div className="rule-preview-results" aria-busy={busy} inert={busy}>
         <PreviewEmpty source={names.source} from={from} />
       </div>
     )
@@ -283,7 +283,8 @@ function PreviewResults({
     onAnnounce(i18n.t("rulePreview.filters.showing", { shown: i18n.format.number(count), total: i18n.format.number(run.items.length) }))
   }
   return (
-    <div className="rule-preview-results" aria-busy={busy}>
+    // Inert while Refresh reads: the dimmed rows are not current, so they are not read or used.
+    <div className="rule-preview-results" aria-busy={busy} inert={busy}>
       {!written && (
         <p className="rule-preview-note-line">
           {i18n.t("rulePreview.states.allExcluded", { count: run.items.length, source: names.source })}
@@ -310,6 +311,28 @@ function PreviewResults({
 function timeZoneName(locale: string, at: Date): string {
   const parts = new Intl.DateTimeFormat(locale, { timeZoneName: "shortGeneric" }).formatToParts(at)
   return parts.find((part) => part.type === "timeZoneName")?.value ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+}
+
+/**
+ * Keeps `--rule-preview-footer` on the page at the footer's height, which grows with text size and
+ * with what it holds, so focus moved by keyboard always stops above it.
+ */
+function useFooterHeight() {
+  const footer = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const element = footer.current
+    if (!element) return
+    const root = document.documentElement
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) root.style.setProperty("--rule-preview-footer", `${entry.borderBoxSize[0]?.blockSize ?? element.offsetHeight}px`)
+    })
+    observer.observe(element)
+    return () => {
+      observer.disconnect()
+      root.style.removeProperty("--rule-preview-footer")
+    }
+  }, [])
+  return footer
 }
 
 /** Back to the rule, when the preview was made, and the page's one primary action. */
@@ -347,8 +370,9 @@ function PreviewFooter({
   const changed = enable.error instanceof ApiError && CHANGED_CODES.includes(enable.error.code ?? "")
   const canStart = run !== undefined && !failed && !changed && detail.state === "dry_run_validated"
   const startFailure: StartFailure | null = enable.error ? (changed ? "changed" : "failed") : null
+  const footer = useFooterHeight()
   return (
-    <footer className="rule-preview-footer">
+    <footer ref={footer} className="rule-preview-footer">
       <div className="rule-preview-footer-inner">
         <a
           className="back-link"
@@ -364,7 +388,6 @@ function PreviewFooter({
         <StartSummary
           run={run}
           destination={names.destination}
-          sharesDetails={detail.privacy_policy === "copy_details"}
           outcome={startFailure}
           onRetry={() => {
             enable.reset()
@@ -377,7 +400,7 @@ function PreviewFooter({
             sharesDetails={detail.privacy_policy === "copy_details"}
             ready={canStart}
             starting={enable.isPending}
-            waiting={busy || failed}
+            waiting={busy}
             onStart={() => enable.mutate()}
           />
         )}
@@ -391,6 +414,13 @@ function readingText(i18n: I18n, detail: RuleDetail, names: Names): string {
   return detail.mapping_count > 0
     ? i18n.t("rulePreview.page.readingBoth", names)
     : i18n.t("rulePreview.page.reading", { source: names.source })
+}
+
+/** When the preview was made, with its date once it is not from today, so an old one shows it. */
+function leadText(i18n: I18n, run: PreviewRun): string {
+  const time = i18n.format.time(run.completedAt)
+  if (isToday(run.completedAt, new Date())) return i18n.t("rulePreview.page.leadAt", { time })
+  return i18n.t("rulePreview.page.leadOn", { date: i18n.format.date(run.completedAt, { weekday: "short", day: "numeric", month: "short" }), time })
 }
 
 /**
@@ -410,7 +440,7 @@ function PreviewLead({
   onRetry: () => void
 }) {
   const i18n = useI18n()
-  const text = run ? i18n.t("rulePreview.page.leadAt", { time: i18n.format.time(run.completedAt) }) : i18n.t("rulePreview.page.lead")
+  const text = run ? leadText(i18n, run) : i18n.t("rulePreview.page.lead")
   return (
     <p className={reading ? "rule-preview-lead rule-preview-reading" : "rule-preview-lead"}>
       {reading ? (
@@ -443,14 +473,11 @@ function PreviewLead({
 function StartSummary({
   run,
   destination,
-  sharesDetails,
   outcome,
   onRetry,
 }: {
   run: PreviewRun | undefined
   destination: string
-  /** Whether starting copies titles and details, which the decision must say beside the button. */
-  sharesDetails: boolean
   outcome: StartFailure | null
   onRetry: () => void
 }) {
@@ -475,12 +502,6 @@ function StartSummary({
         <span className="sr-only">{t("rulePreview.counts.label", { destination })}</span>
         <OutcomeSigns parts={outcomeParts(i18n, outcomeCounts(run.items))} />
       </p>
-      {sharesDetails && (
-        <p className="rule-preview-shares">
-          <Eye aria-hidden="true" />
-          {t("rulePreview.page.sharesDetails", { destination })}
-        </p>
-      )}
       <p className="rule-preview-consequence">{t("rulePreview.page.pauseAnyTime")}</p>
     </div>
   )
@@ -498,7 +519,7 @@ function StartButton({
   sharesDetails: boolean
   ready: boolean
   starting: boolean
-  /** Whether Start waits on a preview that is reading or did not finish. */
+  /** Whether Start waits on a preview that is reading; a failed one says why in its own panel. */
   waiting: boolean
   onStart: () => void
 }) {
@@ -526,7 +547,7 @@ function StartButton({
         </span>
       ) : (
         // Beside the counts on wide screens; here, under the button, where narrow screens put it.
-        <span className="rule-preview-start-note rule-preview-start-reassure">{t("rulePreview.page.pauseAnyTime")}</span>
+        ready && <span className="rule-preview-start-note rule-preview-start-reassure">{t("rulePreview.page.pauseAnyTime")}</span>
       )}
     </div>
   )

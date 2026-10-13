@@ -70,9 +70,12 @@ export function PreviewFailurePanel({
   switch (failure.kind) {
     case "lapsed": {
       const search = failure.account ? accountSearch(failure.account.id) : ""
-      const account = failure.account?.email ?? providerWords(i18n, null).account
+      // The account's address when it is known, otherwise "Your Google account", never a bare noun.
+      const title = failure.account
+        ? t("rulePreview.states.lapsedTitle", { account: failure.account.email })
+        : t("rulePreview.states.lapsedTitleProvider", { account: providerWords(i18n, failure.provider).account })
       return (
-        <Panel variant="stopped" icon={<ShieldAlert aria-hidden="true" />} title={t("rulePreview.states.lapsedTitle", { account })} body={t("rulePreview.states.lapsedBody")}
+        <Panel variant="stopped" icon={<ShieldAlert aria-hidden="true" />} title={title} body={t("rulePreview.states.lapsedBody")}
           action={navigationLink(connectionsPath(search), t("rulePreview.states.reauthorize"), () => onViewChange("settings", { search, settingsTab: "connections" }))}
         />
       )

@@ -100,7 +100,8 @@ const preview: RulePreview = {
 
 /** Calendar and event names come from the server; dates, times, and the time zone from locale data. */
 const zone = new Intl.DateTimeFormat("en-US", { timeZoneName: "shortGeneric" }).formatToParts(today).find((part) => part.type === "timeZoneName")?.value ?? ""
-const FIXTURE_TEXT = ["Family", "Work", "Dentist", "Mum", "Busy (tentative)", "Busy", account.email, "DA", zone, ...dateWords()]
+// An address may break after its "@", so each half is server text too.
+const FIXTURE_TEXT = ["Family", "Work", "Dentist", "Mum", "Busy (tentative)", "Busy", account.email, ...account.email.replace("@", "@ ").split(" "), "DA", zone, ...dateWords()]
 
 type Answer = { status: number; body: unknown }
 
@@ -218,12 +219,26 @@ describe("RulePreviewView", () => {
     expect(container.querySelector(".rule-preview-later")).toBeNull()
   })
 
+  it("moves the Show choice with the arrow keys, as one tab stop", async () => {
+    mockFetch({ status: 200, body: preview })
+    await renderPreview(testI18n())
+
+    const all = button("All 2")
+    expect(button("Will sync 1").tabIndex).toBe(-1)
+    act(() => {
+      all.focus()
+      all.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }))
+    })
+    expect(button("Will sync 1").getAttribute("aria-checked")).toBe("true")
+    expect(document.activeElement).toBe(button("Will sync 1"))
+  })
+
   it("names the decision's effect when the rule copies details", async () => {
     mockFetch({ status: 200, body: preview }, { ...previewedRule, privacy_policy: "copy_details" })
     await renderPreview(testI18n())
 
     expect(button("Start syncing and share details with Work")).toBeTruthy()
-    expect(container.querySelector(".rule-preview-footer")?.textContent).toContain("Shares titles and details with Work")
+    expect(container.querySelector(".rule-preview-privacy")?.getAttribute("data-tone")).toBe("attention")
   })
 
   it("keeps the filters through a refresh, and drops the old numbers when one fails", async () => {
@@ -240,7 +255,9 @@ describe("RulePreviewView", () => {
     await settle()
     const footer = container.querySelector(".rule-preview-footer")?.textContent ?? ""
     expect(footer).not.toContain("to add")
-    expect(footer).toContain("Available when the preview finishes")
+    // The panel says what to do; Start waits without promising it will come back by itself.
+    expect(footer).not.toContain("Available when the preview finishes")
+    expect(button("Start syncing to Work").getAttribute("aria-disabled")).toBe("true")
     expect(container.querySelector(".rule-preview-lead")?.textContent).not.toContain("Previewed at")
   })
 

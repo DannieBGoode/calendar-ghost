@@ -3,6 +3,7 @@
     "documentTitle": "Preview",
     "lead": "A preview: nothing is written until you start syncing.",
     "leadAt": "Previewed at {time}. Nothing is written until you start syncing.",
+    "leadOn": "Previewed {date} at {time}. Nothing is written until you start syncing.",
     "back": "Back to rule",
     "reading": "Reading {source}…",
     "readingBoth": "Reading {source} and {destination}…",
@@ -12,7 +13,6 @@
     "availableWhenDone": "Available when the preview finishes",
     "previewAgain": "Refresh",
     "enableFailed": "Syncing did not start. Try again in a moment.",
-    "sharesDetails": "Shares titles and details with {destination}",
     "changedSincePreview": "This rule changed since the preview.",
     "pauseAnyTime": "You can pause or remove the rule at any time."
   },
@@ -139,6 +139,7 @@
   },
   "states": {
     "lapsedTitle": "{account} needs reauthorization",
+    "lapsedTitleProvider": "Your {account} needs reauthorization",
     "lapsedBody": "The preview could not read it. Nothing was written.",
     "reauthorize": "Reauthorize account",
     "unavailableTitle": "{Calendar} is not answering right now",
