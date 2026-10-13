@@ -3256,7 +3256,8 @@ def test_preview_reports_recurring_series_and_planned_actions(tmp_path: Path) ->
         "carries_details": False,
         "recurrence": list(master.recurrence.lines),
     }
-    assert (cancelled["kind"], cancelled["planned_action"]) == ("occurrence", "ignore")
+    # The run writes the series, then cancels this occurrence in it.
+    assert (cancelled["kind"], cancelled["planned_action"]) == ("occurrence", "delete")
     assert (cancelled["reason"], cancelled["cancelled"]) == ("occurrence_cancelled", True)
     assert cancelled["series_event_id"] == master.reference.event_id.value
     assert cancelled["original_start"] == week_start(1).isoformat()

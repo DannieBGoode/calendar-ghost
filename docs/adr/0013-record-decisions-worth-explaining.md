@@ -22,6 +22,10 @@ prevention and bookkeeping, and each echo cost a provider read.
   that were never in the rule's scope, or bookkeeping with no provider write.
 - `all_day_excluded`, `series_not_synchronized`, and `series_without_occurrences` are recorded on
   the first run and on incremental runs that saw the event change, and not on the daily full pass.
+- An occurrence of a deleted series, and a cancelled occurrence of a series the rule never
+  projected, are `cancelled_without_projection` (amended 2026-10-14, ADR 0011): nothing of them is
+  missing from the destination, so they explain nothing. A first run otherwise listed each
+  occurrence of a series deleted weeks earlier.
 - Earlier entries with the unrecorded reasons stay in SQLite and are hidden from Activity.
 - A series check made only to repair one missing occurrence is not recorded when it finds the
   series current. Listed beside the occurrence's block it read as a contradiction ("already up to

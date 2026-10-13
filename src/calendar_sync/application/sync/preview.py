@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Literal
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable, RuleNotFound
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
+from calendar_sync.application.sync.planning import EventPlanner
 from calendar_sync.application.sync.ports import (
     CalendarReader,
     RecoveryIncidents,
@@ -15,6 +16,7 @@ from calendar_sync.application.sync.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.sync.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventMapping,
@@ -28,9 +30,19 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleId,
 )
-from calendar_sync.domain.services import EventProjector, SyncDecisionService
+from calendar_sync.domain.services import (
+    EventProjector,
+    ProjectionFingerprinter,
+    SyncDecisionService,
+)
 
 PreviewItemKind = Literal["single", "series", "occurrence"]
+
+# A preview lists what the run records in Activity (ADR 0013), so an event deleted before the
+# rule projected it is not listed. Events other rules project into the source calendar are: they
+# are on that calendar, and the rule leaves them out.
+_UNLISTED = UNRECORDED_REASONS - {SyncReason.MANAGED_PROJECTION_SOURCE}
+_HELD = frozenset({SyncAction.CREATE, SyncAction.UPDATE, SyncAction.CONFLICT})
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,21 +81,23 @@ class RulePreview:
 
 
 @dataclass(slots=True)
-class _PreviewScope:
-    """Every listed source event, each with its parent series if an occurrence, and whether the
-    rule projects it."""
+class _Tally:
+    """What a preview counts: events and series the destination will hold, those it will not,
+    and the occurrence changes of series it will hold, which are counted on their own."""
 
-    listed: list[tuple[CalendarEvent, CalendarEvent | None, bool]] = field(default_factory=list)
-    live: dict[EventRef, bool] = field(default_factory=dict)
+    eligible_events: int = 0
     excluded: int = 0
     series_count: int = 0
     occurrence_changes: int = 0
 
-    @property
-    def eligible_events(self) -> int:
-        """Events and series; occurrence changes are counted on their own."""
-        included = sum(1 for _event, _parent, projects in self.listed if projects)
-        return included - self.occurrence_changes
+    def add(self, item: PreviewItem, projects: bool) -> None:
+        if not projects:
+            self.excluded += 1
+        elif item.kind == "occurrence":
+            self.occurrence_changes += 1
+        else:
+            self.eligible_events += 1
+            self.series_count += item.kind == "series"
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +139,7 @@ class PreviewSyncRule:
         rule = self._previewable_rule(rule_id)
         started = self.clock.now()
         try:
-            scope, items = self._read(rule)
+            tally, items = self._read(rule)
         except ProviderFailure as failure:
             # Lost authorization a preview meets on either account lapses that account, so
             # Settings and the rule point at the account to reauthorize (ADR 0027).
@@ -141,28 +155,28 @@ class PreviewSyncRule:
                 RulePreviewSummary(
                     rule.id,
                     self.clock.now(),
-                    scope.eligible_events,
-                    scope.excluded,
-                    recurring_series=scope.series_count,
-                    occurrence_changes=scope.occurrence_changes,
+                    tally.eligible_events,
+                    tally.excluded,
+                    recurring_series=tally.series_count,
+                    occurrence_changes=tally.occurrence_changes,
                 )
             )
             uow.commit()
 
         return RulePreview(
             rule.id,
-            scope.eligible_events,
-            scope.excluded,
+            tally.eligible_events,
+            tally.excluded,
             items,
-            recurring_series=scope.series_count,
-            occurrence_changes=scope.occurrence_changes,
+            recurring_series=tally.series_count,
+            occurrence_changes=tally.occurrence_changes,
         )
 
-    def _read(self, rule: SyncRule) -> tuple[_PreviewScope, tuple[PreviewItem, ...]]:
+    def _read(self, rule: SyncRule) -> tuple[_Tally, tuple[PreviewItem, ...]]:
         cutoff = self.clock.now() - timedelta(days=rule.initial_lookback_days)
         with self.unit_of_work() as uow:
             cursor = uow.cursors.get(rule.id)
-        scope = self._classify(rule, self._source_events(rule, cursor, cutoff))
+        events = self._source_events(rule, cursor, cutoff)
         with self.unit_of_work() as uow:
             mappings = {mapping.source: mapping for mapping in uow.mappings.for_rule(rule.id)}
             # A rule that never wrote has nothing in the destination to compare with.
@@ -172,18 +186,20 @@ class PreviewSyncRule:
             planner = _Planner(
                 uow,
                 rule,
-                scope,
+                cutoff,
                 _Destination(self.provider, mappings, {event.reference: event for event in listed}),
-                self.provider,
+                # Fingerprints are pure; the run's and this one agree on every projection.
+                EventPlanner(self.provider, self.decisions, ProjectionFingerprinter()),
                 self.projector,
-                self.decisions,
             )
-            items = tuple(
-                item
-                for event, parent, projects in scope.listed
-                if _shown(item := planner.item(event, parent, projects))
-            )
-        return scope, items
+            masters = {event.reference: event for event in events if event.occurrence is None}
+            tally, items = _Tally(), []
+            for event in events:
+                item, projects = planner.plan(event, self._series_of(rule, event, masters))
+                if item.reason not in _UNLISTED:
+                    tally.add(item, projects)
+                    items.append(item)
+        return tally, tuple(items)
 
     def _source_events(
         self, rule: SyncRule, cursor: str | None, cutoff: datetime
@@ -214,104 +230,117 @@ class PreviewSyncRule:
             raise RuleNotExecutable(f"sync rule cannot preview from state {rule.state}")
         return rule
 
-    def _classify(self, rule: SyncRule, events: Sequence[CalendarEvent]) -> _PreviewScope:
-        """Sort the source listing into what the rule would project and what it excludes."""
-        masters = {event.reference: event for event in events if event.occurrence is None}
-        scope = _PreviewScope()
-
-        def skipped(master: CalendarEvent) -> bool:
-            if not rule.eligible(master):
-                return True
-            if master.recurrence is None:
-                return False
-            # Like a Sync Run, a series with no occurrence left to project is not projected.
-            if master.reference not in scope.live:
-                scope.live[master.reference] = self.provider.has_live_occurrences(
-                    master.reference, rule.transformation
-                )
-            return not scope.live[master.reference]
-
-        for listed in events:
-            event, parent = self._with_series(rule, listed, masters)
-            projects = not skipped(parent or event)
-            scope.listed.append((event, parent, projects))
-            if not projects:
-                scope.excluded += 1
-            elif parent is not None:
-                scope.occurrence_changes += 1
-            else:
-                scope.series_count += event.recurrence is not None
-        return scope
-
-    def _with_series(
+    def _series_of(
         self, rule: SyncRule, event: CalendarEvent, masters: Mapping[EventRef, CalendarEvent]
-    ) -> tuple[CalendarEvent, CalendarEvent | None]:
-        """An occurrence with its series; one whose series is not shown projects on its own, as a
-        single event, and so does every other event."""
+    ) -> CalendarEvent | None:
+        """An occurrence's series, or None for an event that is not one or whose series its
+        calendar does not show."""
         if event.occurrence is None:
-            return event, None
-        parent_ref = EventRef(rule.source, event.occurrence.series_event_id)
-        parent = masters.get(parent_ref) or self.provider.get_event(parent_ref)
-        return (event, parent) if parent is not None else (event.as_single(), None)
+            return None
+        series = EventRef(rule.source, event.occurrence.series_event_id)
+        return masters.get(series) or self.provider.get_event(series)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class _Planner:
-    """Plans each previewed event with provider reads only, as a Sync Run would; nothing is
-    written."""
+    """Plans each previewed event with provider reads only, through the decisions a Sync Run
+    makes; nothing is written."""
 
     uow: UnitOfWork
     rule: SyncRule
-    scope: _PreviewScope
+    window_start: datetime
     destination: _Destination
-    provider: CalendarReader
+    events: EventPlanner
     projector: EventProjector
-    decisions: SyncDecisionService
+    _decided: dict[EventRef, SyncDecision] = field(default_factory=dict, init=False)
+    _live: dict[EventRef, bool] = field(default_factory=dict, init=False)
 
-    def item(
-        self, event: CalendarEvent, parent: CalendarEvent | None, projects: bool
-    ) -> PreviewItem:
-        if parent is None:
-            decision = self._decide(event)
-            kind: PreviewItemKind = "series" if event.recurrence is not None else "single"
-        elif not projects:
-            # Its series stays out, so the occurrence does too, for the series' reason. Removing
-            # the series removes its occurrences with it, so none is counted as a removal again.
-            decision = SyncDecision(SyncAction.IGNORE, self._decide(parent).reason)
-            kind = "occurrence"
+    def plan(self, event: CalendarEvent, series: CalendarEvent | None) -> tuple[PreviewItem, bool]:
+        """The event's item, and whether the destination will hold it or, for an occurrence,
+        its series."""
+        kind: PreviewItemKind
+        if event.occurrence is not None and series is not None:
+            series_decision = self._decide(series)
+            decision = self._decide_occurrence(event, series, series_decision)
+            kind, projects = "occurrence", _projects(series_decision)
         else:
-            decision = self._decide_occurrence(event, parent)
-            kind = "occurrence"
+            if event.occurrence is not None:
+                event, decision = self._decide_lone(event)
+            else:
+                decision = self._decide(event)
+            kind = "series" if event.recurrence is not None else "single"
+            projects = _projects(decision)
         projection = self._projection(event, decision) if projects else None
-        return PreviewItem(event, kind, decision.action, decision.reason, projection)
+        return PreviewItem(event, kind, decision.action, decision.reason, projection), projects
 
     def _decide(self, event: CalendarEvent) -> SyncDecision:
-        mapping = self.destination.mapping(event.reference)
-        actual = self.destination.get(mapping.destination) if mapping else None
-        live = self.scope.live.get(event.reference, True)
-        return self.decisions.decide(self.rule, event, mapping, actual, has_live_occurrences=live)
+        """An event's decision, made once though it is also the series of its occurrences."""
+        if event.reference not in self._decided:
+            mapping = self.destination.mapping(event.reference)
+            actual = self.destination.get(mapping.destination) if mapping else None
+            _found, self._decided[event.reference] = self.events.decide(
+                self.rule,
+                event,
+                mapping,
+                actual,
+                window_start=self.window_start,
+                live=self._has_live_occurrences,
+            )
+        return self._decided[event.reference]
 
-    def _decide_occurrence(self, event: CalendarEvent, parent: CalendarEvent) -> SyncDecision:
+    def _decide_lone(self, event: CalendarEvent) -> tuple[CalendarEvent, SyncDecision]:
+        """An occurrence whose series its calendar does not show projects on its own, as a
+        single event; one of a series the rule projected cannot be verified."""
         assert event.occurrence is not None
-        rule, start = self.rule, event.occurrence.original_start
-        series_mapping = self.destination.mapping(parent.reference)
-        destination_series = (
-            self.destination.get(series_mapping.destination) if series_mapping else None
-        )
-        if series_mapping is None or destination_series is None:
-            # The series is written, or written again, with this occurrence's change in it.
-            return _change_in_new_series(rule, event)
-        current = self.provider.get_occurrence(series_mapping.destination, start)
+        single = event.as_single()
+        series = EventRef(self.rule.source, event.occurrence.series_event_id)
+        if self.destination.mapping(series) is not None:
+            return single, SyncDecision(SyncAction.CONFLICT, SyncReason.SOURCE_UNVERIFIABLE)
+        return single, self._decide(single)
+
+    def _decide_occurrence(
+        self, event: CalendarEvent, series: CalendarEvent, series_decision: SyncDecision
+    ) -> SyncDecision:
+        assert event.occurrence is not None
+        start = event.occurrence.original_start
+        mapping = self.destination.mapping(series.reference)
+        recorded = self.uow.occurrences.get(mapping.id, start) if mapping else None
+        if series_decision.action is SyncAction.CREATE:
+            # The run writes the series, or writes it again, then decides the occurrence in it.
+            return self.events.decisions.decide_occurrence_in_new_series(
+                self.rule, series, event, recorded
+            )
+        if series_decision.action is SyncAction.DELETE:
+            # Removing the series removes its mappings, and every occurrence, with it.
+            mapping = recorded = None
+        destination_series = self.destination.get(mapping.destination) if mapping else None
         situation = OccurrenceSituation(
-            parent,
-            series_mapping,
+            series,
+            mapping,
             start,
             event,
-            self.uow.occurrences.get(series_mapping.id, start),
+            recorded,
             destination_series,
-            current,
+            self.events.provider.get_occurrence(destination_series.reference, start)
+            if destination_series is not None
+            else None,
         )
-        return self.decisions.decide_occurrence(rule, situation)
+        decision = self.events.decisions.decide_occurrence(self.rule, situation)
+        if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING and not (
+            self._has_live_occurrences(series.reference)
+        ):
+            # As in a Sync Run, a dormant series has no projection to repair.
+            decision = self.events.decisions.decide_occurrence(
+                self.rule, replace(situation, has_live_occurrences=False)
+            )
+        return decision
+
+    def _has_live_occurrences(self, series: EventRef) -> bool:
+        if series not in self._live:
+            self._live[series] = self.events.provider.has_live_occurrences(
+                series, self.rule.transformation
+            )
+        return self._live[series]
 
     def _projection(self, event: CalendarEvent, decision: SyncDecision) -> PreviewProjection | None:
         """What the destination would hold once the rule runs; nothing for a removal or a
@@ -328,24 +357,7 @@ class _Planner:
         )
 
 
-def _shown(item: PreviewItem) -> bool:
-    """A cancelled event with no time that nothing will change is not on any calendar to show;
-    one the rule will remove from the destination is."""
-    source = item.source
-    return (
-        source.time is not None
-        or source.occurrence is not None
-        or (item.planned_action is not SyncAction.IGNORE)
-    )
-
-
-def _change_in_new_series(rule: SyncRule, event: CalendarEvent) -> SyncDecision:
-    """How an occurrence change lands in a series the run writes with it: as the destination
-    gains it, nothing exists there yet to update or remove. A changed date is added as it now is;
-    a cancelled or excluded one is never written."""
-    if event.status is EventStatus.CANCELLED:
-        return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_CANCELLED)
-    exclusion = rule.transformation.exclusion(event)
-    if exclusion is not None:
-        return SyncDecision(SyncAction.IGNORE, exclusion.skip_reason)
-    return SyncDecision(SyncAction.CREATE, SyncReason.OCCURRENCE_CHANGED)
+def _projects(decision: SyncDecision) -> bool:
+    """Whether the destination holds the event's projection once the run decides it, or keeps
+    the one a Conflict leaves in place."""
+    return decision.action in _HELD or decision.reason is SyncReason.PROJECTION_CURRENT

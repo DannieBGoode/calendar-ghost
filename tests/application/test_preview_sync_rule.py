@@ -186,9 +186,10 @@ def test_preview_counts_series_and_occurrence_changes_with_planned_actions() -> 
     assert preview.occurrence_changes == 2
     assert preview.excluded_events == 2
     assert [(item.kind, item.planned_action, item.reason) for item in preview.items] == [
+        # The run writes the series, then changes and cancels these two of its occurrences.
         ("series", SyncAction.CREATE, SyncReason.SOURCE_CREATED),
-        ("occurrence", SyncAction.CREATE, SyncReason.OCCURRENCE_CHANGED),
-        ("occurrence", SyncAction.IGNORE, SyncReason.OCCURRENCE_CANCELLED),
+        ("occurrence", SyncAction.UPDATE, SyncReason.OCCURRENCE_CHANGED),
+        ("occurrence", SyncAction.DELETE, SyncReason.OCCURRENCE_CANCELLED),
         ("series", SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE),
         ("occurrence", SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE),
     ]
@@ -222,10 +223,10 @@ def test_preview_of_an_occurrence_whose_destination_series_was_deleted_does_not_
     preview = _preview(factory, calendars).execute(rule().id)
 
     assert preview.occurrence_changes == 1
-    # The run writes the series again with the change in it, so nothing is blocked.
+    # The run writes the series again, then puts the change back in it, so nothing is blocked.
     assert [(item.kind, item.planned_action, item.reason) for item in preview.items] == [
         ("series", SyncAction.CREATE, SyncReason.PROJECTION_MISSING),
-        ("occurrence", SyncAction.CREATE, SyncReason.OCCURRENCE_CHANGED),
+        ("occurrence", SyncAction.UPDATE, SyncReason.OCCURRENCE_DRIFT_REPAIRED),
     ]
 
 
@@ -240,10 +241,10 @@ def test_preview_excludes_a_series_whose_every_occurrence_is_cancelled() -> None
     assert preview.eligible_events == 0
     assert preview.recurring_series == 0
     assert preview.occurrence_changes == 0
-    assert preview.excluded_events == 2
+    # The cancelled occurrence of a series never projected is not the rule's to list.
+    assert preview.excluded_events == 1
     assert [(item.kind, item.reason, item.projection) for item in preview.items] == [
         ("series", SyncReason.SERIES_WITHOUT_OCCURRENCES, None),
-        ("occurrence", SyncReason.SERIES_WITHOUT_OCCURRENCES, None),
     ]
 
 
@@ -443,7 +444,7 @@ def _pause(factory: UnitOfWorkFactory) -> None:
         uow.commit()
 
 
-def test_a_declined_occurrence_of_a_new_series_is_never_written() -> None:
+def test_a_declined_occurrence_of_a_new_series_is_removed_once_the_series_is_written() -> None:
     calendars = FakeCalendars()
     master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
     calendars.put(replace(occurrence(master, 1), response=InvitationResponse.DECLINED))
@@ -453,8 +454,11 @@ def test_a_declined_occurrence_of_a_new_series_is_never_written() -> None:
     )
 
     declined = next(item for item in preview.items if item.kind == "occurrence")
-    # Nothing is in the destination yet, so the date is left out rather than removed.
-    assert (declined.planned_action, declined.reason) == (SyncAction.IGNORE, SyncReason.DECLINED)
+    # The run writes the series from its recurrence, then removes the declined date from it.
+    assert (declined.planned_action, declined.reason) == (
+        SyncAction.DELETE,
+        SyncReason.DECLINED_REMOVED,
+    )
     assert declined.projection is None
 
 
@@ -537,5 +541,5 @@ def test_removing_an_excluded_series_counts_one_removal_not_one_per_occurrence()
 
     assert [(item.kind, item.planned_action, item.reason) for item in preview.items] == [
         ("series", SyncAction.DELETE, SyncReason.DECLINED_REMOVED),
-        ("occurrence", SyncAction.IGNORE, SyncReason.DECLINED_REMOVED),
+        ("occurrence", SyncAction.IGNORE, SyncReason.SERIES_NOT_SYNCHRONIZED),
     ]

@@ -32,6 +32,25 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - A preview reads the destination through one listing of the rule's projections instead of one
   request per mapped event, and returns every event instead of a sample of 10.
 
+### Fixed
+
+- A new rule no longer lists, in Activity and its preview, the occurrences of a series deleted
+  from the source before the rule existed. A deleted series stays readable for some weeks, so its
+  cancelled occurrences read "Its series isn't synced, so skipped". Deleting a series the rule
+  projects records only the series' removal, not an extra skip for each moved occurrence, and a
+  cancelled occurrence of a series the rule leaves out, such as one you declined, is no longer
+  listed either. Entries earlier releases recorded for cancelled occurrences are hidden.
+- A deleted series is removed from the destination even when the source reports only one of its
+  occurrences, or when the destination reports an edit before the source reports the deletion.
+  The single projection of an occurrence whose series the calendar did not show is removed once
+  that series shows as deleted. Before, these stayed in the destination.
+- Preview plans every event exactly as the next run decides it. An occurrence of a series the
+  rule will write shows the update or removal the run makes in the new series, an occurrence of a
+  series the rule leaves out reads "Its series isn't synced", and the preview leaves out and does
+  not count what Activity would not record, such as an event deleted before the rule projected
+  it. An occurrence whose series the rule projected but the source no longer shows is blocked, as
+  in a run.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added

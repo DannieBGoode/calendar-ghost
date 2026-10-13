@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import UnsupportedProjection
-from calendar_sync.application.sync.event_sync import event_operation_key
 from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.planning import event_operation_key
 from calendar_sync.application.sync.ports import CalendarProvider
 from calendar_sync.application.sync.sync_run import SyncRunContext, record, require_unchanged
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
@@ -56,8 +56,11 @@ class RetireLoneOccurrences:
                 self._remove(run, lone, source, SyncReason.OCCURRENCE_JOINED_SERIES)
 
     def retire_excluded(self, run: SyncRunContext, source_series: CalendarEvent) -> None:
-        """Remove the single projections of the occurrences of a shown series the rule excludes."""
-        if source_series.status is not EventStatus.CONFIRMED:
+        """Remove the single projections of the occurrences of a shown series the rule does not
+        project: one the rule excludes, or one deleted, which removes every occurrence with it."""
+        if source_series.status is EventStatus.CANCELLED:
+            for lone in run.uow.mappings.lone_occurrences(run.rule.id, source_series.reference):
+                self._remove(run, lone, source_series, SyncReason.SOURCE_CANCELLED)
             return
         exclusion = run.rule.transformation.exclusion(source_series)
         if exclusion is None:

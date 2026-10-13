@@ -57,6 +57,38 @@ def test_skips_no_longer_recorded_are_hidden_from_earlier_history(tmp_path: Path
     assert [entry["reason"] for entry in skipped] == ["all_day_excluded"]
 
 
+def test_skips_of_cancelled_occurrences_recorded_by_earlier_releases_are_hidden(
+    tmp_path: Path,
+) -> None:
+    # Earlier releases explained a deleted occurrence of a series the rule never projected.
+    database = tmp_path / "test.db"
+    app = create_app(build_container(Settings(database)))
+
+    with TestClient(app) as client:
+        client.post(
+            "/api/v1/setup/admin", json={"email": "admin@example.test", "password": PASSWORD}
+        )
+        with sqlite3.connect(database) as connection:
+            connection.executemany(
+                """
+                INSERT INTO audit_entries (
+                    occurred_at, rule_id, action, outcome, detail, reason, source_event_id,
+                    event_cancelled, user_id
+                )
+                VALUES ('2026-09-01T10:00:00+00:00', 'rule-1', 'ignore', 'skipped', '',
+                    'series_not_synchronized', ?, ?,
+                    (SELECT id FROM users ORDER BY rowid LIMIT 1))
+                """,
+                [("deleted_20261027T090000Z", 1), ("live_20261027T090000Z", 0)],
+            )
+        listed = client.get("/api/v1/audit-entries").json()
+        hidden = client.get("/api/v1/audit-entries/1")
+
+    assert [entry["source_event_id"] for entry in listed] == ["live_20261027T090000Z"]
+    # A link to a hidden entry still opens it.
+    assert hidden.status_code == 200
+
+
 @pytest.mark.parametrize(
     "method", ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"]
 )

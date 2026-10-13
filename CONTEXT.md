@@ -104,7 +104,7 @@ The durable identity link between one source event and the projection managed fo
 _Avoid_: Event match, duplicate record
 
 **Source Cancellation**:
-The source-side removal or cancellation of an event. It causes deletion of the mapped destination projection; restoring the source causes the projection to be created again.
+The source-side removal or cancellation of an event. It causes deletion of the mapped destination projection; restoring the source causes the projection to be created again. It matters to a rule only through a projection: a cancelled event, series, or occurrence that no projection of the rule holds, or will hold once the rule writes its series, leaves nothing to delete and is no decision of the rule, so Activity records nothing for it and a Rule Preview does not list it. Deleting a series removes every occurrence with it.
 _Avoid_: Destination deletion, unlinking
 
 **Native Event**:
@@ -331,7 +331,7 @@ _Avoid_: OAuth secret, administrator password, database password
 ## Rule Lifecycle
 
 **Rule Preview**:
-A side-effect-free evaluation of every source event in the rule's Initial Sync Window, each beside the projection it would write and its planned action, or beside the reason the rule excludes it. A new or materially changed rule must pass preview before it can be enabled. It writes nothing to any calendar; locally it records only the rule's validated state and the preview's counts, so enabling can restate what will be written. The events it lists stay with the person who asked for it and are never stored.
+A side-effect-free evaluation of every source event in the rule's Initial Sync Window, each beside the projection it would write and its planned action, or beside the reason the rule excludes it. It plans through the same decisions as a Sync Run, so each event it lists shows what the next run will do and record. A new or materially changed rule must pass preview before it can be enabled. It writes nothing to any calendar; locally it records only the rule's validated state and the preview's counts, so enabling can restate what will be written. The events it lists stay with the person who asked for it and are never stored.
 _Avoid_: Test sync, simulation
 
 **Material Rule Change**:
