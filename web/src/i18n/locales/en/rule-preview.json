@@ -33,6 +33,7 @@
   },
   "filters": {
     "show": "Show",
+    "kind": "Kind",
     "chip": "{label} {count}",
     "all": "All",
     "sync": "Will sync",
@@ -46,7 +47,7 @@
       "unanswered": "Not answered"
     },
     "showing": "Showing {shown} of {total}",
-    "noMatch": "No events in this view."
+    "noMatch": "No events match these filters."
   },
   "table": {
     "caption": "What {source} → {destination} will write to {destination}",

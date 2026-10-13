@@ -1,13 +1,25 @@
-import { Fragment, useRef, type KeyboardEvent } from "react"
+import { useRef, type KeyboardEvent } from "react"
 
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
-import type { PreviewView } from "@/lib/rule-preview"
+import {
+  facetCounts,
+  offeredKinds,
+  type PreviewFilters,
+  type PreviewItem,
+  type PreviewKind,
+  type PreviewShow,
+} from "@/lib/rule-preview"
 
-const VIEW_WORDS: Record<PreviewView, MessageKey> = {
+const SHOWS: readonly PreviewShow[] = ["all", "sync", "out"]
+
+const SHOW_WORDS: Record<PreviewShow, MessageKey> = {
   all: "rulePreview.filters.all",
   sync: "rulePreview.filters.sync",
   out: "rulePreview.filters.out",
+}
+
+const KIND_WORDS: Record<PreviewKind, MessageKey> = {
   allDay: "rulePreview.filters.kinds.allDay",
   birthday: "rulePreview.filters.kinds.birthday",
   recurring: "rulePreview.filters.kinds.recurring",
@@ -26,66 +38,113 @@ function CountBadge({ count }: { count: number }) {
   )
 }
 
-/**
- * Which rows the table shows, one view at a time: All, Will sync, Not synced, then each kind this
- * preview has. One choice means the counts never move, no option leads to an empty table but an
- * outcome view with 0, and nothing appears or leaves beside the row when it changes. It is a radio
- * group: one tab stop, with the arrow keys, Home, and End choosing among the views that show rows.
- */
-export function PreviewViewChoice({
-  views,
-  view,
+/** All, Will sync, or Not synced: one choice, joined into one control, read as a radio group. */
+function ShowChoice({
+  counts,
+  show,
   onChange,
 }: {
-  /** The views this preview offers, with their counts, as `previewViews` gives them. */
-  views: readonly { view: PreviewView; count: number }[]
-  view: PreviewView
-  onChange: (view: PreviewView) => void
+  counts: Record<PreviewShow, number>
+  show: PreviewShow
+  onChange: (show: PreviewShow) => void
 }) {
   const { t, format } = useI18n()
   const group = useRef<HTMLDivElement>(null)
-  const open = views.filter((each) => each.count > 0 || each.view === view).map((each) => each.view)
+  const open = SHOWS.filter((each) => counts[each] > 0 || each === show)
 
-  function choose(next: PreviewView) {
-    onChange(next)
-    group.current?.querySelectorAll<HTMLButtonElement>("[role=radio]")[views.findIndex((each) => each.view === next)]?.focus()
-  }
-
+  // One tab stop; the arrow keys, Home, and End choose and focus the next one that shows rows.
   function move(event: KeyboardEvent<HTMLButtonElement>) {
-    const at = open.indexOf(view)
+    const at = open.indexOf(show)
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
     const target = event.key === "Home" ? open[0] : event.key === "End" ? open.at(-1) : step ? open[(at + step + open.length) % open.length] : undefined
     if (!target) return
     event.preventDefault()
-    choose(target)
+    onChange(target)
+    group.current?.querySelectorAll<HTMLButtonElement>("[role=radio]")[SHOWS.indexOf(target)]?.focus()
   }
 
   return (
-    <div ref={group} className="rule-preview-views" role="radiogroup" aria-label={t("rulePreview.filters.show")}>
-      {views.map(({ view: each, count }, index) => {
-        const checked = each === view
-        // An outcome view with nothing in it stays, so the row never changes shape, but cannot be chosen.
-        const empty = count === 0 && !checked
+    <div ref={group} className="rule-preview-segments" role="radiogroup" aria-label={t("rulePreview.filters.show")}>
+      {SHOWS.map((each) => {
+        const checked = each === show
+        const empty = counts[each] === 0 && !checked
         return (
-          <Fragment key={each}>
-            {index === 3 && <span className="rule-preview-views-divider" aria-hidden="true" />}
-            <button
-              type="button"
-              role="radio"
-              className="rule-preview-option"
-              aria-checked={checked}
-              aria-disabled={empty ? true : undefined}
-              aria-label={t("rulePreview.filters.chip", { label: t(VIEW_WORDS[each]), count: format.number(count) })}
-              tabIndex={checked ? 0 : -1}
-              onClick={() => !empty && onChange(each)}
-              onKeyDown={move}
-            >
-              <span>{t(VIEW_WORDS[each])}</span>
-              <CountBadge count={count} />
-            </button>
-          </Fragment>
+          <button
+            key={each}
+            type="button"
+            role="radio"
+            className="rule-preview-option"
+            aria-checked={checked}
+            aria-disabled={empty ? true : undefined}
+            aria-label={t("rulePreview.filters.chip", { label: t(SHOW_WORDS[each]), count: format.number(counts[each]) })}
+            tabIndex={checked ? 0 : -1}
+            onClick={() => !empty && onChange(each)}
+            onKeyDown={move}
+          >
+            <span>{t(SHOW_WORDS[each])}</span>
+            <CountBadge count={counts[each]} />
+          </button>
         )
       })}
+    </div>
+  )
+}
+
+/**
+ * One row: Show, then each kind this preview has, which combine with it and with each other ("any
+ * of"). Every count follows the other choices, so the chosen Show count is always the rows shown
+ * and no separate "Showing" line has to come and go. An option that would show nothing beside the
+ * others stays in place, dimmed, so the row never changes shape, and cannot be pressed unless
+ * chosen.
+ */
+export function PreviewFilterBar({
+  items,
+  filters,
+  onChange,
+}: {
+  items: readonly PreviewItem[]
+  filters: PreviewFilters
+  onChange: (filters: PreviewFilters) => void
+}) {
+  const { t, format } = useI18n()
+  const counts = facetCounts(items, filters)
+  const kinds = offeredKinds(items)
+  const chosen = new Set(filters.kinds)
+
+  function toggleKind(kind: PreviewKind) {
+    const next = chosen.has(kind) ? filters.kinds.filter((each) => each !== kind) : [...filters.kinds, kind]
+    onChange({ ...filters, kinds: next })
+  }
+
+  return (
+    <div className="rule-preview-filters">
+      <ShowChoice counts={counts.show} show={filters.show} onChange={(show) => onChange({ ...filters, show })} />
+      {kinds.length > 0 && (
+        <>
+          <span className="rule-preview-filters-divider" aria-hidden="true" />
+          <div className="rule-preview-kinds" role="group" aria-label={t("rulePreview.filters.kind")}>
+            {kinds.map((kind) => {
+              const pressed = chosen.has(kind)
+              const count = counts.kinds.get(kind) ?? 0
+              const empty = count === 0 && !pressed
+              return (
+                <button
+                  key={kind}
+                  type="button"
+                  className="rule-preview-option"
+                  aria-pressed={pressed}
+                  aria-disabled={empty ? true : undefined}
+                  aria-label={t("rulePreview.filters.chip", { label: t(KIND_WORDS[kind]), count: format.number(count) })}
+                  onClick={() => !empty && toggleKind(kind)}
+                >
+                  <span>{t(KIND_WORDS[kind])}</span>
+                  <CountBadge count={count} />
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

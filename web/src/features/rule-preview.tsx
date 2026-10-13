@@ -6,7 +6,7 @@ import { GhostMark } from "@/components/ghost-mark"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { LiveAnnouncement } from "@/components/rule-commands"
 import { Button } from "@/components/ui/button"
-import { PreviewViewChoice } from "@/features/rule-preview-filters"
+import { PreviewFilterBar } from "@/features/rule-preview-filters"
 import { PreviewFooter } from "@/features/rule-preview-footer"
 import { PreviewEmpty, PreviewFailurePanel, PreviewSkeleton } from "@/features/rule-preview-states"
 import { PreviewAccounts, PreviewSettings } from "@/features/rule-preview-rule"
@@ -20,12 +20,13 @@ import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 import {
   isToday,
   layOut,
-  matchesView,
-  previewViews,
+  NO_FILTERS,
+  isFiltered,
+  matchesFilters,
   narrowLayout,
   type PreviewNames,
   type PreviewRun,
-  type PreviewView,
+  type PreviewFilters,
 } from "@/lib/rule-preview"
 import { previewFailure } from "@/lib/rule-preview-failure"
 import { RULE_CHANGE_QUERIES, rulePreviewKey } from "@/lib/use-rule-commands"
@@ -133,8 +134,8 @@ function RulePreviewPage({
   const i18n = useI18n()
   const names = useNames(detail, accounts, calendarsByAccount)
   const [announcement, setAnnouncement] = useState("")
-  // Kept here, not in the results, so a refresh does not throw the reader's view away.
-  const [view, setView] = useState<PreviewView>("all")
+  // Kept here, not in the results, so a refresh does not throw the reader's filters away.
+  const [filters, setFilters] = useState<PreviewFilters>(NO_FILTERS)
   // A failed refresh keeps the last data in the query; its numbers no longer stand.
   const run = preview.isFetching || preview.error ? undefined : preview.data
   // A failure stays on screen while Refresh retries it, so its own button keeps focus meaningful.
@@ -189,8 +190,8 @@ function RulePreviewPage({
           busy={preview.isFetching}
           names={names}
           lookbackDays={detail.initial_lookback_days}
-          view={view}
-          onViewChoice={setView}
+          filters={filters}
+          onFiltersChange={setFilters}
           onAnnounce={setAnnouncement}
         />
       ) : (
@@ -256,8 +257,8 @@ function PreviewResults({
   names,
   lookbackDays,
   busy,
-  view,
-  onViewChoice,
+  filters,
+  onFiltersChange,
   onAnnounce,
 }: {
   run: PreviewRun
@@ -265,18 +266,15 @@ function PreviewResults({
   busy: boolean
   names: Names
   lookbackDays: number
-  view: PreviewView
-  onViewChoice: (view: PreviewView) => void
+  filters: PreviewFilters
+  onFiltersChange: (filters: PreviewFilters) => void
   onAnnounce: (text: string) => void
 }) {
   const i18n = useI18n()
   const now = run.completedAt
   // Placing a series at its next date steps through its rule, so it is not redone on every render.
   const placed = useMemo(() => layOut(run.items, now), [run.items, now])
-  const views = useMemo(() => previewViews(run.items), [run.items])
-  // A kind a refresh no longer finds is no longer offered, so the table falls back to All.
-  const active = views.some((each) => each.view === view) ? view : "all"
-  const layout = useMemo(() => narrowLayout(placed, (item) => matchesView(item, active)), [placed, active])
+  const layout = useMemo(() => narrowLayout(placed, (item) => matchesFilters(item, filters)), [placed, filters])
   const empty = !layout.undated.length && !layout.earlier.length && !layout.upcoming.length
   const zone = useMemo(() => timeZoneName(i18n.formatLocale, now), [i18n.formatLocale, now])
   if (!run.items.length) {
@@ -288,9 +286,9 @@ function PreviewResults({
     )
   }
   const written = run.items.some((item) => item.projection)
-  const chooseView = (next: PreviewView) => {
-    onViewChoice(next)
-    const count = run.items.filter((item) => matchesView(item, next)).length
+  const changeFilters = (next: PreviewFilters) => {
+    onFiltersChange(next)
+    const count = run.items.filter((item) => matchesFilters(item, next)).length
     onAnnounce(i18n.t("rulePreview.filters.showing", { shown: i18n.format.number(count), total: i18n.format.number(run.items.length) }))
   }
   return (
@@ -301,7 +299,7 @@ function PreviewResults({
           {i18n.t("rulePreview.states.allExcluded", { count: run.items.length, source: names.source })}
         </p>
       )}
-      <PreviewViewChoice views={views} view={active} onChange={chooseView} />
+      <PreviewFilterBar items={run.items} filters={filters} onChange={changeFilters} />
       {!empty ? (
         <PreviewTable
           layout={layout}
@@ -309,7 +307,7 @@ function PreviewResults({
           destination={names.destination}
           now={now}
           zone={zone}
-          complete={active === "all"}
+          complete={!isFiltered(filters)}
         />
       ) : (
         <p className="rule-preview-no-match">{i18n.t("rulePreview.filters.noMatch")}</p>

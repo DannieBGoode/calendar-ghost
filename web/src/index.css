@@ -5785,8 +5785,9 @@ thead + .incident-group th {
   font-size: 0.875rem;
 }
 
-/* One row of views, one chosen at a time; a hairline sets the kinds apart from the outcomes. */
-.rule-preview-views {
+/* One row: Show, a hairline, then the kinds that combine with it. Nothing in it comes or goes as
+   filters change, so the table below never moves. */
+.rule-preview-filters {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -5794,7 +5795,13 @@ thead + .incident-group th {
   margin-top: 0.75rem;
 }
 
-.rule-preview-views-divider {
+.rule-preview-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.rule-preview-filters-divider {
   width: 1px;
   height: 1.25rem;
   margin-inline: 0.25rem;
@@ -5899,6 +5906,7 @@ thead + .incident-group th {
   color: var(--foreground);
 }
 
+.rule-preview-option[aria-pressed="true"],
 .rule-preview-option[aria-checked="true"] {
   border-color: var(--primary);
   background: var(--primary-soft);
@@ -5931,9 +5939,40 @@ thead + .incident-group th {
   font-variant-numeric: tabular-nums;
 }
 
+.rule-preview-option[aria-pressed="true"] .rule-preview-count-badge,
 .rule-preview-option[aria-checked="true"] .rule-preview-count-badge {
   background: color-mix(in oklch, var(--primary) 22%, transparent);
   color: var(--foreground);
+}
+
+/* Show is one choice of three, so its options join into one control, unlike the kind pills. */
+.rule-preview-segments {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  /* Half of one row's height: a pill on one row, a rounded box if large text wraps it to two. */
+  border-radius: 1rem;
+}
+
+.rule-preview-segments .rule-preview-option {
+  border: 0;
+  border-radius: 0;
+}
+
+.rule-preview-segments .rule-preview-option + .rule-preview-option {
+  border-left: 1px solid var(--border);
+}
+
+.rule-preview-segments .rule-preview-option:focus-visible {
+  outline-offset: -2px;
+}
+
+/* The joined options drop their own borders, so the chosen one draws its edge inside. */
+.rule-preview-segments .rule-preview-option[aria-checked="true"] {
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--primary);
 }
 
 td.rule-preview-col-when {
@@ -6323,6 +6362,15 @@ html:has(.rule-preview-footer) {
   .rule-preview-option,
   .rule-preview-earlier-toggle {
     min-height: 2.75rem;
+  }
+
+  .rule-preview-segments {
+    border-radius: 1.4375rem;
+  }
+
+  /* On a phone the kinds take their own line under Show; the hairline would sit at a line end. */
+  .rule-preview-filters-divider {
+    display: none;
   }
 
   .rule-preview-footer .back-link,

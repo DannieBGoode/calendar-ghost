@@ -201,23 +201,25 @@ describe("RulePreviewView", () => {
     expect(calls.filter((call) => call.startsWith("POST"))).toEqual(["POST /api/v1/rules/rule-1/preview"])
   })
 
-  it("narrows the table to one view at a time, with counts that never move", async () => {
+  it("combines Show with kinds in one row that keeps its shape", async () => {
     mockFetch({ status: 200, body: preview })
     await renderPreview(testI18n())
-    const views = () => [...container.querySelectorAll(".rule-preview-views [role=radio]")].map((each) => each.getAttribute("aria-label"))
-    const before = views()
-    expect(before).toEqual(["All 2", "Will sync 1", "Not synced 1", "All-day 1", "Birthdays 1"])
+    const options = () => [...container.querySelectorAll(".rule-preview-filters button")].length
+    const before = options()
 
     act(() => button("Not synced 1").click())
     expect(button("Not synced 1").getAttribute("aria-checked")).toBe("true")
     act(() => button("Birthdays 1").click())
 
-    expect(button("Birthdays 1").getAttribute("aria-checked")).toBe("true")
-    expect(button("Not synced 1").getAttribute("aria-checked")).toBe("false")
+    expect(button("Birthdays 1").getAttribute("aria-pressed")).toBe("true")
+    // Counts follow the other choices, so the chosen Show count is the rows shown.
+    expect(button("Will sync 0").getAttribute("aria-disabled")).toBe("true")
     expect(container.querySelectorAll(".rule-preview-row")).toHaveLength(1)
-    // Nothing beside the views appears or changes, so the page does not shift as they change.
-    expect(views()).toEqual(before)
-    // A narrowed table is not every event, so it does not close by saying so.
+    // Nothing comes or goes beside the filters, so the table below does not move.
+    expect(options()).toBe(before)
+    const results = container.querySelector(".rule-preview-results")
+    expect([...(results?.children ?? [])].map((child) => child.className)).toEqual(["rule-preview-filters", "rule-preview-table-wrap"])
+    // A filtered table is not every event, so it does not close by saying so.
     expect(container.querySelector(".rule-preview-later")).toBeNull()
   })
 

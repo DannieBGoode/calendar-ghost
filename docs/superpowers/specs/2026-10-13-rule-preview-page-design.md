@@ -31,7 +31,7 @@ destination, or why it stays out.
 │ + 38 to add  ~ 3 to update  − 1 to remove  ⊘ 9 not synced                   │  3. what changes
 │ [lock] Busy only: titles, descriptions, and locations stay private.        │  4. what is shared
 │                                                                            │
-│ [All 51] [Will sync 42] [Not synced 9] │ [All-day 6] [Birthdays 4] [Maybe 1]│  5. narrow it
+│ (All 51 | Will sync 42 | Not synced 9) │ [All-day 6] [Birthdays 4] [Maybe 1]│  5. narrow it
 │                                                                            │
 │                                                                            │
 │ ┌ When │ Family  source │ → │ Work  destination │ What happens ─────────┐  │
@@ -118,19 +118,18 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
 
 ## Filters
 
-- One row of views, one chosen at a time: All · Will sync · Not synced, a hairline, then each kind
-  this preview has (All-day · Birthdays · Recurring · Declined · Maybe · Not answered). A kind no
-  row has is not offered; a kind a refresh no longer finds falls back to All.
-- One choice at a time, not a Show filter crossed with Kind filters: a combination such as "Will
-  sync and Recurring" does not help decide whether to start, and crossing them made counts move,
-  options gray out at 0, and a "Showing X of Y · Clear filters" line come and go, which shifted the
-  table. Here every count is fixed for the preview, the chosen view carries its own count, and All
-  is the way back, so nothing beside the row appears or changes as views change.
-- An outcome view with 0 (Will sync on a rule that syncs nothing) stays, so the row keeps its
-  shape, but cannot be chosen; it stays in the tab order (`aria-disabled`).
-- It is a radio group: one tab stop, with the arrow keys, Home, and End moving the choice.
-- Counts sit in small badges after their labels, in tabular numerals. Views change only this page,
-  never the rule.
+- One row: **Show** (All · Will sync · Not synced), one joined control with one choice, then a
+  hairline, then each kind this preview has (All-day · Birthdays · Recurring · Declined · Maybe ·
+  Not answered) as pills that combine with Show and with each other ("any of"). A kind no event in
+  the preview has is not offered. The kinds are always in view, never folded behind a toggle.
+- Every count follows the other choices (faceted), so the chosen Show count is always the rows
+  shown; there is no "Showing X of Y" or "Clear filters" line to come and go and shift the table.
+  An option that would show nothing beside the others stays in place, dimmed, so the row keeps its
+  shape, and cannot be pressed unless chosen; it stays in the tab order (`aria-disabled`).
+- Show is a radio group: one tab stop, with the arrow keys, Home, and End moving the choice. Kinds
+  are toggle buttons (`aria-pressed`). On a phone the kinds take their own line under Show.
+- Counts sit in small badges after their labels, in tabular numerals. Filters change only this
+  page, never the rule.
 
 ## Start syncing
 
@@ -155,7 +154,7 @@ sticking and closes the page instead.
 
 | State | What the person sees |
 |---|---|
-| Loading | Title and privacy line at once. In place of the lead, at its size so nothing below moves, the small ghost mark and "Reading Family…" ("Reading Family and Work…" when the rule has mappings). Refresh does the same; the last results stay, dimmed, `aria-busy`, and inert, so the chosen view and Earlier keep their state and the page does not jump. A failure panel stays while its retry reads, and focus moves to the lead's Refresh, so it never falls to the page. Six skeleton rows; no chips until counts exist. "Start syncing" disabled, with "Available when the preview finishes". No shimmer under reduced motion. |
+| Loading | Title and privacy line at once. In place of the lead, at its size so nothing below moves, the small ghost mark and "Reading Family…" ("Reading Family and Work…" when the rule has mappings). Refresh does the same; the last results stay, dimmed, `aria-busy`, and inert, so the filters and Earlier keep their state and the page does not jump. A failure panel stays while its retry reads, and focus moves to the lead's Refresh, so it never falls to the page. Six skeleton rows; no chips until counts exist. "Start syncing" disabled, with "Available when the preview finishes". No shimmer under reduced motion. |
 | Lapsed account | In place of the table, a Destructive Red panel: "Your Google account needs reauthorization", with one action, "Reauthorize account", which opens its Settings row. |
 | Provider unavailable or limiting | An Attention Ochre panel: "Google Calendar is not answering right now", with Likely cause when known, and "Preview again". Provider text only under the diagnostic disclosure. |
 | Rule changed or busy | A Quiet Surface panel: "This rule changed while it was being previewed", with "Preview again". |
@@ -179,7 +178,7 @@ preview on the page.
   - The chips wrap; they never scroll sideways.
   - In the footer, "Back to rule" and the counts come first, then the button at full width with
     "You can pause or remove the rule at any time." under it, with safe-area padding.
-- Views, the Earlier toggle, Back to rule, and Start are at least 44px tall below 900px.
+- Filter options, the Earlier toggle, Back to rule, and Start are at least 44px tall below 900px.
   Refresh and Change, text actions inside a sentence, are at least 24px (WCAG 2.5.8), so they do
   not push their lines apart.
 
@@ -189,7 +188,7 @@ preview on the page.
   Column headers use `scope="col"`.
 - Each day heading is a `<th scope="rowgroup">` across the row. The arrow column is `aria-hidden`.
 - The Earlier group's toggle is a button with `aria-expanded` that controls its row group.
-- The views are a labelled radio group ("Show"). Each change is announced through the existing
+- Show is a labelled radio group and the kinds a labelled group ("Kind"). Each change is announced through the existing
   persistent live region ("Showing 12 of 51").
 - Outcomes are always words beside their sign, never color alone.
 - Focus order: header, chips, table, footer. Focus rings use the existing indigo ring.
