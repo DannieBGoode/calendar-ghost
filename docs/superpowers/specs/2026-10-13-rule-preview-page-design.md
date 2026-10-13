@@ -57,8 +57,8 @@ destination, or why it stays out.
   and locations to Work. Anyone who can see Work sees them." (Destructive and Privacy-Widening
   Changes).
 - **What this rule syncs:** a quiet panel with the rule's other choices in Rule Details' words
-  (all-day events, birthdays, Maybe, unanswered, declined, starting point), closed by an outline
-  "Change settings" button.
+  (all-day events, birthdays, Maybe, unanswered, declined, starting point), with "Change settings"
+  as an icon button in its top-right corner.
 
 The counts ("+ 12 to add · ⊘ 3 not synced") sit in the sticky footer beside Start syncing, so the
 decision is made with them in view; they cover the whole preview, never the filtered view.
@@ -93,7 +93,11 @@ the arrow sits beside what it leads to. There are no colored calendar dots.
   (BYSETPOS, RDATE, a day filter its frequency does not use) reads "Repeats" and sits under Today. Only a series that has fully ended sits in the Earlier group.
 - A changed occurrence is its own row on its own date, labelled with what changed:
   `19:00  Swim class · This date only: moved from 18:00  → Busy, 19:00  ~ Update`, or
-  `Swim class · This date only: cancelled  − Remove`. Its outcome is the planned action.
+  `Swim class · This date only: cancelled  ⊘ Not synced: cancelled`. Its outcome is the planned
+  action; for a series the run writes for the first time (or again), a changed date is "+ Add" and
+  a cancelled or excluded one is "Not synced", since nothing is there to update or remove.
+- The table ends with "That is everything in Family today. Repeating events go on past their row,
+  and events added or changed later sync on their own."
 - Times use the browser's time zone, named once above the table, in tabular numerals. An event that
   crosses midnight shows its end with the day ("22:00–01:00 Tue"). A multi-day all-day event shows
   its dates ("All day, 13–15 Oct").

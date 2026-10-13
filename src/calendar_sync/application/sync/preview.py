@@ -318,10 +318,12 @@ def _shown(item: PreviewItem) -> bool:
 
 
 def _change_in_new_series(rule: SyncRule, event: CalendarEvent) -> SyncDecision:
-    """How an occurrence change is written into a series written with it."""
+    """How an occurrence change lands in a series the run writes with it: as the destination
+    gains it, nothing exists there yet to update or remove. A changed date is added as it now is;
+    a cancelled or excluded one is never written."""
     if event.status is EventStatus.CANCELLED:
-        return SyncDecision(SyncAction.DELETE, SyncReason.OCCURRENCE_CANCELLED)
+        return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_CANCELLED)
     exclusion = rule.transformation.exclusion(event)
     if exclusion is not None:
-        return SyncDecision(SyncAction.DELETE, exclusion.removal_reason)
-    return SyncDecision(SyncAction.UPDATE, SyncReason.OCCURRENCE_CHANGED)
+        return SyncDecision(SyncAction.IGNORE, exclusion.skip_reason)
+    return SyncDecision(SyncAction.CREATE, SyncReason.OCCURRENCE_CHANGED)

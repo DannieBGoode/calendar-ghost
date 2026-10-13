@@ -186,8 +186,8 @@ def test_preview_counts_series_and_occurrence_changes_with_planned_actions() -> 
     assert preview.excluded_events == 2
     assert [(item.kind, item.planned_action, item.reason) for item in preview.items] == [
         ("series", SyncAction.CREATE, SyncReason.SOURCE_CREATED),
-        ("occurrence", SyncAction.UPDATE, SyncReason.OCCURRENCE_CHANGED),
-        ("occurrence", SyncAction.DELETE, SyncReason.OCCURRENCE_CANCELLED),
+        ("occurrence", SyncAction.CREATE, SyncReason.OCCURRENCE_CHANGED),
+        ("occurrence", SyncAction.IGNORE, SyncReason.OCCURRENCE_CANCELLED),
         ("series", SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE),
         ("occurrence", SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE),
     ]
@@ -224,7 +224,7 @@ def test_preview_of_an_occurrence_whose_destination_series_was_deleted_does_not_
     # The run writes the series again with the change in it, so nothing is blocked.
     assert [(item.kind, item.planned_action, item.reason) for item in preview.items] == [
         ("series", SyncAction.CREATE, SyncReason.PROJECTION_MISSING),
-        ("occurrence", SyncAction.UPDATE, SyncReason.OCCURRENCE_CHANGED),
+        ("occurrence", SyncAction.CREATE, SyncReason.OCCURRENCE_CHANGED),
     ]
 
 
@@ -442,7 +442,7 @@ def _pause(factory: UnitOfWorkFactory) -> None:
         uow.commit()
 
 
-def test_a_declined_occurrence_of_a_new_series_plans_its_removal_from_the_series() -> None:
+def test_a_declined_occurrence_of_a_new_series_is_never_written() -> None:
     calendars = FakeCalendars()
     master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
     calendars.put(replace(occurrence(master, 1), response=InvitationResponse.DECLINED))
@@ -452,10 +452,8 @@ def test_a_declined_occurrence_of_a_new_series_plans_its_removal_from_the_series
     )
 
     declined = next(item for item in preview.items if item.kind == "occurrence")
-    assert (declined.planned_action, declined.reason) == (
-        SyncAction.DELETE,
-        SyncReason.DECLINED_REMOVED,
-    )
+    # Nothing is in the destination yet, so the date is left out rather than removed.
+    assert (declined.planned_action, declined.reason) == (SyncAction.IGNORE, SyncReason.DECLINED)
     assert declined.projection is None
 
 

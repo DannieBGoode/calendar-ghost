@@ -68,7 +68,7 @@
       "other": "{count} events"
     },
     "undated": "Deleted in {source}",
-    "later": "After {date}, new events sync as they appear."
+    "later": "That is everything in {source} today. Repeating events go on past their row, and events added or changed later sync on their own."
   },
   "row": {
     "allDay": "All day",

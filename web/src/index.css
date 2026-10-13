@@ -6151,8 +6151,13 @@ td.rule-preview-col-when {
   font-weight: 650;
 }
 
-.rule-preview-settings > a {
-  align-self: flex-start;
+/* The heading and, in its corner, the one way to change what the panel lists. */
+.rule-preview-settings-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: -0.5rem -0.5rem -0.25rem 0;
 }
 
 .rule-preview-settings dl {

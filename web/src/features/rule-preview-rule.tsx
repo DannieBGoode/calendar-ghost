@@ -92,7 +92,23 @@ export function PreviewSettings({ detail, onChange }: { detail: RuleDetail; onCh
   ]
   return (
     <section className="rule-preview-settings" aria-labelledby="rule-preview-settings-title">
-      <h2 id="rule-preview-settings-title">{t("rulePreview.rule.settings")}</h2>
+      <div className="rule-preview-settings-heading">
+        <h2 id="rule-preview-settings-title">{t("rulePreview.rule.settings")}</h2>
+        <Button variant="ghost" size="icon" asChild>
+          <a
+            href={appPathForRule(detail.id)}
+            aria-label={t("rulePreview.rule.change")}
+            title={t("rulePreview.rule.change")}
+            onClick={(event) => {
+              if (!isPlainLeftClick(event)) return
+              event.preventDefault()
+              onChange()
+            }}
+          >
+            <Settings2 aria-hidden="true" />
+          </a>
+        </Button>
+      </div>
       <dl>
         {settings.map(([term, value]) => (
           <div key={term}>
@@ -101,18 +117,6 @@ export function PreviewSettings({ detail, onChange }: { detail: RuleDetail; onCh
           </div>
         ))}
       </dl>
-      <Button variant="outline" size="sm" asChild>
-        <a
-          href={appPathForRule(detail.id)}
-          onClick={(event) => {
-            if (!isPlainLeftClick(event)) return
-            event.preventDefault()
-            onChange()
-          }}
-        >
-          <Settings2 aria-hidden="true" /> {t("rulePreview.rule.change")}
-        </a>
-      </Button>
     </section>
   )
 }

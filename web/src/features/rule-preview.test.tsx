@@ -186,7 +186,7 @@ describe("RulePreviewView", () => {
     expect(text).toContain("Google account · dana@example.test")
     expect(text).toContain("What this rule syncs")
     expect(text).toContain("Birthdays from contactsNot synced")
-    expect(text).toContain("new events sync as they appear")
+    expect(text).toContain("events added or changed later sync on their own")
     const rows = [...container.querySelectorAll(".rule-preview-row")].map((row) => row.textContent)
     expect(rows).toEqual([
       "All dayMumNothing is writtenNot synced: birthday",
