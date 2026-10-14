@@ -13,6 +13,7 @@ import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
 import { api, type ConnectedAccount, type DiscoveredCalendar, type Rule, type RulePolicyPayload } from "@/lib/api"
+import { CREATE_RULE_KEY } from "@/lib/rule-draft"
 import { firstOtherCalendar, writableCalendars } from "@/lib/writable-calendars"
 
 const CALENDAR_STALE_TIME = 5 * 60 * 1000
@@ -54,6 +55,7 @@ export function RuleBuilder({
   }, [])
 
   const create = useMutation({
+    mutationKey: CREATE_RULE_KEY,
     mutationFn: () =>
       api.createRule({
         source: { connected_account_id: draft.resolvedSourceAccount, calendar_id: draft.resolvedSourceCalendar },
@@ -122,7 +124,8 @@ function BuilderActions({ ready, saving, onCancel }: { ready: boolean; saving: b
   return (
     <>
       <div className="form-actions">
-        <Button type="button" variant="outline" onClick={onCancel}>
+        {/* A save in flight cannot be called back, so the builder stays open until it ends. */}
+        <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
           {t("rules.builder.cancel")}
         </Button>
         {/* aria-disabled keeps focus on the button while it saves; the form ignores the click. */}

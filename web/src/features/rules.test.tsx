@@ -232,6 +232,22 @@ describe("RuleBuilder", () => {
     expect(description?.textContent).toBe("Turn this off to sync timed events only.")
   })
 
+  it("keeps the builder open while the draft saves", async () => {
+    vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise(() => undefined))
+    renderBuilder(testI18n(), [accountA, accountB])
+
+    const cancel = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Cancel")!
+    expect(cancel.disabled).toBe(false)
+    await act(async () => {
+      container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(cancel.disabled).toBe(true)
+    const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]')!
+    expect(submit.getAttribute("aria-busy")).toBe("true")
+  })
+
   it("closes through Cancel without saving", () => {
     const onCancel = vi.fn()
     const fetch = vi.spyOn(globalThis, "fetch")
