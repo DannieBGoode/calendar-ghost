@@ -123,6 +123,10 @@ export function RulesView({
             // A new rule's next step is its preview, which shows what it will write.
             onOpenRulePreview(rule.id)
           }}
+          onCancel={() => {
+            setBuilderChoice(false)
+            createButton.current?.focus()
+          }}
         />
       )}
       {rules.data.length === 0 ? (

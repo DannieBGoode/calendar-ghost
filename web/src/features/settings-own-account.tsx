@@ -270,7 +270,7 @@ function IncidentEmailsChoice({ user, onDone }: { user: SignedInUser; onDone: An
           <h3>{t("settings.ownAccount.notifications.title")}</h3>
           <p>{t("settings.ownAccount.notifications.body")}</p>
         </div>
-        <label className="checkbox-row incident-email-toggle" htmlFor="own-incident-emails">
+        <label className="checkbox-row" htmlFor="own-incident-emails">
           <input
             id="own-incident-emails"
             type="checkbox"

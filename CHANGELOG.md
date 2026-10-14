@@ -19,6 +19,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- The rule builder and the policy editor group a rule's policy the same way: how events look
+  (event information, Maybe events, unanswered invitations) beside which events to include
+  (all-day events, birthdays). Event information now says what the destination shows, and in
+  Attention Ochre who sees the details when a rule copies them. The builder lines its policy up
+  with the calendars above, has a Cancel button, announces loading, empty, and saving states to
+  screen readers, and keeps an empty calendar list and the saving button reachable by keyboard.
 - Preview rule opens its own page, `/rules/<id>/preview`. It lists every event in the rule's
   starting window beside what the destination will hold ("Busy", "Busy (tentative)", or the title
   under Details Projection), with Activity's signs for what happens and the reason for each event

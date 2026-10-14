@@ -3,7 +3,8 @@ import { ArrowRight } from "lucide-react"
 import { useEffect, useRef, useState, type SyntheticEvent } from "react"
 
 import { AccountSelect } from "@/components/account-select"
-import { InvitationResponseFields } from "@/components/invitation-response-fields"
+import { LiveAnnouncement } from "@/components/rule-commands"
+import { RulePolicyFields } from "@/components/rule-policy-fields"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
@@ -11,22 +12,18 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
-import {
-  api,
-  type ConnectedAccount,
-  type DiscoveredCalendar,
-  type Rule,
-  type TentativeEvents,
-  type UnansweredInvitations,
-} from "@/lib/api"
+import { api, type ConnectedAccount, type DiscoveredCalendar, type Rule, type RulePolicyPayload } from "@/lib/api"
 import { firstOtherCalendar, writableCalendars } from "@/lib/writable-calendars"
 
 const CALENDAR_STALE_TIME = 5 * 60 * 1000
 
-type Privacy = "busy_only" | "copy_details"
-type Responses = {
-  tentative_events: TentativeEvents
-  unanswered_invitations: UnansweredInvitations
+// New rules default to Busy-Only Projection and leave out birthdays (CONTEXT.md).
+const DEFAULT_POLICY: RulePolicyPayload = {
+  privacy_policy: "busy_only",
+  sync_all_day_events: true,
+  sync_birthdays: false,
+  tentative_events: "mark",
+  unanswered_invitations: "as_tentative",
 }
 type CalendarQuery = {
   data: DiscoveredCalendar[] | undefined
@@ -39,19 +36,18 @@ type CalendarQuery = {
 export function RuleBuilder({
   accounts,
   onCreated,
+  onCancel,
 }: {
   accounts: ConnectedAccount[]
   onCreated: (rule: Rule) => void
+  onCancel: () => void
 }) {
   const i18n = useI18n()
   const { t } = i18n
   const queryClient = useQueryClient()
   const heading = useRef<HTMLHeadingElement>(null)
   const draft = useDraftEndpoints(accounts)
-  const [privacy, setPrivacy] = useState<Privacy>("busy_only")
-  const [allDay, setAllDay] = useState(true)
-  const [birthdays, setBirthdays] = useState(false)
-  const [responses, setResponses] = useState<Responses>({ tentative_events: "mark", unanswered_invitations: "as_tentative" })
+  const [policy, setPolicy] = useState(DEFAULT_POLICY)
 
   useEffect(() => {
     heading.current?.focus()
@@ -62,10 +58,7 @@ export function RuleBuilder({
       api.createRule({
         source: { connected_account_id: draft.resolvedSourceAccount, calendar_id: draft.resolvedSourceCalendar },
         destination: { connected_account_id: draft.resolvedDestinationAccount, calendar_id: draft.resolvedDestinationCalendar },
-        privacy_policy: privacy,
-        sync_all_day_events: allDay,
-        sync_birthdays: birthdays,
-        ...responses,
+        ...policy,
       }),
     onSuccess: async (rule) => {
       await Promise.all([
@@ -76,20 +69,9 @@ export function RuleBuilder({
     },
   })
 
-  const sameEndpoint =
-    draft.resolvedSourceAccount === draft.resolvedDestinationAccount &&
-    draft.resolvedSourceCalendar === draft.resolvedDestinationCalendar
-  const canSubmit = Boolean(
-    draft.resolvedSourceAccount &&
-      draft.resolvedDestinationAccount &&
-      draft.resolvedSourceCalendar &&
-      draft.resolvedDestinationCalendar &&
-      !sameEndpoint,
-  )
-
   function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (canSubmit) create.mutate()
+    if (draft.complete && !create.isPending) create.mutate()
   }
 
   return (
@@ -115,47 +97,41 @@ export function RuleBuilder({
           account={draft.resolvedDestinationAccount}
           calendar={draft.resolvedDestinationCalendar}
           calendars={draft.destinationCalendars}
-          sameEndpoint={sameEndpoint}
+          sameEndpoint={draft.sameEndpoint}
           onAccountChange={draft.chooseDestinationAccount}
           onCalendarChange={draft.setDestinationCalendar}
         />
         <fieldset className="policy-fields">
           <legend>{t("rules.builder.policyLegend")}</legend>
-          <div className="field-stack">
-            <Label htmlFor="privacy-policy">{t("rules.builder.privacyLabel")}</Label>
-            <NativeSelect id="privacy-policy" value={privacy} onChange={(event) => setPrivacy(event.target.value as Privacy)}>
-              <option value="busy_only">{t("rules.builder.privacyOption.busyOnly")}</option>
-              <option value="copy_details">{t("rules.builder.privacyOption.copyDetails")}</option>
-            </NativeSelect>
-          </div>
-          <label className="checkbox-row">
-            <input type="checkbox" checked={allDay} onChange={(event) => setAllDay(event.target.checked)} />
-            <span>
-              <strong>{t("rules.builder.allDay.label")}</strong>
-              <small>{t("rules.builder.allDay.hint")}</small>
-            </span>
-          </label>
-          <label className="checkbox-row">
-            <input type="checkbox" checked={birthdays} onChange={(event) => setBirthdays(event.target.checked)} />
-            <span>
-              <strong>{t("rules.builder.birthdays.label")}</strong>
-              <small>{t("rules.builder.birthdays.hint")}</small>
-            </span>
-          </label>
-          <InvitationResponseFields
+          <RulePolicyFields
             idPrefix=""
-            policy={{ privacy_policy: privacy, ...responses }}
-            onChange={setResponses}
+            policy={policy}
+            destination={draft.destinationName ?? t("rules.policy.destinationFallback")}
+            onChange={setPolicy}
           />
         </fieldset>
         {create.error && <div className="inline-error" role="alert">{apiErrorMessage(i18n, create.error)}</div>}
-        <div className="form-actions">
-          <Button type="submit" disabled={!canSubmit || create.isPending}>
-            {create.isPending ? t("rules.builder.saving") : t("rules.builder.submit")}
-          </Button>
-        </div>
+        <BuilderActions ready={draft.complete} saving={create.isPending} onCancel={onCancel} />
       </form>
     </section>
+  )
+}
+
+function BuilderActions({ ready, saving, onCancel }: { ready: boolean; saving: boolean; onCancel: () => void }) {
+  const { t } = useI18n()
+  return (
+    <>
+      <div className="form-actions">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          {t("rules.builder.cancel")}
+        </Button>
+        {/* aria-disabled keeps focus on the button while it saves; the form ignores the click. */}
+        <Button type="submit" aria-disabled={!ready || saving || undefined} aria-busy={saving}>
+          {saving ? t("rules.builder.saving") : t("rules.builder.submit")}
+        </Button>
+      </div>
+      <LiveAnnouncement text={saving ? t("rules.builder.saving") : ""} />
+    </>
   )
 }
 
@@ -199,11 +175,19 @@ function useDraftEndpoints(accounts: ConnectedAccount[]) {
       resolvedSourceAccount === resolvedDestinationAccount ? resolvedSourceCalendar : null,
     )
 
+  const sameEndpoint =
+    resolvedSourceAccount === resolvedDestinationAccount && resolvedSourceCalendar === resolvedDestinationCalendar
+
   return {
     resolvedSourceAccount,
     resolvedDestinationAccount,
     resolvedSourceCalendar,
     resolvedDestinationCalendar,
+    sameEndpoint,
+    complete:
+      !sameEndpoint &&
+      [resolvedSourceAccount, resolvedDestinationAccount, resolvedSourceCalendar, resolvedDestinationCalendar].every(Boolean),
+    destinationName: calendarName(destinationCalendars.data, resolvedDestinationCalendar),
     sourceCalendars,
     destinationCalendars,
     setSourceCalendar,
@@ -217,6 +201,10 @@ function useDraftEndpoints(accounts: ConnectedAccount[]) {
       setDestinationCalendar("")
     },
   }
+}
+
+function calendarName(calendars: DiscoveredCalendar[] | undefined, id: string): string | undefined {
+  return calendars?.find((calendar) => calendar.id === id)?.summary
 }
 
 type FieldsetProps = {
@@ -251,12 +239,12 @@ function SourceFieldset({ accounts, account, calendar, calendars, onAccountChang
           id="source-calendar"
           value={calendar}
           onChange={(event) => onCalendarChange(event.target.value)}
-          disabled={!calendars.data?.length}
+          aria-disabled={!calendars.data?.length || undefined}
           aria-describedby={status ? "source-calendar-status" : undefined}
         >
           {calendars.data?.map((option) => <option key={option.id} value={option.id}>{option.summary}</option>)}
         </NativeSelect>
-        {status && <p id="source-calendar-status" className="field-hint">{status}</p>}
+        <p id="source-calendar-status" className="field-hint" role="status">{status}</p>
       </div>
     </fieldset>
   )
@@ -294,7 +282,7 @@ function DestinationFieldset({
           id="destination-calendar"
           value={calendar}
           onChange={(event) => onCalendarChange(event.target.value)}
-          disabled={!writable.length}
+          aria-disabled={!writable.length || undefined}
           aria-invalid={sameEndpoint || undefined}
           aria-describedby={
             sameEndpoint ? "destination-calendar-error" : status ? "destination-calendar-status" : undefined
@@ -302,12 +290,11 @@ function DestinationFieldset({
         >
           {writable.map((option) => <option key={option.id} value={option.id}>{option.summary}</option>)}
         </NativeSelect>
-        {sameEndpoint ? (
+        <p id="destination-calendar-status" className="field-hint" role="status">{sameEndpoint ? null : status}</p>
+        {sameEndpoint && (
           <p id="destination-calendar-error" className="field-error" role="alert">
             {t("rules.builder.sameEndpointError")}
           </p>
-        ) : (
-          status && <p id="destination-calendar-status" className="field-hint">{status}</p>
         )}
       </div>
     </fieldset>

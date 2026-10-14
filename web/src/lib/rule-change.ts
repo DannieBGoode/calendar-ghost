@@ -2,6 +2,7 @@ import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
 import type { ProjectionHandling, RemovalResult, RulePolicyPayload, RunOutcome } from "@/lib/api"
 import { responseConsequences } from "@/lib/invitation-responses"
+import { BUSY_TITLE } from "@/lib/privacy-policy"
 import { providerWords } from "@/lib/providers"
 
 export function policyChanged(current: RulePolicyPayload, next: RulePolicyPayload): boolean {
@@ -19,12 +20,6 @@ const STATE_CONSEQUENCES: Record<string, MessageKey> = {
   paused: "ruleDetails.change.state.paused",
   degraded: "ruleDetails.change.state.degraded",
 }
-
-/**
- * The title `domain/services.py` writes to every Busy-Only projection. Google Calendar receives it
- * in English whatever the UI language, so it is a message parameter, never translated.
- */
-const BUSY_TITLE = "Busy"
 
 function stateConsequence(i18n: I18n, state: string): string {
   return i18n.t(STATE_CONSEQUENCES[state] ?? "ruleDetails.change.state.draft")

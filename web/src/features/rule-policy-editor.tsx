@@ -1,10 +1,8 @@
 import { useMutation } from "@tanstack/react-query"
 import { useRef, useState, type SyntheticEvent } from "react"
 
-import { InvitationResponseFields } from "@/components/invitation-response-fields"
+import { RulePolicyFields } from "@/components/rule-policy-fields"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { NativeSelect } from "@/components/ui/native-select"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { api, type RuleDetail, type RulePolicyPayload } from "@/lib/api"
@@ -84,46 +82,12 @@ export function PolicyEditor({
       </div>
       {open && (
         <form id="policy-form" className="rule-edit-form" onSubmit={submit}>
-          <div className="field-stack">
-            <Label htmlFor="edit-privacy-policy">{t("ruleDetails.policy.eventInformation")}</Label>
-            <NativeSelect
-              ref={firstField}
-              id="edit-privacy-policy"
-              value={next.privacy_policy}
-              onChange={(event) =>
-                setNext({ ...next, privacy_policy: event.target.value as RulePolicyPayload["privacy_policy"] })
-              }
-            >
-              <option value="busy_only">{t("ruleDetails.policy.busyOnly")}</option>
-              <option value="copy_details">{t("ruleDetails.policy.copyDetails")}</option>
-            </NativeSelect>
-          </div>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={next.sync_all_day_events}
-              onChange={(event) => setNext({ ...next, sync_all_day_events: event.target.checked })}
-            />
-            <span>
-              <strong>{t("ruleDetails.policy.allDay")}</strong>
-              <small>{t("ruleDetails.policy.allDayHint")}</small>
-            </span>
-          </label>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={next.sync_birthdays}
-              onChange={(event) => setNext({ ...next, sync_birthdays: event.target.checked })}
-            />
-            <span>
-              <strong>{t("ruleDetails.policy.birthdays")}</strong>
-              <small>{t("ruleDetails.policy.birthdaysHint")}</small>
-            </span>
-          </label>
-          <InvitationResponseFields
+          <RulePolicyFields
             idPrefix="edit-"
             policy={next}
-            onChange={(change) => setNext({ ...next, ...change })}
+            destination={destinationName}
+            privacyRef={firstField}
+            onChange={setNext}
           />
           {changed && (
             <PolicyConsequences
