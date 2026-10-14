@@ -115,7 +115,8 @@ come right after this work and plug into one port; nothing in this design waits 
   - Otherwise it is `scheduled`, with one reason: an availability reason, `not_watchable`, or
     `waiting_for_provider`.
   - `not_watchable` means upkeep found, within the last day, that the source's provider cannot
-    watch it (the process-wide record of `AccountBackoff`). A source no watch covers for any other
+    watch it: no scope covers it, or the provider refused its registration as `unsupported`
+    (the process-wide record of `AccountBackoff`). A source no watch covers for any other
     reason, such as a new or resumed rule upkeep has not reached yet, or an account whose scope
     lookup backs off, is `waiting_for_provider`.
 
@@ -160,8 +161,15 @@ provider call happens inside a write transaction.
       `requested_until`. Commit.
    2. Call `register`, and record the receipt. A Graph `201` also sets `confirmed_at`.
    3. On `duplicate`, call `adopt` once. A subscription found with our id is recorded as `live`.
-      If nothing matches, another registration (another User connected the same mailbox) holds
-      it: the scope is left to polling with `retry_at` = 1 day.
+      If nothing matches and the watch keeps an `abandoned` registration not yet expired, a
+      creation whose answer was lost may hold the scope: upkeep calls `stop` on it (Outlook
+      finds it by its exact address, so no other subscription is deleted), deletes its row, and
+      leaves the watch due for the next cycle. Otherwise, or when that stop fails, another
+      registration (another User connected the same mailbox) holds it: the scope is left to
+      polling with `retry_at` = 1 day.
+   4. On `unsupported`, each calendar the watch covers is recorded as not watchable for a day,
+      as a scope the provider cannot give is. The watch is removed, or, while another
+      registration of it remains, its coverage is emptied so the next cycle retires it.
 3. **Recover.** A `creating` row older than 10 minutes, after a crash or a lost response, becomes
    `abandoned` and stays until `requested_until`. Its notices are then recognized and ignored, and
    Graph can adopt it.
@@ -176,6 +184,8 @@ provider call happens inside a write transaction.
 7. **Failures.**
    - `unauthorized` goes to `LapsedAuthorizations.lapsed(account, failure, attempted_at=call
      start)` (ADR 0027), so a refusal of credentials since replaced lapses nothing.
+   - `unsupported` from `register` makes the covered calendars not watchable for a day (step
+     2.4).
    - Every other class sets the watch's `retry_at` with exponential backoff, capped at 1 day,
      honoring `Retry-After`. A provider that cannot watch a calendar never lapses the account.
    - `unreachable` also records failing Delivery Evidence.

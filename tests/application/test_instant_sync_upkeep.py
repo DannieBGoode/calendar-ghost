@@ -681,6 +681,41 @@ def test_a_duplicate_held_by_another_registration_is_never_touched_and_waits_a_d
     assert scenario.watcher.operations().count("register") == 1
 
 
+def test_a_duplicate_held_by_a_lost_creation_stops_it_and_registers_next_cycle() -> None:
+    # Graph made the subscription, but its answer was lost: the row was abandoned, and Graph
+    # refuses the next creation as a duplicate that names the lost registration, not this one.
+    scenario = seeded(RegistrationState.CREATING, created_at=NOW - CREATION_DEADLINE)
+    lost = scenario.registration()
+    scenario.watcher.refusals["register"] = refusal(WatchFailureKind.DUPLICATE)
+
+    budget = scenario.run()
+
+    assert scenario.watcher.operations() == ["register", "adopt", "stop"]
+    # Stopped by what the lost registration knows, which Outlook finds by its exact address.
+    assert scenario.watcher.calls[-1] == ("stop", lost.id.value)
+    assert scenario.watcher.stopped_handles == [None]
+    assert budget.remaining == 97
+    assert scenario.registrations() == []
+    (watch,) = scenario.watches()
+    assert (watch.retry_at, watch.failures) == (None, 0)
+    del scenario.watcher.refusals["register"]
+    scenario.clock.at = NOW + timedelta(minutes=5)
+    scenario.run()
+    assert scenario.registration().state is RegistrationState.LIVE
+
+
+def test_a_duplicate_whose_lost_creation_cannot_be_stopped_waits_a_day() -> None:
+    scenario = seeded(RegistrationState.CREATING, created_at=NOW - CREATION_DEADLINE)
+    scenario.watcher.refusals["register"] = refusal(WatchFailureKind.DUPLICATE)
+    scenario.watcher.refusals["stop"] = refusal(WatchFailureKind.TEMPORARY)
+
+    scenario.run()
+
+    assert scenario.registration().state is RegistrationState.ABANDONED
+    (watch,) = scenario.watches()
+    assert (watch.retry_at, watch.failures) == (NOW + MAX_BACKOFF, 1)
+
+
 def test_a_registration_due_for_renewal_is_extended_in_place() -> None:
     scenario = seeded(RegistrationState.LIVE)
     due = scenario.registration().renew_at
@@ -786,21 +821,45 @@ def test_a_refusal_of_credentials_lapses_the_account_as_of_the_calls_start() -> 
     assert (watch.retry_at, watch.failures) == (None, 0)
 
 
-def test_a_provider_that_cannot_watch_a_calendar_backs_off_and_never_lapses_the_account() -> None:
+def test_a_calendar_its_provider_refuses_to_watch_is_not_watchable_for_a_day() -> None:
     scenario = world()
     scenario.watcher.refusals["register"] = refusal(WatchFailureKind.UNSUPPORTED)
+    backoff = scenario.upkeep.providers.backoff
 
     scenario.run()
-    (watch,) = scenario.watches()
-    assert (watch.retry_at, watch.failures) == (NOW + timedelta(minutes=1), 1)
-    scenario.run()
-    assert scenario.watcher.operations().count("register") == 1
-    scenario.clock.at = NOW + timedelta(minutes=1)
-    scenario.run()
 
-    (watch,) = scenario.watches()
-    assert (watch.retry_at, watch.failures) == (NOW + timedelta(minutes=3), 2)
+    # Its rule says it is not watchable, rather than waiting for the provider, and the account
+    # never lapses.
+    assert backoff.known_unwatchable(SOURCE, NOW)
+    assert scenario.watches() == []
+    assert scenario.registrations() == []
     assert scenario.lapses.recorded == []
+    scenario.clock.at = NOW + timedelta(hours=23)
+    scenario.run()
+    assert scenario.watcher.operations() == ["scope", "register"]
+    scenario.clock.at = NOW + timedelta(days=1)
+    del scenario.watcher.refusals["register"]
+    scenario.run()
+    assert not backoff.known_unwatchable(SOURCE, scenario.clock.at)
+    assert scenario.registration().state is RegistrationState.LIVE
+
+
+def test_a_replacement_its_provider_refuses_retires_the_watch_it_would_replace() -> None:
+    scenario = seeded(RegistrationState.LIVE)
+    scenario.watcher.extends = False
+    scenario.watcher.refusals["register"] = refusal(WatchFailureKind.UNSUPPORTED)
+    due = scenario.registration().renew_at
+    assert due is not None
+    scenario.clock.at = due
+
+    scenario.run()
+    (watch,) = scenario.watches()
+    assert watch.coverage == frozenset()
+    scenario.run()
+
+    assert scenario.upkeep.providers.backoff.known_unwatchable(SOURCE, due)
+    assert scenario.watcher.operations() == ["extend", "register", "stop"]
+    assert scenario.watches() == []
     assert scenario.registrations() == []
 
 
@@ -836,7 +895,7 @@ def test_a_temporary_failure_keeps_a_registration_the_provider_may_have_made() -
 
 def test_a_success_after_failures_clears_the_backoff() -> None:
     scenario = world()
-    scenario.watcher.refusals["register"] = refusal(WatchFailureKind.UNSUPPORTED)
+    scenario.watcher.refusals["register"] = refusal(WatchFailureKind.RATE_LIMITED)
     scenario.run()
     del scenario.watcher.refusals["register"]
     scenario.clock.at = NOW + timedelta(minutes=1)

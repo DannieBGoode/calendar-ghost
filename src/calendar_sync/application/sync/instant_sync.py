@@ -487,8 +487,28 @@ class _Cycle:
         if failure.kind is WatchFailureKind.DUPLICATE:
             return self._adopt(target, registration)
         self._forget(registration, failure)
-        self._failed(target, failure, attempted_at)
+        if failure.kind is WatchFailureKind.UNSUPPORTED:
+            self._unwatchable(target)
+        else:
+            self._failed(target, failure, attempted_at)
         return None
+
+    def _unwatchable(self, target: _Target) -> None:
+        """The provider will not watch what the watch covers. Each calendar is not watchable
+        until UNWATCHABLE_RECHECK, as a scope it cannot give is, so its rules say so rather than
+        wait for the provider. The watch goes, or, while it still holds a registration, covers
+        nothing, so the next cycle stops that and removes it."""
+        watch = target.watch
+        for calendar in watch.coverage:
+            self.upkeep.providers.backoff.cannot_watch(
+                CalendarEndpoint(watch.account, calendar), self.now
+            )
+        with self.upkeep.unit_of_work() as uow:
+            if any(each.watch_id == watch.id for each in uow.watches.registrations()):
+                uow.watches.set_coverage(watch.id, frozenset())
+            else:
+                uow.watches.remove(watch.id)
+            uow.commit()
 
     def _adopt(self, target: _Target, registration: WatchRegistration) -> Receipt | None:
         """After a duplicate, take over the provider's registration only if it names this one's
@@ -507,14 +527,33 @@ class _Cycle:
             self._failed(target, failure, attempted_at)
             return None
         if receipt is None:
-            # Another registration holds the scope, such as another User's of the same mailbox.
-            # It is never touched; the scope is left to Scheduled Sync for a day.
+            # A creation of this watch whose answer was lost may hold the scope: stopped, the
+            # next cycle registers again. Otherwise another registration holds it, such as
+            # another User's of the same mailbox. It is never touched; the scope is left to
+            # Scheduled Sync for a day.
+            stopped = self._stop_abandoned(target)
             with self.upkeep.unit_of_work() as uow:
                 uow.watches.delete_registration(registration.id)
-                retry_at = self.upkeep.clock.now() + MAX_BACKOFF
-                uow.watches.set_retry(target.watch.id, retry_at, target.watch.failures + 1)
+                if not stopped:
+                    retry_at = self.upkeep.clock.now() + MAX_BACKOFF
+                    uow.watches.set_retry(target.watch.id, retry_at, target.watch.failures + 1)
                 uow.commit()
         return receipt
+
+    def _stop_abandoned(self, target: _Target) -> bool:
+        """Stop the watch's abandoned registrations its provider may still hold; whether it had
+        any and none refused to stop. A stop needs no handle: the watcher finds a registration
+        whose answer was lost by its exact address, so no other is ever deleted."""
+        with self.upkeep.unit_of_work() as uow:
+            abandoned = tuple(
+                each
+                for each in uow.watches.registrations()
+                if each.watch_id == target.watch.id
+                and each.state is RegistrationState.ABANDONED
+                and not each.gone(self.now)
+            )
+        stopped = [self._stop(target.watcher, target.watch, each) for each in abandoned]
+        return bool(stopped) and all(stopped)
 
     def _forget(self, registration: WatchRegistration, failure: WatchFailure) -> None:
         """Drop a registration its provider refused; keep one it may have made recognized."""
@@ -601,25 +640,26 @@ class _Cycle:
 
     def _stop(
         self, watcher: CalendarWatcher | None, watch: CalendarWatch, registration: WatchRegistration
-    ) -> None:
-        """Stop a registration, best effort, then delete it.
+    ) -> bool:
+        """Stop a registration, best effort, then delete it; False when its stop failed.
 
         One whose stop fails is abandoned until it would expire, and one the budget cannot pay
         to stop yet keeps its state, so the next cycle stops it.
         """
         if watcher is not None:
             if self.meter.exhausted:
-                return
+                return True
             try:
                 self.meter.paid(lambda: watcher.stop(watch.account, registration))
             except WatchFailure:
                 with self.upkeep.unit_of_work() as uow:
                     uow.watches.abandon(registration.id)
                     uow.commit()
-                return
+                return False
         with self.upkeep.unit_of_work() as uow:
             uow.watches.delete_registration(registration.id)
             uow.commit()
+        return True
 
     def _failed(self, target: _Target, failure: WatchFailure, attempted_at: datetime) -> None:
         """Lapse the account for a refusal of its credentials; back off for any other failure."""
