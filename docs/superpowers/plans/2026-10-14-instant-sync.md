@@ -1208,8 +1208,6 @@ from calendar_sync.domain.model import CalendarEndpoint, CalendarId, ConnectedAc
 Then append to the end of the module, after `token_hash`:
 
 ```python
-
-
 class DeliveryState(StrEnum):
     """Whether a provider's notices reach the installation's public address."""
 
@@ -3920,7 +3918,7 @@ In `src/calendar_sync/infrastructure/persistence/migrations.py`, append to `_FOR
 after `(30, "0030_birthday_policy.sql"),`:
 
 ```python
-    (31, "0031_instant_sync.sql"),
+((31, "0031_instant_sync.sql"),)
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -4058,300 +4056,297 @@ def _watching(harness: PersistenceHarness, *registrations: WatchRegistration) ->
 At the end of `class PersistenceContract`, add:
 
 ```python
-    # Calendar Watches and Instant Sync Requests
+# Calendar Watches and Instant Sync Requests
 
-    def test_watches_round_trip_with_their_coverage_and_registrations(
-        self, harness: PersistenceHarness
-    ) -> None:
-        live = _live("registration-2")
-        _watching(harness, _registration(), live)
-        family = CalendarId("family")
-        with harness.unit_of_work() as uow:
-            uow.watches.set_coverage(WATCH.id, frozenset({RULE.source.calendar_id, family}))
-            uow.watches.set_retry(WATCH.id, NOW + HOUR, 2)
-            uow.commit()
 
-        with harness.unit_of_work() as uow:
-            watches, registrations = uow.watches.list(), uow.watches.registrations()
+def test_watches_round_trip_with_their_coverage_and_registrations(
+    self, harness: PersistenceHarness
+) -> None:
+    live = _live("registration-2")
+    _watching(harness, _registration(), live)
+    family = CalendarId("family")
+    with harness.unit_of_work() as uow:
+        uow.watches.set_coverage(WATCH.id, frozenset({RULE.source.calendar_id, family}))
+        uow.watches.set_retry(WATCH.id, NOW + HOUR, 2)
+        uow.commit()
 
-        assert watches == (
-            replace(
-                WATCH,
-                coverage=frozenset({RULE.source.calendar_id, family}),
-                retry_at=NOW + HOUR,
-                failures=2,
+    with harness.unit_of_work() as uow:
+        watches, registrations = uow.watches.list(), uow.watches.registrations()
+
+    assert watches == (
+        replace(
+            WATCH,
+            coverage=frozenset({RULE.source.calendar_id, family}),
+            retry_at=NOW + HOUR,
+            failures=2,
+        ),
+    )
+    assert registrations == (_registration(), live)
+
+
+def test_a_receipt_makes_only_a_registration_still_being_created_live(
+    self, harness: PersistenceHarness
+) -> None:
+    created, abandoned = (
+        WatchRegistrationId("registration-1"),
+        WatchRegistrationId("registration-2"),
+    )
+    _watching(harness, _registration(), _registration("registration-2"))
+    with harness.unit_of_work() as uow:
+        # Creation itself proved delivery, as a provider that validates the address does.
+        assert uow.watches.record_receipt(
+            created, Receipt("handle-1", NOW + 7 * DAY, confirmed=True), NOW + 5 * DAY, NOW
+        )
+        assert uow.watches.abandon(abandoned)
+        uow.commit()
+
+    with harness.unit_of_work() as uow:
+        # Late receipts: the registration was abandoned, made live, or deleted meanwhile.
+        late = (
+            uow.watches.record_receipt(abandoned, RECEIPT, NOW + 5 * DAY, NOW + MINUTE),
+            uow.watches.record_receipt(
+                created, Receipt("handle-other", NOW + DAY), NOW, NOW + HOUR
             ),
+            uow.watches.record_receipt(WatchRegistrationId("missing"), RECEIPT, NOW, NOW + HOUR),
         )
-        assert registrations == (_registration(), live)
+        uow.commit()
+    with harness.unit_of_work() as uow:
+        registrations = uow.watches.registrations()
 
-    def test_a_receipt_makes_only_a_registration_still_being_created_live(
-        self, harness: PersistenceHarness
-    ) -> None:
-        created, abandoned = (
-            WatchRegistrationId("registration-1"),
-            WatchRegistrationId("registration-2"),
+    assert late == (False, False, False)
+    assert registrations == (
+        replace(
+            _registration(),
+            state=RegistrationState.LIVE,
+            handle="handle-1",
+            expires_at=NOW + 7 * DAY,
+            renew_at=NOW + 5 * DAY,
+            confirmed_at=NOW,
+        ),
+        replace(_registration("registration-2"), state=RegistrationState.ABANDONED),
+    )
+
+
+def test_a_receipt_after_a_removal_abandoned_its_registration_changes_nothing(
+    self, harness: PersistenceHarness
+) -> None:
+    creating = _registration()
+    _watching(harness, creating)
+    # The inbox abandons a registration being created when its provider removes it.
+    with harness.unit_of_work() as uow:
+        removed = uow.watches.abandon(creating.id)
+        uow.commit()
+    with harness.unit_of_work() as uow:
+        late = uow.watches.record_receipt(
+            creating.id, Receipt("handle-1", NOW + 7 * DAY, confirmed=True), NOW, NOW
         )
-        _watching(harness, _registration(), _registration("registration-2"))
-        with harness.unit_of_work() as uow:
-            # Creation itself proved delivery, as a provider that validates the address does.
-            assert uow.watches.record_receipt(
-                created, Receipt("handle-1", NOW + 7 * DAY, confirmed=True), NOW + 5 * DAY, NOW
-            )
-            assert uow.watches.abandon(abandoned)
-            uow.commit()
+        uow.commit()
+    with harness.unit_of_work() as uow:
+        registrations = uow.watches.registrations()
 
-        with harness.unit_of_work() as uow:
-            # Late receipts: the registration was abandoned, made live, or deleted meanwhile.
-            late = (
-                uow.watches.record_receipt(abandoned, RECEIPT, NOW + 5 * DAY, NOW + MINUTE),
-                uow.watches.record_receipt(
-                    created, Receipt("handle-other", NOW + DAY), NOW, NOW + HOUR
-                ),
-                uow.watches.record_receipt(
-                    WatchRegistrationId("missing"), RECEIPT, NOW, NOW + HOUR
-                ),
-            )
-            uow.commit()
-        with harness.unit_of_work() as uow:
-            registrations = uow.watches.registrations()
+    assert (removed, late) == (True, False)
+    assert registrations == (replace(creating, state=RegistrationState.ABANDONED),)
 
-        assert late == (False, False, False)
-        assert registrations == (
-            replace(
-                _registration(),
-                state=RegistrationState.LIVE,
-                handle="handle-1",
-                expires_at=NOW + 7 * DAY,
-                renew_at=NOW + 5 * DAY,
-                confirmed_at=NOW,
-            ),
-            replace(_registration("registration-2"), state=RegistrationState.ABANDONED),
+
+def test_an_extension_keeps_a_renewal_request_newer_than_the_one_it_answered(
+    self, harness: PersistenceHarness
+) -> None:
+    asked = replace(_live(), renew_requested_at=NOW + HOUR)
+    _watching(harness, asked)
+    with harness.unit_of_work() as uow:
+        # Upkeep read a request of NOW; the provider asked again at NOW + HOUR meanwhile.
+        assert uow.watches.record_extension(
+            asked.id, NOW + 8 * DAY, NOW + 6 * DAY, seen_request=NOW
         )
-
-    def test_a_receipt_after_a_removal_abandoned_its_registration_changes_nothing(
-        self, harness: PersistenceHarness
-    ) -> None:
-        creating = _registration()
-        _watching(harness, creating)
-        # The inbox abandons a registration being created when its provider removes it.
-        with harness.unit_of_work() as uow:
-            removed = uow.watches.abandon(creating.id)
-            uow.commit()
-        with harness.unit_of_work() as uow:
-            late = uow.watches.record_receipt(
-                creating.id, Receipt("handle-1", NOW + 7 * DAY, confirmed=True), NOW, NOW
-            )
-            uow.commit()
-        with harness.unit_of_work() as uow:
-            registrations = uow.watches.registrations()
-
-        assert (removed, late) == (True, False)
-        assert registrations == (replace(creating, state=RegistrationState.ABANDONED),)
-
-    def test_an_extension_keeps_a_renewal_request_newer_than_the_one_it_answered(
-        self, harness: PersistenceHarness
-    ) -> None:
-        asked = replace(_live(), renew_requested_at=NOW + HOUR)
-        _watching(harness, asked)
-        with harness.unit_of_work() as uow:
-            # Upkeep read a request of NOW; the provider asked again at NOW + HOUR meanwhile.
-            assert uow.watches.record_extension(
-                asked.id, NOW + 8 * DAY, NOW + 6 * DAY, seen_request=NOW
-            )
-            uow.commit()
-        with harness.unit_of_work() as uow:
-            kept = uow.watches.registrations()[0]
-            assert uow.watches.record_extension(
-                asked.id, NOW + 9 * DAY, NOW + 7 * DAY, seen_request=NOW + HOUR
-            )
-            uow.commit()
-        with harness.unit_of_work() as uow:
-            cleared = uow.watches.registrations()[0]
-
-        assert (kept.expires_at, kept.renew_at, kept.renew_requested_at) == (
-            NOW + 8 * DAY,
-            NOW + 6 * DAY,
-            NOW + HOUR,
+        uow.commit()
+    with harness.unit_of_work() as uow:
+        kept = uow.watches.registrations()[0]
+        assert uow.watches.record_extension(
+            asked.id, NOW + 9 * DAY, NOW + 7 * DAY, seen_request=NOW + HOUR
         )
-        assert (cleared.expires_at, cleared.renew_at, cleared.renew_requested_at) == (
-            NOW + 9 * DAY,
-            NOW + 7 * DAY,
-            None,
+        uow.commit()
+    with harness.unit_of_work() as uow:
+        cleared = uow.watches.registrations()[0]
+
+    assert (kept.expires_at, kept.renew_at, kept.renew_requested_at) == (
+        NOW + 8 * DAY,
+        NOW + 6 * DAY,
+        NOW + HOUR,
+    )
+    assert (cleared.expires_at, cleared.renew_at, cleared.renew_requested_at) == (
+        NOW + 9 * DAY,
+        NOW + 7 * DAY,
+        None,
+    )
+
+
+def test_only_a_live_registration_extends_or_retires_and_any_is_abandoned(
+    self, harness: PersistenceHarness
+) -> None:
+    creating = WatchRegistrationId("registration-1")
+    live = WatchRegistrationId("registration-2")
+    _watching(harness, _registration(), _live("registration-2"))
+    with harness.unit_of_work() as uow:
+        refused = (
+            uow.watches.record_extension(creating, NOW + DAY, NOW, seen_request=None),
+            uow.watches.retire(creating),
         )
+        retired = (uow.watches.retire(live), uow.watches.retire(live))
+        extended_retiring = uow.watches.record_extension(live, NOW + DAY, NOW, seen_request=None)
+        abandoned = (
+            uow.watches.abandon(creating),
+            uow.watches.abandon(live),
+            uow.watches.abandon(live),
+            uow.watches.abandon(WatchRegistrationId("missing")),
+        )
+        uow.commit()
+    with harness.unit_of_work() as uow:
+        states = [registration.state for registration in uow.watches.registrations()]
+        uow.watches.delete_registration(creating)
+        uow.commit()
+    with harness.unit_of_work() as uow:
+        left = [registration.id for registration in uow.watches.registrations()]
 
-    def test_only_a_live_registration_extends_or_retires_and_any_is_abandoned(
-        self, harness: PersistenceHarness
-    ) -> None:
-        creating = WatchRegistrationId("registration-1")
-        live = WatchRegistrationId("registration-2")
-        _watching(harness, _registration(), _live("registration-2"))
-        with harness.unit_of_work() as uow:
-            refused = (
-                uow.watches.record_extension(creating, NOW + DAY, NOW, seen_request=None),
-                uow.watches.retire(creating),
+    assert refused == (False, False)
+    assert retired == (True, False)
+    assert not extended_retiring
+    # Abandoning works from any state, again too; only a missing registration refuses it.
+    assert abandoned == (True, True, True, False)
+    assert states == [RegistrationState.ABANDONED, RegistrationState.ABANDONED]
+    assert left == [live]
+
+
+def test_a_watch_needs_its_users_account_one_scope_and_a_token_of_its_own(
+    self, harness: PersistenceHarness
+) -> None:
+    harness.connect_account(THEIR_ACCOUNT, OTHER_USER)
+    with harness.unit_of_work() as uow:
+        uow.watches.add(WATCH)
+        uow.watches.add_registration(_registration())
+        with pytest.raises(IdentityCollision):
+            uow.watches.add(replace(WATCH, id=CalendarWatchId("watch-2")))
+        with pytest.raises(MissingReference):
+            uow.watches.add(replace(WATCH, id=CalendarWatchId("watch-3"), account=THEIR_ACCOUNT))
+        with pytest.raises(MissingReference):
+            uow.watches.add_registration(
+                _registration("registration-2", CalendarWatchId("missing"))
             )
-            retired = (uow.watches.retire(live), uow.watches.retire(live))
-            extended_retiring = uow.watches.record_extension(
-                live, NOW + DAY, NOW, seen_request=None
+        with pytest.raises(IdentityCollision):
+            uow.watches.add_registration(
+                replace(_registration("registration-3"), token_hash=_registration().token_hash)
             )
-            abandoned = (
-                uow.watches.abandon(creating),
-                uow.watches.abandon(live),
-                uow.watches.abandon(live),
-                uow.watches.abandon(WatchRegistrationId("missing")),
-            )
-            uow.commit()
-        with harness.unit_of_work() as uow:
-            states = [registration.state for registration in uow.watches.registrations()]
-            uow.watches.delete_registration(creating)
-            uow.commit()
-        with harness.unit_of_work() as uow:
-            left = [registration.id for registration in uow.watches.registrations()]
+        uow.commit()
 
-        assert refused == (False, False)
-        assert retired == (True, False)
-        assert not extended_retiring
-        # Abandoning works from any state, again too; only a missing registration refuses it.
-        assert abandoned == (True, True, True, False)
-        assert states == [RegistrationState.ABANDONED, RegistrationState.ABANDONED]
-        assert left == [live]
+    with harness.unit_of_work() as uow:
+        assert uow.watches.list() == (WATCH,)
+        assert uow.watches.registrations() == (_registration(),)
 
-    def test_a_watch_needs_its_users_account_one_scope_and_a_token_of_its_own(
-        self, harness: PersistenceHarness
-    ) -> None:
-        harness.connect_account(THEIR_ACCOUNT, OTHER_USER)
-        with harness.unit_of_work() as uow:
-            uow.watches.add(WATCH)
-            uow.watches.add_registration(_registration())
-            with pytest.raises(IdentityCollision):
-                uow.watches.add(replace(WATCH, id=CalendarWatchId("watch-2")))
-            with pytest.raises(MissingReference):
-                uow.watches.add(
-                    replace(WATCH, id=CalendarWatchId("watch-3"), account=THEIR_ACCOUNT)
-                )
-            with pytest.raises(MissingReference):
-                uow.watches.add_registration(
-                    _registration("registration-2", CalendarWatchId("missing"))
-                )
-            with pytest.raises(IdentityCollision):
-                uow.watches.add_registration(
-                    replace(_registration("registration-3"), token_hash=_registration().token_hash)
-                )
-            uow.commit()
 
-        with harness.unit_of_work() as uow:
-            assert uow.watches.list() == (WATCH,)
-            assert uow.watches.registrations() == (_registration(),)
+def test_another_user_can_neither_read_nor_change_a_users_watches_or_requests(
+    self, harness: PersistenceHarness
+) -> None:
+    asked = replace(_live(), renew_requested_at=NOW)
+    with harness.unit_of_work() as uow:
+        uow.rules.add(RULE)
+        uow.commit()
+    _watching(harness, asked, _registration("registration-2"))
+    harness.request_run(USER, RULE.id, NOW)
+    harness.connect_account(THEIR_SOURCE.connected_account_id, OTHER_USER)
+    with harness.unit_of_work() as uow:
+        watches, registrations = uow.watches.list(), uow.watches.registrations()
 
-    def test_another_user_can_neither_read_nor_change_a_users_watches_or_requests(
-        self, harness: PersistenceHarness
-    ) -> None:
-        asked = replace(_live(), renew_requested_at=NOW)
-        with harness.unit_of_work() as uow:
-            uow.rules.add(RULE)
-            uow.commit()
-        _watching(harness, asked, _registration("registration-2"))
-        harness.request_run(USER, RULE.id, NOW)
-        harness.connect_account(THEIR_SOURCE.connected_account_id, OTHER_USER)
-        with harness.unit_of_work() as uow:
-            watches, registrations = uow.watches.list(), uow.watches.registrations()
+    with harness.units(OTHER_USER)() as theirs:
+        seen = (
+            theirs.watches.list(),
+            theirs.watches.registrations(),
+            theirs.instant_requests.pending(),
+        )
+        changed = (
+            theirs.watches.record_receipt(WatchRegistrationId("registration-2"), RECEIPT, NOW, NOW),
+            theirs.watches.record_extension(asked.id, NOW + 9 * DAY, NOW, seen_request=NOW),
+            theirs.watches.retire(asked.id),
+            theirs.watches.abandon(asked.id),
+        )
+        theirs.watches.set_coverage(WATCH.id, frozenset())
+        theirs.watches.set_retry(WATCH.id, NOW + DAY, 5)
+        theirs.watches.delete_registration(asked.id)
+        theirs.watches.remove(WATCH.id)
+        theirs.instant_requests.acknowledge(RULE.id, 1, NOW)
+        # The identifier is taken; the account and the watch are another User's.
+        with pytest.raises(IdentityCollision):
+            theirs.watches.add(replace(THEIR_WATCH, id=WATCH.id))
+        with pytest.raises(MissingReference):
+            theirs.watches.add(replace(THEIR_WATCH, account=ACCOUNT))
+        with pytest.raises(MissingReference):
+            theirs.watches.add_registration(_registration("theirs"))
+        theirs.commit()
 
-        with harness.units(OTHER_USER)() as theirs:
-            seen = (
-                theirs.watches.list(),
-                theirs.watches.registrations(),
-                theirs.instant_requests.pending(),
-            )
-            changed = (
-                theirs.watches.record_receipt(
-                    WatchRegistrationId("registration-2"), RECEIPT, NOW, NOW
-                ),
-                theirs.watches.record_extension(
-                    asked.id, NOW + 9 * DAY, NOW, seen_request=NOW
-                ),
-                theirs.watches.retire(asked.id),
-                theirs.watches.abandon(asked.id),
-            )
-            theirs.watches.set_coverage(WATCH.id, frozenset())
-            theirs.watches.set_retry(WATCH.id, NOW + DAY, 5)
-            theirs.watches.delete_registration(asked.id)
-            theirs.watches.remove(WATCH.id)
-            theirs.instant_requests.acknowledge(RULE.id, 1, NOW)
-            # The identifier is taken; the account and the watch are another User's.
-            with pytest.raises(IdentityCollision):
-                theirs.watches.add(replace(THEIR_WATCH, id=WATCH.id))
-            with pytest.raises(MissingReference):
-                theirs.watches.add(replace(THEIR_WATCH, account=ACCOUNT))
-            with pytest.raises(MissingReference):
-                theirs.watches.add_registration(_registration("theirs"))
-            theirs.commit()
+    with harness.unit_of_work() as uow:
+        assert (uow.watches.list(), uow.watches.registrations()) == (watches, registrations)
+        assert uow.instant_requests.pending() == (PendingRequest(RULE.id, 1, 0, NOW, NOW, None),)
+    assert seen == ((), (), ())
+    assert changed == (False, False, False, False)
 
-        with harness.unit_of_work() as uow:
-            assert (uow.watches.list(), uow.watches.registrations()) == (watches, registrations)
-            assert uow.instant_requests.pending() == (
-                PendingRequest(RULE.id, 1, 0, NOW, NOW, None),
-            )
-        assert seen == ((), (), ())
-        assert changed == (False, False, False, False)
 
-    def test_acknowledging_a_request_never_lowers_what_was_handled(
-        self, harness: PersistenceHarness
-    ) -> None:
-        with harness.unit_of_work() as uow:
-            uow.rules.add(RULE)
-            uow.commit()
-        for minutes in (0, 1, 2):
-            harness.request_run(USER, RULE.id, NOW + minutes * MINUTE)
-        with harness.unit_of_work() as uow:
-            waiting = uow.instant_requests.pending()
-            uow.instant_requests.acknowledge(RULE.id, 3, NOW + 3 * MINUTE)
-            # A run that captured an earlier request finishes later.
-            uow.instant_requests.acknowledge(RULE.id, 1, NOW + 4 * MINUTE)
-            uow.commit()
-        with harness.unit_of_work() as uow:
-            handled = uow.instant_requests.pending()
-        harness.request_run(USER, RULE.id, NOW + 5 * MINUTE)
-        with harness.unit_of_work() as uow:
-            again = uow.instant_requests.pending()
+def test_acknowledging_a_request_never_lowers_what_was_handled(
+    self, harness: PersistenceHarness
+) -> None:
+    with harness.unit_of_work() as uow:
+        uow.rules.add(RULE)
+        uow.commit()
+    for minutes in (0, 1, 2):
+        harness.request_run(USER, RULE.id, NOW + minutes * MINUTE)
+    with harness.unit_of_work() as uow:
+        waiting = uow.instant_requests.pending()
+        uow.instant_requests.acknowledge(RULE.id, 3, NOW + 3 * MINUTE)
+        # A run that captured an earlier request finishes later.
+        uow.instant_requests.acknowledge(RULE.id, 1, NOW + 4 * MINUTE)
+        uow.commit()
+    with harness.unit_of_work() as uow:
+        handled = uow.instant_requests.pending()
+    harness.request_run(USER, RULE.id, NOW + 5 * MINUTE)
+    with harness.unit_of_work() as uow:
+        again = uow.instant_requests.pending()
 
-        assert waiting == (PendingRequest(RULE.id, 3, 0, NOW, NOW + 2 * MINUTE, None),)
-        assert handled == ()
-        # Waiting starts again from the notice that came after the runs.
-        assert again == (
-            PendingRequest(RULE.id, 4, 3, NOW + 5 * MINUTE, NOW + 5 * MINUTE, NOW + 4 * MINUTE),
+    assert waiting == (PendingRequest(RULE.id, 3, 0, NOW, NOW + 2 * MINUTE, None),)
+    assert handled == ()
+    # Waiting starts again from the notice that came after the runs.
+    assert again == (
+        PendingRequest(RULE.id, 4, 3, NOW + 5 * MINUTE, NOW + 5 * MINUTE, NOW + 4 * MINUTE),
+    )
+
+
+def test_removing_a_rule_removes_its_request_and_deleting_an_account_its_watches(
+    self, harness: PersistenceHarness
+) -> None:
+    with harness.unit_of_work() as uow:
+        uow.rules.add(RULE)
+        uow.rules.add(OTHER_RULE)
+        uow.commit()
+    for each in (RULE, OTHER_RULE):
+        harness.request_run(USER, each.id, NOW)
+    _watching(harness, _live())
+
+    with harness.unit_of_work() as uow:
+        uow.rules.remove(RULE.id)
+        uow.commit()
+    with harness.unit_of_work() as uow:
+        kept = [request.rule_id for request in uow.instant_requests.pending()]
+        uow.rules.purge(OTHER_RULE.id)
+        uow.commit()
+    harness.disconnect_account(ACCOUNT)
+    with harness.unit_of_work() as uow:
+        assert uow.accounts.delete_disconnected(ACCOUNT)
+        uow.commit()
+    with harness.unit_of_work() as uow:
+        left = (
+            uow.watches.list(),
+            uow.watches.registrations(),
+            uow.instant_requests.pending(),
         )
 
-    def test_removing_a_rule_removes_its_request_and_deleting_an_account_its_watches(
-        self, harness: PersistenceHarness
-    ) -> None:
-        with harness.unit_of_work() as uow:
-            uow.rules.add(RULE)
-            uow.rules.add(OTHER_RULE)
-            uow.commit()
-        for each in (RULE, OTHER_RULE):
-            harness.request_run(USER, each.id, NOW)
-        _watching(harness, _live())
-
-        with harness.unit_of_work() as uow:
-            uow.rules.remove(RULE.id)
-            uow.commit()
-        with harness.unit_of_work() as uow:
-            kept = [request.rule_id for request in uow.instant_requests.pending()]
-            uow.rules.purge(OTHER_RULE.id)
-            uow.commit()
-        harness.disconnect_account(ACCOUNT)
-        with harness.unit_of_work() as uow:
-            assert uow.accounts.delete_disconnected(ACCOUNT)
-            uow.commit()
-        with harness.unit_of_work() as uow:
-            left = (
-                uow.watches.list(),
-                uow.watches.registrations(),
-                uow.instant_requests.pending(),
-            )
-
-        assert kept == [OTHER_RULE.id]
-        assert left == ((), (), ())
+    assert kept == [OTHER_RULE.id]
+    assert left == ((), (), ())
 ```
 
 In `tests/adapters/test_persistence_contract.py`, add `from datetime import datetime` above
@@ -5003,15 +4998,16 @@ In `InMemoryUnitOfWork.__enter__`, after `self.provider_calls = InMemoryProvider
 In `class _OtherUsers`, after `hold_occurrence`, add:
 
 ```python
-    def hold_watch(self, watch_id: CalendarWatchId) -> bool:
-        return any(watch_id in state.watches for state in self._states())
+def hold_watch(self, watch_id: CalendarWatchId) -> bool:
+    return any(watch_id in state.watches for state in self._states())
 
-    def hold_registration(self, registration: WatchRegistration) -> bool:
-        return any(
-            other.id == registration.id or other.token_hash == registration.token_hash
-            for state in self._states()
-            for other in state.registrations.values()
-        )
+
+def hold_registration(self, registration: WatchRegistration) -> bool:
+    return any(
+        other.id == registration.id or other.token_hash == registration.token_hash
+        for state in self._states()
+        for other in state.registrations.values()
+    )
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -5835,10 +5831,8 @@ In `src/calendar_sync/infrastructure/persistence/memory.py`, add
 `class MemoryDatabase` after the `incidents` field add:
 
 ```python
-    delivery_evidence: dict[tuple[ProviderKind, str], DeliveryEvidence] = field(
-        default_factory=dict
-    )
-    """Whether each provider reached each public address, as SQLite's installation table keeps."""
+delivery_evidence: dict[tuple[ProviderKind, str], DeliveryEvidence] = field(default_factory=dict)
+"""Whether each provider reached each public address, as SQLite's installation table keeps."""
 ```
 
 In `src/calendar_sync/infrastructure/persistence/memory_installation.py`:
@@ -5937,9 +5931,7 @@ def _apply(
         )
         return 0
     if kind is NoticeKind.REMOVED and registration.state in _REMOVED_TO:
-        state.registrations[key] = replace(
-            registration, state=_REMOVED_TO[registration.state]
-        )
+        state.registrations[key] = replace(registration, state=_REMOVED_TO[registration.state])
     return _request_runs(state, registration.watch_id, at)
 
 
@@ -6000,9 +5992,9 @@ class InMemoryDeliveryEvidenceLog:
         }
 
     def _kept(self, provider: ProviderKind, address: str) -> DeliveryEvidence:
-        return self.database.delivery_evidence.get(
-            (provider, address)
-        ) or DeliveryEvidence(provider, address)
+        return self.database.delivery_evidence.get((provider, address)) or DeliveryEvidence(
+            provider, address
+        )
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -6071,92 +6063,92 @@ Add a field to `PersistenceHarness`, after `request_run`:
 At the end of `class PersistenceContract`, add:
 
 ```python
-    # What Instant Sync reads across Users
+# What Instant Sync reads across Users
 
-    def test_instant_sync_owners_have_an_enabled_rule_or_a_watch_disabled_ones_included(
-        self, harness: PersistenceHarness
-    ) -> None:
-        theirs = replace(
-            RULE, id=SyncRuleId("their-rule"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
+
+def test_instant_sync_owners_have_an_enabled_rule_or_a_watch_disabled_ones_included(
+    self, harness: PersistenceHarness
+) -> None:
+    theirs = replace(
+        RULE, id=SyncRuleId("their-rule"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
+    )
+    for account in (THEIR_SOURCE, THEIR_DESTINATION):
+        harness.connect_account(account.connected_account_id, OTHER_USER)
+    with harness.unit_of_work() as uow:
+        uow.rules.add(RULE)
+        uow.commit()
+    _commit_as(harness, OTHER_USER, lambda uow: uow.rules.add(theirs.pause()))
+    with harness.installation() as installation:
+        without_watches = installation.instant_sync_owners()
+
+    _watching(harness, replace(_live(), confirmed_at=NOW))
+    with harness.unit_of_work() as uow:
+        uow.watches.set_retry(WATCH.id, NOW + HOUR, 1)
+        uow.commit()
+
+    def watch_theirs(uow: UnitOfWork) -> None:
+        uow.watches.add(THEIR_WATCH)
+        uow.watches.add_registration(_registration("their-registration", THEIR_WATCH.id))
+
+    _commit_as(harness, OTHER_USER, watch_theirs)
+    harness.disable(OTHER_USER)
+    harness.prefer(OTHER_USER, False)
+    with harness.installation() as installation:
+        owners = installation.instant_sync_owners()
+
+    # A paused rule alone needs no watch, and a User without a watch has nothing planned.
+    assert without_watches == (InstantSyncOwner(USER, True, False, None),)
+    assert owners == (
+        # The retry comes before the planned renewal.
+        InstantSyncOwner(USER, wanted=True, disabled=False, next_due=NOW + HOUR),
+        # A disabled User is listed, so upkeep stops their watches.
+        InstantSyncOwner(OTHER_USER, wanted=False, disabled=True, next_due=NOW + CREATION_DEADLINE),
+    )
+
+
+def test_pending_instant_runs_are_unhandled_requests_of_enabled_rules_of_active_users(
+    self, harness: PersistenceHarness
+) -> None:
+    handled = replace(
+        OTHER_RULE, id=SyncRuleId("rule-2"), destination=endpoint("work-account", "third")
+    )
+    theirs = replace(
+        RULE, id=SyncRuleId("their-rule"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
+    )
+    for account in (THEIR_SOURCE, THEIR_DESTINATION):
+        harness.connect_account(account.connected_account_id, OTHER_USER)
+    failed = RuleRunOutcome(
+        RULE.id, RunKind.SYNC, NOW, False, failure_kind=ProviderFailureKind.TEMPORARY
+    )
+    with harness.unit_of_work() as uow:
+        for each in (RULE, OTHER_RULE, handled):
+            uow.rules.add(each)
+        uow.run_outcomes.record(failed)
+        uow.commit()
+    _commit_as(harness, OTHER_USER, lambda uow: uow.rules.add(theirs))
+    requested = ((USER, RULE), (USER, OTHER_RULE), (USER, handled), (OTHER_USER, theirs))
+    for owner, each in requested:
+        harness.request_run(owner, each.id, NOW)
+    with harness.unit_of_work() as uow:
+        uow.rules.save(OTHER_RULE.pause())
+        uow.instant_requests.acknowledge(handled.id, 1, NOW + MINUTE)
+        uow.commit()
+    harness.disable(OTHER_USER)
+
+    with harness.installation() as installation:
+        failing = installation.pending_instant_runs()
+    with harness.unit_of_work() as uow:
+        uow.run_outcomes.record(
+            replace(failed, completed_at=NOW + HOUR, succeeded=True, failure_kind=None)
         )
-        for account in (THEIR_SOURCE, THEIR_DESTINATION):
-            harness.connect_account(account.connected_account_id, OTHER_USER)
-        with harness.unit_of_work() as uow:
-            uow.rules.add(RULE)
-            uow.commit()
-        _commit_as(harness, OTHER_USER, lambda uow: uow.rules.add(theirs.pause()))
-        with harness.installation() as installation:
-            without_watches = installation.instant_sync_owners()
+        uow.commit()
+    with harness.installation() as installation:
+        recovered = installation.pending_instant_runs()
 
-        _watching(harness, replace(_live(), confirmed_at=NOW))
-        with harness.unit_of_work() as uow:
-            uow.watches.set_retry(WATCH.id, NOW + HOUR, 1)
-            uow.commit()
-
-        def watch_theirs(uow: UnitOfWork) -> None:
-            uow.watches.add(THEIR_WATCH)
-            uow.watches.add_registration(_registration("their-registration", THEIR_WATCH.id))
-
-        _commit_as(harness, OTHER_USER, watch_theirs)
-        harness.disable(OTHER_USER)
-        harness.prefer(OTHER_USER, False)
-        with harness.installation() as installation:
-            owners = installation.instant_sync_owners()
-
-        # A paused rule alone needs no watch, and a User without a watch has nothing planned.
-        assert without_watches == (InstantSyncOwner(USER, True, False, None),)
-        assert owners == (
-            # The retry comes before the planned renewal.
-            InstantSyncOwner(USER, wanted=True, disabled=False, next_due=NOW + HOUR),
-            # A disabled User is listed, so upkeep stops their watches.
-            InstantSyncOwner(
-                OTHER_USER, wanted=False, disabled=True, next_due=NOW + CREATION_DEADLINE
-            ),
-        )
-
-    def test_pending_instant_runs_are_unhandled_requests_of_enabled_rules_of_active_users(
-        self, harness: PersistenceHarness
-    ) -> None:
-        handled = replace(
-            OTHER_RULE, id=SyncRuleId("rule-2"), destination=endpoint("work-account", "third")
-        )
-        theirs = replace(
-            RULE, id=SyncRuleId("their-rule"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
-        )
-        for account in (THEIR_SOURCE, THEIR_DESTINATION):
-            harness.connect_account(account.connected_account_id, OTHER_USER)
-        failed = RuleRunOutcome(
-            RULE.id, RunKind.SYNC, NOW, False, failure_kind=ProviderFailureKind.TEMPORARY
-        )
-        with harness.unit_of_work() as uow:
-            for each in (RULE, OTHER_RULE, handled):
-                uow.rules.add(each)
-            uow.run_outcomes.record(failed)
-            uow.commit()
-        _commit_as(harness, OTHER_USER, lambda uow: uow.rules.add(theirs))
-        requested = ((USER, RULE), (USER, OTHER_RULE), (USER, handled), (OTHER_USER, theirs))
-        for owner, each in requested:
-            harness.request_run(owner, each.id, NOW)
-        with harness.unit_of_work() as uow:
-            uow.rules.save(OTHER_RULE.pause())
-            uow.instant_requests.acknowledge(handled.id, 1, NOW + MINUTE)
-            uow.commit()
-        harness.disable(OTHER_USER)
-
-        with harness.installation() as installation:
-            failing = installation.pending_instant_runs()
-        with harness.unit_of_work() as uow:
-            uow.run_outcomes.record(
-                replace(failed, completed_at=NOW + HOUR, succeeded=True, failure_kind=None)
-            )
-            uow.commit()
-        with harness.installation() as installation:
-            recovered = installation.pending_instant_runs()
-
-        request = PendingRequest(RULE.id, 1, 0, NOW, NOW, None)
-        scheduled = ScheduledRule(USER, RULE, None)
-        assert failing == (PendingInstantRun(scheduled, request, last_run_failed=True),)
-        assert recovered == (PendingInstantRun(scheduled, request, last_run_failed=False),)
+    request = PendingRequest(RULE.id, 1, 0, NOW, NOW, None)
+    scheduled = ScheduledRule(USER, RULE, None)
+    assert failing == (PendingInstantRun(scheduled, request, last_run_failed=True),)
+    assert recovered == (PendingInstantRun(scheduled, request, last_run_failed=False),)
 ```
 
 In `tests/adapters/test_persistence_contract.py`:
@@ -6226,16 +6218,17 @@ class PendingInstantRun:
 In `class InstallationUnitOfWork(Protocol)`, after `status_records`, add:
 
 ```python
-    def instant_sync_owners(self) -> Sequence[InstantSyncOwner]:
-        """Every User with an enabled rule or a Calendar Watch, disabled Users included, by
-        identifier."""
-        ...
+def instant_sync_owners(self) -> Sequence[InstantSyncOwner]:
+    """Every User with an enabled rule or a Calendar Watch, disabled Users included, by
+    identifier."""
+    ...
 
-    def pending_instant_runs(self) -> Sequence[PendingInstantRun]:
-        """Every enabled rule of a User who is not disabled whose Instant Sync Request is not yet
-        handled, by User and then by rule. Neither the User's wish nor their cadence is read
-        here; dispatch decides with them."""
-        ...
+
+def pending_instant_runs(self) -> Sequence[PendingInstantRun]:
+    """Every enabled rule of a User who is not disabled whose Instant Sync Request is not yet
+    handled, by User and then by rule. Neither the User's wish nor their cadence is read
+    here; dispatch decides with them."""
+    ...
 ```
 
 In `src/calendar_sync/infrastructure/persistence/watches.py`, change
@@ -6249,9 +6242,7 @@ def upkeep_due(
     """When upkeep next has work for one User's watches; None when nothing is planned."""
     retries = (watch.retry_at for watch in watches)
     moments = [moment for moment in retries if moment is not None]
-    moments.extend(
-        moment for registration in registrations for moment in _due(registration)
-    )
+    moments.extend(moment for registration in registrations for moment in _due(registration))
     return min(moments, default=None)
 
 
@@ -6288,63 +6279,64 @@ from calendar_sync.infrastructure.persistence.watches import (
 In `class SqliteInstallationUnitOfWork`, after `status_records`, add:
 
 ```python
-    def instant_sync_owners(self) -> Sequence[InstantSyncOwner]:
-        assert self._connection is not None
-        due = _upkeep_due(self._connection)
-        rows = self._connection.execute(
-            """
-            SELECT id, state, instant_sync FROM users
-            WHERE EXISTS (
-                SELECT 1 FROM sync_rules
-                WHERE sync_rules.user_id = users.id AND sync_rules.state = ?
-            ) OR EXISTS (
-                SELECT 1 FROM calendar_watches WHERE calendar_watches.user_id = users.id
-            )
-            ORDER BY id
-            """,
-            (SyncRuleState.ENABLED.value,),
-        ).fetchall()
-        return tuple(
-            InstantSyncOwner(
-                UserId(str(row["id"])),
-                wanted=bool(row["instant_sync"]),
-                disabled=row["state"] == UserState.DISABLED.value,
-                next_due=due.get(str(row["id"])),
-            )
-            for row in rows
+def instant_sync_owners(self) -> Sequence[InstantSyncOwner]:
+    assert self._connection is not None
+    due = _upkeep_due(self._connection)
+    rows = self._connection.execute(
+        """
+        SELECT id, state, instant_sync FROM users
+        WHERE EXISTS (
+            SELECT 1 FROM sync_rules
+            WHERE sync_rules.user_id = users.id AND sync_rules.state = ?
+        ) OR EXISTS (
+            SELECT 1 FROM calendar_watches WHERE calendar_watches.user_id = users.id
         )
+        ORDER BY id
+        """,
+        (SyncRuleState.ENABLED.value,),
+    ).fetchall()
+    return tuple(
+        InstantSyncOwner(
+            UserId(str(row["id"])),
+            wanted=bool(row["instant_sync"]),
+            disabled=row["state"] == UserState.DISABLED.value,
+            next_due=due.get(str(row["id"])),
+        )
+        for row in rows
+    )
 
-    def pending_instant_runs(self) -> Sequence[PendingInstantRun]:
-        assert self._connection is not None
-        rows = self._connection.execute(
-            """
-            SELECT sync_rules.*, outcome.last_full_succeeded_at,
-                outcome.succeeded AS last_succeeded, request.rule_id, request.requested_seq,
-                request.handled_seq, request.first_requested_at, request.last_requested_at,
-                request.last_run_at
-            FROM instant_sync_requests request
-            JOIN sync_rules
-                ON sync_rules.id = request.rule_id AND sync_rules.user_id = request.user_id
-            JOIN users ON users.id = sync_rules.user_id AND users.state = 'active'
-            LEFT JOIN rule_run_outcomes outcome
-                ON outcome.rule_id = sync_rules.id AND outcome.kind = 'sync'
-            WHERE sync_rules.state = ? AND request.requested_seq > request.handled_seq
-            ORDER BY sync_rules.user_id, sync_rules.id
-            """,
-            (SyncRuleState.ENABLED.value,),
-        ).fetchall()
-        return tuple(
-            PendingInstantRun(
-                ScheduledRule(
-                    UserId(str(row["user_id"])),
-                    rule_from_row(row),
-                    optional_time(row["last_full_succeeded_at"]),
-                ),
-                request_from_row(row),
-                last_run_failed=row["last_succeeded"] == 0,
-            )
-            for row in rows
+
+def pending_instant_runs(self) -> Sequence[PendingInstantRun]:
+    assert self._connection is not None
+    rows = self._connection.execute(
+        """
+        SELECT sync_rules.*, outcome.last_full_succeeded_at,
+            outcome.succeeded AS last_succeeded, request.rule_id, request.requested_seq,
+            request.handled_seq, request.first_requested_at, request.last_requested_at,
+            request.last_run_at
+        FROM instant_sync_requests request
+        JOIN sync_rules
+            ON sync_rules.id = request.rule_id AND sync_rules.user_id = request.user_id
+        JOIN users ON users.id = sync_rules.user_id AND users.state = 'active'
+        LEFT JOIN rule_run_outcomes outcome
+            ON outcome.rule_id = sync_rules.id AND outcome.kind = 'sync'
+        WHERE sync_rules.state = ? AND request.requested_seq > request.handled_seq
+        ORDER BY sync_rules.user_id, sync_rules.id
+        """,
+        (SyncRuleState.ENABLED.value,),
+    ).fetchall()
+    return tuple(
+        PendingInstantRun(
+            ScheduledRule(
+                UserId(str(row["user_id"])),
+                rule_from_row(row),
+                optional_time(row["last_full_succeeded_at"]),
+            ),
+            request_from_row(row),
+            last_run_failed=row["last_succeeded"] == 0,
         )
+        for row in rows
+    )
 ```
 
 After `_USERS_PER_QUERY`, add:
@@ -6379,38 +6371,37 @@ Change `from collections.abc import Collection, Sequence` to
 In `class InMemoryInstallationUnitOfWork`, after `status_records`, add:
 
 ```python
-    def instant_sync_owners(self) -> tuple[InstantSyncOwner, ...]:
-        database = self._database
-        return tuple(
-            InstantSyncOwner(
-                owner,
-                wanted=owner not in database.instant_sync_off,
-                disabled=owner in database.disabled,
-                next_due=upkeep_due(state.watches.values(), state.registrations.values()),
-            )
-            for owner, state in sorted(database.partitions.items(), key=lambda item: item[0].value)
-            if state.watches
-            or any(rule.state is SyncRuleState.ENABLED for rule in state.rules.values())
+def instant_sync_owners(self) -> tuple[InstantSyncOwner, ...]:
+    database = self._database
+    return tuple(
+        InstantSyncOwner(
+            owner,
+            wanted=owner not in database.instant_sync_off,
+            disabled=owner in database.disabled,
+            next_due=upkeep_due(state.watches.values(), state.registrations.values()),
         )
+        for owner, state in sorted(database.partitions.items(), key=lambda item: item[0].value)
+        if state.watches
+        or any(rule.state is SyncRuleState.ENABLED for rule in state.rules.values())
+    )
 
-    def pending_instant_runs(self) -> tuple[PendingInstantRun, ...]:
-        return tuple(
-            run
-            for owner, state in sorted(
-                self._database.partitions.items(), key=lambda item: item[0].value
-            )
-            if owner not in self._database.disabled
-            for run in _pending_runs(owner, state)
+
+def pending_instant_runs(self) -> tuple[PendingInstantRun, ...]:
+    return tuple(
+        run
+        for owner, state in sorted(
+            self._database.partitions.items(), key=lambda item: item[0].value
         )
+        if owner not in self._database.disabled
+        for run in _pending_runs(owner, state)
+    )
 ```
 
 After `_last_full_sync`, add:
 
 ```python
 def _pending_runs(owner: UserId, state: MemoryState) -> Iterator[PendingInstantRun]:
-    for rule_id, request in sorted(
-        state.instant_requests.items(), key=lambda item: item[0].value
-    ):
+    for rule_id, request in sorted(state.instant_requests.items(), key=lambda item: item[0].value):
         rule = state.rules.get(rule_id)
         if rule is None or rule.state is not SyncRuleState.ENABLED:
             continue
@@ -6615,7 +6606,7 @@ Replace the body of `insert_user`'s `connection.execute` call with:
 In `_user`, after `notify_by_email=bool(row["notify_by_email"]),`, add:
 
 ```python
-        instant_sync=bool(row["instant_sync"]),
+instant_sync = (bool(row["instant_sync"]),)
 ```
 
 In `tests/identity_fakes.py`, in `class MemoryUsers`, after `set_notification_email`, add:
@@ -7184,8 +7175,7 @@ def _refuses_credentials(failure: ProviderFailure) -> bool:
     if failure.kind is ProviderFailureKind.AUTHENTICATION:
         return True
     return (
-        failure.kind is ProviderFailureKind.AUTHORIZATION
-        and failure.cause is Cause.ACCESS_REVOKED
+        failure.kind is ProviderFailureKind.AUTHORIZATION and failure.cause is Cause.ACCESS_REVOKED
     )
 
 
@@ -8919,9 +8909,7 @@ from calendar_sync.infrastructure.persistence.authorization_states import (
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher
 
-CLIENT = OAuthClientConfig(
-    "client", "secret", "http://localhost:8000/api/v1/oauth/google/callback"
-)
+CLIENT = OAuthClientConfig("client", "secret", "http://localhost:8000/api/v1/oauth/google/callback")
 
 
 def test_google_watches_its_calendars_and_reads_their_notices(tmp_path: Path) -> None:
@@ -8999,18 +8987,19 @@ Add two fields at the end of `ProviderDescriptor`, after `secret_expires`:
 Add two methods at the end of `ProviderDirectory`:
 
 ```python
-    def watching(self, slug: str) -> ProviderDescriptor | None:
-        """The provider whose watch notices arrive under `slug`, when it reads them."""
-        found = self.at(slug)
-        return found if found is not None and found.notice_reader is not None else None
+def watching(self, slug: str) -> ProviderDescriptor | None:
+    """The provider whose watch notices arrive under `slug`, when it reads them."""
+    found = self.at(slug)
+    return found if found is not None and found.notice_reader is not None else None
 
-    def slug_of(self, kind: ProviderKind) -> str:
-        """Where `kind`'s connection flow and watch notices live. Every provider this release
-        knows has a descriptor, so a missing one is a composition error."""
-        found = self.of(kind)
-        if found is None:
-            raise LookupError(f"no descriptor for provider {kind.value}")
-        return found.guide.slug
+
+def slug_of(self, kind: ProviderKind) -> str:
+    """Where `kind`'s connection flow and watch notices live. Every provider this release
+    knows has a descriptor, so a missing one is a composition error."""
+    found = self.of(kind)
+    if found is None:
+        raise LookupError(f"no descriptor for provider {kind.value}")
+    return found.guide.slug
 ```
 
 `src/calendar_sync/infrastructure/google/descriptor.py`:
@@ -10239,8 +10228,7 @@ def _eligible(item: PendingInstantRun, instant: frozenset[UserId]) -> bool:
 def _fair_runs(ready: Sequence[PendingInstantRun]) -> tuple[InstantRun, ...]:
     """Due runs taking turns between Users, as a scheduled pass orders its rules."""
     seqs = {
-        (item.scheduled.owner, item.scheduled.rule.id): item.request.requested_seq
-        for item in ready
+        (item.scheduled.owner, item.scheduled.rule.id): item.request.requested_seq for item in ready
     }
     return tuple(
         InstantRun(ScheduledRun(scheduled, full=False), seqs[scheduled.owner, scheduled.rule.id])
@@ -10630,8 +10618,7 @@ class InstantSyncStatus:
             if self.address is not None and registration.address.startswith(f"{self.address}/")
         )
         return {
-            rule.id: _cadence_of(rule.source, availability, watches, current, now)
-            for rule in rules
+            rule.id: _cadence_of(rule.source, availability, watches, current, now) for rule in rules
         }
 
     def poll_every(self, user: UserId) -> timedelta:
@@ -11069,18 +11056,19 @@ In `tests/application/test_user_deletion.py`, change `Installation.__init__` to 
 replace `Installation.owned` with:
 
 ```python
-    def owned(self, user_id: UserId) -> OwnedRules:
-        units = self.database.for_user(user_id)
-        return OwnedRules(
-            units,
-            RemoveSyncRule(units, self.deleter, _Authorizations(units), FixedClock(), self.locks),
-            lambda: self._stop_watches(user_id),
-        )
+def owned(self, user_id: UserId) -> OwnedRules:
+    units = self.database.for_user(user_id)
+    return OwnedRules(
+        units,
+        RemoveSyncRule(units, self.deleter, _Authorizations(units), FixedClock(), self.locks),
+        lambda: self._stop_watches(user_id),
+    )
 
-    def _stop_watches(self, user_id: UserId) -> None:
-        self.stopped.append((user_id, self.users.get(user_id) is not None))
-        if self.stopping_fails:
-            raise RuntimeError("synthetic provider outage")
+
+def _stop_watches(self, user_id: UserId) -> None:
+    self.stopped.append((user_id, self.users.get(user_id) is not None))
+    if self.stopping_fails:
+        raise RuntimeError("synthetic provider outage")
 ```
 
 and append:
@@ -11102,9 +11090,7 @@ def test_watches_that_cannot_be_stopped_never_hold_a_deletion_back(
     installation.stopping_fails = True
 
     with caplog.at_level("ERROR", logger="calendar_sync.application.identity.administration"):
-        result = installation.delete_own().execute(
-            MEMBER.id, PASSWORD, ProjectionHandling.DELETE
-        )
+        result = installation.delete_own().execute(MEMBER.id, PASSWORD, ProjectionHandling.DELETE)
 
     assert result.rules == 1
     assert installation.stopped == [(MEMBER.id, True)]
@@ -11331,11 +11317,9 @@ class OwnedRules:
 in `DeleteUser.execute`, replace
 
 ```python
-        result = _remove_rules(
-            self.owned(user.id), ProjectionHandling.DELETE, keep_unreachable=True
-        )
-        self.users.delete(user.id)
-        return result
+result = _remove_rules(self.owned(user.id), ProjectionHandling.DELETE, keep_unreachable=True)
+self.users.delete(user.id)
+return result
 ```
 
 with
@@ -11537,14 +11521,14 @@ and after `account_calendars: AccountCalendars | None = None` and its docstring,
 In `build_adapters`, add to the `Adapters(...)` call, after `token_authentication=tokens,`:
 
 ```python
-        delivery_evidence=SqliteDeliveryEvidenceLog(database),
-        watch_inbox=SqliteWatchNoticeInbox(database),
+delivery_evidence = (SqliteDeliveryEvidenceLog(database),)
+watch_inbox = (SqliteWatchNoticeInbox(database),)
 ```
 
 and to the final `replace(...)`, after `calendar_provider=RoutingCalendarProvider.of(accounts, providers),`:
 
 ```python
-        watchers=RoutingCalendarWatcher.of(accounts, providers),
+watchers = (RoutingCalendarWatcher.of(accounts, providers),)
 ```
 
 Replace `compose` with:
@@ -11747,20 +11731,20 @@ after `call_stats = adapters.call_stats`, add:
 in its `UserServices(...)` call, after `lapsed_authorizations=rule_health.lapses,`, add:
 
 ```python
-        instant_sync_status=instant,
-        watch_upkeep=watch_upkeep,
+instant_sync_status = (instant,)
+watch_upkeep = (watch_upkeep,)
 ```
 
 and replace the `disconnect_connected_account=` argument with:
 
 ```python
-        disconnect_connected_account=(
-            DisconnectConnectedAccount(
-                unit_of_work, accounts, locks, _account_watches(watch_upkeep)
-            )
-            if accounts
-            else None
-        ),
+disconnect_connected_account = (
+    (
+        DisconnectConnectedAccount(unit_of_work, accounts, locks, _account_watches(watch_upkeep))
+        if accounts
+        else None
+    ),
+)
 ```
 
 After `public_address`, add:
@@ -13810,9 +13794,7 @@ def instant_sync_hints(
         return ()
     if signals.plain_http:
         return (
-            InstallationHint(
-                HintKind.PLAIN_HTTP_ADDRESS, None, signals.wanting, PLAIN_HTTP_ANCHOR
-            ),
+            InstallationHint(HintKind.PLAIN_HTTP_ADDRESS, None, signals.wanting, PLAIN_HTTP_ANCHOR),
         )
     return tuple(
         InstallationHint(
@@ -13962,18 +13944,20 @@ In `src/calendar_sync/bootstrap/container.py`, import `HintSources` from
 `instant_sync_signals` from `calendar_sync.application.operations.installation_hints`, compose:
 
 ```python
-        installation_health=GetInstallationHealth(
-            adapters.users,
-            lambda users: {user: status.health for user, status in statuses.of(users).items()},
-            scheduler,
-            adapters.clock,
-            HintSources(
-                _failure_causes(adapters.installation_units),
-                adapters.providers.guides,
-                _instant_sync_signals(adapters, public_address(settings)),
-            ),
-            adapters.providers.client_secrets,
+installation_health = (
+    GetInstallationHealth(
+        adapters.users,
+        lambda users: {user: status.health for user, status in statuses.of(users).items()},
+        scheduler,
+        adapters.clock,
+        HintSources(
+            _failure_causes(adapters.installation_units),
+            adapters.providers.guides,
+            _instant_sync_signals(adapters, public_address(settings)),
         ),
+        adapters.providers.client_secrets,
+    ),
+)
 ```
 
 and add after `_failure_causes`:
@@ -14249,10 +14233,10 @@ def test_the_web_ui_opens_the_guide_where_the_site_renders_it() -> None:
 In `tests/test_ubiquitous_language.py`, add two terms to `AVOIDED`, keeping its order:
 
 ```python
-    "parent mapping",
-    "push sync",
-    "real-time sync",
-    "recurring master",
+("parent mapping",)
+("push sync",)
+("real-time sync",)
+("recurring master",)
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
