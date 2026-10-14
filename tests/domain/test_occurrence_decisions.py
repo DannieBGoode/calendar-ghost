@@ -256,13 +256,37 @@ def test_occurrence_of_an_unsynchronized_series_is_ignored() -> None:
     assert decision.reason is SyncReason.SERIES_NOT_SYNCHRONIZED
 
 
-def test_occurrence_of_a_cancelled_mapped_series_is_ignored() -> None:
+def test_occurrence_of_a_cancelled_mapped_series_is_no_decision_of_its_own() -> None:
+    # Removing the series removes the occurrence; the series' own decision says so.
     cancelled = replace(SOURCE, status=EventStatus.CANCELLED)
 
     decision = decide(occurrence(SOURCE, 1), busy_instance(), source_series=cancelled)
 
     assert decision.action is SyncAction.IGNORE
-    assert decision.reason is SyncReason.SERIES_NOT_SYNCHRONIZED
+    assert decision.reason is SyncReason.CANCELLED_WITHOUT_PROJECTION
+
+
+def test_occurrence_of_a_cancelled_unmapped_series_is_no_decision_of_its_own() -> None:
+    cancelled = replace(SOURCE, status=EventStatus.CANCELLED)
+
+    decision = decide(
+        occurrence(SOURCE, 1),
+        None,
+        source_series=cancelled,
+        series_mapping=None,
+        destination_series=None,
+    )
+
+    assert decision.reason is SyncReason.CANCELLED_WITHOUT_PROJECTION
+
+
+def test_cancelled_occurrence_of_an_unsynchronized_series_is_no_decision_of_its_own() -> None:
+    cancelled = occurrence(SOURCE, 1, status=EventStatus.CANCELLED)
+
+    decision = decide(cancelled, None, series_mapping=None, destination_series=None)
+
+    assert decision.action is SyncAction.IGNORE
+    assert decision.reason is SyncReason.CANCELLED_WITHOUT_PROJECTION
 
 
 def test_occurrence_of_a_series_outside_the_source_calendar_is_ignored() -> None:

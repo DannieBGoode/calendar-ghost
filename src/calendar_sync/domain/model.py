@@ -399,6 +399,28 @@ class CalendarEvent:
         # The occurrence switched between timed and all-day.
         return True
 
+    def regular_occurrence(self, reference: EventRef, original_start: OccurrenceStart) -> Self:
+        """This series' occurrence at `original_start` as its recurrence shows it, before any
+        change to that one occurrence: what a series just written holds there."""
+        time: EventTime
+        if isinstance(self.time, TimedInterval) and isinstance(original_start, datetime):
+            time = TimedInterval(
+                original_start, original_start + (self.time.ends_at - self.time.starts_at)
+            )
+        elif isinstance(self.time, AllDayRange) and not isinstance(original_start, datetime):
+            time = AllDayRange(
+                original_start, original_start + (self.time.ends_before - self.time.starts_on)
+            )
+        else:
+            raise DomainValidationError("an occurrence starts as its series does")
+        return replace(
+            self,
+            reference=reference,
+            time=time,
+            recurrence=None,
+            occurrence=OccurrenceIdentity(self.reference.event_id, original_start),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class EventProjection:

@@ -12,12 +12,16 @@ from calendar_sync.application.sync.errors import (
     RuleNotFound,
     UnsupportedProjection,
 )
-from calendar_sync.application.sync.event_sync import SynchronizeEvents, event_operation_key
+from calendar_sync.application.sync.event_sync import SynchronizeEvents
 from calendar_sync.application.sync.exception_replays import ExceptionReplays
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.sync.lone_occurrences import RetireLoneOccurrences
 from calendar_sync.application.sync.occurrences import SeriesRepairs, SynchronizeOccurrences
 from calendar_sync.application.sync.own_writes import is_own_occurrence_write, is_own_write
+from calendar_sync.application.sync.planning import (
+    decided_before_its_occurrences,
+    event_operation_key,
+)
 from calendar_sync.application.sync.ports import (
     CalendarProvider,
     ProviderCallStats,
@@ -303,8 +307,10 @@ class ExecuteSyncRule:
             else:
                 self._record_unverifiable(run, exception.reference, series_mapping.destination)
             return
-        if series_mapping is None and series_ref not in run.handled:
-            # Creating the series replays its exceptions; this one is applied below.
+        if series_ref not in run.handled and decided_before_its_occurrences(
+            source_series, series_mapping
+        ):
+            # Creating a series replays its exceptions; this one is applied below.
             run.handled.add(exception.reference)
             self._synchronize_event(
                 run, source_series, destination_loaded=False, actual_destination=None
@@ -343,10 +349,16 @@ class ExecuteSyncRule:
         if source_series is None:
             self._record_unverifiable(run, series_mapping.source, destination_event.reference)
             return
-        source_occurrence = (
-            None
-            if source_series.status is EventStatus.CANCELLED
-            else self.provider.get_occurrence(series_mapping.source, identity.original_start)
+        if source_series.status is EventStatus.CANCELLED:
+            # Deleted in the source before its feed said so: removing the series removes this
+            # occurrence with it.
+            self._synchronize_event(
+                run, source_series, destination_loaded=False, actual_destination=None
+            )
+            run.handled.add(series_mapping.source)
+            return
+        source_occurrence = self.provider.get_occurrence(
+            series_mapping.source, identity.original_start
         )
         if source_occurrence is not None and source_occurrence.reference in run.handled:
             return
@@ -506,7 +518,8 @@ class ExecuteSyncRule:
             and not run.source_listed
         ):
             self.exception_replays.replay(run, mapping, source_event)
-        if source_event.recurrence is not None:
+        # A provider may keep a deleted series without its recurrence, as a bare cancellation.
+        if source_event.recurrence is not None or source_event.status is EventStatus.CANCELLED:
             if mapping is not None and decision.action is not SyncAction.DELETE:
                 self.lone_occurrences.retire(run, mapping, source_event)
             else:

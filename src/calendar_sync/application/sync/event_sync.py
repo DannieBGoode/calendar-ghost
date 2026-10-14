@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import UnsupportedProjection
+from calendar_sync.application.sync.planning import EventPlanner, event_operation_key
 from calendar_sync.application.sync.ports import CalendarProvider
 from calendar_sync.application.sync.sync_run import (
     SyncRunContext,
@@ -17,13 +17,11 @@ from calendar_sync.domain.model import (
     CalendarEvent,
     EventMapping,
     EventMappingId,
-    EventRef,
     EventStatus,
     OccurrenceIdentity,
     SyncAction,
     SyncDecision,
     SyncReason,
-    SyncRuleId,
 )
 from calendar_sync.domain.services import ProjectionFingerprinter, SyncDecisionService
 
@@ -104,7 +102,6 @@ class SynchronizeEvents:
         actual_destination: CalendarEvent | None,
     ) -> tuple[EventMapping | None, SyncDecision]:
         """Decide one source event against its projection; a found interrupted create maps it."""
-        rule = run.rule
         actual = actual_destination
         if not destination_loaded and mapping is not None:
             # A listed projection is used once; any later decision this run reads it fresh.
@@ -112,30 +109,15 @@ class SynchronizeEvents:
             fetched = listed if listed is not None else self.provider.get_event(mapping.destination)
             # A provider may keep deleted events as metadata-less cancellations: they are missing.
             actual = None if fetched is None or fetched.status is EventStatus.CANCELLED else fetched
-        decision = self.decisions.decide(
-            rule, source_event, mapping, actual, window_start=run.window_start
+        planner = EventPlanner(self.provider, self.decisions, self.fingerprinter)
+        return planner.decide(
+            run.rule,
+            source_event,
+            mapping,
+            actual,
+            window_start=run.window_start,
+            live=lambda series: has_live_occurrences(run, self.provider, series),
         )
-        if decision.reason is SyncReason.BEFORE_SYNC_WINDOW and self.provider.find_projection(
-            rule.destination,
-            event_operation_key(
-                rule.id, source_event.reference, source_event.revision, SyncAction.CREATE
-            ),
-        ):
-            # The provider acknowledged this create before an interrupted run could record its
-            # mapping; complete it idempotently instead of orphaning the projection.
-            decision = self.decisions.decide(rule, source_event, mapping, actual)
-        if (
-            decision.action is SyncAction.CREATE
-            and source_event.recurrence is not None
-            and not has_live_occurrences(run, self.provider, source_event.reference)
-        ):
-            # Creating it would only be cancelled again by its occurrences, on every run.
-            if mapping is None:
-                mapping, actual = self._acknowledged_series(run, source_event)
-            decision = self.decisions.decide(
-                rule, source_event, mapping, actual, has_live_occurrences=False
-            )
-        return mapping, decision
 
     def _write(
         self,
@@ -229,53 +211,3 @@ class SynchronizeEvents:
         if source_event.recurrence is not None and run.uow.occurrences.for_series(mapping.id):
             return mapping.source_revision
         return source_event.revision
-
-    def _acknowledged_series(
-        self, run: SyncRunContext, source_event: CalendarEvent
-    ) -> tuple[EventMapping | None, CalendarEvent | None]:
-        """Find a series the provider created before an interrupted run could record its mapping.
-
-        Its ownership is then verified like any mapped projection before it is removed.
-        """
-        key = event_operation_key(
-            run.rule.id, source_event.reference, source_event.revision, SyncAction.CREATE
-        )
-        found = self.provider.find_projection(run.rule.destination, key)
-        if found is None or found.status is not EventStatus.CONFIRMED or found.occurrence:
-            return None, None
-        mapping = EventMapping(
-            id=EventMappingId(key),
-            rule_id=run.rule.id,
-            source=source_event.reference,
-            destination=found.reference,
-            source_revision=source_event.revision,
-            projection_fingerprint=self.fingerprinter.fingerprint(
-                SyncDecisionService.as_projection(found)
-            ),
-        )
-        return mapping, found
-
-
-def event_operation_key(
-    rule_id: SyncRuleId,
-    source: EventRef,
-    revision: str,
-    action: SyncAction,
-    *,
-    replacing: EventRef | None = None,
-) -> str:
-    """The write's stable key. A create that replaces a projection its destination lost names
-    the lost one, so it is new for each replacement and the same for each retry of it: a
-    provider that keeps the key of a create, as Graph's transactionId does, never answers it
-    with the projection it replaces."""
-    parts = [
-        rule_id.value,
-        source.calendar.connected_account_id.value,
-        source.calendar.calendar_id.value,
-        source.event_id.value,
-        revision,
-        action.value,
-    ]
-    if replacing is not None:
-        parts.append(replacing.event_id.value)
-    return hashlib.sha256("|".join(parts).encode()).hexdigest()

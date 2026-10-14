@@ -16,6 +16,7 @@ from calendar_sync.domain.model import (
     EventStatus,
     NoProjectionExpected,
     OccurrenceCheck,
+    OccurrenceMapping,
     OccurrenceSituation,
     OccurrenceStart,
     ProjectionContent,
@@ -215,6 +216,9 @@ class SyncDecisionService:
         if ignored is not None:
             return ignored
         if series_mapping is None:
+            if _is_absent(situation.source_occurrence):
+                # Never projected and gone from the source: nothing of it is the rule's to decide.
+                return SyncDecision(SyncAction.IGNORE, SyncReason.CANCELLED_WITHOUT_PROJECTION)
             return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_NOT_SYNCHRONIZED)
         unproven = _occurrence_identity_decision(rule, situation, series_mapping)
         if unproven is not None:
@@ -229,22 +233,56 @@ class SyncDecisionService:
             return removal
         if destination is None:
             return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OCCURRENCE_MISSING)
-        return self._occurrence_projection_decision(rule, situation, source, destination)
+        return self._occurrence_projection_decision(
+            rule,
+            source,
+            situation.occurrence_mapping,
+            None
+            if destination.status is EventStatus.CANCELLED
+            else self.as_projection(destination),
+            destination_reported=situation.destination_reported,
+        )
+
+    def decide_occurrence_in_new_series(
+        self,
+        rule: SyncRule,
+        source_series: CalendarEvent,
+        source: CalendarEvent,
+        recorded: OccurrenceMapping | None,
+    ) -> SyncDecision:
+        """Decide an occurrence of a series this run writes, before the run writes it.
+
+        The series is written from its recurrence, so the destination then holds the regular
+        occurrence at the occurrence's original start, which the run decides it against.
+        """
+        if source.occurrence is None:
+            raise DomainValidationError("only an occurrence belongs to a series")
+        regular = source_series.regular_occurrence(
+            source.reference, source.occurrence.original_start
+        )
+        removal = _occurrence_removal(rule, source, regular)
+        if removal is not None:
+            return removal
+        return self._occurrence_projection_decision(
+            rule, source, recorded, self._projector.project(regular, rule)
+        )
 
     def _occurrence_projection_decision(
         self,
         rule: SyncRule,
-        situation: OccurrenceSituation,
         source: CalendarEvent,
-        destination: CalendarEvent,
+        recorded: OccurrenceMapping | None,
+        destination: EventProjection | None,
+        *,
+        destination_reported: bool = False,
     ) -> SyncDecision:
-        """Restore or update an occurrence whose projection differs from the source's."""
+        """Restore or update an occurrence whose projection differs from the source's; a
+        `destination` of None is one cancelled there."""
         projection = self._projector.project(source, rule)
         expected = self._fingerprinter.fingerprint(projection)
-        recorded = situation.occurrence_mapping
         # As for a series, only a projection the source now calls for differently than the one
         # last written is a source change (ADR 0017).
-        source_changed = not situation.destination_reported and (
+        source_changed = not destination_reported and (
             recorded is None
             or (
                 recorded.source_revision != source.revision
@@ -256,9 +294,9 @@ class SyncDecisionService:
             if source_changed
             else SyncReason.OCCURRENCE_DRIFT_REPAIRED
         )
-        if destination.status is EventStatus.CANCELLED:
+        if destination is None:
             return SyncDecision(SyncAction.UPDATE, changed, projection)
-        actual = self._fingerprinter.fingerprint(self.as_projection(destination))
+        actual = self._fingerprinter.fingerprint(destination)
         if expected == actual:
             return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_CURRENT, projection)
         if (
@@ -269,6 +307,36 @@ class SyncDecisionService:
         ):
             return SyncDecision(SyncAction.UPDATE, SyncReason.POLICY_APPLIED, projection)
         return SyncDecision(SyncAction.UPDATE, changed, projection)
+
+    @staticmethod
+    def ownership_conflict(
+        rule: SyncRule,
+        source_event: CalendarEvent,
+        mapping: EventMapping,
+        actual_destination: CalendarEvent | None,
+    ) -> SyncReason | None:
+        """Why the mapping or its destination cannot prove the rule owns the projection, if so."""
+        return _identity_conflict(rule, source_event, mapping, actual_destination)
+
+    @staticmethod
+    def lone_projection_removal(
+        rule: SyncRule, source_series: CalendarEvent, occurrence: CalendarEvent | None
+    ) -> SyncReason | None:
+        """Why the single projection of an occurrence is removed once its calendar shows the
+        series and the rule does not project that series; None to keep it.
+
+        A deleted series removes every occurrence with it, so `occurrence` need not be read.
+        Under a series the rule excludes, an occurrence `None` could not be read and stays to be
+        decided as the event it was projected as.
+        """
+        if source_series.status is EventStatus.CANCELLED:
+            return SyncReason.SOURCE_CANCELLED
+        exclusion = rule.transformation.exclusion(source_series)
+        if exclusion is None or occurrence is None:
+            return None
+        if occurrence.status is EventStatus.CANCELLED:
+            return SyncReason.SOURCE_CANCELLED
+        return exclusion.removal_reason
 
     @staticmethod
     def require_delete_ownership(mapping: EventMapping | None) -> EventMapping:
@@ -344,7 +412,9 @@ def _unsynchronized_series(rule: SyncRule, source_series: CalendarEvent) -> Sync
     if source_series.managed_origin is not None:
         return SyncDecision(SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE)
     if source_series.status is EventStatus.CANCELLED:
-        return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_NOT_SYNCHRONIZED)
+        # Deleting a series removes every occurrence with it; the series' own decision removes
+        # its projection, so none of its occurrences is a decision of its own.
+        return SyncDecision(SyncAction.IGNORE, SyncReason.CANCELLED_WITHOUT_PROJECTION)
     return None
 
 

@@ -112,7 +112,15 @@ Conflict is recorded. Direct destination edits or deletions of an occurrence are
 source, and a recreated destination series re-applies every Occurrence Mapping. A Material Rule
 Change re-decides every Series Mapping and each of its Occurrence Mappings, including exceptions
 outside the Initial Sync Window. Rule Preview reports recurring series and changed occurrences with
-their planned actions.
+their planned actions, decided as the run decides them: an occurrence of a series the run creates is
+decided against the regular occurrence the new series holds, so a moved one is an update and a
+cancelled one a removal.
+
+A deleted series removes its projection and every occurrence with it, including the single
+projections of its occurrences, and is decided before any occurrence that reports it. No occurrence
+of a deleted series is a decision of its own, and neither is a cancelled occurrence of a series the
+rule never projected: both are `cancelled_without_projection`. A provider keeps deleted events for
+some weeks, so a new rule's first run lists these and records nothing for them.
 
 Google cancels a whole series once its last live occurrence is cancelled, and a cancelled
 projection reads as missing. A source series whose every occurrence is cancelled, such as the
@@ -192,7 +200,9 @@ provider write). `all_day_excluded`, `series_not_synchronized`, and `series_with
 are recorded by the first run and
 by incremental runs that saw the event change, but not by the daily full pass, which would repeat
 them for every unchanged event each day. Entries with the unrecorded reasons written by earlier
-releases are hidden from Activity. See
+releases are hidden from Activity, as are their `series_not_synchronized` entries for cancelled
+occurrences. A Rule Preview leaves out the same unrecorded decisions, so it lists what the run will
+record, except that it still lists events other rules project into the source calendar. See
 [ADR 0013](adr/0013-record-decisions-worth-explaining.md).
 
 ## Partial failure

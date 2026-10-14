@@ -92,10 +92,12 @@ source series, Occurrence Start, source revision, and action. Every write uses
 Within each source batch, series masters and single events are processed before occurrence
 exceptions. When an exception's series has no Series Mapping, the application loads the source
 series and decides it first; if the series is eligible it is created, then the exception is
-applied. If the series is ineligible the exception is ignored. A provider failure while loading the
+applied. If the series is ineligible the exception is ignored. A series the source reports
+cancelled is also decided first, mapped or not, so a deleted series removes its projection even
+when only an occurrence's change reports the deletion. A provider failure while loading the
 series fails the run before any occurrence write, and the cursors do not advance. A series the
-provider reports as absent is ignored when this rule never mapped it (`series_not_synchronized`),
-and is a Conflict (`source_unverifiable`) with no write when it is mapped.
+provider reports as absent projects the occurrence on its own when this rule never mapped it (see
+below), and is a Conflict (`source_unverifiable`) with no write when it is mapped.
 
 Every occurrence write, cancellation, restoration, and mapping retirement is preceded by the same
 stop check as single-event writes: if the rule was paused, edited, or removed during the run, the
@@ -180,6 +182,28 @@ one it declined, projects none of its occurrences ([ADR 0018](0018-project-by-in
 so its occurrences' single projections are removed with the series' removal reason, such as
 `declined_removed`. An occurrence the series cannot find is left to be decided as the single event
 it was projected as.
+
+### A cancelled occurrence the rule never projected
+
+Amended 2026-10-14. A deleted series stays readable for some weeks as a cancellation, and a full
+listing reports it with its cancelled occurrences. A new rule therefore met the occurrences of a
+series deleted before it existed, and recorded each as `series_not_synchronized`, as though a live
+series were left out. A Source Cancellation matters to a rule only through a projection
+([CONTEXT.md](../../CONTEXT.md)), so an occurrence decision is now
+`cancelled_without_projection`, counted on the run and never recorded, when:
+
+- its series is cancelled, mapped or not: deleting the series removes every occurrence with it,
+  and the series' own decision records that removal, or that it was blocked; or
+- the rule has no Series Mapping for it and the occurrence is itself cancelled or gone.
+
+A live occurrence of a series the rule does not project keeps `series_not_synchronized`, because
+it answers why that meeting is missing. A deleted series is decided before its occurrences, mapped
+or not, wherever an occurrence reports it: in the source batch, and when the destination feed
+reports an occurrence whose source series is found cancelled. Deciding it removes the single
+projections of its occurrences too (`source_cancelled`), and a provider that keeps a deleted series
+only as a bare cancellation, without its recurrence, removes them as well. Entries earlier releases
+recorded as `series_not_synchronized` for a cancelled occurrence are hidden from Activity; one whose
+occurrence still read as live under a deleted series cannot be told apart and stays listed.
 
 ### Transformations and eligibility
 
@@ -291,6 +315,22 @@ Rule Preview includes eligible series and occurrence exceptions. `eligible_event
 reports its kind (`single`, `series`, or `occurrence`) and its planned action from the same
 decision service used during synchronization, using only provider reads. Preview remains
 side-effect-free apart from recording the validated rule state.
+
+Amended 2026-10-14. Preview plans each event through the run's own decisions, so for every event
+the next run records it lists the same action and reason. Single events and series are decided by
+the `EventPlanner` the run uses, with the run's sync window and its check for live occurrences
+before a series is created. An occurrence is decided against what its series will be once the run
+decides the series: a series the run creates holds the regular occurrence at the occurrence's
+original start (`decide_occurrence_in_new_series`), so a moved occurrence is an update and a
+cancelled or excluded one a removal, as the run then writes them; a series the run removes, or never
+projected, leaves the occurrence without a Series Mapping, and removes the occurrence's single
+projection if it had one. Deciding such a series lists the removal of each single projection of
+its occurrences, also of one the listing left out. A series the listing leaves out but the run decides with its occurrence,
+such as a deleted one only the occurrence reports, is listed with it. A preview leaves out what Activity does
+not record, such as an event deleted before the rule projected it, and does not count it; it still
+lists events other rules project into the source calendar. Earlier releases planned an occurrence of
+a new series as added or left out, and an occurrence of an excluded series under the series' reason,
+neither of which the run then recorded.
 
 ### Rule Removal
 

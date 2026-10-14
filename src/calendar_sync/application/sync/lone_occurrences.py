@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import UnsupportedProjection
-from calendar_sync.application.sync.event_sync import event_operation_key
 from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.planning import event_operation_key
 from calendar_sync.application.sync.ports import CalendarProvider
 from calendar_sync.application.sync.sync_run import SyncRunContext, record, require_unchanged
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
@@ -51,30 +51,30 @@ class RetireLoneOccurrences:
             if source is None:
                 continue  # unreadable, so decided as the event it was projected as
             if source.status is EventStatus.CANCELLED:
-                self._remove(run, lone, source, SyncReason.SOURCE_CANCELLED)
+                self._remove(run, lone, source, SyncReason.SOURCE_CANCELLED, source.revision)
             elif self._shown(run, series_mapping, source_series, lone.occurrence, source):
-                self._remove(run, lone, source, SyncReason.OCCURRENCE_JOINED_SERIES)
+                self._remove(
+                    run, lone, source, SyncReason.OCCURRENCE_JOINED_SERIES, source.revision
+                )
 
     def retire_excluded(self, run: SyncRunContext, source_series: CalendarEvent) -> None:
-        """Remove the single projections of the occurrences of a shown series the rule excludes."""
-        if source_series.status is not EventStatus.CONFIRMED:
-            return
-        exclusion = run.rule.transformation.exclusion(source_series)
-        if exclusion is None:
+        """Remove the single projections of the occurrences of a shown series the rule does not
+        project: one the rule excludes, or one deleted, which removes every occurrence with it."""
+        deleted = source_series.status is EventStatus.CANCELLED
+        if not deleted and run.rule.transformation.exclusion(source_series) is None:
             return
         for lone in run.uow.mappings.lone_occurrences(run.rule.id, source_series.reference):
             assert lone.occurrence is not None
-            source = self.provider.get_occurrence(
-                source_series.reference, lone.occurrence.original_start
+            source = (
+                None
+                if deleted
+                else self.provider.get_occurrence(
+                    source_series.reference, lone.occurrence.original_start
+                )
             )
-            if source is None:
-                continue  # unreadable, so decided as the event it was projected as
-            reason = (
-                SyncReason.SOURCE_CANCELLED
-                if source.status is EventStatus.CANCELLED
-                else exclusion.removal_reason
-            )
-            self._remove(run, lone, source, reason)
+            reason = self.decisions.lone_projection_removal(run.rule, source_series, source)
+            if reason is not None:
+                self._remove(run, lone, source, reason, (source or source_series).revision)
 
     def _shown(
         self,
@@ -104,8 +104,15 @@ class RetireLoneOccurrences:
         return decision.action is SyncAction.IGNORE and decision.reason in _SHOWN
 
     def _remove(
-        self, run: SyncRunContext, lone: EventMapping, source: CalendarEvent, reason: SyncReason
+        self,
+        run: SyncRunContext,
+        lone: EventMapping,
+        source: CalendarEvent | None,
+        reason: SyncReason,
+        revision: str,
     ) -> None:
+        """Delete the single projection; `source` is the occurrence, None once it is gone with
+        its series, and `revision` what the deletion's Operation Key is taken of."""
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
             mapping = run.uow.mappings.for_source(run.rule.id, lone.source)
@@ -116,9 +123,7 @@ class RetireLoneOccurrences:
                     mapping.destination,
                     mapping.source,
                     run.rule.id,
-                    event_operation_key(
-                        run.rule.id, mapping.source, source.revision, SyncAction.DELETE
-                    ),
+                    event_operation_key(run.rule.id, mapping.source, revision, SyncAction.DELETE),
                 )
             except UnsupportedProjection as unsupported:
                 self._record(run, mapping, source, SyncAction.CONFLICT, unsupported.reason)
@@ -135,7 +140,7 @@ class RetireLoneOccurrences:
         self,
         run: SyncRunContext,
         mapping: EventMapping,
-        source: CalendarEvent,
+        source: CalendarEvent | None,
         action: SyncAction,
         reason: SyncReason,
     ) -> None:
@@ -152,7 +157,7 @@ class RetireLoneOccurrences:
                 destination_event_id=mapping.destination.event_id.value,
                 reason=reason,
                 run_id=run.run_id,
-                event=RecordedEvent.of(source),
+                event=RecordedEvent.of_occurrence(source),
             ),
         )
         run.uow.commit()

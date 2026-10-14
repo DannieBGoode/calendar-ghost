@@ -147,6 +147,13 @@ _CATEGORY_SQL = f"""(CASE
 END)"""
 # Earlier releases recorded these skips; Activity no longer lists them.
 _UNRECORDED_SQL = _sql_list(frozenset(reason.value for reason in UNRECORDED_REASONS))
+# Earlier releases also explained a cancelled occurrence of a series the rule never projected,
+# which is now `cancelled_without_projection`. Only the occurrence's own cancellation was kept,
+# so one under a deleted series that still read as live stays listed.
+_LEGACY_CANCELLED_OCCURRENCE_SQL = (
+    f"NOT (COALESCE(reason, '') = '{SyncReason.SERIES_NOT_SYNCHRONIZED.value}'"
+    f" AND action = '{SyncAction.IGNORE.value}' AND event_cancelled)"
+)
 
 _WRITES = frozenset({"create", "update", "delete", "remove_projection"})
 # Writes that put a destination event back to match its source.
@@ -195,7 +202,11 @@ class SqliteActivityQueries:
         self._history = history
 
     def entries(self, selection: ActivityFilter) -> list[ActivityEntry]:
-        conditions = ["user_id = ?", f"COALESCE(reason, '') NOT IN ({_UNRECORDED_SQL})"]
+        conditions = [
+            "user_id = ?",
+            f"COALESCE(reason, '') NOT IN ({_UNRECORDED_SQL})",
+            _LEGACY_CANCELLED_OCCURRENCE_SQL,
+        ]
         parameters: list[object] = [self._user]
         search = selection.search.strip() if selection.search is not None else ""
         if search:
