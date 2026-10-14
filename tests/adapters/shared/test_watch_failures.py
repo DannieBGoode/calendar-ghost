@@ -76,9 +76,9 @@ def test_an_unnamed_provider_is_named_neutrally() -> None:
     assert watch_failure(unnamed).detail == "The calendar provider is temporarily unavailable"
 
 
-def test_an_unavailable_account_is_unsupported_and_named_by_nothing() -> None:
+def test_an_unavailable_account_is_its_own_kind_and_named_by_nothing() -> None:
     unavailable = account_unavailable()
 
-    assert unavailable.kind is WatchFailureKind.UNSUPPORTED
+    assert unavailable.kind is WatchFailureKind.ACCOUNT_UNAVAILABLE
     assert unavailable.failure is None
     assert "account-" not in unavailable.detail

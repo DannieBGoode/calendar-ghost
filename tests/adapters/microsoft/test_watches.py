@@ -405,7 +405,7 @@ class UnavailableTokens:
         ConnectedAccountDisconnected("connected account personal-account needs reauthorization"),
     ],
 )
-def test_an_account_without_credentials_is_unsupported_in_every_call(gone: Exception) -> None:
+def test_an_account_without_credentials_is_unavailable_in_every_call(gone: Exception) -> None:
     graph = FakeMicrosoftGraph()
     watcher = OutlookCalendarWatcher(
         UnavailableTokens(gone), GraphHttp(graph.client()), MovingClock()
@@ -421,7 +421,7 @@ def test_an_account_without_credentials_is_unsupported_in_every_call(gone: Excep
     for call in calls:
         with pytest.raises(WatchFailure) as raised:
             call()
-        assert raised.value.kind is WatchFailureKind.UNSUPPORTED
+        assert raised.value.kind is WatchFailureKind.ACCOUNT_UNAVAILABLE
         assert "personal-account" not in raised.value.detail
         assert _carries_no_provider_error(raised.value)
     assert graph.requests == []

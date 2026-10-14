@@ -50,6 +50,10 @@ class WatchFailureKind(StrEnum):
     """The provider refused the account's credentials, which lapses the account (ADR 0027)."""
     UNSUPPORTED = "unsupported"
     """The provider cannot watch this; it never lapses the account."""
+    ACCOUNT_UNAVAILABLE = "account_unavailable"
+    """The Connected Account no longer exists or is disconnected, so its credentials are gone.
+    Upkeep backs off as for a temporary failure: it says nothing about what can be watched, and
+    the account's rules already tell its owner."""
     DUPLICATE = "duplicate"
     """The provider already holds a registration for the same scope."""
     UNREACHABLE = "unreachable"
@@ -76,9 +80,9 @@ class CalendarWatcher(Protocol):
     """Asks one provider to report changes, through channels or subscriptions it holds.
 
     Every method raises only WatchFailure. A Connected Account that no longer exists or is
-    disconnected is `unsupported`, so upkeep backs off and never lapses it. The adapter never
-    invents an identity during a call: the registration id and token come from upkeep, which
-    persisted them first.
+    disconnected is `account_unavailable`, so upkeep backs off and never lapses it. The adapter
+    never invents an identity during a call: the registration id and token come from upkeep,
+    which persisted them first.
     """
 
     def scope(self, calendar: CalendarEndpoint) -> WatchScope | None:

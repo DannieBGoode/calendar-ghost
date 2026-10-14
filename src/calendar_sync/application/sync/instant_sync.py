@@ -490,6 +490,7 @@ class _Cycle:
         if failure.kind is WatchFailureKind.UNSUPPORTED:
             self._unwatchable(target)
         else:
+            # An unavailable account among them: it says nothing about what can be watched.
             self._failed(target, failure, attempted_at)
         return None
 

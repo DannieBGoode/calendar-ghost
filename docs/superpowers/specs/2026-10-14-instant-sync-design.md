@@ -147,8 +147,9 @@ The provider descriptor lives in `sync`, so everything it exposes is declared he
   registration id from the path, the provider handle and token it presents, and a kind:
   `started`, `changed`, `missed`, `reauthorize`, or `removed`.
 - **Failure classes** for watch calls, kept apart from ordinary sync failures: `unauthorized`,
-  `unsupported`, `duplicate`, `unreachable` (the provider's validation reason, not a bare `400`),
-  `rate_limited`, and `temporary`.
+  `unsupported`, `account_unavailable` (the Connected Account no longer exists or is
+  disconnected, so its credentials are gone), `duplicate`, `unreachable` (the provider's
+  validation reason, not a bare `400`), `rate_limited`, and `temporary`.
 
 ### Use case `UpkeepWatches` (sync context, one User's unit of work)
 
@@ -190,6 +191,8 @@ provider call happens inside a write transaction.
      2.4).
    - Every other class sets the watch's `retry_at` with exponential backoff, capped at 1 day,
      honoring `Retry-After`. A provider that cannot watch a calendar never lapses the account.
+     `account_unavailable` is among them: it never marks a calendar not watchable and keeps the
+     watch's coverage, so the watch registers again once the account is back.
    - `unreachable` also records failing Delivery Evidence.
 
 User Deletion calls `stop` for that User's registrations after Rule Removal and before deleting
@@ -413,6 +416,8 @@ review raised:
   known and unknown notices.
 - The new tables pass the isolation schema and contract tests.
 - `unauthorized` lapses the account through ADR 0027, and `unsupported` never does.
+- An unavailable account backs off and keeps its coverage; only `unsupported` from `register`
+  makes a calendar not watchable.
 
 The plan also holds a manual checklist against real Google and Microsoft accounts, kept out of CI,
 and a measurement of provider calls per instant run.

@@ -221,9 +221,8 @@ minutes, and the provider usually confirms within seconds. It lasts longer when:
 
 Its provider said it cannot report changes in this calendar to Calendar Ghost. Microsoft reports
 changes only for the signed-in person's own mailbox, so a calendar shared from another mailbox
-cannot be watched, and Google will not watch some calendars it publishes itself. A calendar whose
-account needed reauthorization when Calendar Ghost asked shows this too. Calendar Ghost asks again
-once a day, and after a restart. Its rules sync every five minutes.
+cannot be watched, and Google will not watch some calendars it publishes itself. Calendar Ghost
+asks again once a day, and after a restart. Its rules sync every five minutes.
 
 ### You turned it off
 

@@ -280,7 +280,7 @@ def test_a_token_endpoint_google_could_not_reach_is_temporary() -> None:
         ConnectedAccountDisconnected("connected account account-family needs reauthorization"),
     ],
 )
-def test_an_account_without_credentials_is_unsupported_not_temporary(gone: Exception) -> None:
+def test_an_account_without_credentials_is_unavailable_not_unsupported(gone: Exception) -> None:
     def unavailable(_account: ConnectedAccountId) -> Any:
         raise gone
 
@@ -289,7 +289,7 @@ def test_an_account_without_credentials_is_unsupported_not_temporary(gone: Excep
     for call in (lambda: register(google), lambda: google.stop(ACCOUNT, registration())):
         with pytest.raises(WatchFailure) as raised:
             call()
-        assert raised.value.kind is WatchFailureKind.UNSUPPORTED
+        assert raised.value.kind is WatchFailureKind.ACCOUNT_UNAVAILABLE
         assert "account-family" not in raised.value.detail
         assert _carries_no_provider_error(raised.value)
 

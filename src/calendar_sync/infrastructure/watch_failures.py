@@ -22,10 +22,11 @@ ACCOUNT_UNAVAILABLE = (ConnectedAccountNotFound, ConnectedAccountDisconnected)
 
 
 def account_unavailable() -> WatchFailure:
-    """An account whose credentials are gone cannot be watched. Its rules meet the same and its
-    owner is told there, so watching only backs off; the detail names no account."""
+    """An account whose credentials are gone cannot be watched for now. Its rules meet the same
+    and its owner is told there, so watching only backs off, and its calendars are never taken
+    for ones the provider cannot watch; the detail names no account."""
     return WatchFailure(
-        kind=WatchFailureKind.UNSUPPORTED,
+        kind=WatchFailureKind.ACCOUNT_UNAVAILABLE,
         detail="the connected account is no longer available",
     )
 

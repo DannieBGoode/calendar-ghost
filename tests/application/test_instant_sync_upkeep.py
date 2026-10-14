@@ -844,6 +844,26 @@ def test_a_calendar_its_provider_refuses_to_watch_is_not_watchable_for_a_day() -
     assert scenario.registration().state is RegistrationState.LIVE
 
 
+def test_an_account_unavailable_while_registering_backs_off_and_keeps_its_coverage() -> None:
+    # The account was disconnected or removed as upkeep asked: nothing says the calendar cannot
+    # be watched, so it is asked again once the account is back, after the usual short wait.
+    scenario = world()
+    scenario.watcher.refusals["register"] = refusal(WatchFailureKind.ACCOUNT_UNAVAILABLE)
+
+    scenario.run()
+
+    assert not scenario.upkeep.providers.backoff.known_unwatchable(SOURCE, NOW)
+    (watch,) = scenario.watches()
+    assert watch.coverage == {CalendarId("personal-calendar")}
+    assert (watch.retry_at, watch.failures) == (NOW + timedelta(minutes=1), 1)
+    assert scenario.registrations() == []
+    assert scenario.lapses.recorded == []
+    del scenario.watcher.refusals["register"]
+    scenario.clock.at = NOW + timedelta(minutes=1)
+    scenario.run()
+    assert scenario.registration().state is RegistrationState.LIVE
+
+
 def test_a_replacement_its_provider_refuses_retires_the_watch_it_would_replace() -> None:
     scenario = seeded(RegistrationState.LIVE)
     scenario.watcher.extends = False
