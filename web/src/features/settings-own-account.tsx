@@ -6,6 +6,7 @@ import { NewPasswordFields } from "@/components/new-password-fields"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { InstantSyncItem } from "@/features/settings-instant-sync"
 import { SelfDeletionItem } from "@/features/settings-self-deletion"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
@@ -18,7 +19,7 @@ import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
 type Announce = (message: string) => void
 
 /**
- * The signed-in User's own sign-in, incident emails, and deletion; every User has it.
+ * The signed-in User's own sign-in, incident emails, Instant Sync, and deletion; every User has it.
  * `onOpenPeople` opens the People page, where an administrator names another one.
  */
 export function OwnAccountSection({
@@ -44,6 +45,7 @@ export function OwnAccountSection({
         <EmailItem email={user.email} onDone={setMessage} />
         <PasswordItem onDone={setMessage} />
         <IncidentEmailsItem user={user} sendsEmail={sendsEmail} onDone={setMessage} />
+        <InstantSyncItem user={user} onDone={setMessage} />
         <SelfDeletionItem onOpenPeople={onOpenPeople} />
       </div>
       {/* Always present, so a screen reader announces each message as it arrives. */}

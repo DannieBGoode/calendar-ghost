@@ -13,8 +13,8 @@
     "administration": "Administration"
   },
   "ownAccount": {
-    "title": "Sign-in and email",
-    "intro": "How you sign in to Calendar Ghost, and the email it sends you.",
+    "title": "Sign-in, email, and sync",
+    "intro": "How you sign in to Calendar Ghost, the email it sends you, and how soon your rules sync.",
     "cancel": "Cancel",
     "currentPassword": "Current password",
     "email": {
@@ -43,6 +43,20 @@
       "setUpEmail": "How to set up email",
       "on": "Calendar Ghost now emails you about incidents.",
       "off": "Calendar Ghost no longer emails you about incidents. They still appear in Activity."
+    },
+    "instantSync": {
+      "title": "Instant sync",
+      "body": "Your rules sync soon after a change in their source calendar, not only on their schedule.",
+      "instant": "Instantly",
+      "scheduled": "On schedule",
+      "on": "Your rules now sync soon after each change in their source calendars.",
+      "off": "Your rules now sync on their schedule only.",
+      "blocked": {
+        "not_in_plan": "Your plan does not include it.",
+        "no_public_address": "This Calendar Ghost needs a public HTTPS address first.",
+        "not_reaching": "Your calendar providers cannot reach this Calendar Ghost.",
+        "unknown": "It is not available here right now."
+      }
     },
     "delete": {
       "title": "Delete your account",

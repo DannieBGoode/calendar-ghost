@@ -95,6 +95,10 @@ class MemoryUsers:
         if user_id in self.users:
             self.users[user_id] = replace(self.users[user_id], notify_by_email=notify_by_email)
 
+    def set_instant_sync(self, user_id: UserId, wanted: bool) -> None:
+        if user_id in self.users:
+            self.users[user_id] = replace(self.users[user_id], instant_sync=wanted)
+
     def password_hash(self, user_id: UserId) -> str | None:
         return self.hashes.get(user_id)
 

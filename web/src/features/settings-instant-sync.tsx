@@ -1,0 +1,133 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+
+import { LearnWhyLink } from "@/components/learn-why-link"
+import { NativeSelect } from "@/components/ui/native-select"
+import { apiErrorMessage } from "@/i18n/api-errors"
+import { useI18n } from "@/i18n/provider"
+import { api, type SessionStatus, type SignedInUser } from "@/lib/api"
+import { instantSyncBlock, instantSyncHelpUrl } from "@/lib/instant-sync"
+
+/**
+ * Whether the User's rules run soon after their provider reports a change (Instant Sync), beside
+ * incident emails: a choice between syncing instantly and on schedule, sized like the Appearance
+ * choices. Where it cannot run for them, the row says why and links to the section of the Instant
+ * Sync guide that explains the fix, like incident emails without email. It keeps the choice only
+ * while providers cannot reach the installation: watches remain and are retried then, and choosing
+ * "On schedule" stops them. Elsewhere nothing runs that the choice could stop, so it offers none.
+ */
+export function InstantSyncItem({ user, onDone }: { user: SignedInUser; onDone: (message: string) => void }) {
+  const block = instantSyncBlock(user.instant_sync_availability)
+  const help = instantSyncHelpUrl(user.instant_sync_help)
+  if (block === null) return <InstantSyncChoice user={user} onDone={onDone} />
+  if (block === "not_reaching") return <InstantSyncChoice user={user} onDone={onDone} reason={{ block, help }} />
+  return <InstantSyncUnavailable block={block} help={help} />
+}
+
+type Block = NonNullable<ReturnType<typeof instantSyncBlock>>
+
+/** Why Instant Sync does not work for the User, and the guide's section on it. */
+type Reason = { block: Block; help: string | null }
+
+const REASON_ID = "own-instant-sync-reason"
+
+function InstantSyncUnavailable({ block, help }: { block: Block; help: string | null }) {
+  const { t } = useI18n()
+  return (
+    <div className="setting-item">
+      <div className="setting-row">
+        <div className="setting-copy">
+          <h3>{t("settings.ownAccount.instantSync.title")}</h3>
+          <p>{t("settings.ownAccount.instantSync.body")}</p>
+          <p id={REASON_ID} className="setting-state">
+            {t(`settings.ownAccount.instantSync.blocked.${block}`)}
+          </p>
+        </div>
+        {help && <LearnWhyLink href={help} describedBy={REASON_ID} />}
+      </div>
+    </div>
+  )
+}
+
+function InstantSyncChoice({
+  user,
+  onDone,
+  reason,
+}: {
+  user: SignedInUser
+  onDone: (message: string) => void
+  reason?: Reason
+}) {
+  const i18n = useI18n()
+  const { t } = i18n
+  const change = useInstantSyncChange(onDone)
+  const instant = change.isPending ? change.variables : user.instant_sync
+  return (
+    <div className="setting-item">
+      <div className="setting-row">
+        <div className="setting-copy">
+          <h3 id="own-instant-sync-title">{t("settings.ownAccount.instantSync.title")}</h3>
+          <p>{t("settings.ownAccount.instantSync.body")}</p>
+          {reason && <InstantSyncReason reason={reason} />}
+        </div>
+        <div className="appearance-control">
+          <NativeSelect
+            id="own-instant-sync"
+            aria-labelledby="own-instant-sync-title"
+            aria-describedby={reason ? REASON_ID : undefined}
+            value={instant ? "instant" : "scheduled"}
+            disabled={change.isPending}
+            onChange={(event) => change.mutate(event.target.value === "instant")}
+          >
+            <option value="instant">{t("settings.ownAccount.instantSync.instant")}</option>
+            <option value="scheduled">{t("settings.ownAccount.instantSync.scheduled")}</option>
+          </NativeSelect>
+        </div>
+      </div>
+      {change.error && (
+        <p className="field-error" role="alert">
+          {apiErrorMessage(i18n, change.error)}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** The reason beside the choice, as a rule's page says it: the sentence, then "Learn why". */
+function InstantSyncReason({ reason }: { reason: Reason }) {
+  const { t } = useI18n()
+  return (
+    <p className="setting-state">
+      <span id={REASON_ID}>{t(`settings.ownAccount.instantSync.blocked.${reason.block}`)}</span>
+      {reason.help && (
+        <>
+          {" "}
+          <LearnWhyLink href={reason.help} describedBy={REASON_ID} />
+        </>
+      )}
+    </p>
+  )
+}
+
+/**
+ * Changes the choice. The dropdown shows the requested value only while the change is pending; then
+ * it shows the session's, which the change's answer updates at once and every later refetch keeps
+ * current, such as after another tab changed it. The answer replaces the cached session's User only
+ * while that session is still signed in as the User it names: another tab may have signed in as
+ * someone else meanwhile.
+ */
+function useInstantSyncChange(onDone: (message: string) => void) {
+  const { t } = useI18n()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (wanted: boolean) => api.setInstantSync(wanted),
+    onSuccess: async (changed) => {
+      onDone(changed.instant_sync ? t("settings.ownAccount.instantSync.on") : t("settings.ownAccount.instantSync.off"))
+      queryClient.setQueryData<SessionStatus>(["session"], (session) =>
+        session?.authenticated && session.user?.id === changed.id
+          ? { ...session, user: changed }
+          : session,
+      )
+      await queryClient.invalidateQueries({ queryKey: ["session"] })
+    },
+  })
+}

@@ -90,6 +90,9 @@ class Installation:
         self.database = InMemoryUnitOfWorkFactory()
         self.deleter = Deleter(failing)
         self.locks = RuleLocks()
+        self.stopped: list[tuple[UserId, bool]] = []
+        """Whose watches were stopped, and whether the User still existed then."""
+        self.stopping_fails = False
         state = self.database.for_user(MEMBER.id).state
         state.rules[rule().id] = rule()
         state.accounts[rule().source.connected_account_id] = ConnectedAccountState.CONNECTED
@@ -113,7 +116,13 @@ class Installation:
         return OwnedRules(
             units,
             RemoveSyncRule(units, self.deleter, _Authorizations(units), FixedClock(), self.locks),
+            lambda: self._stop_watches(user_id),
         )
+
+    def _stop_watches(self, user_id: UserId) -> None:
+        self.stopped.append((user_id, self.users.get(user_id) is not None))
+        if self.stopping_fails:
+            raise RuntimeError("synthetic provider outage")
 
     def delete_user(self) -> DeleteUser:
         return DeleteUser(self.users, self.sessions, self.owned)
@@ -329,3 +338,27 @@ def test_someone_joining_while_the_last_user_leaves_keeps_their_administrator() 
         installation.delete_own().execute(ADMIN.id, PASSWORD, ProjectionHandling.DELETE)
     assert installation.users.get(ADMIN.id) == ADMIN
     assert installation.rules_of(MEMBER.id) == (rule().id,)
+
+
+def test_deleting_a_user_stops_their_watches_before_their_records_go() -> None:
+    installation = Installation()
+
+    installation.delete_user().execute(ADMIN.id, MEMBER.id)
+
+    assert installation.stopped == [(MEMBER.id, True)]
+    assert installation.users.get(MEMBER.id) is None
+
+
+def test_watches_that_cannot_be_stopped_never_hold_a_deletion_back(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    installation = Installation()
+    installation.stopping_fails = True
+
+    with caplog.at_level("ERROR", logger="calendar_sync.application.identity.administration"):
+        result = installation.delete_own().execute(MEMBER.id, PASSWORD, ProjectionHandling.DELETE)
+
+    assert result.rules == 1
+    assert installation.stopped == [(MEMBER.id, True)]
+    assert installation.users.get(MEMBER.id) is None
+    assert "Could not stop the watches of a User being deleted" in caplog.text

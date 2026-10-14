@@ -294,9 +294,25 @@ CALENDAR_SYNC_MICROSOFT_REDIRECT_URI=https://calendar.example.test/api/v1/oauth/
 CALENDAR_SYNC_SECURE_COOKIES=true
 ```
 
-Do not expose the service directly to the public internet. See [Google OAuth redirect URI on a
-LAN host](deployment.md#google-oauth-redirect-uri-on-a-lan-host) for the tunnel and reverse-proxy
-options.
+Do not expose the service directly to the public internet; Instant Sync below needs only one path
+to be public. See
+[Google OAuth redirect URI on a LAN host](deployment.md#google-oauth-redirect-uri-on-a-lan-host)
+for the tunnel and reverse-proxy options.
+
+### Turn on Instant Sync (optional)
+
+Rules sync every five minutes without anything below. To have a rule run soon after its Source
+Calendar changes, Google and Microsoft must reach this installation at a public HTTPS address:
+
+1. Forward `/api/v1/watch-notices/` through HTTPS with a reverse proxy or Cloudflare Tunnel
+   ([examples](instant-sync.md#forward-the-notices-path)). Tailscale Serve keeps a name inside your
+   tailnet, which providers cannot reach.
+2. Set `CALENDAR_SYNC_PUBLIC_URL` in `.env` to that address, such as
+   `https://calendar.example.test`, and run `docker compose up -d`.
+3. Open a rule. Within five minutes, **When it syncs** says **Syncs instantly**.
+   [Check that it works](instant-sync.md#check-that-it-works) explains more.
+
+Each person can turn **Instant sync** off under **Settings → Your account**.
 
 ## 6. Connect monitors and agents
 

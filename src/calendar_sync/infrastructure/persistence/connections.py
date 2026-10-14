@@ -33,10 +33,13 @@ def open_connection(
 
 
 @contextmanager
-def transaction(database_path: Path) -> Iterator[sqlite3.Connection]:
+def transaction(
+    database_path: Path, *, timeout: float = BUSY_TIMEOUT_SECONDS
+) -> Iterator[sqlite3.Connection]:
     """One short transaction: committed when the block succeeds, rolled back if it raises.
 
-    The connection is closed either way, so no handle or lock outlives the block.
+    The connection is closed either way, so no handle or lock outlives the block. A write waits up
+    to `timeout` seconds for another writer's lock.
     """
-    with closing(open_connection(database_path)) as connection, connection:
+    with closing(open_connection(database_path, timeout=timeout)) as connection, connection:
         yield connection

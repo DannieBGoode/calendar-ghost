@@ -11,6 +11,10 @@ from types import TracebackType
 from typing import Protocol, Self
 
 from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.application.sync.watch_ports import (
+    CalendarWatchRepository,
+    InstantSyncRequestRepository,
+)
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditEntry
@@ -399,6 +403,8 @@ class UnitOfWork(Protocol):
     previews: RulePreviewRepository
     calendar_names: CalendarNameRepository
     provider_calls: ProviderCallRepository
+    watches: CalendarWatchRepository
+    instant_requests: InstantSyncRequestRepository
 
     def __enter__(self) -> Self: ...
 

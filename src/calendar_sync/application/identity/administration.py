@@ -3,6 +3,7 @@ Password Reset Links, roles, and disabling. None of it shows a User's calendars 
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -43,6 +44,8 @@ from calendar_sync.domain.access import (
     require_administrator_remains,
 )
 from calendar_sync.domain.model import ProjectionHandling, SyncRuleId
+
+logger = logging.getLogger(__name__)
 
 
 class AdministratorRequired(ApplicationError):
@@ -349,10 +352,13 @@ class UserDeletionInterrupted(ApplicationError):
 
 @dataclass(frozen=True, slots=True)
 class OwnedRules:
-    """What deleting a User needs of their own rules: that User's units and Rule Removal."""
+    """What deleting a User needs of their own records: that User's units, Rule Removal, and
+    stopping their Calendar Watches at the provider."""
 
     unit_of_work: UnitOfWorkFactory
     removal: RemoveSyncRule
+    stop_watches: Callable[[], None] = lambda: None
+    """Stops the User's watches, best effort; their rows go with the User."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,9 +394,9 @@ class DeleteUser:
         user = _existing(self.users, user_id)
         self.users.set_state(user.id, UserState.DISABLED)
         self.sessions.end_all(user.id)
-        result = _remove_rules(
-            self.owned(user.id), ProjectionHandling.DELETE, keep_unreachable=True
-        )
+        owned = self.owned(user.id)
+        result = _remove_rules(owned, ProjectionHandling.DELETE, keep_unreachable=True)
+        _stop_watches(owned)
         self.users.delete(user.id)
         return result
 
@@ -463,7 +469,9 @@ class DeleteOwnAccount:
                 raise LastAdministrator(
                     "someone joined meanwhile; they need an administrator"
                 ) from error
-        result = _remove_rules(self.owned(user.id), handling, keep_unreachable=False)
+        owned = self.owned(user.id)
+        result = _remove_rules(owned, handling, keep_unreachable=False)
+        _stop_watches(owned)
         self.users.delete(user.id)
         if self.users.count() == 0:
             self._return_to_setup()
@@ -471,6 +479,15 @@ class DeleteOwnAccount:
 
     def _return_to_setup(self) -> None:
         self.settings.return_to_setup(self.clock.now())
+
+
+def _stop_watches(owned: OwnedRules) -> None:
+    """Stop the User's watches before their records go, so providers stop sending notices
+    sooner; a watch that cannot be stopped expires at its provider, and holds nothing back."""
+    try:
+        owned.stop_watches()
+    except Exception:
+        logger.exception("Could not stop the watches of a User being deleted; they expire")
 
 
 def _remove_rules(

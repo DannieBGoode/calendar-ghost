@@ -68,7 +68,7 @@ from calendar_sync.interfaces.api.dependencies import (
     set_session_cookie,
 )
 from calendar_sync.interfaces.api.problems import ApiProblem, problem_from
-from calendar_sync.interfaces.api.routes.session import signed_in
+from calendar_sync.interfaces.api.routes.session import SignedInAnswers, signed_in
 from calendar_sync.interfaces.api.schemas import (
     AcceptInvitationRequest,
     IssuedLinkResponse,
@@ -120,7 +120,7 @@ class Administration(Protocol):
     def delete_user(self) -> DeleteUser: ...
 
 
-class AdministrationServices(Protocol):
+class AdministrationServices(SignedInAnswers, Protocol):
     @property
     def administration(self) -> Administration: ...
     @property
@@ -129,8 +129,6 @@ class AdministrationServices(Protocol):
     def identity(self) -> Identity: ...
     @property
     def secure_cookies(self) -> bool: ...
-    @property
-    def sends_email(self) -> bool: ...
 
 
 Services = Annotated[AdministrationServices, Depends(app_services)]
@@ -228,7 +226,7 @@ def accept_invitation(
         # Joined, but the password was reset before the session started: sign in instead.
         raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
     set_session_cookie(response, session.token, services.secure_cookies)
-    return signed_in(services.identity.users.get(session.user_id), services.sends_email)
+    return signed_in(services.identity.users.get(session.user_id), services)
 
 
 @router.post("/api/v1/password-resets/check", response_model=LinkStatusResponse)

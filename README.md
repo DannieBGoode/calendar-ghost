@@ -95,7 +95,7 @@ machine and creates only the destination representation selected by each rule.
 | --- | --- |
 | Events | Timed events, all-day events, recurring series, single-occurrence changes, and cancellations |
 | Policies | Busy-only or detail-copy projection; include or exclude all-day events; include or exclude contacts' birthdays; mark, sync, or skip events answered Maybe; sync unanswered invitations as Maybe or wait for an answer, per rule. Declined events are never synced |
-| Scheduling | Source and destination incremental polling every five minutes plus **Sync Now** |
+| Scheduling | Source and destination incremental polling every five minutes plus **Sync Now**; with a public HTTPS address, [Instant Sync](docs/instant-sync.md) runs a rule soon after Google or Microsoft reports a change |
 | Reconciliation | Daily full pass plus **Reconcile Now**, which reports remaining drift and records conflicts as blocked |
 | Loop prevention | Private managed-origin metadata prevents projections from becoming sources |
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |
@@ -422,7 +422,7 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Incident email sender; with the host, each person receives their own incidents by email |
 | `CALENDAR_SYNC_SMTP_RECIPIENT` | No | Operator who receives incidents about the installation itself, such as a stalled scheduler |
 | `CALENDAR_SYNC_SMTP_STARTTLS` | No | Enable SMTP STARTTLS; defaults to `true` |
-| `CALENDAR_SYNC_PUBLIC_URL` | No | Address people open Calendar Ghost at, such as `https://calendar.example.com`: an `http` or `https` address at the root of its host, with no path. Incident email then links to each person's next step. Unset sends email without a link |
+| `CALENDAR_SYNC_PUBLIC_URL` | No | Address people open Calendar Ghost at, such as `https://calendar.example.com`: an `http` or `https` address at the root of its host, with no path. Incident email then links to each person's next step. Unset sends email without a link. An `https` address that Google and Microsoft reach also turns on [Instant Sync](docs/instant-sync.md) |
 
 Notification delivery is best-effort. A delivery failure never prevents the incident from being
 recorded locally or stops later synchronization attempts.

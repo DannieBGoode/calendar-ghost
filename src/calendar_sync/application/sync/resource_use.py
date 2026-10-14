@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, date, timedelta
+from types import TracebackType
+from typing import Protocol, Self
 
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.ports import ProviderCallTally, UnitOfWorkFactory
+from calendar_sync.application.sync.ports import ProviderCallRepository, ProviderCallTally
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +25,32 @@ def first_counted_day(today: date) -> date:
     return today - timedelta(days=PROVIDER_CALL_DAYS - 1)
 
 
+class CallCountingUnitOfWork(Protocol):
+    """The part of a User's unit of work that counts their provider calls."""
+
+    @property
+    def provider_calls(self) -> ProviderCallRepository: ...
+
+    def __enter__(self) -> Self: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None: ...
+
+    def commit(self) -> None: ...
+
+
+class CallCountingUnitOfWorkFactory(Protocol):
+    """Opens units of work for the one User whose provider calls are counted."""
+
+    def __call__(self) -> CallCountingUnitOfWork: ...
+
+
 def record_provider_calls(
-    unit_of_work: UnitOfWorkFactory, clock: Clock, calls: ProviderCallTally
+    unit_of_work: CallCountingUnitOfWorkFactory, clock: Clock, calls: ProviderCallTally
 ) -> None:
     """Add a finished run's calls to its User's counts for today, in UTC.
 

@@ -23,12 +23,14 @@ from calendar_sync.application.sync.provider_descriptors import (
     ProviderDirectory,
     ProviderGuide,
 )
+from calendar_sync.application.sync.watch_ports import CalendarWatcher, NoticeReader
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.providers.routing import (
     RoutingAccountCalendars,
     RoutingCalendarProvider,
+    RoutingCalendarWatcher,
 )
 from tests.fake_calendar import FakeCalendars
 from tests.helpers import event
@@ -183,3 +185,56 @@ def test_an_access_check_that_passes_names_no_provider() -> None:
     )
 
     assert router.verify_access(PERSONAL) == AccountAccess(3, 2)
+
+
+def test_an_accounts_watcher_is_the_one_of_its_provider() -> None:
+    watcher = cast(CalendarWatcher, Mock())
+    kinds = StoredKinds({PERSONAL: ProviderKind.GOOGLE})
+    router = RoutingCalendarWatcher.of(
+        kinds, ProviderDirectory((ProviderDescriptor(GUIDE, watcher=watcher),))
+    )
+
+    assert router(PERSONAL) is watcher
+    assert router(PERSONAL) is watcher
+    assert router.provider_of(PERSONAL) is ProviderKind.GOOGLE
+    assert kinds.lookups == [PERSONAL]
+
+
+def test_an_account_whose_provider_cannot_watch_has_no_watcher() -> None:
+    router = RoutingCalendarWatcher.of(
+        StoredKinds({PERSONAL: ProviderKind.GOOGLE}),
+        ProviderDirectory((ProviderDescriptor(GUIDE),)),
+    )
+
+    assert router(PERSONAL) is None
+
+
+def test_an_account_that_does_not_exist_has_no_watcher() -> None:
+    kinds = StoredKinds({})
+    router = RoutingCalendarWatcher(kinds, {ProviderKind.GOOGLE: cast(CalendarWatcher, Mock())})
+
+    assert router(PERSONAL) is None
+    assert router.provider_of(PERSONAL) is None
+    # An account that later connects is found: only answers are kept.
+    kinds.kinds[PERSONAL] = ProviderKind.GOOGLE
+    assert router(PERSONAL) is not None
+
+
+def test_notices_reach_only_a_provider_that_reads_them() -> None:
+    reading = ProviderDescriptor(GUIDE, notice_reader=cast(NoticeReader, Mock()))
+    silent = ProviderDescriptor(
+        ProviderGuide(ProviderKind.OUTLOOK, "other", "Other", "Other Calendar", {})
+    )
+    directory = ProviderDirectory((reading, silent))
+
+    assert directory.watching("example") is reading
+    assert directory.watching("other") is None
+    assert directory.watching("unknown") is None
+
+
+def test_a_providers_slug_names_where_its_notices_arrive() -> None:
+    directory = ProviderDirectory((ProviderDescriptor(GUIDE),))
+
+    assert directory.slug_of(ProviderKind.GOOGLE) == "example"
+    with pytest.raises(LookupError):
+        directory.slug_of(ProviderKind.OUTLOOK)

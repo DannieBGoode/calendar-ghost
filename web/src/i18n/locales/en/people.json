@@ -282,6 +282,14 @@
         "one": "{count} person failed for a reason Calendar Ghost does not recognize. The service logs name {provider}'s reason.",
         "other": "{count} people failed for a reason Calendar Ghost does not recognize. The service logs name {provider}'s reason."
       },
+      "plainHttpAddress": {
+        "one": "{count} person wants instant sync, but calendar providers report changes only to an HTTPS address, and this installation's public address uses plain HTTP.",
+        "other": "{count} people want instant sync, but calendar providers report changes only to an HTTPS address, and this installation's public address uses plain HTTP."
+      },
+      "noticesNotArriving": {
+        "one": "{count} person wants instant sync, but {provider} cannot reach this installation, so changes in {calendar} wait for the next scheduled sync.",
+        "other": "{count} people want instant sync, but {provider} cannot reach this installation, so changes in {calendar} wait for the next scheduled sync."
+      },
       "howToFixLabel": "How to fix: {hint}"
     }
   },

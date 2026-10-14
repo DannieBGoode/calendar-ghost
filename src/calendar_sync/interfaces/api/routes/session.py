@@ -10,7 +10,8 @@ from calendar_sync.application.identity.errors import (
     UserDisabled,
 )
 from calendar_sync.application.identity.sign_in import SignIn
-from calendar_sync.domain.access import User
+from calendar_sync.domain.access import User, UserId
+from calendar_sync.domain.watches import AVAILABILITY_ANCHORS, Availability
 from calendar_sync.interfaces.api.dependencies import (
     SESSION_COOKIE,
     Identity,
@@ -30,13 +31,24 @@ class SignInIdentity(Identity, Protocol):
     def sign_in(self) -> SignIn: ...
 
 
-class SessionServices(Protocol):
+class InstantSyncReader(Protocol):
+    def availability(self, user: UserId) -> Availability: ...
+
+
+class SignedInAnswers(Protocol):
+    """What every answer that names the signed-in User reads beside the User."""
+
+    @property
+    def sends_email(self) -> bool: ...
+    @property
+    def instant_sync_status(self) -> InstantSyncReader: ...
+
+
+class SessionServices(SignedInAnswers, Protocol):
     @property
     def identity(self) -> SignInIdentity: ...
     @property
     def secure_cookies(self) -> bool: ...
-    @property
-    def sends_email(self) -> bool: ...
 
 
 Services = Annotated[SessionServices, Depends(app_services)]
@@ -59,7 +71,7 @@ def sign_in(
         throttled.headers = {"Retry-After": str(error.retry_after)}
         raise throttled from error
     set_session_cookie(response, session.token, services.secure_cookies)
-    return signed_in(services.identity.users.get(session.user_id), services.sends_email)
+    return signed_in(services.identity.users.get(session.user_id), services)
 
 
 @router.get("/api/v1/session", response_model=SessionResponse)
@@ -69,7 +81,7 @@ def session_status(
 ) -> SessionResponse:
     user_id = services.identity.sessions.user_of(session)
     user = services.identity.users.get(user_id) if user_id is not None else None
-    return signed_in(user, services.sends_email)
+    return signed_in(user, services)
 
 
 @router.delete("/api/v1/session", status_code=status.HTTP_204_NO_CONTENT)
@@ -82,19 +94,25 @@ def sign_out(
     response.delete_cookie(SESSION_COOKIE, path="/")
 
 
-def signed_in(user: User | None, sends_email: bool = False) -> SessionResponse:
+def signed_in(user: User | None, services: SignedInAnswers) -> SessionResponse:
     if user is None:
         return SessionResponse(authenticated=False)
     return SessionResponse(
-        authenticated=True, user=user_response(user), installation_sends_email=sends_email
+        authenticated=True,
+        user=user_response(user, services),
+        installation_sends_email=services.sends_email,
     )
 
 
-def user_response(user: User) -> SignedInUserResponse:
+def user_response(user: User, services: SignedInAnswers) -> SignedInUserResponse:
+    availability = services.instant_sync_status.availability(user.id)
     return SignedInUserResponse(
         id=user.id.value,
         email=user.email,
         role=user.role.value,
         notify_by_email=user.notify_by_email,
         language=user.language,
+        instant_sync=user.instant_sync,
+        instant_sync_availability=availability.value,
+        instant_sync_help=AVAILABILITY_ANCHORS.get(availability),
     )

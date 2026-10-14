@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 from tests.fake_graph_events import FakeGraphEvents
+from tests.fake_graph_subscriptions import FakeGraphSubscriptions
 
 GRAPH = "https://graph.microsoft.com/v1.0"
 LOGIN = "https://login.microsoftonline.com"
@@ -36,6 +37,9 @@ class FakeCalendar:
     name: str | None
     can_edit: bool = True
     default: bool = False
+    owner: str | None = None
+    """The address of the mailbox it belongs to; None for the mailbox showing it. Another
+    mailbox's calendar is one it shares."""
 
 
 @dataclass
@@ -98,6 +102,7 @@ class FakeMicrosoftGraph:
         self.token_requests: list[Mapping[str, str]] = []
         self.requests: list[httpx.Request] = []
         self.events = FakeGraphEvents()
+        self.subscriptions = FakeGraphSubscriptions()
         self.refusals: list[tuple[Callable[[httpx.Request], bool], Refusal]] = []
         """Refusals answered, in order, to the first request each one matches; each answers
         once."""
@@ -179,6 +184,14 @@ class FakeMicrosoftGraph:
             )
         if request.method == "GET" and path == "/me/calendars":
             return self._calendars(request, mailbox)
+        if path == "/subscriptions" or path.startswith("/subscriptions/"):
+            return self.subscriptions.serve(request, mailbox.address, path)
+        if request.method == "GET" and path == "/me/calendar":
+            default = next((c for c in mailbox.calendars if c.default), mailbox.calendars[0])
+            return httpx.Response(200, json=_calendar_owner(mailbox, default))
+        exact = next((c for c in mailbox.calendars if path == f"/me/calendars/{c.id}"), None)
+        if request.method == "GET" and exact is not None:
+            return httpx.Response(200, json=_calendar_owner(mailbox, exact))
         calendar = next(
             (c for c in mailbox.calendars if path.startswith(f"/me/calendars/{c.id}/")), None
         )
@@ -256,6 +269,14 @@ class FakeMicrosoftGraph:
 def _token_error(status: int, error: str, code: int) -> httpx.Response:
     refusal = token_error(error, code, status=status)
     return httpx.Response(refusal.status, json=refusal.body)
+
+
+def _calendar_owner(mailbox: FakeMailbox, calendar: FakeCalendar) -> Json:
+    """A calendar as `$select=owner` reads it: the address of the mailbox it belongs to."""
+    return {
+        "id": calendar.id,
+        "owner": {"name": mailbox.display_name, "address": calendar.owner or mailbox.address},
+    }
 
 
 def _graph_error(status: int, code: str) -> httpx.Response:

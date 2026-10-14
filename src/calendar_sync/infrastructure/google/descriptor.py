@@ -1,4 +1,4 @@
-"""The Google package as bootstrap composes it: one descriptor (ADR 0022)."""
+"""The Google package as bootstrap composes it: one descriptor (ADR 0022, ADR 0036)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from calendar_sync.application.sync.provider_descriptors import (
 from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
+from calendar_sync.infrastructure.google.watches import GoogleCalendarWatcher, GoogleNoticeReader
 from calendar_sync.infrastructure.oauth import OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
@@ -35,4 +36,6 @@ def google_provider(
         connection=ProviderConnection(oauth, client.redirect_uri),
         calendars=oauth,
         provider=GoogleCalendarProvider(oauth.service_for, clock),
+        watcher=GoogleCalendarWatcher(oauth.service_for, clock),
+        notice_reader=GoogleNoticeReader(),
     )

@@ -1,4 +1,4 @@
-"""The Microsoft package as bootstrap composes it: one descriptor (ADR 0022, ADR 0034)."""
+"""The Microsoft package as bootstrap composes it: one descriptor (ADR 0022, ADR 0034, ADR 0036)."""
 
 from pathlib import Path
 
@@ -7,6 +7,10 @@ from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.microsoft.descriptor import microsoft_provider
 from calendar_sync.infrastructure.microsoft.oauth import MicrosoftClient, MicrosoftOAuthService
 from calendar_sync.infrastructure.microsoft.provider import OutlookCalendarProvider
+from calendar_sync.infrastructure.microsoft.watches import (
+    OutlookCalendarWatcher,
+    OutlookNoticeReader,
+)
 from calendar_sync.infrastructure.oauth import OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
@@ -41,6 +45,8 @@ def test_a_configured_installation_gets_every_microsoft_role(tmp_path: Path) -> 
     assert descriptor.connection.redirect_uri == REDIRECT
     assert isinstance(descriptor.calendars, MicrosoftOAuthService)
     assert isinstance(descriptor.provider, OutlookCalendarProvider)
+    assert isinstance(descriptor.watcher, OutlookCalendarWatcher)
+    assert isinstance(descriptor.notice_reader, OutlookNoticeReader)
 
 
 def test_without_its_application_or_the_master_key_microsoft_offers_nothing(
@@ -53,9 +59,11 @@ def test_without_its_application_or_the_master_key_microsoft_offers_nothing(
         microsoft_provider(unregistered, store, states, key, SystemClock()),
         microsoft_provider(CONFIGURED, None, states, "", SystemClock()),
     ):
-        assert (descriptor.connection, descriptor.calendars, descriptor.provider) == (
-            None,
-            None,
-            None,
-        )
+        assert (
+            descriptor.connection,
+            descriptor.calendars,
+            descriptor.provider,
+            descriptor.watcher,
+            descriptor.notice_reader,
+        ) == (None, None, None, None, None)
     assert not microsoft_provider(unregistered, store, states, key, SystemClock()).configured

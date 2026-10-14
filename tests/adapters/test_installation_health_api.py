@@ -1,14 +1,22 @@
 """Installation Health over the status API and MCP, for Installation Administrators only."""
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
 
+from calendar_sync.application.operations.installation_health import InstallationHealth
+from calendar_sync.application.operations.installation_hints import (
+    PLAIN_HTTP_ANCHOR,
+    HintKind,
+    InstallationHint,
+)
+from calendar_sync.application.operations.status import StatusVerdict
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_container
 from calendar_sync.interfaces.api.app import create_app
+from calendar_sync.interfaces.api.status_payload import installation_health_response
 from tests.adapters.test_mcp import JSON_HEADERS
 from tests.users import ADMIN_EMAIL, ADMIN_PASSWORD
 
@@ -157,3 +165,27 @@ def test_installation_health_warns_of_a_microsoft_client_secret_about_to_expire(
         (incident["kind"], incident["provider"], incident["expires_on"])
         for incident in body["incidents"]
     ] == [("client_secret_expiring", "outlook", expires.isoformat())]
+
+
+def test_an_instant_sync_hint_names_no_cause_and_needs_the_administrator() -> None:
+    health = InstallationHealth(
+        status=StatusVerdict.HEALTHY,
+        incidents=(),
+        users={StatusVerdict.HEALTHY: 2},
+        disabled_users=0,
+        checked_at=datetime(2026, 10, 14, 12, 0, tzinfo=UTC),
+        hints=(InstallationHint(HintKind.PLAIN_HTTP_ADDRESS, None, 2, PLAIN_HTTP_ANCHOR),),
+    )
+
+    body = installation_health_response(health).model_dump(mode="json")
+
+    assert body["needs_attention"] is True
+    assert body["hints"] == [
+        {
+            "kind": "plain_http_address",
+            "cause": None,
+            "users": 2,
+            "anchor": "instant-sync-needs-an-https-public-address",
+            "provider": None,
+        }
+    ]

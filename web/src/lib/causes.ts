@@ -92,6 +92,10 @@ export function hintText(i18n: I18n, hint: InstallationHint): string {
       return i18n.t("people.health.hints.testingMode", { count, ...words })
     case "unrecognized":
       return i18n.t("people.health.hints.unrecognized", { count, ...words })
+    case "plain_http_address":
+      return i18n.t("people.health.hints.plainHttpAddress", { count })
+    case "notices_not_arriving":
+      return i18n.t("people.health.hints.noticesNotArriving", { count, ...words })
     default:
       return i18n.t("people.health.hints.shared", { count, cause: causeWords(i18n, causeOf(hint) ?? "unknown", hint.provider) })
   }

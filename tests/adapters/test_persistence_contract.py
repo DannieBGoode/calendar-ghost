@@ -1,12 +1,13 @@
 """The in-memory unit of work and SQLite honor the persistence contract."""
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
-from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.health import SqliteIncidentRepository
 from calendar_sync.infrastructure.persistence.installation import (
@@ -15,6 +16,7 @@ from calendar_sync.infrastructure.persistence.installation import (
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryIncidentRepository,
     InMemoryUnitOfWorkFactory,
+    raise_instant_request,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
@@ -42,6 +44,17 @@ class TestInMemoryUnitOfWork(PersistenceContract):
         # The accounts the contract's rules use, recorded as the SQLite harness records them.
         for account in RULE_ACCOUNTS:
             connect(ConnectedAccountId(account), USER)
+
+        def request_run(user: UserId, rule_id: SyncRuleId, at: datetime) -> None:
+            raise_instant_request(database.for_user(user).state, rule_id, at)
+
+        def prefer(user: UserId, wanted: bool) -> None:
+            off = database.database.instant_sync_off
+            if wanted:
+                off.discard(user)
+            else:
+                off.add(user)
+
         return PersistenceHarness(
             database.for_user,
             connect=connect,
@@ -49,6 +62,8 @@ class TestInMemoryUnitOfWork(PersistenceContract):
             disable=database.database.disabled.add,
             installation=database.installation(),
             incidents=lambda user: InMemoryIncidentRepository(database.database, user),
+            request_run=request_run,
+            prefer=prefer,
         )
 
 
@@ -85,6 +100,31 @@ class TestSqliteUnitOfWork(PersistenceContract):
                     "UPDATE users SET state = 'disabled' WHERE id = ?", (user.value,)
                 )
 
+        def request_run(user: UserId, rule_id: SyncRuleId, at: datetime) -> None:
+            # As the Watch Notice inbox raises it: a handled request starts waiting again.
+            with transaction(database) as connection:
+                connection.execute(
+                    """
+                    INSERT INTO instant_sync_requests (
+                        rule_id, user_id, requested_seq, handled_seq, first_requested_at,
+                        last_requested_at
+                    ) VALUES (?, ?, 1, 0, ?, ?)
+                    ON CONFLICT (rule_id) DO UPDATE SET
+                        first_requested_at = CASE WHEN requested_seq = handled_seq
+                            THEN excluded.first_requested_at
+                            ELSE MIN(first_requested_at, excluded.first_requested_at) END,
+                        requested_seq = requested_seq + 1,
+                        last_requested_at = MAX(last_requested_at, excluded.last_requested_at)
+                    """,
+                    (rule_id.value, user.value, at.isoformat(), at.isoformat()),
+                )
+
+        def prefer(user: UserId, wanted: bool) -> None:
+            with transaction(database) as connection:
+                connection.execute(
+                    "UPDATE users SET instant_sync = ? WHERE id = ?", (int(wanted), user.value)
+                )
+
         return PersistenceHarness(
             # Source Observations are sealed, so the store needs a History Cipher to keep them.
             SqliteUnitOfWorkFactory(
@@ -95,4 +135,6 @@ class TestSqliteUnitOfWork(PersistenceContract):
             disable=disable,
             installation=SqliteInstallationUnitOfWorkFactory(database),
             incidents=lambda user: SqliteIncidentRepository(database, user),
+            request_run=request_run,
+            prefer=prefer,
         )

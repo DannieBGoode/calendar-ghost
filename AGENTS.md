@@ -52,9 +52,11 @@ support, billing, and the Operator Overview belong in this repository. ADRs 0029
 their persistence, isolation, and identity, and
 `docs/superpowers/specs/2026-10-09-multi-user-design.md` orders the work. Users have shipped: every
 record belongs to one User, use cases receive a unit of work scoped to that User, and only the
-scheduler, migrations, and the Operator Overview receive the installation-wide
-`InstallationUnitOfWork`. A new owned table carries `user_id` and refers to its parent by
-identifier and User together; `tests/adapters/test_user_isolation_schema.py` fails otherwise.
+scheduler and the Instant Sync loops beside it, migrations, and the Operator Overview receive the
+installation-wide `InstallationUnitOfWork`. The Watch Notice inbox is the one public-route writer
+that crosses Users, through its own narrow port (ADR 0029, amended, and ADR 0036). A new owned
+table carries `user_id` and refers to its parent by identifier and User together;
+`tests/adapters/test_user_isolation_schema.py` fails otherwise.
 Plan limits apply only when an administrator turns Plans on, and billing only when Commercial Mode
 is also on; both are off by default, and with Plans off every user has every feature (ADR 0028).
 Preserve the self-hosting promise that there is no mandatory Calendar Ghost account, telemetry, or
@@ -182,8 +184,10 @@ the Docker build context, and has its own `Site` workflow.
   who does not administer, as for an unknown User. Only setup,
   sign-in, the session status and sign-out, the token-protected Invitation and Password Reset Link
   routes (`/api/v1/invitations/check`, `/api/v1/invitations/accept`,
-  `/api/v1/password-resets/check`, `/api/v1/password-resets`), static application files, and
-  `/health` are intentionally public; `/health` is the only unauthenticated operational status
+  `/api/v1/password-resets/check`, `/api/v1/password-resets`), the Watch Notice route providers
+  call (`/api/v1/watch-notices/{provider_slug}/{registration_id}`, ADR 0036), which answers alike
+  for known and unknown registrations and logs no identifier, token, or body, static application
+  files, and `/health` are intentionally public; `/health` is the only unauthenticated operational status
   route. The OAuth callback is session-and-state protected: it reads the session itself
   (`session_user`) to redirect rather than answer 401, and completes a flow only for the signed-in
   User who began it. `/api/v1/status`, `/api/v1/installation/health`, and

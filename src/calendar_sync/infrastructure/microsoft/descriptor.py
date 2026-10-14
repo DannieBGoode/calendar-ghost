@@ -1,4 +1,4 @@
-"""The Microsoft package as bootstrap composes it: one descriptor (ADR 0022, ADR 0034)."""
+"""The Microsoft package as bootstrap composes it: one descriptor (ADR 0022, ADR 0034, ADR 0036)."""
 
 from __future__ import annotations
 
@@ -14,6 +14,10 @@ from calendar_sync.application.sync.provider_descriptors import (
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.microsoft.oauth import MicrosoftClient, MicrosoftOAuthService
 from calendar_sync.infrastructure.microsoft.provider import OutlookCalendarProvider
+from calendar_sync.infrastructure.microsoft.watches import (
+    OutlookCalendarWatcher,
+    OutlookNoticeReader,
+)
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
@@ -44,4 +48,6 @@ def microsoft_provider(
         calendars=oauth,
         provider=OutlookCalendarProvider(oauth, oauth.graph, clock),
         secret_expires=secret_expires,
+        watcher=OutlookCalendarWatcher(oauth, oauth.graph, clock),
+        notice_reader=OutlookNoticeReader(),
     )

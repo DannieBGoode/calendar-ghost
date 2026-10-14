@@ -50,7 +50,23 @@ IncidentStepValue = Literal[
     "see_history",
 ]
 """An Incident's one next step (ADR 0033), as the domain decides it for the Web UI and email."""
-HintKindValue = Literal["shared_cause", "testing_mode", "unrecognized"]
+HintKindValue = Literal[
+    "shared_cause", "testing_mode", "unrecognized", "plain_http_address", "notices_not_arriving"
+]
+InstantSyncAvailabilityValue = Literal[
+    "on", "off_by_user", "not_in_plan", "no_public_address", "not_reaching"
+]
+"""Whether Instant Sync is on for a User, or why not (ADR 0036)."""
+EffectiveCadenceValue = Literal[
+    "instant",
+    "not_watchable",
+    "waiting_for_provider",
+    "off_by_user",
+    "not_in_plan",
+    "no_public_address",
+    "not_reaching",
+]
+"""How a rule syncs: "instant", or why Scheduled Sync runs it instead."""
 
 
 class ApiResponse(BaseModel):
@@ -87,6 +103,11 @@ class SignedInUserResponse(ApiResponse):
     role: Literal["installation_administrator", "user"]
     notify_by_email: bool
     language: str | None
+    instant_sync: bool
+    """Whether the User wants Instant Sync; it is on only while the availability is "on"."""
+    instant_sync_availability: InstantSyncAvailabilityValue
+    instant_sync_help: str | None
+    """The section of docs/instant-sync.md that explains why it is unavailable, and the fix."""
 
 
 class SessionResponse(ApiResponse):
@@ -256,6 +277,9 @@ class RuleWorkResponse(ApiResponse):
 class RuleSummaryResponse(RuleResponse):
     source: NamedCalendarEndpointResponse
     destination: NamedCalendarEndpointResponse
+    effective_cadence: EffectiveCadenceValue
+    poll_every_minutes: int
+    """How often Scheduled Sync runs the rule, as the User's Plan says."""
     last_sync: RunOutcomeResponse | None
     latest_preview: PreviewSummaryResponse | None
     running: RuleWorkResponse | None
@@ -264,6 +288,9 @@ class RuleSummaryResponse(RuleResponse):
 class RuleDetailResponse(RuleResponse):
     source: NamedCalendarEndpointResponse
     destination: NamedCalendarEndpointResponse
+    effective_cadence: EffectiveCadenceValue
+    poll_every_minutes: int
+    """How often Scheduled Sync runs the rule, as the User's Plan says."""
     initial_lookback_days: int
     mapping_count: int
     last_sync: RunOutcomeResponse | None
@@ -785,7 +812,8 @@ class InstallationHintResponse(ApiResponse):
     """A likely cause from a pattern across Users; it names none of them (ADR 0031)."""
 
     kind: HintKindValue
-    cause: CauseValue
+    cause: CauseValue | None
+    """The administrator's Cause the pattern shows; null for a hint about Instant Sync."""
     users: int
     """How many Users show the pattern."""
     anchor: str
@@ -809,3 +837,7 @@ class InstallationHealthResponse(ApiResponse):
 
 class NotificationPreferenceRequest(BaseModel):
     notify_by_email: bool
+
+
+class InstantSyncPreferenceRequest(BaseModel):
+    instant_sync: bool
