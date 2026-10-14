@@ -798,15 +798,8 @@ class OutlookCalendarProvider:
     ) -> ProviderFailure:
         now = self._clock.now()
         read: dict[ConnectedAccountId, datetime] = self._credentials_read.__dict__.get("at", {})
-        return ProviderFailure(
-            _kind(error),
-            str(error),
-            retry_after_seconds(error.retry_after, now),
-            account_id=account,
-            provider=ProviderKind.OUTLOOK,
-            attempted_at=read.get(account, now),
-            cause=cause_of(error, event_scoped=event_scoped),
-            provider_label=MICROSOFT.calendar_name,
+        return refusal_failure(
+            error, account, attempted_at=read.get(account, now), now=now, event_scoped=event_scoped
         )
 
     @staticmethod
@@ -845,6 +838,29 @@ class _Refusals(AbstractContextManager[None]):
                 kind=ProviderFailureKind.PERMANENT,
                 account_id=self._account,
             ) from error
+
+
+def refusal_failure(
+    error: GraphRefusal | TokenRefusal,
+    account: ConnectedAccountId,
+    *,
+    attempted_at: datetime,
+    now: datetime,
+    event_scoped: bool = False,
+) -> ProviderFailure:
+    """A Microsoft refusal as the provider failure the account's request met, keeping no message
+    text. `attempted_at`, when the request read the account's credentials, tells whether a
+    Reauthorization has replaced them since (ADR 0027); `now` counts a Retry-After date down."""
+    return ProviderFailure(
+        _kind(error),
+        str(error),
+        retry_after_seconds(error.retry_after, now),
+        account_id=account,
+        provider=ProviderKind.OUTLOOK,
+        attempted_at=attempted_at,
+        cause=cause_of(error, event_scoped=event_scoped),
+        provider_label=MICROSOFT.calendar_name,
+    )
 
 
 def _kind(error: GraphRefusal | TokenRefusal) -> ProviderFailureKind:
