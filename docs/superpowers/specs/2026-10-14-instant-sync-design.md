@@ -87,7 +87,7 @@ come right after this work and plug into one port; nothing in this design waits 
   | Writer | Transition |
   | --- | --- |
   | Upkeep | insert `creating` · `creating → live` (receipt) · `live → retiring` (Google replacement recorded) · any → `abandoned` · delete |
-  | Inbox | set `confirmed_at` (idempotent) · set `renew_requested_at` (idempotent) · `live → retiring` on `subscriptionRemoved` |
+  | Inbox | set `confirmed_at` (idempotent) · set `renew_requested_at` (idempotent) · `live → retiring` or `creating → abandoned` on `subscriptionRemoved` |
 
   A receipt for a row that is no longer `creating` updates nothing, so a removed registration is
   never brought back. Upkeep clears `renew_requested_at` only if it still holds the value upkeep
@@ -110,7 +110,7 @@ come right after this work and plug into one port; nothing in this design waits 
   Every output except `on` and `off_by_user` names its docs anchor.
 - **Effective cadence** of a rule:
   - It is `instant` when availability is `on` and the rule's source is covered by a watch with a
-    `live`, confirmed, unexpired registration.
+    `live`, confirmed, unexpired registration that points at the current public address.
   - Otherwise it is `scheduled`, with one reason: an availability reason, `not_watchable`, or
     `waiting_for_provider`.
 
@@ -189,9 +189,13 @@ the deleted registrations are unknown and acknowledged without effect.
   3. Runs `UpkeepWatches` in order of the earliest due work (`renew_at`, `retry_at`, missing
      coverage), stopping when the cycle's provider-call budget is spent.
 
-  The budget counts every network call, including listing, deleting, retrying, and pages. Because
-  the order follows persisted due times, no User starves, and work resumes where it stopped. Calls
-  are counted per User in Provider Calls, so they appear on the Operator Overview.
+  The budget counts the provider calls each step actually made, as the per-thread Provider Call
+  tally measures them, including listing, deleting, retrying, and pages. Upkeep asks a provider
+  for the scope of a Source Calendar only when no watch covers it yet. It persists what it finds
+  as it goes, so a cycle that runs out of budget keeps its progress. The next cycle starts with
+  the Users this one never reached, then the one it stopped on, so no User starves. Calls are
+  counted per User in Provider Calls, so they appear on the Operator Overview. A scope lookup the
+  provider refuses backs off per account, honoring `Retry-After`.
 - **`InstantDispatch`** chooses runs. `due(now)` returns `InstantRun(scheduled_run, captured_seq)`
   for each rule whose request has `requested_seq > handled_seq` and that meets all of these:
   - its owner is not disabled
@@ -201,8 +205,11 @@ the deleted registrations are unknown and acknowledged without effect.
   - it is not already reserved by the dispatcher
   - its last instant run was at least 30 seconds ago
 
-  Requests of rules that are no longer eligible are acknowledged and dropped. Delivery Evidence
-  never blocks a run: an authenticated notice is itself proof that delivery works.
+  Requests of rules whose owner no longer wants Instant Sync, whose cadence no longer allows it,
+  or whose last run failed, are acknowledged and dropped. The dispatcher checks this again once a
+  queued run gets a slot. Requests of paused rules and disabled Users are never listed: they
+  wait, and run or are dropped once the rule or User is active again. Delivery Evidence never
+  blocks a run: an authenticated notice is itself proof that delivery works.
 - **Acknowledgement** happens after `ScheduledPass.run` returns, whether the run succeeded or
   failed. One statement sets `handled_seq = max(handled_seq, captured_seq)` and `last_run_at`. A
   notice that arrives during the run raises `requested_seq`, so another run follows.
@@ -213,10 +220,10 @@ the deleted registrations are unknown and acknowledged without effect.
 
 ### Notice intake: `WatchNoticeInbox` (operations context)
 
-This is the one new reader that crosses Users. ADR 0029 is amended to name it, and
-`INSTALLATION_UNIT_RECEIVERS` gains its module. Its port is narrow:
-`record(batch, at) -> InboxResult`. It reads and writes only registrations, Instant Sync Requests,
-and Delivery Evidence.
+This is the one new reader that crosses Users, and ADR 0029 is amended to name it. It is its own
+narrow port (`record(notices, provider, address_base, at) -> int`), not the installation-wide
+unit of work, and it reads and writes only registrations, Instant Sync Requests, and Delivery
+Evidence. The dispatcher, which is part of the scheduler, joins `INSTALLATION_UNIT_RECEIVERS`.
 
 For each notice, it locates the registration by the id in the path, then checks two things in
 constant time: the token hash, and the provider handle when the notice carries one. Unknown,
@@ -227,7 +234,7 @@ constant time: the token hash, and the provider handle when the notice carries o
 | `started` (Google `sync`) | set `confirmed_at` |
 | `changed`, `missed` | one statement upserts a request for each enabled rule of the owner whose source is in the watch's coverage, raising `requested_seq` |
 | `reauthorize` | set `renew_requested_at` |
-| `removed` | `live → retiring`, and raise requests (catch-up) |
+| `removed` | `live → retiring`, or `creating → abandoned` so a late receipt cannot revive it, and raise requests (catch-up) |
 
 Every authenticated notice refreshes the provider's success evidence for the current address, at
 most once a minute. Intake makes one short write transaction per HTTP request, in a worker thread,
