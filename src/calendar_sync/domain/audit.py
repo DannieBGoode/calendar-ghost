@@ -35,6 +35,15 @@ class RecordedEvent:
             cancelled=event.status is EventStatus.CANCELLED,
         )
 
+    @classmethod
+    def of_occurrence(cls, occurrence: CalendarEvent | None) -> RecordedEvent:
+        """An occurrence as the run saw it. One gone from its series has no title or time of its
+        own, and may have had a title other than the series'; Activity names it from what it last
+        recorded for it."""
+        if occurrence is not None:
+            return cls.of(occurrence)
+        return cls(title="", recurring=True, cancelled=True)
+
 
 class AuditAction(StrEnum):
     """What an Audit Entry records; the stored values are a compatibility surface."""

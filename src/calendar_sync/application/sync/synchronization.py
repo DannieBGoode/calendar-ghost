@@ -18,7 +18,10 @@ from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWork
 from calendar_sync.application.sync.lone_occurrences import RetireLoneOccurrences
 from calendar_sync.application.sync.occurrences import SeriesRepairs, SynchronizeOccurrences
 from calendar_sync.application.sync.own_writes import is_own_occurrence_write, is_own_write
-from calendar_sync.application.sync.planning import event_operation_key
+from calendar_sync.application.sync.planning import (
+    decided_before_its_occurrences,
+    event_operation_key,
+)
 from calendar_sync.application.sync.ports import (
     CalendarProvider,
     ProviderCallStats,
@@ -304,12 +307,10 @@ class ExecuteSyncRule:
             else:
                 self._record_unverifiable(run, exception.reference, series_mapping.destination)
             return
-        if series_ref not in run.handled and (
-            series_mapping is None or source_series.status is EventStatus.CANCELLED
+        if series_ref not in run.handled and decided_before_its_occurrences(
+            source_series, series_mapping
         ):
-            # A series is decided before its occurrence when it has no projection yet, which
-            # creating it replays the exceptions of, this one applied below; or when it was
-            # deleted, which removes its projection and every occurrence with it.
+            # Creating a series replays its exceptions; this one is applied below.
             run.handled.add(exception.reference)
             self._synchronize_event(
                 run, source_series, destination_loaded=False, actual_destination=None

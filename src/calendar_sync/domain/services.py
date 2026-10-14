@@ -309,6 +309,26 @@ class SyncDecisionService:
         return SyncDecision(SyncAction.UPDATE, changed, projection)
 
     @staticmethod
+    def lone_projection_removal(
+        rule: SyncRule, source_series: CalendarEvent, occurrence: CalendarEvent | None
+    ) -> SyncReason | None:
+        """Why the single projection of an occurrence is removed once its calendar shows the
+        series and the rule does not project that series; None to keep it.
+
+        A deleted series removes every occurrence with it, so `occurrence` need not be read.
+        Under a series the rule excludes, an occurrence `None` could not be read and stays to be
+        decided as the event it was projected as.
+        """
+        if source_series.status is EventStatus.CANCELLED:
+            return SyncReason.SOURCE_CANCELLED
+        exclusion = rule.transformation.exclusion(source_series)
+        if exclusion is None or occurrence is None:
+            return None
+        if occurrence.status is EventStatus.CANCELLED:
+            return SyncReason.SOURCE_CANCELLED
+        return exclusion.removal_reason
+
+    @staticmethod
     def require_delete_ownership(mapping: EventMapping | None) -> EventMapping:
         if mapping is None:
             raise OwnershipNotEstablished("destination deletion requires an event mapping")

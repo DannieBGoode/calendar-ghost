@@ -18,6 +18,7 @@ from calendar_sync.domain.model import (
     InvitationResponse,
     SyncReason,
     SyncRuleState,
+    TimedInterval,
 )
 from calendar_sync.domain.services import (
     EventProjector,
@@ -26,7 +27,7 @@ from calendar_sync.domain.services import (
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUserUnitOfWorkFactory
 from tests.fake_calendar import FakeCalendars, FixedClock, enabled_rule_factory, sync_use_case
-from tests.helpers import event, occurrence, rule, series, week_start
+from tests.helpers import NOW, event, occurrence, rule, series, week_start
 
 STARTS = tuple(week_start(week) for week in range(4))
 Planned = set[tuple[str, str, SyncReason]]
@@ -209,3 +210,51 @@ def test_a_paused_rules_preview_lists_what_its_next_run_records(
     planned, recorded = _changed_since_the_last_run(change)
 
     assert planned == recorded
+
+
+def _preview_then_run(factory: InMemoryUserUnitOfWorkFactory, calendars: FakeCalendars) -> Planned:
+    """Preview the paused rule, then run it; what the preview planned."""
+    _pause(factory)
+    preview = _preview(factory, calendars)
+    _resume(factory)
+    sync_use_case(factory, calendars).execute(rule().id)
+    return _planned(preview)
+
+
+def test_a_preview_shows_the_removal_of_a_lone_projection_whose_series_shows_as_deleted() -> None:
+    calendars = FakeCalendars()
+    invited = calendars.put(occurrence(series("their-series"), 2, title="Planning"))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    recorded = len(factory.state.audit)
+    calendars.put(_cancelled(series("their-series")), starts=STARTS)
+    calendars.report(calendars.put(_cancelled(invited, "invited-deleted")))
+
+    planned = _preview_then_run(factory, calendars)
+
+    removal = (invited.reference.event_id.value, "delete", SyncReason.SOURCE_CANCELLED)
+    assert planned == _recorded(factory, recorded) == {removal}
+
+
+def test_a_preview_shows_a_series_deletion_that_only_its_occurrence_reports() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS)
+    moved = calendars.put(_moved(master, 2))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    recorded = len(factory.state.audit)
+    # A bare tombstone, without its recurrence, that the window's listing leaves out.
+    long_ago = NOW - timedelta(days=90)
+    calendars.put(
+        replace(
+            _cancelled(master),
+            recurrence=None,
+            time=TimedInterval(long_ago, long_ago + timedelta(hours=1)),
+        )
+    )
+    calendars.report(calendars.put(_cancelled(moved, "moved-deleted")))
+
+    planned = _preview_then_run(factory, calendars)
+
+    removal = (master.reference.event_id.value, "delete", SyncReason.SOURCE_CANCELLED)
+    assert planned == _recorded(factory, recorded) == {removal}

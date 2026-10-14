@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import timedelta
 
+from calendar_sync.domain.audit import RecordedEvent
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventStatus,
@@ -198,4 +199,8 @@ def test_a_lone_projection_is_removed_when_only_its_series_deletion_is_reported(
     sync_use_case(factory, calendars).execute(rule().id)
 
     assert lone not in calendars.events
-    assert factory.state.audit[-1].reason == SyncReason.SOURCE_CANCELLED
+    removal = factory.state.audit[-1]
+    assert removal.reason == SyncReason.SOURCE_CANCELLED
+    assert removal.source_event_id == invited.reference.event_id.value
+    # The series' title and time are not the occurrence's; Activity names it as last recorded.
+    assert removal.event == RecordedEvent(title="", recurring=True, cancelled=True)

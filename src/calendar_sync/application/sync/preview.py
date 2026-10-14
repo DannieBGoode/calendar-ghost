@@ -8,7 +8,7 @@ from typing import Literal
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable, RuleNotFound
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.sync.planning import EventPlanner
+from calendar_sync.application.sync.planning import EventPlanner, decided_before_its_occurrences
 from calendar_sync.application.sync.ports import (
     CalendarReader,
     RecoveryIncidents,
@@ -194,11 +194,21 @@ class PreviewSyncRule:
             )
             masters = {event.reference: event for event in events if event.occurrence is None}
             tally, items = _Tally(), []
-            for event in events:
-                item, projects = planner.plan(event, self._series_of(rule, event, masters))
+
+            def add(planned: tuple[PreviewItem, bool]) -> None:
+                item, projects = planned
                 if item.reason not in _UNLISTED:
                     tally.add(item, projects)
                     items.append(item)
+
+            for event in events:
+                series = self._series_of(rule, event, masters)
+                if series is not None and planner.decides_first(series, listed=masters):
+                    # The listing leaves the series out, but the run decides it with its
+                    # occurrence, such as a deleted one only the occurrence reports.
+                    masters[series.reference] = series
+                    add(planner.plan(series, None))
+                add(planner.plan(event, series))
         return tally, tuple(items)
 
     def _source_events(
@@ -273,6 +283,14 @@ class _Planner:
         projection = self._projection(event, decision) if projects else None
         return PreviewItem(event, kind, decision.action, decision.reason, projection), projects
 
+    def decides_first(
+        self, series: CalendarEvent, *, listed: Mapping[EventRef, CalendarEvent]
+    ) -> bool:
+        """Whether the run decides an unlisted series before an occurrence of it."""
+        return series.reference not in listed and decided_before_its_occurrences(
+            series, self.destination.mapping(series.reference)
+        )
+
     def _decide(self, event: CalendarEvent) -> SyncDecision:
         """An event's decision, made once though it is also the series of its occurrences."""
         if event.reference not in self._decided:
@@ -305,6 +323,18 @@ class _Planner:
         start = event.occurrence.original_start
         mapping = self.destination.mapping(series.reference)
         recorded = self.uow.occurrences.get(mapping.id, start) if mapping else None
+        lone = self.destination.mapping(event.reference)
+        if (
+            lone is not None
+            and lone.occurrence is not None
+            and series_decision.action is not SyncAction.CREATE
+            and (mapping is None or series_decision.action is SyncAction.DELETE)
+        ):
+            # Projected on its own while its series was not shown; a series the rule does not
+            # project removes that projection, as a run does once it decides the series.
+            reason = self.events.decisions.lone_projection_removal(self.rule, series, event)
+            if reason is not None:
+                return SyncDecision(SyncAction.DELETE, reason)
         if series_decision.action is SyncAction.CREATE:
             # The run writes the series, or writes it again, then decides the occurrence in it.
             return self.events.decisions.decide_occurrence_in_new_series(

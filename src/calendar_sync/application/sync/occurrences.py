@@ -214,7 +214,7 @@ class SynchronizeOccurrences:
                 detail=detail,
                 reason=decision.reason,
                 run_id=run.run_id,
-                event=_recorded_event(occurrence.source),
+                event=RecordedEvent.of_occurrence(occurrence.source),
             ),
             observed=occurrence.source,
         )
@@ -430,14 +430,6 @@ def _missing_occurrence_detail(
         f"Series check before blocking: {check}. "
         f"No destination occurrence originally starts at {original_start.isoformat()}."
     )
-
-
-def _recorded_event(source_occurrence: CalendarEvent | None) -> RecordedEvent:
-    if source_occurrence is not None:
-        return RecordedEvent.of(source_occurrence)
-    # An occurrence absent from its series has no title or time of its own, and may have had a
-    # title other than the series'; Activity names it from what it last recorded for it.
-    return RecordedEvent(title="", recurring=True, cancelled=True)
 
 
 def occurrence_operation_key(

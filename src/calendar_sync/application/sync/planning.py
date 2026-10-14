@@ -101,6 +101,13 @@ class EventPlanner:
         return mapping, found
 
 
+def decided_before_its_occurrences(series: CalendarEvent, mapping: EventMapping | None) -> bool:
+    """Whether an occurrence's change has its series decided first: one not projected yet,
+    which creating replays its exceptions, or one deleted, which removes its projection and
+    every occurrence with it."""
+    return mapping is None or series.status is EventStatus.CANCELLED
+
+
 def event_operation_key(
     rule_id: SyncRuleId,
     source: EventRef,

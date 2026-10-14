@@ -323,7 +323,9 @@ before a series is created. An occurrence is decided against what its series wil
 decides the series: a series the run creates holds the regular occurrence at the occurrence's
 original start (`decide_occurrence_in_new_series`), so a moved occurrence is an update and a
 cancelled or excluded one a removal, as the run then writes them; a series the run removes, or never
-projected, leaves the occurrence without a Series Mapping. A preview leaves out what Activity does
+projected, leaves the occurrence without a Series Mapping, and removes the occurrence's single
+projection if it had one. A series the listing leaves out but the run decides with its occurrence,
+such as a deleted one only the occurrence reports, is listed with it. A preview leaves out what Activity does
 not record, such as an event deleted before the rule projected it, and does not count it; it still
 lists events other rules project into the source calendar. Earlier releases planned an occurrence of
 a new series as added or left out, and an occurrence of an excluded series under the series' reason,
