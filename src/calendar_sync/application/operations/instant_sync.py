@@ -1,17 +1,19 @@
-"""Instant Sync across Users (ADR 0036): watch upkeep and the dispatch of Instant Sync Requests.
+"""Instant Sync across Users (ADR 0036): watch upkeep, the dispatch of Instant Sync Requests,
+and what the Web UI reads about both.
 
-Both run beside the scheduler and, like it, read every User through the installation-wide unit
-of work (ADR 0029). Each User's own work still runs with that User's units: their watch upkeep,
-each rule's run through the scheduled pass, and each acknowledgement.
+Upkeep and dispatch run beside the scheduler and, like it, read every User through the
+installation-wide unit of work (ADR 0029). Each User's own work still runs with that User's
+units: their watch upkeep, each rule's run through the scheduled pass, and each acknowledgement.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from calendar_sync.application.identity.ports import UserDirectory
 from calendar_sync.application.operations.ports import (
     InstallationUnitOfWorkFactory,
     InstantSyncOwner,
@@ -25,9 +27,28 @@ from calendar_sync.application.operations.scheduled_pass import (
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.instant_sync import CallBudget, UpkeepWatches
 from calendar_sync.application.sync.ports import UnitOfWorkFactory
-from calendar_sync.application.sync.watch_ports import PendingRequest, SyncCadencePolicy
+from calendar_sync.application.sync.watch_ports import (
+    DeliveryEvidenceLog,
+    PendingRequest,
+    SyncCadencePolicy,
+)
 from calendar_sync.domain.access import UserId
-from calendar_sync.domain.model import SyncRuleId, SyncRuleState
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.model import (
+    CalendarEndpoint,
+    ConnectedAccountId,
+    SyncRuleId,
+    SyncRuleState,
+)
+from calendar_sync.domain.watches import (
+    Availability,
+    CadenceReason,
+    CalendarWatch,
+    DeliveryState,
+    WatchRegistration,
+    effective_cadence,
+    instant_sync_availability,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -248,3 +269,87 @@ def _fair_runs(ready: Sequence[PendingInstantRun]) -> tuple[InstantRun, ...]:
         InstantRun(ScheduledRun(scheduled, full=False), seqs[scheduled.owner, scheduled.rule.id])
         for scheduled in fairly_ordered([item.scheduled for item in ready])
     )
+
+
+@dataclass(slots=True)
+class InstantSyncStatus:
+    """Whether Instant Sync is on for a User, and why each of their rules syncs as it does.
+
+    The account switch and the rule pages read it. It reads the User's own records, their
+    preference, their Plan's cadence, and the Delivery Evidence of the installation's address.
+    """
+
+    users: UserDirectory
+    unit_of_work: Callable[[UserId], UnitOfWorkFactory]
+    cadence: SyncCadencePolicy
+    evidence: DeliveryEvidenceLog
+    provider_of: Callable[[ConnectedAccountId], ProviderKind | None]
+    address: str | None
+    """The installation's public https address; None when it cannot offer Instant Sync."""
+    clock: Clock
+
+    def availability(self, user: UserId) -> Availability:
+        with self.unit_of_work(user)() as uow:
+            watches = tuple(uow.watches.list())
+        return self._availability(user, watches)
+
+    def cadences(self, user: UserId) -> Mapping[SyncRuleId, CadenceReason]:
+        """Each rule's Effective Cadence: instant, or why Scheduled Sync runs it instead."""
+        with self.unit_of_work(user)() as uow:
+            rules = tuple(uow.rules.list())
+            watches = tuple(uow.watches.list())
+            registrations = tuple(uow.watches.registrations())
+        availability = self._availability(user, watches)
+        now = self.clock.now()
+        # A registration made for an earlier public address delivers nowhere this one hears.
+        current = tuple(
+            registration
+            for registration in registrations
+            if self.address is not None and registration.address.startswith(f"{self.address}/")
+        )
+        return {
+            rule.id: _cadence_of(rule.source, availability, watches, current, now) for rule in rules
+        }
+
+    def poll_every(self, user: UserId) -> timedelta:
+        """How often Scheduled Sync runs the User's rules, as their Plan says."""
+        return self.cadence.cadence(user).poll_every
+
+    def _availability(self, user: UserId, watches: Sequence[CalendarWatch]) -> Availability:
+        found = self.users.get(user)
+        return instant_sync_availability(
+            address_is_https=self.address is not None,
+            cadence=self.cadence.cadence(user),
+            wanted=found is not None and found.instant_sync,
+            delivery=self._delivery(watches),
+        )
+
+    def _delivery(self, watches: Sequence[CalendarWatch]) -> tuple[DeliveryState, ...]:
+        """The Delivery State of each provider the User's watched sources use, at this
+        installation's address; evidence for another address says nothing about this one."""
+        if self.address is None or not watches:
+            return ()
+        evidence = self.evidence.evidence(self.address)
+        providers = {self.provider_of(watch.account) for watch in watches}
+        return tuple(
+            evidence[provider].state if provider in evidence else DeliveryState.UNKNOWN
+            for provider in providers
+            if provider is not None
+        )
+
+
+def _cadence_of(
+    source: CalendarEndpoint,
+    availability: Availability,
+    watches: Sequence[CalendarWatch],
+    registrations: Sequence[WatchRegistration],
+    now: datetime,
+) -> CadenceReason:
+    """One rule's Effective Cadence, from the watch covering its Source Calendar, if any."""
+    watch = next((each for each in watches if each.covers(source)), None)
+    own = tuple(
+        registration
+        for registration in registrations
+        if watch is not None and registration.watch_id == watch.id
+    )
+    return effective_cadence(availability, watch, own, now)
