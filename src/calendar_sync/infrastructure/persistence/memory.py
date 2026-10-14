@@ -31,6 +31,12 @@ from calendar_sync.application.sync.ports import (
     SyncRuleRepository,
     UnitOfWork,
 )
+from calendar_sync.application.sync.watch_ports import (
+    CalendarWatchRepository,
+    InstantSyncRequestRepository,
+    PendingRequest,
+    Receipt,
+)
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditEntry
@@ -52,6 +58,13 @@ from calendar_sync.domain.model import (
     SyncRuleId,
 )
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
+from calendar_sync.domain.watches import (
+    CalendarWatch,
+    CalendarWatchId,
+    RegistrationState,
+    WatchRegistration,
+    WatchRegistrationId,
+)
 from calendar_sync.infrastructure.clock import SystemClock
 
 if TYPE_CHECKING:
@@ -88,6 +101,11 @@ class MemoryState:
     provider_calls: dict[tuple[ProviderKind, date], ProviderCallCounts] = field(
         default_factory=dict
     )
+    watches: dict[CalendarWatchId, CalendarWatch] = field(default_factory=dict)
+    registrations: dict[WatchRegistrationId, WatchRegistration] = field(default_factory=dict)
+    instant_requests: dict[SyncRuleId, PendingRequest] = field(default_factory=dict)
+    """Raised by the Watch Notice inbox outside any unit of work, as SQLite's are. A unit copies
+    its partition when it opens and commits, so a test raises requests only between units."""
 
 
 def _require_rule(state: MemoryState, rule_id: SyncRuleId) -> None:
@@ -109,6 +127,34 @@ def _require_rule_accounts(state: MemoryState) -> None:
 
 def _duplicate_relationship() -> DuplicateDirectionalRelationship:
     return DuplicateDirectionalRelationship("a rule already exists for this source and destination")
+
+
+def _forget_watches(state: MemoryState, account_id: ConnectedAccountId) -> None:
+    """Mirror SQLite's cascade from an account to its watches and their registrations."""
+    gone = {key for key, watch in state.watches.items() if watch.account == account_id}
+    state.watches = {key: watch for key, watch in state.watches.items() if key not in gone}
+    state.registrations = {
+        key: registration
+        for key, registration in state.registrations.items()
+        if registration.watch_id not in gone
+    }
+
+
+def raise_instant_request(state: MemoryState, rule_id: SyncRuleId, at: datetime) -> None:
+    """Raise a rule's Instant Sync Request as SQLite's inbox does: a request already handled
+    starts waiting again from `at`, and a pending one keeps the earliest time it waits since and
+    the latest time it was raised, whatever order notices arrive in."""
+    current = state.instant_requests.get(rule_id)
+    if current is None:
+        state.instant_requests[rule_id] = PendingRequest(rule_id, 1, 0, at, at, None)
+        return
+    waiting = current.requested_seq > current.handled_seq
+    state.instant_requests[rule_id] = replace(
+        current,
+        requested_seq=current.requested_seq + 1,
+        first_requested_at=min(current.first_requested_at, at) if waiting else at,
+        last_requested_at=max(current.last_requested_at, at),
+    )
 
 
 class InMemoryConnectedAccountRecords:
@@ -162,6 +208,7 @@ class InMemoryConnectedAccountRecords:
             for endpoint, name in self._state.calendar_names.items()
             if endpoint.connected_account_id != account_id
         }
+        _forget_watches(self._state, account_id)
         # The account's own Incidents, such as its Lapsed Authorization, go with it.
         self._incidents.delete_account(account_id)
         return True
@@ -221,6 +268,7 @@ class InMemorySyncRuleRepository:
             key: outcome for key, outcome in self._state.outcomes.items() if key[0] != rule_id
         }
         self._state.previews.pop(rule_id, None)
+        self._state.instant_requests.pop(rule_id, None)
         self._state.observations = {
             key: value for key, value in self._state.observations.items() if key[0] != rule_id
         }
@@ -529,6 +577,155 @@ class InMemoryProviderCallRepository:
         total.failed += counts.failed
 
 
+class InMemoryCalendarWatchRepository:
+    def __init__(self, state: MemoryState, others: _OtherUsers) -> None:
+        self._state = state
+        self._others = others
+
+    def list(self) -> tuple[CalendarWatch, ...]:
+        return tuple(sorted(self._state.watches.values(), key=lambda watch: watch.id.value))
+
+    def registrations(self) -> tuple[WatchRegistration, ...]:
+        return tuple(
+            sorted(
+                self._state.registrations.values(),
+                key=lambda each: (each.watch_id.value, each.created_at, each.id.value),
+            )
+        )
+
+    def add(self, watch: CalendarWatch) -> None:
+        # Mirror SQLite's primary key, its one watch per account and scope, and its reference to
+        # the User's own account.
+        if (
+            watch.id in self._state.watches
+            or self._others.hold_watch(watch.id)
+            or any(
+                other.account == watch.account and other.scope == watch.scope
+                for other in self._state.watches.values()
+            )
+        ):
+            raise IdentityCollision(f"calendar watch {watch.id.value} already exists")
+        if watch.account not in self._state.accounts:
+            raise MissingReference(f"connected account {watch.account.value} does not exist")
+        self._state.watches[watch.id] = watch
+
+    def set_coverage(self, watch_id: CalendarWatchId, coverage: frozenset[CalendarId]) -> None:
+        watch = self._state.watches.get(watch_id)
+        if watch is not None:
+            self._state.watches[watch_id] = replace(watch, coverage=frozenset(coverage))
+
+    def set_retry(
+        self, watch_id: CalendarWatchId, retry_at: datetime | None, failures: int
+    ) -> None:
+        watch = self._state.watches.get(watch_id)
+        if watch is not None:
+            self._state.watches[watch_id] = replace(watch, retry_at=retry_at, failures=failures)
+
+    def remove(self, watch_id: CalendarWatchId) -> None:
+        self._state.watches.pop(watch_id, None)
+        self._state.registrations = {
+            key: registration
+            for key, registration in self._state.registrations.items()
+            if registration.watch_id != watch_id
+        }
+
+    def add_registration(self, registration: WatchRegistration) -> None:
+        # Mirror SQLite's primary key, its unique token hash, and its reference to the watch.
+        if self._others.hold_registration(registration) or any(
+            other.id == registration.id or other.token_hash == registration.token_hash
+            for other in self._state.registrations.values()
+        ):
+            raise IdentityCollision(f"watch registration {registration.id.value} already exists")
+        if registration.watch_id not in self._state.watches:
+            raise MissingReference(f"calendar watch {registration.watch_id.value} does not exist")
+        self._state.registrations[registration.id] = registration
+
+    def record_receipt(
+        self,
+        registration_id: WatchRegistrationId,
+        receipt: Receipt,
+        renew_at: datetime,
+        at: datetime,
+    ) -> bool:
+        registration = self._state.registrations.get(registration_id)
+        if registration is None or registration.state is not RegistrationState.CREATING:
+            return False
+        confirmed = registration.confirmed_at or (at if receipt.confirmed else None)
+        self._state.registrations[registration_id] = replace(
+            registration,
+            state=RegistrationState.LIVE,
+            handle=receipt.handle,
+            expires_at=receipt.expires_at,
+            renew_at=renew_at,
+            confirmed_at=confirmed,
+        )
+        return True
+
+    def record_extension(
+        self,
+        registration_id: WatchRegistrationId,
+        expires_at: datetime,
+        renew_at: datetime,
+        seen_request: datetime | None,
+    ) -> bool:
+        registration = self._state.registrations.get(registration_id)
+        if registration is None or registration.state is not RegistrationState.LIVE:
+            return False
+        asked = registration.renew_requested_at
+        self._state.registrations[registration_id] = replace(
+            registration,
+            expires_at=expires_at,
+            renew_at=renew_at,
+            renew_requested_at=None if asked == seen_request else asked,
+        )
+        return True
+
+    def retire(self, registration_id: WatchRegistrationId) -> bool:
+        return self._move(registration_id, RegistrationState.RETIRING, {RegistrationState.LIVE})
+
+    def abandon(self, registration_id: WatchRegistrationId) -> bool:
+        return self._move(registration_id, RegistrationState.ABANDONED, set(RegistrationState))
+
+    def delete_registration(self, registration_id: WatchRegistrationId) -> None:
+        self._state.registrations.pop(registration_id, None)
+
+    def _move(
+        self,
+        registration_id: WatchRegistrationId,
+        to: RegistrationState,
+        leaving: Collection[RegistrationState],
+    ) -> bool:
+        registration = self._state.registrations.get(registration_id)
+        if registration is None or registration.state not in leaving:
+            return False
+        self._state.registrations[registration_id] = replace(registration, state=to)
+        return True
+
+
+class InMemoryInstantSyncRequestRepository:
+    def __init__(self, state: MemoryState) -> None:
+        self._state = state
+
+    def pending(self) -> tuple[PendingRequest, ...]:
+        return tuple(
+            sorted(
+                (
+                    request
+                    for request in self._state.instant_requests.values()
+                    if request.requested_seq > request.handled_seq
+                ),
+                key=lambda request: request.rule_id.value,
+            )
+        )
+
+    def acknowledge(self, rule_id: SyncRuleId, seq: int, ran_at: datetime) -> None:
+        current = self._state.instant_requests.get(rule_id)
+        if current is not None:
+            self._state.instant_requests[rule_id] = replace(
+                current, handled_seq=max(current.handled_seq, seq), last_run_at=ran_at
+            )
+
+
 class InMemoryUnitOfWork:
     """One User's records, like SQLite's unit of work: they live in that User's partition."""
 
@@ -545,6 +742,8 @@ class InMemoryUnitOfWork:
     previews: RulePreviewRepository
     calendar_names: CalendarNameRepository
     provider_calls: ProviderCallRepository
+    watches: CalendarWatchRepository
+    instant_requests: InstantSyncRequestRepository
 
     def __init__(self, database: MemoryDatabase, user_id: UserId, clock: Clock) -> None:
         self._database = database
@@ -576,6 +775,8 @@ class InMemoryUnitOfWork:
         self.previews = InMemoryRulePreviewRepository(working)
         self.calendar_names = InMemoryCalendarNameRepository(working)
         self.provider_calls = InMemoryProviderCallRepository(working)
+        self.watches = InMemoryCalendarWatchRepository(working, others)
+        self.instant_requests = InMemoryInstantSyncRequestRepository(working)
         return self
 
     def __exit__(
@@ -757,6 +958,16 @@ class _OtherUsers:
             occurrence.id == occurrence_id
             for state in self._states()
             for occurrence in state.occurrences.values()
+        )
+
+    def hold_watch(self, watch_id: CalendarWatchId) -> bool:
+        return any(watch_id in state.watches for state in self._states())
+
+    def hold_registration(self, registration: WatchRegistration) -> bool:
+        return any(
+            other.id == registration.id or other.token_hash == registration.token_hash
+            for state in self._states()
+            for other in state.registrations.values()
         )
 
 
