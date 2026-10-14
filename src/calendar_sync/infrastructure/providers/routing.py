@@ -1,8 +1,9 @@
 """Sends each calendar request to the adapter of the provider its Connected Account belongs to.
 
 A rule's source and destination may belong to different providers, so every request is routed
-by the account its endpoint names (ADR 0022). An account's provider never changes, so the answer
-is kept after the first lookup; an account not found is looked up again next time.
+by the account its endpoint names (ADR 0022). Instant Sync finds each account's watcher the same
+way (ADR 0036). An account's provider never changes, so the answer is kept after the first
+lookup; an account not found is looked up again next time.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from calendar_sync.application.sync.ports import (
     ProviderChangeSet,
 )
 from calendar_sync.application.sync.provider_descriptors import ProviderDirectory
+from calendar_sync.application.sync.watch_ports import CalendarWatcher
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -256,3 +258,30 @@ class RoutingAccountCalendars:
         except AccountAccessCheckFailed as error:
             error.provider = self._kinds.of(account_id)
             raise
+
+
+class RoutingCalendarWatcher:
+    """The watcher of each Connected Account's provider, for Instant Sync (WatcherFor): None when
+    the provider cannot watch, or the account no longer exists."""
+
+    def __init__(
+        self, kinds: ProviderKinds, watchers: Mapping[ProviderKind, CalendarWatcher]
+    ) -> None:
+        self._kinds = _KnownKinds(kinds)
+        self._watchers = dict(watchers)
+
+    @classmethod
+    def of(cls, kinds: ProviderKinds, providers: ProviderDirectory) -> RoutingCalendarWatcher:
+        """A router to the watcher each provider's descriptor offers."""
+        return cls(
+            kinds,
+            {d.kind: d.watcher for d in providers.descriptors if d.watcher is not None},
+        )
+
+    def __call__(self, account_id: ConnectedAccountId) -> CalendarWatcher | None:
+        kind = self._kinds.of(account_id)
+        return None if kind is None else self._watchers.get(kind)
+
+    def provider_of(self, account_id: ConnectedAccountId) -> ProviderKind | None:
+        """The account's Provider Kind, from the same remembered lookup."""
+        return self._kinds.of(account_id)
