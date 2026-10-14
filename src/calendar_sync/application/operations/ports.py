@@ -10,7 +10,7 @@ from typing import Literal, Protocol, Self
 
 from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.application.sync.ports import RulePreviewSummary, ScheduledRule
-from calendar_sync.application.sync.watch_ports import WatchNotice
+from calendar_sync.application.sync.watch_ports import PendingRequest, WatchNotice
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
@@ -66,6 +66,31 @@ class ResourceUse:
     activity_entries: int
     provider_calls: tuple[ProviderCallUse, ...]
     """Each provider's calls since the day asked for, by provider."""
+
+
+@dataclass(frozen=True, slots=True)
+class InstantSyncOwner:
+    """A User whose Calendar Watches upkeep reconciles: one with an enabled rule or a watch."""
+
+    user: UserId
+    wanted: bool
+    """Whether they want Instant Sync, as their account settings say."""
+    disabled: bool
+    """A disabled User is listed too, so upkeep stops their watches."""
+    next_due: datetime | None
+    """When their watches next need upkeep: a retry, a renewal asked for or planned, a creation
+    deadline, or the end of a registration. None when nothing is planned, as for a User without
+    a watch yet, whose coverage is still missing."""
+
+
+@dataclass(frozen=True, slots=True)
+class PendingInstantRun:
+    """An enabled rule of a User who is not disabled, whose Instant Sync Request waits."""
+
+    scheduled: ScheduledRule
+    request: PendingRequest
+    last_run_failed: bool
+    """Whether its latest Sync Run failed; Scheduled Sync retries such a rule until one succeeds."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +157,17 @@ class InstallationUnitOfWork(Protocol):
     def status_records(self, users: Collection[UserId]) -> Mapping[UserId, StatusRecords]:
         """What each of `users`' Installation Status is computed from, read in the same number
         of queries however many rules they have. A User with no records has empty ones."""
+        ...
+
+    def instant_sync_owners(self) -> Sequence[InstantSyncOwner]:
+        """Every User with an enabled rule or a Calendar Watch, disabled Users included, by
+        identifier."""
+        ...
+
+    def pending_instant_runs(self) -> Sequence[PendingInstantRun]:
+        """Every enabled rule of a User who is not disabled whose Instant Sync Request is not yet
+        handled, by User and then by rule. Neither the User's wish nor their cadence is read
+        here; dispatch decides with them."""
         ...
 
 

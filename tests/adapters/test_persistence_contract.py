@@ -48,6 +48,13 @@ class TestInMemoryUnitOfWork(PersistenceContract):
         def request_run(user: UserId, rule_id: SyncRuleId, at: datetime) -> None:
             raise_instant_request(database.for_user(user).state, rule_id, at)
 
+        def prefer(user: UserId, wanted: bool) -> None:
+            off = database.database.instant_sync_off
+            if wanted:
+                off.discard(user)
+            else:
+                off.add(user)
+
         return PersistenceHarness(
             database.for_user,
             connect=connect,
@@ -56,6 +63,7 @@ class TestInMemoryUnitOfWork(PersistenceContract):
             installation=database.installation(),
             incidents=lambda user: InMemoryIncidentRepository(database.database, user),
             request_run=request_run,
+            prefer=prefer,
         )
 
 
@@ -111,6 +119,12 @@ class TestSqliteUnitOfWork(PersistenceContract):
                     (rule_id.value, user.value, at.isoformat(), at.isoformat()),
                 )
 
+        def prefer(user: UserId, wanted: bool) -> None:
+            with transaction(database) as connection:
+                connection.execute(
+                    "UPDATE users SET instant_sync = ? WHERE id = ?", (int(wanted), user.value)
+                )
+
         return PersistenceHarness(
             # Source Observations are sealed, so the store needs a History Cipher to keep them.
             SqliteUnitOfWorkFactory(
@@ -122,4 +136,5 @@ class TestSqliteUnitOfWork(PersistenceContract):
             installation=SqliteInstallationUnitOfWorkFactory(database),
             incidents=lambda user: SqliteIncidentRepository(database, user),
             request_run=request_run,
+            prefer=prefer,
         )

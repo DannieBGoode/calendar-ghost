@@ -809,6 +809,8 @@ class MemoryDatabase:
     partitions: dict[UserId, MemoryState] = field(default_factory=dict)
     disabled: set[UserId] = field(default_factory=set)
     """Users who may not sign in; the scheduler holds their rules."""
+    instant_sync_off: set[UserId] = field(default_factory=set)
+    """Users who turned Instant Sync off; like `disabled`, kept as SQLite's users table keeps it."""
     incidents: dict[UserId, dict[str, MemoryIncident]] = field(default_factory=dict)
     """Each User's Incidents by key; like SQLite's, they change outside any unit of work, except
     as a unit's rule removals and account deletions change them when it commits."""

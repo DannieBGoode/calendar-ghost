@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from types import TracebackType
@@ -14,8 +14,10 @@ from calendar_sync.application.operations.ports import (
     InboxBusy,
     IncidentSummary,
     InstallationUnitOfWork,
+    InstantSyncOwner,
     OpenBlock,
     OperationsOverview,
+    PendingInstantRun,
     ProviderCallUse,
     RecordedRule,
     ResourceUse,
@@ -44,6 +46,7 @@ from calendar_sync.infrastructure.persistence.memory import (
     raise_instant_request,
 )
 from calendar_sync.infrastructure.persistence.watch_inbox import EVIDENCE_REFRESH, presents
+from calendar_sync.infrastructure.persistence.watches import upkeep_due
 
 
 class InMemoryInstallationUnitOfWork:
@@ -124,6 +127,30 @@ class InMemoryInstallationUnitOfWork:
 
     def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
         return {user: _status_records(self._database, user) for user in users}
+
+    def instant_sync_owners(self) -> tuple[InstantSyncOwner, ...]:
+        database = self._database
+        return tuple(
+            InstantSyncOwner(
+                owner,
+                wanted=owner not in database.instant_sync_off,
+                disabled=owner in database.disabled,
+                next_due=upkeep_due(state.watches.values(), state.registrations.values()),
+            )
+            for owner, state in sorted(database.partitions.items(), key=lambda item: item[0].value)
+            if state.watches
+            or any(rule.state is SyncRuleState.ENABLED for rule in state.rules.values())
+        )
+
+    def pending_instant_runs(self) -> tuple[PendingInstantRun, ...]:
+        return tuple(
+            run
+            for owner, state in sorted(
+                self._database.partitions.items(), key=lambda item: item[0].value
+            )
+            if owner not in self._database.disabled
+            for run in _pending_runs(owner, state)
+        )
 
 
 def _unfinished(database: MemoryDatabase, owner: UserId, state: MemoryState) -> bool:
@@ -303,6 +330,21 @@ def _authorization(state: MemoryState, account: ConnectedAccountId) -> AccountAu
 def _last_full_sync(state: MemoryState, rule_id: SyncRuleId) -> datetime | None:
     outcome = state.outcomes.get((rule_id, RunKind.SYNC))
     return outcome.last_full_succeeded_at if outcome is not None else None
+
+
+def _pending_runs(owner: UserId, state: MemoryState) -> Iterator[PendingInstantRun]:
+    for rule_id, request in sorted(state.instant_requests.items(), key=lambda item: item[0].value):
+        rule = state.rules.get(rule_id)
+        if rule is None or rule.state is not SyncRuleState.ENABLED:
+            continue
+        if request.requested_seq <= request.handled_seq:
+            continue
+        outcome = state.outcomes.get((rule_id, RunKind.SYNC))
+        yield PendingInstantRun(
+            ScheduledRule(owner, rule, _last_full_sync(state, rule_id)),
+            request,
+            last_run_failed=outcome is not None and not outcome.succeeded,
+        )
 
 
 @dataclass(slots=True)

@@ -16,6 +16,8 @@ from calendar_sync.application.operations.ports import (
     AccountStanding,
     CauseSighting,
     InstallationUnitOfWorkFactory,
+    InstantSyncOwner,
+    PendingInstantRun,
     ProviderCallUse,
     RecordedRule,
 )
@@ -31,6 +33,7 @@ from calendar_sync.application.sync.ports import (
     IncidentRepository,
     ProviderCallCounts,
     RulePreviewSummary,
+    ScheduledRule,
     UnitOfWork,
     UnitOfWorkFactory,
 )
@@ -67,6 +70,7 @@ from calendar_sync.domain.model import (
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.watches import (
+    CREATION_DEADLINE,
     CalendarWatch,
     CalendarWatchId,
     RegistrationState,
@@ -122,6 +126,9 @@ class PersistenceHarness:
     """Each User's Incidents, which open and resolve outside any unit of work."""
     request_run: Callable[[UserId, SyncRuleId, datetime], object]
     """Raise a rule's Instant Sync Request, as an authentic Watch Notice would outside any unit
+    of work."""
+    prefer: Callable[[UserId, bool], object]
+    """Record whether a User wants Instant Sync, as their account settings would outside any unit
     of work."""
 
     @property
@@ -1970,3 +1977,90 @@ class PersistenceContract:
 
         assert kept == [OTHER_RULE.id]
         assert left == ((), (), ())
+
+    # What Instant Sync reads across Users
+
+    def test_instant_sync_owners_have_an_enabled_rule_or_a_watch_disabled_ones_included(
+        self, harness: PersistenceHarness
+    ) -> None:
+        theirs = replace(
+            RULE, id=SyncRuleId("their-rule"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
+        )
+        for account in (THEIR_SOURCE, THEIR_DESTINATION):
+            harness.connect_account(account.connected_account_id, OTHER_USER)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.commit()
+        _commit_as(harness, OTHER_USER, lambda uow: uow.rules.add(theirs.pause()))
+        with harness.installation() as installation:
+            without_watches = installation.instant_sync_owners()
+
+        _watching(harness, replace(_live(), confirmed_at=NOW))
+        with harness.unit_of_work() as uow:
+            uow.watches.set_retry(WATCH.id, NOW + HOUR, 1)
+            uow.commit()
+
+        def watch_theirs(uow: UnitOfWork) -> None:
+            uow.watches.add(THEIR_WATCH)
+            uow.watches.add_registration(_registration("their-registration", THEIR_WATCH.id))
+
+        _commit_as(harness, OTHER_USER, watch_theirs)
+        harness.disable(OTHER_USER)
+        harness.prefer(OTHER_USER, False)
+        with harness.installation() as installation:
+            owners = installation.instant_sync_owners()
+
+        # A paused rule alone needs no watch, and a User without a watch has nothing planned.
+        assert without_watches == (InstantSyncOwner(USER, True, False, None),)
+        assert owners == (
+            # The retry comes before the planned renewal.
+            InstantSyncOwner(USER, wanted=True, disabled=False, next_due=NOW + HOUR),
+            # A disabled User is listed, so upkeep stops their watches.
+            InstantSyncOwner(
+                OTHER_USER, wanted=False, disabled=True, next_due=NOW + CREATION_DEADLINE
+            ),
+        )
+
+    def test_pending_instant_runs_are_unhandled_requests_of_enabled_rules_of_active_users(
+        self, harness: PersistenceHarness
+    ) -> None:
+        handled = replace(
+            OTHER_RULE, id=SyncRuleId("rule-2"), destination=endpoint("work-account", "third")
+        )
+        theirs = replace(
+            RULE, id=SyncRuleId("their-rule"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
+        )
+        for account in (THEIR_SOURCE, THEIR_DESTINATION):
+            harness.connect_account(account.connected_account_id, OTHER_USER)
+        failed = RuleRunOutcome(
+            RULE.id, RunKind.SYNC, NOW, False, failure_kind=ProviderFailureKind.TEMPORARY
+        )
+        with harness.unit_of_work() as uow:
+            for each in (RULE, OTHER_RULE, handled):
+                uow.rules.add(each)
+            uow.run_outcomes.record(failed)
+            uow.commit()
+        _commit_as(harness, OTHER_USER, lambda uow: uow.rules.add(theirs))
+        requested = ((USER, RULE), (USER, OTHER_RULE), (USER, handled), (OTHER_USER, theirs))
+        for owner, each in requested:
+            harness.request_run(owner, each.id, NOW)
+        with harness.unit_of_work() as uow:
+            uow.rules.save(OTHER_RULE.pause())
+            uow.instant_requests.acknowledge(handled.id, 1, NOW + MINUTE)
+            uow.commit()
+        harness.disable(OTHER_USER)
+
+        with harness.installation() as installation:
+            failing = installation.pending_instant_runs()
+        with harness.unit_of_work() as uow:
+            uow.run_outcomes.record(
+                replace(failed, completed_at=NOW + HOUR, succeeded=True, failure_kind=None)
+            )
+            uow.commit()
+        with harness.installation() as installation:
+            recovered = installation.pending_instant_runs()
+
+        request = PendingRequest(RULE.id, 1, 0, NOW, NOW, None)
+        scheduled = ScheduledRule(USER, RULE, None)
+        assert failing == (PendingInstantRun(scheduled, request, last_run_failed=True),)
+        assert recovered == (PendingInstantRun(scheduled, request, last_run_failed=False),)

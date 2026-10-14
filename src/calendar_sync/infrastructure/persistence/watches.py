@@ -8,13 +8,14 @@ it back, and upkeep clears a renewal request only while it still holds the time 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 
 from calendar_sync.application.sync.watch_ports import PendingRequest, Receipt
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import CalendarId, ConnectedAccountId, SyncRuleId
 from calendar_sync.domain.watches import (
+    CREATION_DEADLINE,
     CalendarWatch,
     CalendarWatchId,
     RegistrationState,
@@ -301,3 +302,28 @@ def request_from_row(row: sqlite3.Row) -> PendingRequest:
         last_requested_at=datetime.fromisoformat(str(row["last_requested_at"])),
         last_run_at=_read(row["last_run_at"]),
     )
+
+
+def upkeep_due(
+    watches: Iterable[CalendarWatch], registrations: Iterable[WatchRegistration]
+) -> datetime | None:
+    """When upkeep next has work for one User's watches; None when nothing is planned."""
+    retries = (watch.retry_at for watch in watches)
+    moments = [moment for moment in retries if moment is not None]
+    moments.extend(moment for registration in registrations for moment in _due(registration))
+    return min(moments, default=None)
+
+
+def _due(registration: WatchRegistration) -> tuple[datetime, ...]:
+    """A creation deadline, a renewal asked for or planned, or the end of the registration, after
+    which upkeep deletes it (`WatchRegistration.gone`)."""
+    if registration.state is RegistrationState.CREATING:
+        return (registration.created_at + CREATION_DEADLINE,)
+    if registration.state is RegistrationState.LIVE:
+        asked, planned, ends = (
+            registration.renew_requested_at,
+            registration.renew_at,
+            registration.expires_at,
+        )
+        return tuple(moment for moment in (asked, planned, ends) if moment is not None)
+    return (registration.expires_at or registration.requested_until,)
