@@ -17,6 +17,13 @@ class RunKind(StrEnum):
     RECONCILIATION = "reconciliation"
 
 
+class RunOrigin(StrEnum):
+    """Who started a Sync Run, where it changes what the run means."""
+
+    SCHEDULED = "scheduled"
+    RECONCILE_NOW = "reconcile_now"
+
+
 @dataclass(frozen=True, slots=True)
 class RuleRunOutcome:
     """The latest result of one kind of run: counts and a failure category, never content."""

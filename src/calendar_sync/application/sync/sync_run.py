@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
@@ -10,7 +11,13 @@ from calendar_sync.application.sync.errors import RuleNotExecutable
 from calendar_sync.application.sync.locking import RuleWork
 from calendar_sync.application.sync.ports import CalendarReader, ProviderCallTally, UnitOfWork
 from calendar_sync.application.sync.run_log import call_summary, duration
-from calendar_sync.domain.audit import AuditAction, AuditEntry, repeats_previous
+from calendar_sync.domain.audit import (
+    AuditAction,
+    AuditEntry,
+    FoundBy,
+    RunReason,
+    repeats_previous,
+)
 from calendar_sync.domain.changes import SourceComparison
 from calendar_sync.domain.model import (
     CalendarEvent,
@@ -196,6 +203,20 @@ class SyncRunContext:
     log: SyncRunLog | None = None
     work: RuleWork | None = None
     """What the rule reports while this run is in progress, including how much it handled."""
+    run_reason: RunReason | None = None
+    """Why this run read the calendars as it did."""
+    found_by: FoundBy | None = None
+    """The work that led to the decisions being made now; nested work inherits it."""
+
+    @contextmanager
+    def finding(self, found_by: FoundBy) -> Iterator[None]:
+        """Name the work that finds events until the block ends, then restore the earlier one."""
+        outer = self.found_by
+        self.found_by = found_by
+        try:
+            yield
+        finally:
+            self.found_by = outer
 
     def count(self, action: SyncAction, source: EventRef) -> None:
         """Count one decision about `source`, remembering it when it is a block.
@@ -296,6 +317,7 @@ def record(
     if comparison is not None and own_identity and _repeats(run, entry, comparison):
         run.unrecorded += 1
         return
+    entry = replace(entry, run_reason=run.run_reason, found_by=run.found_by)
     if comparison is not None:
         assert observed is not None
         if comparison.observation is not None:

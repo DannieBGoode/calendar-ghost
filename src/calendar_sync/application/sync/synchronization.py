@@ -41,7 +41,13 @@ from calendar_sync.application.sync.sync_run import (
     require_unchanged,
 )
 from calendar_sync.domain.accounts import ProviderKind
-from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
+from calendar_sync.domain.audit import (
+    AuditAction,
+    AuditEntry,
+    AuditOutcome,
+    FoundBy,
+    RecordedEvent,
+)
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import (
     CalendarEvent,
@@ -55,7 +61,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
-from calendar_sync.domain.runs import RuleRunOutcome, RunKind
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind, RunOrigin
 from calendar_sync.domain.services import ProjectionFingerprinter, SyncDecisionService
 
 
@@ -123,9 +129,17 @@ class ExecuteSyncRule:
         )
 
     def execute(
-        self, rule_id: SyncRuleId, *, full: bool = False, work: RuleWork | None = None
+        self,
+        rule_id: SyncRuleId,
+        *,
+        full: bool = False,
+        work: RuleWork | None = None,
+        origin: RunOrigin = RunOrigin.SCHEDULED,
     ) -> SyncRunResult:
-        """Run once; `work` is the larger work this run is part of, which its caller reports."""
+        """Run once; `work` is the larger work this run is part of, which its caller reports.
+
+        `origin` names who started the run when that changes what it means, as Reconcile Now does.
+        """
         reported = nullcontext() if work else None
         work = work or RuleWork(RuleWorkKind.SYNC, self.clock.now())
         with (
@@ -134,16 +148,21 @@ class ExecuteSyncRule:
             self.call_stats.measure() as calls,
         ):
             try:
-                return self._execute_measured(rule_id, full, work, calls)
+                return self._execute_measured(rule_id, full, origin, work, calls)
             finally:
                 record_provider_calls(self.unit_of_work, self.clock, calls)
 
     def _execute_measured(
-        self, rule_id: SyncRuleId, full: bool, work: RuleWork, calls: ProviderCallTally
+        self,
+        rule_id: SyncRuleId,
+        full: bool,
+        origin: RunOrigin,
+        work: RuleWork,
+        calls: ProviderCallTally,
     ) -> SyncRunResult:
         log = SyncRunLog(rule_id, self.clock, calls, work.started_at)
         try:
-            return self._execute_serialized(rule_id, full=full, log=log, work=work)
+            return self._execute_serialized(rule_id, full=full, origin=origin, log=log, work=work)
         except RuleNotExecutable:
             log.stopped()
             raise
@@ -185,16 +204,29 @@ class ExecuteSyncRule:
                 uow.commit()
 
     def _execute_serialized(
-        self, rule_id: SyncRuleId, *, full: bool, log: SyncRunLog, work: RuleWork
+        self,
+        rule_id: SyncRuleId,
+        *,
+        full: bool,
+        origin: RunOrigin,
+        log: SyncRunLog,
+        work: RuleWork,
     ) -> SyncRunResult:
         with self.unit_of_work() as uow:
             rule = _executable_rule(uow, rule_id)
-            run, feeds = self.change_feeds.begin(uow, rule, full=full, log=log, work=work)
-            self._synchronize_sources(run, feeds.source)
-            self._repair_destinations(run, feeds.destination)
+            run, feeds = self.change_feeds.begin(
+                uow, rule, full=full, origin=origin, log=log, work=work
+            )
+            # Each phase names the work that finds its events; nested work inherits it.
+            with run.finding(FoundBy.SOURCE_FEED):
+                self._synchronize_sources(run, feeds.source)
+            with run.finding(FoundBy.DESTINATION_FEED):
+                self._repair_destinations(run, feeds.destination)
             if run.reproject:
-                self._reproject_remaining(run)
-            self.exception_replays.finish_pending(run)
+                with run.finding(FoundBy.REPROJECTION):
+                    self._reproject_remaining(run)
+            with run.finding(FoundBy.PENDING_REPLAY):
+                self.exception_replays.finish_pending(run)
             self.change_feeds.advance(run, feeds)
         log.finished(run.counts, run.unrecorded)
 
@@ -462,7 +494,8 @@ class ExecuteSyncRule:
         self, run: SyncRunContext, source: EventRef, destination: EventRef | None
     ) -> None:
         run.count(SyncAction.CONFLICT, source)
-        run.uow.audit.append(
+        record(
+            run,
             AuditEntry(
                 occurred_at=self.clock.now(),
                 rule_id=run.rule.id,
@@ -472,7 +505,7 @@ class ExecuteSyncRule:
                 destination_event_id=destination.event_id.value if destination else None,
                 reason=SyncReason.SOURCE_UNVERIFIABLE,
                 run_id=run.run_id,
-            )
+            ),
         )
 
     def _synchronize_event(

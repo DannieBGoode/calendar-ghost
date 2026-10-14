@@ -16,8 +16,9 @@ from calendar_sync.application.sync.sync_run import (
     SyncRunContext,
     SyncRunLog,
 )
+from calendar_sync.domain.audit import RunReason
 from calendar_sync.domain.model import SyncAction, SyncRule
-from calendar_sync.domain.runs import RuleRunOutcome, RunKind
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind, RunOrigin
 
 
 def _run_mode(*, reproject: bool, full: bool, first: bool) -> tuple[str, str]:
@@ -45,6 +46,29 @@ class ChangeFeeds:
         return self.source_listed and self.destination_listed
 
 
+def run_reason(
+    *,
+    reproject: bool,
+    origin: RunOrigin,
+    full: bool,
+    saved_source: bool,
+    saved_destination: bool,
+    feeds: ChangeFeeds,
+) -> RunReason:
+    """Why the run read the calendars as it did: the first reason that applies (ADR 0036)."""
+    if reproject:
+        return RunReason.REPROJECTION
+    if origin is RunOrigin.RECONCILE_NOW:
+        return RunReason.RECONCILE_NOW
+    if full:
+        return RunReason.DAILY_PASS
+    if not saved_source and not saved_destination:
+        return RunReason.FIRST_RUN
+    if feeds.source_listed or feeds.destination_listed:
+        return RunReason.RELISTED
+    return RunReason.CHANGES
+
+
 @dataclass(slots=True)
 class ChangeFeedCursors:
     """Reads both calendars' change feeds from a rule's saved cursors, and saves the next ones."""
@@ -55,7 +79,14 @@ class ChangeFeedCursors:
     locks: RuleLocks
 
     def begin(
-        self, uow: UnitOfWork, rule: SyncRule, *, full: bool, log: SyncRunLog, work: RuleWork
+        self,
+        uow: UnitOfWork,
+        rule: SyncRule,
+        *,
+        full: bool,
+        origin: RunOrigin,
+        log: SyncRunLog,
+        work: RuleWork,
     ) -> tuple[SyncRunContext, ChangeFeeds]:
         """Read both change feeds from the saved cursors, or in full when a full run is due."""
         run_id = self.run_ids.new_run_id()
@@ -63,7 +94,8 @@ class ChangeFeedCursors:
         full_run = full or reproject
         previous_cursor = uow.cursors.get(rule.id)
         cursor = None if full_run else previous_cursor
-        destination_cursor = None if full_run else uow.destination_cursors.get(rule.id)
+        saved_destination = uow.destination_cursors.get(rule.id)
+        destination_cursor = None if full_run else saved_destination
         log.begin(run_id, *_run_mode(reproject=reproject, full=full, first=previous_cursor is None))
         cutoff = self.clock.now() - timedelta(days=rule.initial_lookback_days)
         changes = self.provider.changes(rule.source, cursor, cutoff)
@@ -94,6 +126,14 @@ class ChangeFeedCursors:
             source_listed=feeds.source_listed,
             log=log,
             work=work,
+            run_reason=run_reason(
+                reproject=reproject,
+                origin=origin,
+                full=full,
+                saved_source=previous_cursor is not None,
+                saved_destination=saved_destination is not None,
+                feeds=feeds,
+            ),
         )
         run.expect(len(changes.events) + len(destination_changes.events))
         if feeds.destination_listed:

@@ -1971,7 +1971,9 @@ def test_sync_and_reconcile_now_answer_a_failed_run_as_the_providers_failure(
         ProviderFailureKind.TEMPORARY, "Outlook did not list the exceptions of a series"
     )
 
-    def failed_run(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> None:
+    def failed_run(
+        rule_id: SyncRuleId, *, full: bool = False, work: object = None, origin: object = None
+    ) -> None:
         raise failure
 
     container = _failing_now(container, failed_run)
@@ -2009,7 +2011,9 @@ def test_sync_and_reconcile_now_lapse_an_account_the_provider_refused(
         attempted_at=datetime.now(UTC),
     )
 
-    def failed_run(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> None:
+    def failed_run(
+        rule_id: SyncRuleId, *, full: bool = False, work: object = None, origin: object = None
+    ) -> None:
         raise failure
 
     container = _failing_now(container, failed_run)
@@ -2056,7 +2060,9 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
         uow.commit()
     _append_audit(adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
 
-    def full_pass(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> SyncRunResult:
+    def full_pass(
+        rule_id: SyncRuleId, *, full: bool = False, work: object = None, origin: object = None
+    ) -> SyncRunResult:
         assert full
         # The pass decides the blocked event again and finds it still blocked.
         _append_audit(
@@ -2199,7 +2205,9 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
         uow.commit()
     _append_audit(adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
 
-    def full_pass(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> SyncRunResult:
+    def full_pass(
+        rule_id: SyncRuleId, *, full: bool = False, work: object = None, origin: object = None
+    ) -> SyncRunResult:
         _append_audit(
             adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-2")
         )
