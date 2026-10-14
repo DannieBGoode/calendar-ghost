@@ -6,6 +6,14 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- Instant Sync: with a public HTTPS address in `CALENDAR_SYNC_PUBLIC_URL` that Google and Microsoft
+  reach at `/api/v1/watch-notices/`, a rule runs soon after its provider reports a change in its
+  Source Calendar instead of waiting for the next five-minute sync. Scheduled syncs and the daily
+  pass still run and catch any report that is lost. Each person can turn it off under
+  **Settings → Your account**, where the switch says why when it cannot run and links to the guide.
+  Each rule says "Syncs instantly" or "Syncs every 5 minutes" and why. Installation Health tells
+  administrators when the public address uses plain HTTP or a provider cannot reach it. Migration
+  31 adds the tables; see [Instant Sync](docs/instant-sync.md) for proxy and tunnel examples.
 - Installation Health warns before the Microsoft client secret expires. Copy the secret's
   **Expires** date from Entra into `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES`: from 30 days
   before it, an installation Incident needs the administrator on People and in

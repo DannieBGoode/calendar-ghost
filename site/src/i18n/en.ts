@@ -387,6 +387,10 @@ export const en = {
       troubleshooting: {
         description: "What to check when Calendar Ghost cannot reach Google or Microsoft, a rule stops, an event did not synchronize, or you cannot sign in.",
       },
+      "instant-sync": {
+        description:
+          "Run rules soon after Google or Microsoft reports a change: the public HTTPS address it needs, reverse proxy and Cloudflare Tunnel examples, how to check it, and what it costs.",
+      },
     },
     /** The small table of contents beside the document. */
     contents: "On this page",

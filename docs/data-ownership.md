@@ -11,8 +11,8 @@ Installation Administrator operates the installation but never sees another User
 rules, or events ([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
 [ADR 0030](adr/0030-users-administrators-and-registration.md)).
 
-- Users: each one's email, role, state, language, notification preference, and when they joined
-  and last signed in. An upgraded installation's first User has no email until they add one.
+- Users: each one's email, role, state, language, notification and Instant Sync preferences, and
+  when they joined and last signed in. An upgraded installation's first User has no email until they add one.
 
 - Directional Sync Rules, calendar and Connected Account identifiers, mappings, cursors, operation
   state, incidents, and run outcomes.
@@ -33,6 +33,13 @@ rules, or events ([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
 - Provider call counts: for each User, calendar provider, and UTC day, how many calls their runs
   made, how many the provider refused for its rate limit, and how many failed. Only counts are
   kept, never what a call asked for, and days older than 30 are discarded.
+- Instant Sync, when the installation has a public HTTPS address: each Calendar Watch's Connected
+  Account, what it covers, and which Source Calendars; each Watch Registration's provider handle,
+  a SHA-256 hash of its secret token, the address it points at, its state, and its times; per
+  rule, counters of requested and handled runs and when they happened; and, for the installation,
+  when each provider last reached the public address and last failed to. Reports from Google and
+  Microsoft carry no event content and are never stored or logged
+  ([Instant Sync](instant-sync.md#privacy)).
 
 Service log lines contain identifiers, counts, timings, and provider status categories. They do not
 contain event titles, descriptions, locations, guests, calendar identifiers, account emails, or
@@ -71,7 +78,9 @@ The installation communicates with:
    by rules. Calendar Ghost marks the events it writes with extended properties in its own
    namespace, which Outlook does not display: the rule, the operation, and the source event's
    identifiers, start, and repeat pattern, never its title or other content. Writes to Outlook never invite or email
-   anyone.
+   anyone. With Instant Sync, the installation also tells Google and Microsoft its public address
+   so they can report that a watched calendar or mailbox changed; their reports carry no event
+   content.
 2. An SMTP server and a webhook URL only when the operator configures them. With SMTP, each User
    receives their own Incident Notifications at their email, unless they turn them off; the
    configured SMTP recipient and the webhook receive only incidents about the installation itself,

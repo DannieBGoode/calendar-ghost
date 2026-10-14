@@ -372,7 +372,8 @@ cannot reach it, and people's switches already say so.
 Serve `/api/v1/watch-notices/` through HTTPS, for example with a reverse proxy or Cloudflare
 Tunnel, set `CALENDAR_SYNC_PUBLIC_URL` to that `https` address, and run `docker compose up -d`.
 Within five minutes, Calendar Ghost asks each provider to report changes there. If you do not want
-Instant Sync, each person can turn **Instant sync** off, and the hint goes away.
+Instant Sync, each person can turn **Instant sync** off, and the hint goes away. See
+[Instant Sync](instant-sync.md#no-public-https-address) for the requirements and proxy examples.
 
 ### Calendar providers cannot reach the installation
 
@@ -398,7 +399,9 @@ sign-in page means the proxy or tunnel stops the request before it reaches Calen
 headers, and body unchanged, and let it through any sign-in gate, such as Cloudflare Access, and any
 bot challenge. The certificate must be valid for the public name: providers refuse a self-signed
 one. Google's notices count again with the next change in a watched calendar; Microsoft is asked
-again on Calendar Ghost's next try, which waits longer after each failure, at most a day.
+again on Calendar Ghost's next try, which waits longer after each failure, at most a day. See
+[Forward the notices path](instant-sync.md#forward-the-notices-path) for working proxy and tunnel
+examples.
 
 ## Problems you fix yourself
 

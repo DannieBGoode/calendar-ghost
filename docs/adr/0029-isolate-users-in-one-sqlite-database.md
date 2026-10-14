@@ -46,3 +46,19 @@ Deleting or exporting one User is a use case over the shared database, not a fil
   run once per User, and moving to PostgreSQL later would be a redesign rather than an adapter.
 - **PostgreSQL now.** Greater write concurrency and row-level security, but it adds a database
   server to every household installation for a workload SQLite carries.
+
+## Amendment: the Watch Notice inbox writes across Users (2026-10-14)
+
+A provider sends a Watch Notice to a public route that has no session and names only a Watch
+Registration ([ADR 0036](0036-instant-sync-through-provider-notices.md)). Finding the rules it
+concerns means reading a registration before its User is known, so the `WatchNoticeInbox` port
+(`application/operations/ports.py`), which `SqliteWatchNoticeInbox`
+(`infrastructure/persistence/watch_inbox.py`) implements, is the one public-route writer that
+crosses Users. It is narrow: it does not receive the installation-wide unit of work, but opens one
+short write transaction of its own per request; it reads and writes only Watch Registrations,
+Instant Sync Requests, and Delivery Evidence; it acts only after the notice's token hash and
+provider handle match in constant time; and it raises requests only for the enabled rules of the
+registration's own User whose Source Calendar the watch covers. Instant Sync's watch upkeep and
+dispatch run beside the scheduler and, like it, receive the installation-wide unit of work, so the
+isolation test's list of its receivers names `application/operations/instant_sync.py` beside the
+scheduled pass, the Operator Overview, and migrations.

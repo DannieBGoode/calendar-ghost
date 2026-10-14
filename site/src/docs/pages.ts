@@ -5,6 +5,7 @@
 export const DOC_PAGES = [
   { slug: "self-hosting", source: "docs/self-hosting.md" },
   { slug: "troubleshooting", source: "docs/troubleshooting.md" },
+  { slug: "instant-sync", source: "docs/instant-sync.md" },
 ] as const
 
 export type DocSlug = (typeof DOC_PAGES)[number]["slug"]

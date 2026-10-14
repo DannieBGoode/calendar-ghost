@@ -29,11 +29,13 @@ ports and errors its modules share
   lives here too: it derives expected projections and proves provider state, independently of
   incremental synchronization. So do Connected Accounts and Lapsed Authorization, and rule health
   with the Incidents it reports, because each changes rules. Provider
-  failures, retries, and provider call counts belong here.
+  failures, retries, and provider call counts belong here. Calendar Watches of one User and
+  their upkeep (`UpkeepWatches`) live here too.
 - **Identity and Access** (`application/identity`) owns Users, their roles and sessions, the
   Registration Policy, Invitations and Password Reset Links, and Integration Tokens.
 - **Operations** (`application/operations`) owns Activity, Installation Status, Installation
-  Health and Installation Hints, the Operator Overview, and storage.
+  Health and Installation Hints, the Operator Overview, and storage. It also runs Instant Sync
+  across Users: watch upkeep, the dispatch of Instant Sync Requests, and the Watch Notice inbox.
 - **Shared** (`application/shared`) holds only what every context needs: the base application
   error, the clock, and identifiers.
 
@@ -251,7 +253,11 @@ about the provider ([ADR 0022](adr/0022-route-calendar-requests-by-provider.md),
   (`/api/v1/oauth/{slug}/`), its display and calendar names, the troubleshooting section for each
   Cause it can raise, and any Installation Hint only it explains;
 - whether the installation configured it, its OAuth flow (`AccountAuthorization`) and redirect URI;
-- its calendar roles: `AccountCalendars` and `CalendarProvider`.
+- its calendar roles: `AccountCalendars` and `CalendarProvider`;
+- when the provider can report changes, its `CalendarWatcher`, which chooses a Watch Scope and
+  creates, extends, adopts, and stops Watch Registrations, and its `NoticeReader`, which turns a
+  neutral `NoticeRequest` (headers, query, body) into Watch Notices, so no Starlette type crosses
+  the descriptor ([ADR 0036](adr/0036-instant-sync-through-provider-notices.md)).
 
 `calendar_providers` in `bootstrap/container.py` composes the descriptors into a
 `ProviderDirectory`. Routing builds its adapter map from it, Installation Hints read the guides, and
@@ -291,6 +297,28 @@ To add a provider:
    (`tests/test_troubleshooting_anchors.py` checks them), its setup in `docs/self-hosting.md`, and
    its Web UI catalog entries in `common.json`: `provider`, `providerName`, `providerAccount`,
    `providerApi`, `providerConsole`, and `providerStatus`.
+
+## Instant Sync loops
+
+Two asyncio loops start and stop with the scheduler in the FastAPI lifespan
+(`infrastructure/scheduling.py`), and only when the installation has an `https` public address and
+the Installation Master Key:
+
+- `WatchKeeper` runs `WatchUpkeep` every five minutes in one worker thread, one User after another,
+  with a budget of 200 provider calls a cycle. The Users a cycle did not reach go first in the
+  next, then Users with nothing planned yet, then the rest by their earliest due work. Slow
+  provider calls never delay rule runs or the scheduler's heartbeat.
+- `InstantSyncDispatcher` wakes when the notice route sets its event from a worker thread, and on
+  a timer for the earliest moment a pending request becomes due, at least every minute. It holds a
+  reservation for each rule it queued, runs at most 2 at once apart from the scheduler's 4, and
+  runs each through `ScheduledPass.run` before acknowledging its request.
+
+The public route `POST /api/v1/watch-notices/{provider_slug}/{registration_id}` streams at most
+64 KB, asks the provider's `NoticeReader` to read it, and hands the notices to the
+`WatchNoticeInbox`. The inbox is the one public-route writer that crosses Users (ADR 0029,
+amended): one short transaction on a connection that waits at most one second for SQLite's lock,
+touching only registrations, Instant Sync Requests, and Delivery Evidence, with no provider call.
+Without an `https` public address the route answers `404`, as for any unknown API path.
 
 ## Logging
 
@@ -334,8 +362,9 @@ refuses a record whose User differs from its parent's, and a rule's accounts mus
 Each repository of a User's unit of work adds that User to every statement, and an upsert that meets
 another User's record is refused rather than skipped. Deleting a User deletes everything they own
 through these references. `tests/adapters/test_user_isolation_schema.py` checks the schema, and that
-only the scheduled pass, the Operator Overview, the migrations, and the composition root reach
-`InstallationUnitOfWork`.
+only the scheduled pass and the Instant Sync loops, the Operator Overview, the migrations, and the
+composition root reach `InstallationUnitOfWork`. The Watch Notice inbox crosses Users through its
+own narrow port instead.
 
 The in-memory unit of work that application tests use and the SQLite one both pass the persistence
 contract in `tests/contracts/persistence.py`. It states, through the ports alone, the behavior use

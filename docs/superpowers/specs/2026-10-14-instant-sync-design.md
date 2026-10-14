@@ -175,9 +175,11 @@ provider call happens inside a write transaction.
      honoring `Retry-After`. A provider that cannot watch a calendar never lapses the account.
    - `unreachable` also records failing Delivery Evidence.
 
-User Deletion and account disconnection call `stop` for that User's or account's registrations
-first, best effort and with a short timeout, then delete as today. Owned rows cascade. Notices for
-the deleted registrations are unknown and acknowledged without effect.
+User Deletion calls `stop` for that User's registrations after Rule Removal and before deleting
+the User, and account disconnection calls it for the account's registrations after stopping its
+rules and before discarding its credentials, which stopping needs. Both are best effort, with a
+short deadline (10 seconds), then delete as today. Owned rows cascade. Notices for the deleted
+registrations are unknown and acknowledged without effect.
 
 ### Operations context (`application/operations/instant_sync.py`)
 

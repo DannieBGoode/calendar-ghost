@@ -31,7 +31,10 @@ Each phase can be released alone and keeps existing installations working.
    (ADR 0030, amended 2026-10-10), and provider calls and storage counted per User. Storage is counted in records (rules,
    Connected Accounts, Activity entries), not bytes.
 3. **Plans.** Plan definitions and assignment, the four limits, a per-User sync interval in the
-   scheduler, and Plan Hold.
+   scheduler, and Plan Hold. Plans implement the `SyncCadencePolicy` port
+   (`application/sync/watch_ports.py`) from each Plan's shortest sync interval, whose shortest value
+   is "instant" ([ADR 0036](../../adr/0036-instant-sync-through-provider-notices.md)); until then,
+   `EveryUserInstant` gives every User Instant Sync and a five-minute Scheduled Sync.
 4. **Open registration.** The Open Registration Policy, the sign-up page, email verification,
    self-service password reset, sign-up rate limits, and continuous backup guidance for the Hosted
    Service.

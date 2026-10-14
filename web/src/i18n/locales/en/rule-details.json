@@ -388,7 +388,7 @@
     "preview": "Preview rule",
     "reviewAndStart": "Review and start",
     "syncNow": "Sync now",
-    "syncNowDescription": "Apply changes made in {source} since the last run. Runs by itself every five minutes.",
+    "syncNowDescription": "Apply changes made in {source} since the last run, without waiting for the rule to run by itself.",
     "reconcileNow": "Reconcile now",
     "reconcileNowDescription": "Sync in full, putting back events edited or deleted in {destination}, then check the events this rule wrote there from its starting point onward and report any that still differ.",
     "pause": "Pause rule",
