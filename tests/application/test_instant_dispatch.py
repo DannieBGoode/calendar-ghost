@@ -327,6 +327,24 @@ def test_a_request_whose_rule_may_not_run_instantly_is_dropped(
     assert world.runs.ran == []
 
 
+def test_a_drop_storage_refuses_logs_only_the_class_of_its_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    world = World((USER, rule()))
+    world.requests.notice(USER, rule().id, NOW - QUIET)
+    world.owner(USER, wanted=False)
+    world.requests.acknowledging_fails = True
+
+    with caplog.at_level("ERROR", logger="calendar_sync.application.operations.instant_sync"):
+        world.dispatch.due(frozenset())
+
+    assert world.requests.waiting(USER, rule().id)
+    assert "Could not drop an Instant Sync Request" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "database is locked" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
+
+
 @pytest.mark.parametrize(("stop", "resume"), list(INACTIVE.values()), ids=list(INACTIVE))
 def test_a_request_waits_while_its_rule_or_user_is_inactive_then_runs(
     stop: Callable[[World], None], resume: Callable[[World], None]
@@ -437,6 +455,9 @@ def test_a_crash_before_the_acknowledgement_runs_the_rule_again(
     assert world.requests.waiting(USER, rule().id)
     assert _ids(again) == ["rule-1"]
     assert "Could not acknowledge the instant run of rule rule-1" in caplog.text
+    # Only the error's class is logged, never its text or traceback.
+    assert "database is locked" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 def test_a_rule_whose_acknowledgement_failed_waits_the_gap_before_it_runs_again() -> None:

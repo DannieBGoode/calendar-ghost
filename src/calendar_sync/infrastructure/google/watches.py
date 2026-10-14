@@ -125,10 +125,10 @@ class GoogleCalendarWatcher:
                 self._service_for(account).events().watch(calendarId=calendar.value, body=body)
             )
             answer = send("events.watch", request, self._timer)
-        except ACCOUNT_UNAVAILABLE as error:
-            raise account_unavailable() from error
+        except ACCOUNT_UNAVAILABLE:
+            raise account_unavailable() from None
         except Exception as error:
-            raise self._failure(error, account, started) from error
+            raise self._failure(error, account, started) from None
         return _receipt(answer, registration_id, until)
 
     def extend(
@@ -164,12 +164,12 @@ class GoogleCalendarWatcher:
                 .stop(body={"id": handle.channel, "resourceId": handle.resource})
             )
             send("channels.stop", request, self._timer)
-        except ACCOUNT_UNAVAILABLE as error:
-            raise account_unavailable() from error
+        except ACCOUNT_UNAVAILABLE:
+            raise account_unavailable() from None
         except Exception as error:
             if status_code(error) in GONE:
                 return
-            raise self._failure(error, account, started) from error
+            raise self._failure(error, account, started) from None
 
     def _failure(
         self, error: Exception, account: ConnectedAccountId, started: datetime

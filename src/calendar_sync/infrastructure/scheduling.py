@@ -237,8 +237,13 @@ class InstantSyncDispatcher:
             runs, next_due = await self._threads.run(
                 partial(self._dispatch.due, frozenset(self._reserved))
             )
-        except Exception:
-            logger.exception("Choosing instant runs failed; looking again shortly")
+        except Exception as error:
+            # Instant Sync logs only an error's class: a provider's text, which the error may
+            # carry along, can quote a token or a registration address.
+            logger.error(
+                "Choosing instant runs failed; looking again shortly (%s)",
+                error.__class__.__name__,
+            )
             return self._longest_sleep
         for item in runs:
             rule_id = item.scheduled.scheduled.rule.id.value
@@ -255,9 +260,11 @@ class InstantSyncDispatcher:
         try:
             async with slots:
                 await self._threads.run(partial(self._dispatch.run, item))
-        except Exception:
-            logger.exception(
-                "Instant run of rule %s failed; Scheduled Sync runs it meanwhile", rule_id
+        except Exception as error:
+            logger.error(
+                "Instant run of rule %s failed; Scheduled Sync runs it meanwhile (%s)",
+                rule_id,
+                error.__class__.__name__,
             )
         finally:
             self._reserved.discard(rule_id)
@@ -287,6 +294,9 @@ class WatchKeeper:
             # a BaseException, still stops it.
             try:
                 await self._threads.run(self._upkeep.run)
-            except Exception:
-                logger.exception("Watch upkeep failed; trying again at the next interval")
+            except Exception as error:
+                logger.error(
+                    "Watch upkeep failed; trying again at the next interval (%s)",
+                    error.__class__.__name__,
+                )
             await asyncio.sleep(self._interval_seconds)

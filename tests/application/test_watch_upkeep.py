@@ -24,6 +24,7 @@ ADDRESS = "https://ghost.example.test"
 THIRD_USER = UserId("user-3")
 
 Visit = tuple[UserId, bool, str | None]
+PROVIDER_TEXT = "synthetic provider text quoting token=secret-token"
 
 
 class Owners:
@@ -72,7 +73,12 @@ class Upkeep:
     def execute(self, *, allowed: bool, address: str | None, budget: CallBudget) -> None:
         self.visits.append((self.user, allowed, address))
         if self.failing:
-            raise RuntimeError("synthetic provider outage")
+            # Storage failed while upkeep handled a provider's refusal, whose text may quote
+            # the request: a token, a registration address.
+            try:
+                raise ValueError(PROVIDER_TEXT)
+            except ValueError:
+                raise RuntimeError("database is locked")  # noqa: B904
         budget.spend(self.cost)
 
 
@@ -186,6 +192,19 @@ def test_one_users_failing_upkeep_holds_up_nobody_else(caplog: pytest.LogCapture
     assert [user for user, _, _ in visits] == [USER, OTHER_USER]
     assert "Upkeep of a User's watches failed; trying again next cycle" in caplog.text
     assert USER.value not in caplog.text
+
+
+def test_a_failing_upkeep_logs_only_the_class_of_its_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level("ERROR", logger="calendar_sync.application.operations.instant_sync"):
+        _upkeep(Owners(_owner(USER)), [], failing=frozenset({USER})).run()
+
+    # Neither the error's text nor the provider error it met on the way reaches the log.
+    assert "RuntimeError" in caplog.text
+    assert PROVIDER_TEXT not in caplog.text
+    assert "database is locked" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 def test_users_no_provider_can_watch_for_are_skipped() -> None:

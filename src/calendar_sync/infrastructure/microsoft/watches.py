@@ -90,9 +90,9 @@ class OutlookCalendarWatcher:
             mailbox = self._owner(account, "/me/calendar", started)
             owner = self._owner(account, f"/me/calendars/{calendar.calendar_id.value}", started)
         except (GraphRefusal, TokenRefusal) as error:
-            raise self._failure(error, account, started) from error
-        except ACCOUNT_UNAVAILABLE as error:
-            raise account_unavailable() from error
+            raise self._failure(error, account, started) from None
+        except ACCOUNT_UNAVAILABLE:
+            raise account_unavailable() from None
         # A calendar another mailbox shares cannot be watched with delegated permissions.
         return WatchScope.account() if mailbox is not None and owner == mailbox else None
 
@@ -129,9 +129,9 @@ class OutlookCalendarWatcher:
                 body=body,
             )
         except (GraphRefusal, TokenRefusal) as error:
-            raise self._failure(error, account, started) from error
-        except ACCOUNT_UNAVAILABLE as error:
-            raise account_unavailable() from error
+            raise self._failure(error, account, started) from None
+        except ACCOUNT_UNAVAILABLE:
+            raise account_unavailable() from None
         receipt = _receipt(answer, expiry)
         if receipt is None:
             raise WatchFailure(
@@ -159,11 +159,11 @@ class OutlookCalendarWatcher:
             if error.status in GONE:
                 # Graph removed it: None asks upkeep for a new subscription in its place.
                 return None
-            raise self._failure(error, account, started) from error
+            raise self._failure(error, account, started) from None
         except TokenRefusal as error:
-            raise self._failure(error, account, started) from error
-        except ACCOUNT_UNAVAILABLE as error:
-            raise account_unavailable() from error
+            raise self._failure(error, account, started) from None
+        except ACCOUNT_UNAVAILABLE:
+            raise account_unavailable() from None
         return _instant(answer.get("expirationDateTime")) or expiry
 
     def adopt(
@@ -179,9 +179,9 @@ class OutlookCalendarWatcher:
         try:
             found = self._find(account, address)
         except (GraphRefusal, TokenRefusal) as error:
-            raise self._failure(error, account, started) from error
-        except ACCOUNT_UNAVAILABLE as error:
-            raise account_unavailable() from error
+            raise self._failure(error, account, started) from None
+        except ACCOUNT_UNAVAILABLE:
+            raise account_unavailable() from None
         return None if found is None else _receipt(found, None)
 
     def stop(self, account: ConnectedAccountId, registration: WatchRegistration) -> None:
@@ -197,11 +197,11 @@ class OutlookCalendarWatcher:
                 )
         except GraphRefusal as error:
             if error.status not in GONE:
-                raise self._failure(error, account, started) from error
+                raise self._failure(error, account, started) from None
         except TokenRefusal as error:
-            raise self._failure(error, account, started) from error
-        except ACCOUNT_UNAVAILABLE as error:
-            raise account_unavailable() from error
+            raise self._failure(error, account, started) from None
+        except ACCOUNT_UNAVAILABLE:
+            raise account_unavailable() from None
 
     def _owner(self, account: ConnectedAccountId, path: str, now: datetime) -> str | None:
         """Who owns the calendar at `path`, remembered for about one upkeep cycle; None when it

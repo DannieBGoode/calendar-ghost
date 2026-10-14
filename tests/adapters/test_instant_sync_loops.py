@@ -205,6 +205,10 @@ def test_a_failed_look_or_run_never_ends_the_dispatcher(caplog: pytest.LogCaptur
 
     assert "Choosing instant runs failed; looking again shortly" in caplog.text
     assert "Instant run of rule rule-1 failed" in caplog.text
+    # Only the error's class is logged, never its text or traceback.
+    assert "database is locked" not in caplog.text
+    assert "synthetic run failure" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 def test_stopping_the_dispatcher_lets_a_running_run_finish_its_acknowledgement() -> None:
@@ -322,8 +326,9 @@ def test_the_watch_keeper_runs_upkeep_each_interval_and_survives_a_failure(
     assert upkeep.cycles == 2
     assert sleeps == [300, 300]
     assert [record.getMessage() for record in caplog.records] == [
-        "Watch upkeep failed; trying again at the next interval"
+        "Watch upkeep failed; trying again at the next interval (RuntimeError)"
     ]
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 @pytest.mark.parametrize(

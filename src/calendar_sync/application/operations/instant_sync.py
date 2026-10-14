@@ -118,8 +118,13 @@ class WatchUpkeep:
             upkeep = self.upkeep_for(owner.user)
             if upkeep is not None:
                 upkeep.execute(allowed=self._allowed(owner), address=self.address, budget=calls)
-        except Exception:
-            logger.exception("Upkeep of a User's watches failed; trying again next cycle")
+        except Exception as error:
+            # Only the class: a provider's text, which the error may carry along, can quote a
+            # token or a registration address.
+            logger.error(
+                "Upkeep of a User's watches failed; trying again next cycle (%s)",
+                error.__class__.__name__,
+            )
 
     def _allowed(self, owner: InstantSyncOwner) -> bool:
         """Whether the User may have watches: the installation can be reached, the User is
@@ -213,13 +218,14 @@ class InstantDispatch:
             ran_at = self.clock.now()
             try:
                 self._acknowledge(scheduled.owner, scheduled.rule.id, item.seq, ran_at)
-            except Exception:
+            except Exception as error:
                 # Its request still looks unanswered, so the rule waits the gap here instead:
                 # storage that keeps refusing must not run it back to back.
                 self._held_until[scheduled.rule.id] = ran_at + MIN_GAP
-                logger.exception(
-                    "Could not acknowledge the instant run of rule %s; it runs again",
+                logger.error(
+                    "Could not acknowledge the instant run of rule %s; it runs again (%s)",
                     scheduled.rule.id.value,
+                    error.__class__.__name__,
                 )
             else:
                 self._held_until.pop(scheduled.rule.id, None)
@@ -260,8 +266,11 @@ class InstantDispatch:
         scheduled = item.scheduled
         try:
             self._acknowledge(scheduled.owner, scheduled.rule.id, item.request.requested_seq, now)
-        except Exception:
-            logger.exception("Could not drop an Instant Sync Request; trying again next look")
+        except Exception as error:
+            logger.error(
+                "Could not drop an Instant Sync Request; trying again next look (%s)",
+                error.__class__.__name__,
+            )
 
     def _acknowledge(self, owner: UserId, rule_id: SyncRuleId, seq: int, at: datetime) -> None:
         with self.requests_for(owner)() as uow:

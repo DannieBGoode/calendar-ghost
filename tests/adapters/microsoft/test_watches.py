@@ -340,6 +340,30 @@ def test_refusals_are_classed_for_upkeep_without_graphs_words(
     assert failure.failure is None or "private-marker" not in failure.failure.detail
 
 
+def _carries_no_provider_error(failure: WatchFailure) -> bool:
+    """Whether a traceback of `failure` would show no provider error, whose text may quote the
+    request: a token, a subscription address."""
+    return failure.__cause__ is None and failure.__suppress_context__
+
+
+def test_a_watch_failure_carries_no_provider_error_along() -> None:
+    watcher, graph = outlook()
+    calls = (
+        lambda: watcher.scope(OWN),
+        lambda: register(watcher),
+        lambda: watcher.extend(ACCOUNT, registration("subscription-1"), UNTIL),
+        lambda: watcher.adopt(ACCOUNT, WatchScope.account(), OURS, ADDRESS),
+        lambda: watcher.stop(ACCOUNT, registration("subscription-1")),
+    )
+
+    for call in calls:
+        # Graph refuses each call's first request.
+        graph.refuse(graph_error(503, "ServiceNotAvailable"))
+        with pytest.raises(WatchFailure) as raised:
+            call()
+        assert _carries_no_provider_error(raised.value)
+
+
 def test_a_rate_limit_carries_graphs_retry_after() -> None:
     watcher, graph = outlook()
     graph.refuse(graph_error(429, "TooManyRequests", **{"Retry-After": "30"}))
@@ -399,6 +423,7 @@ def test_an_account_without_credentials_is_unsupported_in_every_call(gone: Excep
             call()
         assert raised.value.kind is WatchFailureKind.UNSUPPORTED
         assert "personal-account" not in raised.value.detail
+        assert _carries_no_provider_error(raised.value)
     assert graph.requests == []
 
 

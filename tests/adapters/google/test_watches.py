@@ -209,6 +209,24 @@ def test_refusals_are_classed_for_upkeep_without_googles_words(
     assert "synthetic Google" not in raised.value.detail
 
 
+def _carries_no_provider_error(failure: WatchFailure) -> bool:
+    """Whether a traceback of `failure` would show no provider error, whose text may quote the
+    request: a token, a registration address."""
+    return failure.__cause__ is None and failure.__suppress_context__
+
+
+def test_a_watch_failure_carries_no_provider_error_along() -> None:
+    service = MagicMock()
+    service.events.return_value.watch.return_value = request_raising(401)
+    service.channels.return_value.stop.return_value = request_raising(503)
+    google = watcher(service)
+
+    for call in (lambda: register(google), lambda: google.stop(ACCOUNT, registration())):
+        with pytest.raises(WatchFailure) as raised:
+            call()
+        assert _carries_no_provider_error(raised.value)
+
+
 def test_a_refused_account_lapses_from_when_its_credentials_were_read() -> None:
     service = MagicMock()
     service.events.return_value.watch.return_value = request_raising(401)
@@ -273,6 +291,7 @@ def test_an_account_without_credentials_is_unsupported_not_temporary(gone: Excep
             call()
         assert raised.value.kind is WatchFailureKind.UNSUPPORTED
         assert "account-family" not in raised.value.detail
+        assert _carries_no_provider_error(raised.value)
 
 
 def test_a_request_that_got_no_answer_is_temporary() -> None:

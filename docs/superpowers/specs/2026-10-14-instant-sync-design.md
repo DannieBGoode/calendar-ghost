@@ -309,6 +309,9 @@ rule cadence reasons, and Installation Health. It never removes watches or block
     correct, only slower.
   - The loop survives exceptions the way the scheduler's does. It is cancelled on shutdown, and
     its requests remain durable.
+  - Upkeep, dispatch, and both loops log only an error's class, never its text or traceback: a
+    provider's text can quote a token or a registration address. For the same reason, the watch
+    adapters raise a `WatchFailure` without the provider's error attached (`from None`).
   - The scheduler, the dispatcher, and the keeper each run their work on worker threads of their
     own, sized to their concurrency (the dispatcher's one larger, for its look for due runs), never
     on the event loop's default threads, which the Web API's requests share. The notice route
