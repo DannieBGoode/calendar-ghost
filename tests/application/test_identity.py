@@ -16,6 +16,7 @@ from calendar_sync.application.identity.errors import (
 )
 from calendar_sync.application.identity.sign_in import (
     ChangeOwnPassword,
+    SetInstantSync,
     SetNotificationEmail,
     SetOwnEmail,
     SetUpInstallation,
@@ -292,6 +293,35 @@ def test_choosing_incident_emails_never_restores_a_role_or_state_changed_meanwhi
         UserState.DISABLED,
     )
     assert changed == stored
+
+
+def test_choosing_instant_sync_never_restores_a_role_or_state_changed_meanwhile() -> None:
+    users = DemotedAfterReading()
+    users.add(
+        User(
+            UserId("admin"),
+            "admin@example.test",
+            Role.INSTALLATION_ADMINISTRATOR,
+            UserState.ACTIVE,
+            NOW,
+        ),
+        f"hashed:{PASSWORD}",
+    )
+
+    changed = SetInstantSync(users).execute(UserId("admin"), wanted=False)
+
+    stored = users.users[UserId("admin")]
+    assert (stored.instant_sync, stored.role, stored.state) == (
+        False,
+        Role.USER,
+        UserState.DISABLED,
+    )
+    assert changed == stored
+
+
+def test_choosing_instant_sync_needs_a_user_who_still_exists() -> None:
+    with pytest.raises(IncorrectCredentials):
+        SetInstantSync(MemoryUsers()).execute(UserId("gone"), wanted=True)
 
 
 def test_changing_a_password_needs_the_current_one_and_ends_every_other_session() -> None:

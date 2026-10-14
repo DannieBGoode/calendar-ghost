@@ -158,6 +158,18 @@ class SetNotificationEmail:
 
 
 @dataclass(slots=True)
+class SetInstantSync:
+    """Whether the signed-in User's rules run soon after a change is reported."""
+
+    users: UserDirectory
+
+    def execute(self, user_id: UserId, wanted: bool) -> User:
+        _existing(self.users, user_id)
+        self.users.set_instant_sync(user_id, wanted)
+        return _existing(self.users, user_id)
+
+
+@dataclass(slots=True)
 class ChangeOwnPassword:
     """Replace the signed-in User's password and end their other sessions."""
 

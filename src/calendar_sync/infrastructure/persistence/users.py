@@ -17,7 +17,9 @@ from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import token_hash
 
 SESSION_LIFETIME = timedelta(days=7)
-_COLUMNS = "id, email, role, state, language, notify_by_email, created_at, last_sign_in_at"
+_COLUMNS = (
+    "id, email, role, state, language, notify_by_email, instant_sync, created_at, last_sign_in_at"
+)
 _SORT_COLUMNS = {
     UserSort.JOINED: "created_at",
     UserSort.EMAIL: "email",
@@ -97,6 +99,12 @@ class SqliteUserDirectory:
             connection.execute(
                 "UPDATE users SET notify_by_email = ? WHERE id = ?",
                 (int(notify_by_email), user_id.value),
+            )
+
+    def set_instant_sync(self, user_id: UserId, wanted: bool) -> None:
+        with transaction(self._database_path) as connection:
+            connection.execute(
+                "UPDATE users SET instant_sync = ? WHERE id = ?", (int(wanted), user_id.value)
             )
 
     def password_hash(self, user_id: UserId) -> str | None:
@@ -190,8 +198,9 @@ def insert_user(connection: sqlite3.Connection, user: User, password_hash: str) 
         connection.execute(
             """
             INSERT INTO users (
-                id, email, password_hash, role, state, language, notify_by_email, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                id, email, password_hash, role, state, language, notify_by_email, instant_sync,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user.id.value,
@@ -201,6 +210,7 @@ def insert_user(connection: sqlite3.Connection, user: User, password_hash: str) 
                 user.state.value,
                 user.language,
                 int(user.notify_by_email),
+                int(user.instant_sync),
                 user.created_at.isoformat(),
             ),
         )
@@ -242,6 +252,7 @@ def _user(row: sqlite3.Row) -> User:
         last_sign_in_at=datetime.fromisoformat(str(signed_in)) if signed_in else None,
         language=str(row["language"]) if row["language"] is not None else None,
         notify_by_email=bool(row["notify_by_email"]),
+        instant_sync=bool(row["instant_sync"]),
     )
 
 
