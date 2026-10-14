@@ -9,10 +9,14 @@ nothing (ADR 0036).
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+from types import MappingProxyType
 
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.cadence import SyncCadence
 from calendar_sync.domain.errors import DomainValidationError
 from calendar_sync.domain.model import CalendarEndpoint, CalendarId, ConnectedAccountId
 
@@ -236,3 +240,128 @@ def backoff(failures: int, retry_after: timedelta | None = None) -> timedelta:
 def token_hash(token: str) -> str:
     """The hash a registration keeps of its secret token, so the store never holds the token."""
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+class DeliveryState(StrEnum):
+    """Whether a provider's notices reach the installation's public address."""
+
+    UNKNOWN = "unknown"
+    """No evidence yet for this address."""
+    WORKING = "working"
+    FAILING = "failing"
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryEvidence:
+    """The latest proof that one provider's notices reach one public address, and the latest
+    sign that they do not."""
+
+    provider: ProviderKind
+    address: str
+    last_success_at: datetime | None = None
+    """An authenticated notice, or a creation that itself proves delivery."""
+    last_failure_at: datetime | None = None
+    """A registration not confirmed in time, or a provider that could not reach the address."""
+
+    @property
+    def state(self) -> DeliveryState:
+        """Failing when the latest failure is newer than the latest success."""
+        if self.last_failure_at is not None and (
+            self.last_success_at is None or self.last_failure_at > self.last_success_at
+        ):
+            return DeliveryState.FAILING
+        if self.last_success_at is not None:
+            return DeliveryState.WORKING
+        return DeliveryState.UNKNOWN
+
+
+class Availability(StrEnum):
+    """Whether a User's rules may sync instantly, or the one reason they may not."""
+
+    ON = "on"
+    OFF_BY_USER = "off_by_user"
+    NOT_IN_PLAN = "not_in_plan"
+    NO_PUBLIC_ADDRESS = "no_public_address"
+    NOT_REACHING = "not_reaching"
+
+
+AVAILABILITY_ANCHORS: Mapping[Availability, str] = MappingProxyType(
+    {
+        Availability.NOT_IN_PLAN: "not-in-your-plan",
+        Availability.NO_PUBLIC_ADDRESS: "no-public-https-address",
+        Availability.NOT_REACHING: "providers-cannot-reach-the-installation",
+    }
+)
+"""The section of docs/instant-sync.md that explains each reason only an administrator or a Plan
+can change."""
+
+
+def instant_sync_availability(
+    *,
+    address_is_https: bool,
+    cadence: SyncCadence,
+    wanted: bool,
+    delivery: Collection[DeliveryState],
+) -> Availability:
+    """Whether a User's rules may sync instantly, with the first reason that stops them.
+
+    `delivery` holds the Delivery State of each provider the User's watched sources use. Providers
+    are known not to reach the installation only when at least one is used and every one used is
+    failing; a User with no watchable source is on.
+    """
+    if not address_is_https:
+        return Availability.NO_PUBLIC_ADDRESS
+    if not cadence.instant:
+        return Availability.NOT_IN_PLAN
+    if not wanted:
+        return Availability.OFF_BY_USER
+    if delivery and all(state is DeliveryState.FAILING for state in delivery):
+        return Availability.NOT_REACHING
+    return Availability.ON
+
+
+class CadenceReason(StrEnum):
+    """How a rule syncs now: instantly, or on schedule for one reason."""
+
+    INSTANT = "instant"
+    NOT_WATCHABLE = "not_watchable"
+    """Its Source Calendar's provider cannot watch it, such as a calendar shared from another
+    mailbox."""
+    WAITING_FOR_PROVIDER = "waiting_for_provider"
+    """Its watch exists, but no registration has proved yet that notices arrive."""
+    OFF_BY_USER = "off_by_user"
+    NOT_IN_PLAN = "not_in_plan"
+    NO_PUBLIC_ADDRESS = "no_public_address"
+    NOT_REACHING = "not_reaching"
+
+
+_AVAILABILITY_REASONS: Mapping[Availability, CadenceReason] = MappingProxyType(
+    {
+        Availability.OFF_BY_USER: CadenceReason.OFF_BY_USER,
+        Availability.NOT_IN_PLAN: CadenceReason.NOT_IN_PLAN,
+        Availability.NO_PUBLIC_ADDRESS: CadenceReason.NO_PUBLIC_ADDRESS,
+        Availability.NOT_REACHING: CadenceReason.NOT_REACHING,
+    }
+)
+
+
+def effective_cadence(
+    availability: Availability,
+    watch: CalendarWatch | None,
+    registrations: Collection[WatchRegistration],
+    now: datetime,
+) -> CadenceReason:
+    """How a rule syncs now, given its owner's availability and the watch covering its source.
+
+    It syncs instantly only while one of that watch's registrations is delivering.
+    """
+    if availability is not Availability.ON:
+        return _AVAILABILITY_REASONS[availability]
+    if watch is None:
+        return CadenceReason.NOT_WATCHABLE
+    if any(
+        registration.watch_id == watch.id and registration.delivering(now)
+        for registration in registrations
+    ):
+        return CadenceReason.INSTANT
+    return CadenceReason.WAITING_FOR_PROVIDER
