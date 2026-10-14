@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { LearnWhyLink } from "@/components/learn-why-link"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
-import { api, type SignedInUser } from "@/lib/api"
+import { api, type SessionStatus, type SignedInUser } from "@/lib/api"
 import { instantSyncBlock, instantSyncHelpUrl } from "@/lib/instant-sync"
 
 /**
@@ -14,10 +14,10 @@ import { instantSyncBlock, instantSyncHelpUrl } from "@/lib/instant-sync"
 export function InstantSyncItem({ user, onDone }: { user: SignedInUser; onDone: (message: string) => void }) {
   const i18n = useI18n()
   const { t } = i18n
-  const { change, shown } = useInstantSyncChoice(user, onDone)
-  const block = instantSyncBlock(shown.instant_sync_availability)
-  const help = block ? instantSyncHelpUrl(shown.instant_sync_help) : null
-  const checked = change.isPending ? change.variables : shown.instant_sync
+  const change = useInstantSyncChange(onDone)
+  const block = instantSyncBlock(user.instant_sync_availability)
+  const help = block ? instantSyncHelpUrl(user.instant_sync_help) : null
+  const checked = change.isPending ? change.variables : user.instant_sync
   return (
     <div className="setting-item">
       <div className="setting-row">
@@ -54,16 +54,20 @@ export function InstantSyncItem({ user, onDone }: { user: SignedInUser; onDone: 
   )
 }
 
-/** The choice as the last change answered it, or as the session says, and the change itself. */
-function useInstantSyncChoice(user: SignedInUser, onDone: (message: string) => void) {
+/**
+ * Changes the choice. The switch shows the requested value only while the change is pending; then
+ * it shows the session's, which the change's answer updates at once and every later refetch keeps
+ * current, such as after another tab changed it.
+ */
+function useInstantSyncChange(onDone: (message: string) => void) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
-  const change = useMutation({
+  return useMutation({
     mutationFn: (wanted: boolean) => api.setInstantSync(wanted),
     onSuccess: async (changed) => {
       onDone(changed.instant_sync ? t("settings.ownAccount.instantSync.on") : t("settings.ownAccount.instantSync.off"))
+      queryClient.setQueryData<SessionStatus>(["session"], (session) => session && { ...session, user: changed })
       await queryClient.invalidateQueries({ queryKey: ["session"] })
     },
   })
-  return { change, shown: change.data ?? user }
 }

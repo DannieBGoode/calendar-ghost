@@ -314,6 +314,27 @@ describe("OwnAccountSection", () => {
     expect(status()).toBe("Your rules now sync soon after each change in their source calendars.")
   })
 
+  it("shows the session's latest instant sync choice once a change is done, not the change's answer", async () => {
+    const i18n = testI18n()
+    await renderSection(i18n)
+    await click(field("own-instant-sync"))
+    expect(sent("PUT", "/api/v1/account/instant-sync")).toEqual({ instant_sync: false })
+    // The session's refetch after the change, then a later one after another tab turned it on.
+    for (const instant_sync of [false, true]) {
+      act(() => {
+        root?.render(
+          <StaticI18nProvider i18n={i18n}>
+            <QueryClientProvider client={queryClient}>
+              <OwnAccountSection user={{ ...user, instant_sync }} sendsEmail onOpenPeople={openPeople} />
+            </QueryClientProvider>
+          </StaticI18nProvider>,
+        )
+      })
+      await settle()
+      expect(field("own-instant-sync").checked).toBe(instant_sync)
+    }
+  })
+
   it("disables instant sync where it cannot run, with the reason and where to learn why", async () => {
     await renderSection(testI18n(), {
       signedIn: { ...user, instant_sync_availability: "no_public_address", instant_sync_help: "no-public-https-address" },
