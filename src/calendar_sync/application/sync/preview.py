@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Literal
@@ -193,6 +194,7 @@ class PreviewSyncRule:
                 self.projector,
             )
             masters = {event.reference: event for event in events if event.occurrence is None}
+            listed_refs = {event.reference for event in events}
             tally, items = _Tally(), []
 
             def add(planned: tuple[PreviewItem, bool]) -> None:
@@ -208,7 +210,11 @@ class PreviewSyncRule:
                     # occurrence, such as a deleted one only the occurrence reports.
                     masters[series.reference] = series
                     add(planner.plan(series, None))
+                    for removal in planner.lone_removals(series, listed=listed_refs):
+                        add(removal)
                 add(planner.plan(event, series))
+                for removal in planner.lone_removals(event, listed=listed_refs):
+                    add(removal)
         return tally, tuple(items)
 
     def _source_events(
@@ -323,12 +329,15 @@ class _Planner:
         start = event.occurrence.original_start
         mapping = self.destination.mapping(series.reference)
         recorded = self.uow.occurrences.get(mapping.id, start) if mapping else None
-        if series_decision.action is not SyncAction.CREATE and (
-            mapping is None or series_decision.action is SyncAction.DELETE
+        lone = self.destination.mapping(event.reference)
+        if (
+            lone is not None
+            and lone.occurrence is not None
+            and _retires_lone_projections(series_decision, mapping)
         ):
-            removal = self._lone_removal(event, series)
+            removal = self._lone_removal(lone, series, event.as_single())
             if removal is not None:
-                return removal
+                return removal[0]
         if series_decision.action is SyncAction.CREATE:
             # The run writes the series, or writes it again, then decides the occurrence in it.
             return self.events.decisions.decide_occurrence_in_new_series(
@@ -359,13 +368,44 @@ class _Planner:
             )
         return decision
 
-    def _lone_removal(self, event: CalendarEvent, series: CalendarEvent) -> SyncDecision | None:
+    def lone_removals(
+        self, series: CalendarEvent, *, listed: AbstractSet[EventRef]
+    ) -> list[tuple[PreviewItem, bool]]:
+        """Removals of single projections of the series' occurrences that the listing left out,
+        which a run makes once it decides the series deleted or excluded."""
+        if series.occurrence is not None or (
+            series.recurrence is None and series.status is not EventStatus.CANCELLED
+        ):
+            return []
+        mapping = self.destination.mapping(series.reference)
+        if not _retires_lone_projections(self._decide(series), mapping):
+            return []
+        planned = []
+        for lone in self.uow.mappings.lone_occurrences(self.rule.id, series.reference):
+            if lone.source in listed or lone.occurrence is None:
+                continue
+            # Gone with its series, the occurrence has no title or time of its own left.
+            gone = CalendarEvent(
+                lone.source, None, series.revision, EventStatus.CANCELLED, recurrence=None
+            )
+            removal = self._lone_removal(lone, series, gone)
+            if removal is not None:
+                decision, read = removal
+                source = read.as_single() if read is not None else gone
+                item = PreviewItem(source, "single", decision.action, decision.reason, None)
+                planned.append((item, False))
+        return planned
+
+    def _lone_removal(
+        self, lone: EventMapping, series: CalendarEvent, source: CalendarEvent
+    ) -> tuple[SyncDecision, CalendarEvent | None] | None:
         """The removal of the occurrence's single projection, projected while its series was not
-        shown, by a series the rule does not project; as a run, it reads the occurrence from that
-        series, and blocks a projection it cannot prove the rule's."""
-        lone = self.destination.mapping(event.reference)
-        if lone is None or lone.occurrence is None:
-            return None
+        shown, by a series the rule does not project, with the occurrence the series answered.
+
+        As a run, it reads the occurrence from that series, and blocks a projection it cannot
+        prove the rule's.
+        """
+        assert lone.occurrence is not None
         decisions = self.events.decisions
         occurrence = (
             None
@@ -378,11 +418,11 @@ class _Planner:
         if reason is None:
             return None
         conflict = decisions.ownership_conflict(
-            self.rule, event.as_single(), lone, self.destination.get(lone.destination)
+            self.rule, source, lone, self.destination.get(lone.destination)
         )
         if conflict is not None:
-            return SyncDecision(SyncAction.CONFLICT, conflict)
-        return SyncDecision(SyncAction.DELETE, reason)
+            return SyncDecision(SyncAction.CONFLICT, conflict), occurrence
+        return SyncDecision(SyncAction.DELETE, reason), occurrence
 
     def _has_live_occurrences(self, series: EventRef) -> bool:
         if series not in self._live:
@@ -404,6 +444,14 @@ class _Planner:
             bool(projected.description or projected.location),
             projected.recurrence,
         )
+
+
+def _retires_lone_projections(decision: SyncDecision, mapping: EventMapping | None) -> bool:
+    """Whether deciding a series leads a run to remove the single projections of occurrences
+    of a series it does not project, as it does for one it never projected or removes now."""
+    return decision.action is not SyncAction.CREATE and (
+        mapping is None or decision.action is SyncAction.DELETE
+    )
 
 
 def _projects(decision: SyncDecision) -> bool:

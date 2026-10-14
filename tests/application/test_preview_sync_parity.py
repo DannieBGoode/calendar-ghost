@@ -302,3 +302,17 @@ def test_a_preview_blocks_removing_a_lone_projection_it_cannot_prove_the_rules()
             SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT,
         )
     }
+
+
+def test_a_preview_shows_lone_removals_its_listing_reports_only_the_deleted_series_of() -> None:
+    calendars = FakeCalendars()
+    invited, factory = _lone_projection_of(calendars)
+    recorded = len(factory.state.audit)
+    # The occurrence itself is gone from the listing; only its series' deletion is reported.
+    del calendars.events[invited.reference]
+    calendars.report(calendars.put(_cancelled(series("their-series")), starts=STARTS))
+
+    planned = _preview_then_run(factory, calendars)
+
+    removal = (invited.reference.event_id.value, "delete", SyncReason.SOURCE_CANCELLED)
+    assert planned == _recorded(factory, recorded) == {removal}
