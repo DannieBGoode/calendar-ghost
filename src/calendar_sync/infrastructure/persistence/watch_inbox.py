@@ -32,13 +32,19 @@ _BUSY = frozenset({"SQLITE_BUSY", "SQLITE_LOCKED"})
 
 def presents(notice: WatchNotice, stored_hash: str, stored_handle: str | None) -> bool:
     """Whether `notice` presents its registration's token, and its handle when both have one; a
-    registration still being created has no handle yet. Both compare in constant time."""
-    token = hmac.compare_digest(token_hash(notice.token).encode(), stored_hash.encode())
-    handle = (
-        notice.handle is None
-        or stored_handle is None
-        or hmac.compare_digest(notice.handle.encode(), stored_handle.encode())
-    )
+    registration still being created has no handle yet. Both compare in constant time.
+
+    A token or handle no encoding accepts, such as one with a lone surrogate that JSON may
+    escape, is not authentic: a known registration then answers as an unknown one does."""
+    try:
+        token = hmac.compare_digest(token_hash(notice.token).encode(), stored_hash.encode())
+        handle = (
+            notice.handle is None
+            or stored_handle is None
+            or hmac.compare_digest(notice.handle.encode(), stored_handle.encode())
+        )
+    except UnicodeEncodeError:
+        return False
     return token and handle
 
 

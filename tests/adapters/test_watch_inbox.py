@@ -232,6 +232,24 @@ def test_a_handle_that_differs_is_refused_and_a_missing_one_is_not_checked(store
     assert [request.requested_seq for request in _pending(store)] == [2]
 
 
+@pytest.mark.parametrize(
+    ("token", "handle"),
+    [("token-\ud800", None), ("token-registration-1", "handle-\udfff")],
+    ids=["token", "handle"],
+)
+def test_a_lone_surrogate_is_refused_as_any_wrong_token_is(
+    store: Store, token: str, handle: str | None
+) -> None:
+    # JSON may escape a lone surrogate, which no encoding accepts: a known registration must
+    # answer as an unknown one does, not fail.
+    _seed(store, _registration())
+
+    assert _record(store, _notice(token=token, handle=handle)) == 0
+
+    assert _pending(store) == ()
+    assert _registrations(store) == (_registration(),)
+
+
 def test_a_notice_at_another_providers_address_is_refused(store: Store) -> None:
     _seed(store, _registration())
 

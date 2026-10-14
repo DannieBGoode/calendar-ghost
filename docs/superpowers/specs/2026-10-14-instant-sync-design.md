@@ -246,8 +246,10 @@ unit of work, and it writes only registrations, Instant Sync Requests, and Deliv
 besides those it reads only Connected Accounts, watches and their coverage, and rules. The dispatcher, which is part of the scheduler, joins `INSTALLATION_UNIT_RECEIVERS`.
 
 For each notice, it locates the registration by the id in the path, then checks two things in
-constant time: the token hash, and the provider handle when the notice carries one. Unknown,
-`abandoned`, and refused notices change nothing. Every other notice, of any kind, sets the
+constant time: the token hash, and the provider handle when the notice carries one. A token or
+handle that cannot be encoded, such as one with a lone surrogate, is refused, so a known
+registration answers as an unknown one does. Unknown, `abandoned`, and refused notices change
+nothing. Every other notice, of any kind, sets the
 registration's `confirmed_at` if it is unset: it proves that the provider reaches the installation
 through it, so a dropped Google `sync` notice, or a proxy fixed after a registration was created,
 does not leave rules waiting for the provider while notices flow. Then each acts by kind:
