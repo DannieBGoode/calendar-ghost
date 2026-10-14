@@ -304,20 +304,27 @@ Two asyncio loops start and stop with the scheduler in the FastAPI lifespan
 (`infrastructure/scheduling.py`), and only when the installation has an `https` public address and
 the Installation Master Key:
 
-- `WatchKeeper` runs `WatchUpkeep` every five minutes in one worker thread, one User after another,
-  with a budget of 200 provider calls a cycle. The Users a cycle did not reach go first in the
-  next, then Users with nothing planned yet, then the rest by their earliest due work. Slow
-  provider calls never delay rule runs or the scheduler's heartbeat.
-- `InstantSyncDispatcher` wakes when the notice route sets its event from a worker thread, and on
-  a timer for the earliest moment a pending request becomes due, at least every minute. It holds a
-  reservation for each rule it queued, runs at most 2 at once apart from the scheduler's 4, and
-  runs each through `ScheduledPass.run` before acknowledging its request.
+- `WatchKeeper` runs `WatchUpkeep` every five minutes in one worker thread of its own, one User
+  after another, with a budget of 200 provider calls a cycle. The Users a cycle did not reach go
+  first in the next, then Users with nothing planned yet, then the rest by their earliest due
+  work. Slow provider calls never delay rule runs or the scheduler's heartbeat.
+- `InstantSyncDispatcher` wakes when the notice route, back on the event loop after the inbox
+  write, sets its event, and on a timer for the earliest moment a pending request becomes due, at
+  least every minute. It holds a reservation for each rule it queued, runs at most 2 at once apart
+  from the scheduler's 4, and runs each through `ScheduledPass.run` before acknowledging its
+  request.
+
+The scheduler and both loops run their work on worker threads of their own, sized to their
+concurrency, never on the event loop's default threads, which `asyncio.to_thread` takes for the
+Web API's requests. The notice route records notices on AnyIO's worker threads, so a provider
+waiting seconds for an answer never waits behind sync runs.
 
 The public route `POST /api/v1/watch-notices/{provider_slug}/{registration_id}` streams at most
 64 KB, asks the provider's `NoticeReader` to read it, and hands the notices to the
 `WatchNoticeInbox`. The inbox is the one public-route writer that crosses Users (ADR 0029,
 amended): one short transaction on a connection that waits at most one second for SQLite's lock,
-touching only registrations, Instant Sync Requests, and Delivery Evidence, with no provider call.
+writing only registrations, Instant Sync Requests, and Delivery Evidence, and reading besides
+only accounts, watches and their coverage, and rules, with no provider call.
 Without an `https` public address the route answers `404`, as for any unknown API path.
 
 ## Logging

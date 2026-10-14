@@ -232,8 +232,8 @@ registrations are unknown and acknowledged without effect.
 
 This is the one new reader that crosses Users, and ADR 0029 is amended to name it. It is its own
 narrow port (`record(notices, provider, address_base, at) -> int`), not the installation-wide
-unit of work, and it reads and writes only registrations, Instant Sync Requests, and Delivery
-Evidence. The dispatcher, which is part of the scheduler, joins `INSTALLATION_UNIT_RECEIVERS`.
+unit of work, and it writes only registrations, Instant Sync Requests, and Delivery Evidence;
+besides those it reads only Connected Accounts, watches and their coverage, and rules. The dispatcher, which is part of the scheduler, joins `INSTALLATION_UNIT_RECEIVERS`.
 
 For each notice, it locates the registration by the id in the path, then checks two things in
 constant time: the token hash, and the provider handle when the notice carries one. Unknown,
@@ -297,10 +297,11 @@ rule cadence reasons, and Installation Health. It never removes watches or block
   - **Upgrading again:** registrations still live in the table keep working. Expired ones are
     deleted and recreated by upkeep.
 - **`infrastructure/scheduling.py`**:
-  - **`InstantSyncDispatcher`** is an asyncio loop. It wakes on an event that the route sets from
-    its worker thread (`loop.call_soon_threadsafe`), and on a timer set to the earliest moment a
-    pending request becomes due: the end of its 10-second quiet window, capped at 30 seconds after
-    the first pending notice, or the end of the rule's 30-second gap. It holds a process-local
+  - **`InstantSyncDispatcher`** is an asyncio loop. It wakes on an event that the route sets on
+    the event loop once the inbox write returned (`wake()` is safe from any thread), and on a
+    timer set to the earliest moment a pending request becomes due: the end of its 10-second
+    quiet window, capped at 30 seconds after the first pending notice, or the end of the rule's
+    30-second gap. It holds a process-local
     reservation for each rule it queued and checks the rule again after admission. Its own
     concurrency bound is 2, separate from the scheduler's 4. That way neither kind of run waits
     behind the other's queue, and the total stays bounded at 6.
@@ -308,6 +309,11 @@ rule cadence reasons, and Installation Health. It never removes watches or block
     correct, only slower.
   - The loop survives exceptions the way the scheduler's does. It is cancelled on shutdown, and
     its requests remain durable.
+  - The scheduler, the dispatcher, and the keeper each run their work on worker threads of their
+    own, sized to their concurrency (the dispatcher's one larger, for its look for due runs), never
+    on the event loop's default threads, which the Web API's requests share. The notice route
+    records notices on AnyIO's worker threads, so Graph's 3-second deadline never waits behind
+    sync runs.
 - **`WatchKeeper`** runs `WatchUpkeep` every 5 minutes, with its own concurrency of 2 and a
   per-cycle budget of 200 provider calls. Slow provider calls therefore never delay rule runs or
   the scheduler's heartbeat.
@@ -320,9 +326,11 @@ rule cadence reasons, and Installation Health. It never removes watches or block
     most 100 items.
   - A Graph `validationToken` request is answered with `200` and the token echoed as `text/plain`
     (length-capped).
-  - Otherwise the route answers `202` once the inbox committed, alike for known, unknown, and
-    refused notices. It answers `503` when the commit cannot finish within the lock wait, so
-    providers retry.
+  - The echo carries `X-Content-Type-Options: nosniff`.
+  - Otherwise the route answers `202` once the inbox committed, alike whether or not the
+    registration exists, and for refused notices. A body that is no notice gets `400`, and one
+    above the cap `413`, whatever the registration. It answers `503` when the commit cannot finish
+    within the lock wait, so providers retry.
   - It never logs tokens, handles, registration ids, or bodies.
   - It is added to AGENTS.md's list of intentionally public routes and to
     `tests/adapters/test_api_authorization.py`.

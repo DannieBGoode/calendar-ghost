@@ -1,8 +1,9 @@
 """Every User's Watch Notices, recorded where they land (ADR 0029, amended by ADR 0036).
 
-Besides the installation-wide unit of work, this is the one reader that crosses Users. It reads
-and writes only Watch Registrations, Instant Sync Requests, and Delivery Evidence, in one short
-write transaction per request, and makes no provider call. A notice proves itself by its
+Besides the installation-wide unit of work, this is the one reader that crosses Users. It writes
+only Watch Registrations, Instant Sync Requests, and Delivery Evidence, and besides those reads only
+Connected Accounts, Calendar Watches and their coverage, and rules, in one short write transaction
+per request, and makes no provider call. A notice proves itself by its
 registration's secret token, compared by hash in constant time; one that does not changes nothing.
 """
 

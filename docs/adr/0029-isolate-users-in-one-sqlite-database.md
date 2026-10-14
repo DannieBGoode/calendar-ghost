@@ -55,8 +55,9 @@ concerns means reading a registration before its User is known, so the `WatchNot
 (`application/operations/ports.py`), which `SqliteWatchNoticeInbox`
 (`infrastructure/persistence/watch_inbox.py`) implements, is the one public-route writer that
 crosses Users. It is narrow: it does not receive the installation-wide unit of work, but opens one
-short write transaction of its own per request; it reads and writes only Watch Registrations,
-Instant Sync Requests, and Delivery Evidence; it acts only after the notice's token hash and
+short write transaction of its own per request; it writes only Watch Registrations, Instant Sync
+Requests, and Delivery Evidence, and besides those reads only Connected Accounts, Calendar Watches
+and their coverage, and Directional Sync Rules; it acts only after the notice's token hash and
 provider handle match in constant time; and it raises requests only for the enabled rules of the
 registration's own User whose Source Calendar the watch covers. Instant Sync's watch upkeep and
 dispatch run beside the scheduler and, like it, receive the installation-wide unit of work, so the

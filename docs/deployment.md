@@ -244,8 +244,10 @@ so a restart forgets them.
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. A scheduler pass
 runs up to four different rules at once, so one rule waiting on its provider does not hold up the rest.
-Instant Sync runs up to two more at once, apart from the scheduler's, so at most six rules run
-together.
+Instant Sync runs up to two more at once, apart from the scheduler's, so scheduled and instant
+runs together reach at most six; a manual run, such as **Sync now**, comes on top. Each of these
+loops has worker threads of its own, apart from those the Web UI's requests use, so neither holds
+up the other.
 Multi-process workers are not supported with the SQLite deployment.
 
 The database uses SQLite's write-ahead log, so Web UI reads and scheduler writes do not wait for

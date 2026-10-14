@@ -12,7 +12,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   pass still run and catch any report that is lost. Each person can turn it off under
   **Settings → Your account**, where the switch says why when it cannot run and links to the guide.
   Each rule says "Syncs instantly" or "Syncs every 5 minutes" and why. Installation Health tells
-  administrators when the public address uses plain HTTP or a provider cannot reach it. Migration
+  administrators when the public address uses plain HTTP at a host the internet reaches, or a
+  provider cannot reach it. Migration
   31 adds the tables; see [Instant Sync](docs/instant-sync.md) for proxy and tunnel examples.
 - Installation Health warns before the Microsoft client secret expires. Copy the secret's
   **Expires** date from Entra into `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET_EXPIRES`: from 30 days

@@ -51,8 +51,9 @@ Users without a change of copy or schema.
   provider's `NoticeReader`, and the `WatchNoticeInbox` checks the token hash and provider handle in
   constant time, then raises a per-rule request for each enabled rule of the registration's User
   whose Source Calendar the watch covers. It makes one short write transaction and no provider call,
-  and answers `202` alike for known, unknown, and refused notices, or `503` when storage stays
-  locked for a second, so the provider retries.
+  and answers `202` alike whether or not the registration exists, and for refused notices, or `503`
+  when storage stays locked for a second, so the provider retries. A body that is no notice gets
+  `400`, and one above 64 KB gets `413`, whatever the registration.
 - **An in-process dispatcher runs the requests** through the scheduler's own path. A rule runs once
   10 seconds pass without another notice for it, at most 30 seconds after the first, and at most
   once every 30 seconds. Its concurrency of 2 is apart from the scheduler's 4. After the run

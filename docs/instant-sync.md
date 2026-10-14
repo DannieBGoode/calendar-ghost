@@ -86,13 +86,19 @@ server {
 ```
 
 **Cloudflare Tunnel** needs no open port on your router, which suits a Raspberry Pi at home.
-Create a named tunnel, route the name to it, and forward only the notices path in
-`/etc/cloudflared/config.yml`:
+Sign in to Cloudflare, create a named tunnel, and route the name to it. `tunnel login` opens a
+browser where you choose the domain; `tunnel create` prints the tunnel's UUID and writes its
+credentials to `~/.cloudflared/<tunnel-uuid>.json`, which you copy beside the configuration:
 
 ```sh
+cloudflared tunnel login
 cloudflared tunnel create calendar-ghost
+sudo mkdir -p /etc/cloudflared
+sudo cp ~/.cloudflared/<tunnel-uuid>.json /etc/cloudflared/
 cloudflared tunnel route dns calendar-ghost calendar.example.com
 ```
+
+Then forward only the notices path in `/etc/cloudflared/config.yml`:
 
 ```yaml
 tunnel: <tunnel-uuid>
@@ -104,8 +110,8 @@ ingress:
   - service: http_status:404
 ```
 
-Run it with `cloudflared tunnel run calendar-ghost`, or install it as a service with
-`cloudflared service install`. If Cloudflare Access protects the name, add a Bypass policy for
+Run it with `cloudflared tunnel --config /etc/cloudflared/config.yml run calendar-ghost`, or
+install it as a service with `sudo cloudflared service install`, which reads the same file. If Cloudflare Access protects the name, add a Bypass policy for
 `/api/v1/watch-notices/`. A quick tunnel (`cloudflared tunnel --url http://127.0.0.1:8000`) works
 for a test, but its address changes each time it starts.
 
@@ -142,6 +148,18 @@ the reports they bring until then are answered `404` and change nothing.
 3. If the **Instant sync** switch under **Settings → Your account** is off with a reason, its
    **Learn why** link opens the matching section below. Administrators also see the cause on
    **People** under **Installation health**.
+4. If you use Outlook, check from outside your network that the proxy keeps the query string,
+   which Microsoft's address check needs and Google's reports do not. A proxy that drops it passes
+   the check in
+   [Providers cannot reach the installation](#providers-cannot-reach-the-installation) but fails
+   Microsoft's:
+
+   ```sh
+   curl -i -X POST 'https://calendar.example.com/api/v1/watch-notices/microsoft/00000000000000000000000000000000?validationToken=abc'
+   ```
+
+   Calendar Ghost answers `200 OK` with `abc` as plain text. A `400` in JSON means the proxy
+   dropped the query string, so Calendar Ghost read the request as a malformed report.
 
 ## When Instant Sync is unavailable
 
@@ -219,12 +237,20 @@ Turn **Instant sync** on again under **Settings → Your account**.
   handle, a SHA-256 hash of its secret token, the address it points at, its state, and its times;
   per rule, counters of requested and handled runs and when they happened; and per provider and
   public address, when a report last arrived and when delivery last failed.
-- Logs never contain tokens, handles, registration identifiers, or report bodies. Uvicorn's request
-  lines show the notices path without its registration or query.
+- Calendar Ghost's logs never contain tokens, handles, registration identifiers, or report
+  bodies. Uvicorn's request lines show the notices path without its registration or query.
+- Your reverse proxy or tunnel may keep an access log of its own, which records the full notices
+  path, registration identifier included, and Microsoft's validation query. An identifier alone
+  changes nothing without its secret token, which only travels in headers or bodies that access
+  logs do not record. To keep identifiers out anyway, turn off access logging for
+  `/api/v1/watch-notices/`, such as with `access_log off;` in that nginx `location`, or a Caddy
+  `log_skip` for that path.
 - Google and Microsoft learn the public address, and which calendars or mailboxes Calendar Ghost
   watches, which they already know.
 - The notices path takes no session, so anyone can send a request to it. Calendar Ghost answers
-  every one alike and acts only on one whose registration and secret token match.
+  a report alike whether or not its registration exists, and acts only on one whose registration
+  and secret token match. A body that is no report gets `400`, and one above 64 KB gets `413`,
+  whatever the registration.
 
 ## Cost per run
 
