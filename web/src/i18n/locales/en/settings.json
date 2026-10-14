@@ -46,15 +46,15 @@
     },
     "instantSync": {
       "title": "Instant sync",
-      "body": "Your rules sync soon after a change in their source calendar, instead of waiting for the next scheduled sync. Scheduled syncs still run.",
+      "body": "Your rules sync soon after a change in their source calendar, not only on their schedule.",
       "label": "Sync soon after each change",
       "on": "Your rules now sync soon after each change in their source calendars.",
       "off": "Your rules now sync on their schedule only.",
       "blocked": {
-        "not_in_plan": "Your plan does not include instant sync, so your rules sync on their schedule.",
-        "no_public_address": "Instant sync needs this Calendar Ghost to have a public HTTPS address, so your rules sync on their schedule.",
-        "not_reaching": "Your calendar providers cannot reach this Calendar Ghost, so your rules sync on their schedule.",
-        "unknown": "Instant sync is not available here right now, so your rules sync on their schedule."
+        "not_in_plan": "Your plan does not include it.",
+        "no_public_address": "This Calendar Ghost needs a public HTTPS address first.",
+        "not_reaching": "Your calendar providers cannot reach this Calendar Ghost.",
+        "unknown": "It is not available here right now."
       }
     },
     "delete": {

@@ -335,24 +335,23 @@ describe("OwnAccountSection", () => {
     }
   })
 
-  it("disables instant sync where it cannot run, with the reason and where to learn why", async () => {
+  it("explains where instant sync cannot run, and offers no switch that cannot work", async () => {
     await renderSection(testI18n(), {
       signedIn: { ...user, instant_sync_availability: "no_public_address", instant_sync_help: "no-public-https-address" },
     })
-    const toggle = field("own-instant-sync")
-    expect(toggle.disabled).toBe(true)
-    expect(toggle.checked).toBe(false)
-    expect(toggle.getAttribute("aria-describedby")).toBe("own-instant-sync-reason")
-    expect(container.querySelector("#own-instant-sync-reason")?.textContent).toContain(
-      "Instant sync needs this Calendar Ghost to have a public HTTPS address, so your rules sync on their schedule.",
+    expect(container.querySelector("#own-instant-sync")).toBeNull()
+    expect(instantSync().textContent).toContain(
+      "Your rules sync soon after a change in their source calendar, not only on their schedule.",
+    )
+    expect(container.querySelector("#own-instant-sync-reason")?.textContent).toBe(
+      "This Calendar Ghost needs a public HTTPS address first.",
     )
     const help = instantSync().querySelector("a")
     expect(help?.textContent).toBe("Learn why (opens in a new tab)")
     expect(help?.getAttribute("href")).toBe("https://calendarghost.com/docs/instant-sync#no-public-https-address")
     expect(help?.getAttribute("target")).toBe("_blank")
     expect(help?.getAttribute("rel")).toBe("noreferrer")
-    await click(toggle)
-    expect(sent("PUT", "/api/v1/account/instant-sync")).toBeUndefined()
+    expect(help?.getAttribute("aria-describedby")).toBe("own-instant-sync-reason")
   })
 
   it("says instant sync is unavailable for a reason this version does not know, without a link it cannot name", async () => {
@@ -363,9 +362,9 @@ describe("OwnAccountSection", () => {
         instant_sync_help: null,
       },
     })
-    expect(field("own-instant-sync").disabled).toBe(true)
+    expect(container.querySelector("#own-instant-sync")).toBeNull()
     expect(container.querySelector("#own-instant-sync-reason")?.textContent).toBe(
-      "Instant sync is not available here right now, so your rules sync on their schedule. ",
+      "It is not available here right now.",
     )
     expect(instantSync().querySelector("a")).toBeNull()
   })

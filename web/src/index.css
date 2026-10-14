@@ -1819,11 +1819,29 @@ p {
   gap: 1rem;
 }
 
-.incident-email-toggle,
-.instant-sync-toggle {
+/* A preference row's own switch sits on the row, not in a padded checkbox box: two classes, so it
+   wins over .checkbox-row, which comes later in this file. Beside its explanation it never shrinks,
+   so its label stays on one line; stacked on a phone it may still wrap. */
+.checkbox-row.incident-email-toggle,
+.checkbox-row.instant-sync-toggle {
   min-height: 0;
+  flex: none;
   padding: 0;
   background: transparent;
+}
+
+/* A preference's explanation keeps a readable line length beside its control. */
+.setting-copy {
+  max-width: 40rem;
+}
+
+.setting-row > .inline-link {
+  flex: none;
+}
+
+/* The row's current state, under what the preference does: read before the explanation. */
+.setting-row .setting-state {
+  color: var(--foreground);
 }
 
 /* What the Operator Overview shows about one User: in People's person page, and in Settings for

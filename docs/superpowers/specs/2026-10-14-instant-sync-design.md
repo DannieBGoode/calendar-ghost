@@ -31,10 +31,10 @@ come right after this work and plug into one port; nothing in this design waits 
    everyone, which is what "Plans off" means in ADR 0028. Phase 3 implements the port from the
    Plan's "shortest sync interval" limit, whose shortest value is "instant". There is no interim
    administrator toggle.
-4. **The switch explains itself.** When the installation cannot offer Instant Sync, or the User's
-   Plan does not include it, or providers are known not to reach the installation, the switch is
-   disabled with the reason and a "Learn why" link to the section of `docs/instant-sync.md` that
-   explains the fix.
+4. **The setting explains itself.** When the installation cannot offer Instant Sync, or the User's
+   Plan does not include it, or providers are known not to reach the installation, the row shows
+   the reason in place of the switch, with a "Learn why" link to the section of
+   `docs/instant-sync.md` that explains the fix, as incident emails do without email.
 5. **Durable request, in-process dispatcher.** The webhook records a durable, per-rule Instant Sync
    Request and wakes a dispatcher, which runs the rule through the scheduler's own path.
 6. **Only source rules are dispatched.** Watches exist only for Source Calendars. Destination
@@ -339,8 +339,8 @@ rule cadence reasons, and Installation Health. It never removes watches or block
   its docs anchor). Rule responses gain `effective_cadence` with its reason and `poll_every`. The
   OpenAPI file and web types are regenerated.
 - **Web UI:**
-  - In account settings, an "Instant sync" switch. When it is unavailable, it is disabled with the
-    reason and "Learn why".
+  - In account settings, an "Instant sync" switch. When it is unavailable, the row shows the reason
+    and "Learn why" in its place.
   - On the rule page, "Syncs instantly" or "Syncs every 5 minutes", with the reason.
   - All text is in the i18n catalogs.
 - **Installation Health hints** for administrators:

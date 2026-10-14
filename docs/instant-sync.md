@@ -145,8 +145,8 @@ the reports they bring until then are answered `404` and change nothing.
    [Waiting for the provider](#waiting-for-the-provider).
 2. Edit an event in the rule's Source Calendar. **Activity** usually lists the change within a
    minute.
-3. If the **Instant sync** switch under **Settings → Your account** is off with a reason, its
-   **Learn why** link opens the matching section below. Administrators also see the cause on
+3. If **Instant sync** under **Settings → Your account** shows a reason instead of its switch,
+   its **Learn why** link opens the matching section below. Administrators also see the cause on
    **People** under **Installation health**.
 4. If you use Outlook, check from outside your network that the proxy keeps the query string,
    which Microsoft's address check needs and Google's reports do not. A proxy that drops it passes
@@ -163,7 +163,7 @@ the reports they bring until then are answered `404` and change nothing.
 
 ## When Instant Sync is unavailable
 
-Each section below is the one the switch or a rule links to. Meanwhile rules sync every five
+Each section below is the one **Settings** or a rule links to. Meanwhile rules sync every five
 minutes, and nothing is lost.
 
 ### Not in your plan
@@ -197,7 +197,7 @@ Calendar Ghost answers `202 Accepted` and changes nothing, because no registrati
 identifier. A `404` in JSON comes from Calendar Ghost when its `CALENDAR_SYNC_PUBLIC_URL` is not an
 `https` address, as it then has no notices route. Anything else comes from the proxy or tunnel:
 fix it as [troubleshooting](troubleshooting.md#calendar-providers-cannot-reach-the-installation)
-explains. Once a report arrives, the switch works again. An authenticated report always counts as
+explains. Once a report arrives, the switch comes back. An authenticated report always counts as
 proof that delivery works, so a rule never waits on this check.
 
 ### Waiting for the provider
