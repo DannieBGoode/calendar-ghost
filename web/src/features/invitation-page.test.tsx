@@ -17,7 +17,7 @@ const TOKEN = "inv_synthetic-token"
 const SIGNED_IN = {
   authenticated: true,
   installation_sends_email: false,
-  user: { id: "u2", email: "robin@example.test", role: "user", notify_by_email: true, language: null },
+  user: { id: "u2", email: "robin@example.test", role: "user", notify_by_email: true, instant_sync: true, instant_sync_availability: "on", instant_sync_help: null, language: null },
 }
 
 function jsonResponse(body: unknown, status = 200): Response {

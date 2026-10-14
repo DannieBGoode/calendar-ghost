@@ -224,6 +224,8 @@ function ruleSummary(id: string, overrides: Partial<RuleSummary>): RuleSummary {
     sync_birthdays: false,
     state: "enabled",
     reprojection_required: false,
+    effective_cadence: "instant",
+    poll_every_minutes: 5,
     last_sync: lastSync,
     latest_preview: null,
     running: null,

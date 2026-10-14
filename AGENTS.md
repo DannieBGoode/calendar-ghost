@@ -182,8 +182,10 @@ the Docker build context, and has its own `Site` workflow.
   who does not administer, as for an unknown User. Only setup,
   sign-in, the session status and sign-out, the token-protected Invitation and Password Reset Link
   routes (`/api/v1/invitations/check`, `/api/v1/invitations/accept`,
-  `/api/v1/password-resets/check`, `/api/v1/password-resets`), static application files, and
-  `/health` are intentionally public; `/health` is the only unauthenticated operational status
+  `/api/v1/password-resets/check`, `/api/v1/password-resets`), the Watch Notice route providers
+  call (`/api/v1/watch-notices/{provider_slug}/{registration_id}`, ADR 0036), which answers alike
+  for known and unknown registrations and logs no identifier, token, or body, static application
+  files, and `/health` are intentionally public; `/health` is the only unauthenticated operational status
   route. The OAuth callback is session-and-state protected: it reads the session itself
   (`session_user`) to redirect rather than answer 401, and completes a flow only for the signed-in
   User who began it. `/api/v1/status`, `/api/v1/installation/health`, and

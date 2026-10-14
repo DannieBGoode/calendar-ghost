@@ -33,7 +33,7 @@ function session(role: "installation_administrator" | "user"): SessionStatus {
   return {
     authenticated: true,
     installation_sends_email: true,
-    user: { id: me.id, email: me.email, role, notify_by_email: true, language: null },
+    user: { id: me.id, email: me.email, role, notify_by_email: true, instant_sync: true, instant_sync_availability: "on", instant_sync_help: null, language: null },
   }
 }
 

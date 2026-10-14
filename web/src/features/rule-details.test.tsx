@@ -89,6 +89,8 @@ const enabledRule: RuleDetail = {
   sync_birthdays: false,
   state: "enabled",
   reprojection_required: false,
+  effective_cadence: "instant",
+  poll_every_minutes: 5,
   initial_lookback_days: 30,
   mapping_count: 3,
   last_sync: succeeded,

@@ -74,7 +74,7 @@ const robin: UserOverview = {
 const session: SessionStatus = {
   authenticated: true,
   installation_sends_email: false,
-  user: { id: "user-dana", email: "dana@example.test", role: "installation_administrator", notify_by_email: true, language: null },
+  user: { id: "user-dana", email: "dana@example.test", role: "installation_administrator", notify_by_email: true, instant_sync: true, instant_sync_availability: "on", instant_sync_help: null, language: null },
 }
 
 function jsonResponse(body: unknown, status = 200): Response {

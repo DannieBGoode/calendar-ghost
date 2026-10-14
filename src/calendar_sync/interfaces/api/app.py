@@ -32,6 +32,7 @@ from calendar_sync.interfaces.api.routes import (
     setup,
     storage,
     users,
+    watch_notices,
 )
 from calendar_sync.interfaces.mcp.server import (
     McpIdentity,
@@ -76,6 +77,7 @@ class ApiServices(
     accounts.AuthorizationServices,
     integrations.StatusServices,
     storage.StorageServices,
+    watch_notices.NoticeServices,
     McpServices,
     Protocol,
 ):
@@ -138,6 +140,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         storage,
         integrations,
         users,
+        watch_notices,
     ):
         app.router.routes.extend(module.router.routes)
 

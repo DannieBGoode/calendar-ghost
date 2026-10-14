@@ -37,6 +37,7 @@ from calendar_sync.application.identity.ports import (
 )
 from calendar_sync.application.identity.sign_in import (
     ChangeOwnPassword,
+    SetInstantSync,
     SetNotificationEmail,
     SetOwnEmail,
     SetUpInstallation,
@@ -234,6 +235,7 @@ class IdentityServices:
     sign_in: SignIn
     set_own_email: SetOwnEmail
     set_notification_email: SetNotificationEmail
+    set_instant_sync: SetInstantSync
     change_own_password: ChangeOwnPassword
 
 
@@ -672,6 +674,7 @@ def _identity(adapters: Adapters) -> IdentityServices:
         sign_in=SignIn(users, passwords, sessions, adapters.sign_in_throttle, adapters.clock),
         set_own_email=SetOwnEmail(users, passwords),
         set_notification_email=SetNotificationEmail(users),
+        set_instant_sync=SetInstantSync(users),
         change_own_password=ChangeOwnPassword(users, passwords, sessions),
     )
 

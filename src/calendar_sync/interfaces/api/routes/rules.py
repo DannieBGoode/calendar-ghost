@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Mapping
+from datetime import timedelta
 from typing import Annotated, Any, Protocol
 
 from fastapi import APIRouter, Depends, status
 
+from calendar_sync.application.operations.instant_sync import InstantSyncStatus
 from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.application.sync.errors import (
     ConnectedAccountRequired,
@@ -33,6 +35,7 @@ from calendar_sync.application.sync.rules import (
     ReplaceSyncRuleCalendars,
 )
 from calendar_sync.application.sync.synchronization import SyncNow
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
     AllDayRange,
@@ -52,6 +55,7 @@ from calendar_sync.domain.model import (
     UnansweredInvitationPolicy,
 )
 from calendar_sync.domain.runs import RuleRunOutcome
+from calendar_sync.domain.watches import CadenceReason
 from calendar_sync.interfaces.api.dependencies import available, current_user, user_services
 from calendar_sync.interfaces.api.problems import ApiProblem, problem, problem_from
 from calendar_sync.interfaces.api.schemas import (
@@ -102,6 +106,10 @@ class RuleServices(Protocol):
     def preview_sync_rule(self) -> PreviewSyncRule | None: ...
     @property
     def reconcile_now(self) -> ReconcileNow | None: ...
+    @property
+    def user_id(self) -> UserId: ...
+    @property
+    def instant_sync_status(self) -> InstantSyncStatus: ...
 
 
 Services = Annotated[RuleServices, Depends(user_services)]
@@ -114,9 +122,12 @@ router = APIRouter()
     dependencies=[Depends(current_user)],
 )
 def list_rules(services: Services) -> list[RuleSummaryResponse]:
+    status_, user = services.instant_sync_status, services.user_id
+    reasons, poll_every = status_.cadences(user), status_.poll_every(user)
     return [
         RuleSummaryResponse(
             **_named_rule_response(summary.rule, summary.names),
+            **_cadence_fields(reasons.get(summary.rule.id), poll_every),
             last_sync=_outcome_response(summary.last_sync),
             latest_preview=_preview_response(summary.latest_preview),
             running=_work_response(summary.running),
@@ -307,8 +318,11 @@ def rule_details(rule_id: str, services: Services) -> RuleDetailResponse:
         details = services.get_sync_rule_details.execute(SyncRuleId(rule_id))
     except RuleNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
+    status_, user = services.instant_sync_status, services.user_id
+    reasons, poll_every = status_.cadences(user), status_.poll_every(user)
     return RuleDetailResponse(
         **_named_rule_response(details.rule, details.names),
+        **_cadence_fields(reasons.get(details.rule.id), poll_every),
         initial_lookback_days=details.rule.initial_lookback_days,
         mapping_count=details.mapping_count,
         last_sync=_outcome_response(details.last_sync),
@@ -456,6 +470,14 @@ def _named_rule_response(rule: SyncRule, names: Mapping[CalendarEndpoint, str]) 
         **_rule_response(rule).model_dump(exclude={"source", "destination"}),
         "source": named(rule.source),
         "destination": named(rule.destination),
+    }
+
+
+def _cadence_fields(reason: CadenceReason | None, poll_every: timedelta) -> dict[str, Any]:
+    """How the rule syncs; a rule created since the cadences were read is not watched yet."""
+    return {
+        "effective_cadence": (reason or CadenceReason.NOT_WATCHABLE).value,
+        "poll_every_minutes": int(poll_every.total_seconds() // 60),
     }
 
 

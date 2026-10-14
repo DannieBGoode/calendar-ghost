@@ -19,6 +19,9 @@ const user: SignedInUser = {
   email: "robin@example.test",
   role: "user",
   notify_by_email: true,
+  instant_sync: true,
+  instant_sync_availability: "on",
+  instant_sync_help: null,
   language: null,
 }
 

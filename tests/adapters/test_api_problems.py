@@ -245,12 +245,21 @@ def _constant(path: Path, name: str) -> str | None:
     return None
 
 
+# Only calendar providers call these routes, so the Web UI never shows their codes (ADR 0036).
+_PROVIDER_ROUTES = {API / "routes/watch_notices.py"}
+
+
 def _sent_codes() -> set[str]:
     return (
         set(problems._CODES.values())
         | set(problems._STATUS_CODES.values())
         | {problems._UNLISTED_STATUS}
-        | {code for path in INTERFACES.rglob("*.py") for code in _literal_codes(path)}
+        | {
+            code
+            for path in INTERFACES.rglob("*.py")
+            if path not in _PROVIDER_ROUTES
+            for code in _literal_codes(path)
+        }
     )
 
 

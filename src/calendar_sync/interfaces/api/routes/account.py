@@ -20,6 +20,7 @@ from calendar_sync.application.identity.errors import (
 )
 from calendar_sync.application.identity.sign_in import (
     ChangeOwnPassword,
+    SetInstantSync,
     SetNotificationEmail,
     SetOwnEmail,
 )
@@ -37,11 +38,12 @@ from calendar_sync.interfaces.api.dependencies import (
     signed_in_user,
 )
 from calendar_sync.interfaces.api.problems import problem_from
-from calendar_sync.interfaces.api.routes.session import user_response
+from calendar_sync.interfaces.api.routes.session import SignedInAnswers, user_response
 from calendar_sync.interfaces.api.routes.users import deletion_response
 from calendar_sync.interfaces.api.schemas import (
     ChangePasswordRequest,
     DeleteOwnAccountRequest,
+    InstantSyncPreferenceRequest,
     NotificationPreferenceRequest,
     OwnAccountDeletionResponse,
     SetEmailRequest,
@@ -64,9 +66,11 @@ class AccountIdentity(Identity, Protocol):
     def set_notification_email(self) -> SetNotificationEmail: ...
     @property
     def change_own_password(self) -> ChangeOwnPassword: ...
+    @property
+    def set_instant_sync(self) -> SetInstantSync: ...
 
 
-class OwnAccountServices(Protocol):
+class OwnAccountServices(SignedInAnswers, Protocol):
     @property
     def identity(self) -> AccountIdentity: ...
     @property
@@ -90,7 +94,7 @@ def set_email(payload: SetEmailRequest, user: SignedIn, services: Services) -> S
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
     except EmailTaken as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
-    return user_response(changed)
+    return user_response(changed, services)
 
 
 @router.put("/api/v1/account/notifications", response_model=SignedInUserResponse)
@@ -101,7 +105,19 @@ def set_notifications(
 ) -> SignedInUserResponse:
     """Whether the User's Incident Notifications also come by email; the Web UI keeps them all."""
     changed = services.identity.set_notification_email.execute(user_id, payload.notify_by_email)
-    return user_response(changed)
+    return user_response(changed, services)
+
+
+@router.put("/api/v1/account/instant-sync", response_model=SignedInUserResponse)
+def set_instant_sync(
+    payload: InstantSyncPreferenceRequest,
+    services: Services,
+    user_id: Annotated[UserId, Depends(current_user)],
+) -> SignedInUserResponse:
+    """Whether the User wants Instant Sync; it is on while their Plan and the installation allow
+    it, and the answer says why not otherwise."""
+    changed = services.identity.set_instant_sync.execute(user_id, payload.instant_sync)
+    return user_response(changed, services)
 
 
 @router.put(

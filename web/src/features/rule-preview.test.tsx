@@ -37,6 +37,8 @@ const previewedRule: RuleDetail = {
   sync_birthdays: false,
   state: "dry_run_validated",
   reprojection_required: false,
+  effective_cadence: "instant",
+  poll_every_minutes: 5,
   initial_lookback_days: 30,
   mapping_count: 0,
   last_sync: null,

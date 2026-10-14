@@ -64,6 +64,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/instant-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Instant Sync
+         * @description Whether the User wants Instant Sync; it is on while their Plan and the installation allow
+         *     it, and the answer says why not otherwise.
+         */
+        put: operations["set_instant_sync_api_v1_account_instant_sync_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/notifications": {
         parameters: {
             query?: never;
@@ -1383,6 +1404,11 @@ export interface components {
             /** Since */
             since: string;
         };
+        /** InstantSyncPreferenceRequest */
+        InstantSyncPreferenceRequest: {
+            /** Instant Sync */
+            instant_sync: boolean;
+        };
         /** IntegrationTokenResponse */
         IntegrationTokenResponse: {
             /** Created At */
@@ -1800,6 +1826,11 @@ export interface components {
         /** RuleDetailResponse */
         RuleDetailResponse: {
             destination: components["schemas"]["NamedCalendarEndpointResponse"];
+            /**
+             * Effective Cadence
+             * @enum {string}
+             */
+            effective_cadence: "instant" | "not_watchable" | "waiting_for_provider" | "off_by_user" | "not_in_plan" | "no_public_address" | "not_reaching";
             /** Id */
             id: string;
             /** Initial Lookback Days */
@@ -1809,6 +1840,8 @@ export interface components {
             latest_preview: components["schemas"]["PreviewSummaryResponse"] | null;
             /** Mapping Count */
             mapping_count: number;
+            /** Poll Every Minutes */
+            poll_every_minutes: number;
             /**
              * Privacy Policy
              * @enum {string}
@@ -1893,10 +1926,17 @@ export interface components {
         /** RuleSummaryResponse */
         RuleSummaryResponse: {
             destination: components["schemas"]["NamedCalendarEndpointResponse"];
+            /**
+             * Effective Cadence
+             * @enum {string}
+             */
+            effective_cadence: "instant" | "not_watchable" | "waiting_for_provider" | "off_by_user" | "not_in_plan" | "no_public_address" | "not_reaching";
             /** Id */
             id: string;
             last_sync: components["schemas"]["RunOutcomeResponse"] | null;
             latest_preview: components["schemas"]["PreviewSummaryResponse"] | null;
+            /** Poll Every Minutes */
+            poll_every_minutes: number;
             /**
              * Privacy Policy
              * @enum {string}
@@ -2024,6 +2064,15 @@ export interface components {
             email: string | null;
             /** Id */
             id: string;
+            /** Instant Sync */
+            instant_sync: boolean;
+            /**
+             * Instant Sync Availability
+             * @enum {string}
+             */
+            instant_sync_availability: "on" | "off_by_user" | "not_in_plan" | "no_public_address" | "not_reaching";
+            /** Instant Sync Help */
+            instant_sync_help: string | null;
             /** Language */
             language: string | null;
             /** Notify By Email */
@@ -2342,6 +2391,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedInUserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_instant_sync_api_v1_account_instant_sync_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstantSyncPreferenceRequest"];
             };
         };
         responses: {

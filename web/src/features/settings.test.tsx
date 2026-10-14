@@ -101,7 +101,7 @@ const ADMIN_EMAIL = "admin@example.test"
 const adminSession = {
   authenticated: true,
   installation_sends_email: false,
-  user: { id: "user-admin", email: ADMIN_EMAIL, role: "installation_administrator", notify_by_email: true, language: null },
+  user: { id: "user-admin", email: ADMIN_EMAIL, role: "installation_administrator", notify_by_email: true, instant_sync: true, instant_sync_availability: "on", instant_sync_help: null, language: null },
 }
 
 /** Account names, emails, avatar initials, and the Google return address the fixtures introduce. */

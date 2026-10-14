@@ -13,7 +13,7 @@ from calendar_sync.application.identity.sign_in import SetUpInstallation
 from calendar_sync.domain.access import InvalidEmail
 from calendar_sync.interfaces.api.dependencies import Identity, app_services, set_session_cookie
 from calendar_sync.interfaces.api.problems import problem_from
-from calendar_sync.interfaces.api.routes.session import signed_in
+from calendar_sync.interfaces.api.routes.session import SignedInAnswers, signed_in
 from calendar_sync.interfaces.api.schemas import SessionResponse, SetupRequest, SetupStatusResponse
 
 
@@ -22,13 +22,11 @@ class SetupIdentity(Identity, Protocol):
     def set_up(self) -> SetUpInstallation: ...
 
 
-class SetupServices(Protocol):
+class SetupServices(SignedInAnswers, Protocol):
     @property
     def identity(self) -> SetupIdentity: ...
     @property
     def secure_cookies(self) -> bool: ...
-    @property
-    def sends_email(self) -> bool: ...
 
 
 Services = Annotated[SetupServices, Depends(app_services)]
@@ -55,4 +53,4 @@ def set_up(payload: SetupRequest, response: Response, services: Services) -> Ses
     except IncorrectCredentials as error:
         raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
     set_session_cookie(response, session.token, services.secure_cookies)
-    return signed_in(services.identity.users.get(session.user_id), services.sends_email)
+    return signed_in(services.identity.users.get(session.user_id), services)
