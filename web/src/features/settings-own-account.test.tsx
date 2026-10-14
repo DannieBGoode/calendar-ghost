@@ -350,6 +350,23 @@ describe("OwnAccountSection", () => {
     }
   })
 
+  it("puts the change's answer in the cached session only while it names the same User", async () => {
+    const signedInAs = (who: SignedInUser) => ({ authenticated: true, installation_sends_email: true, user: who })
+    const ash: SignedInUser = { ...user, id: "user-ash", email: "ash@example.test" }
+    for (const [cached, kept] of [
+      [signedInAs(user), signedInAs({ ...user, instant_sync: false, instant_sync_availability: "off_by_user" })],
+      // Another tab signed in as someone else before the answer came.
+      [signedInAs(ash), signedInAs(ash)],
+      [{ authenticated: false, installation_sends_email: true, user: null }, null],
+    ] as const) {
+      await renderSection(testI18n(), { cached: { session: cached } })
+      await choose(syncChoice(), "scheduled")
+      expect(queryClient.getQueryData(["session"])).toEqual(kept ?? cached)
+      act(() => root?.unmount())
+      root = null
+    }
+  })
+
   it("explains where instant sync cannot run, and offers no switch that cannot work", async () => {
     await renderSection(testI18n(), {
       signedIn: { ...user, instant_sync_availability: "no_public_address", instant_sync_help: "no-public-https-address" },
@@ -367,6 +384,42 @@ describe("OwnAccountSection", () => {
     expect(help?.getAttribute("target")).toBe("_blank")
     expect(help?.getAttribute("rel")).toBe("noreferrer")
     expect(help?.getAttribute("aria-describedby")).toBe("own-instant-sync-reason")
+  })
+
+  it("keeps the choice beside the reason while providers cannot reach this installation, so retries can stop", async () => {
+    await renderSection(testI18n(), {
+      signedIn: {
+        ...user,
+        instant_sync_availability: "not_reaching",
+        instant_sync_help: "providers-cannot-reach-the-installation",
+      },
+    })
+    expect(container.querySelector("#own-instant-sync-reason")?.textContent).toBe(
+      "Your calendar providers cannot reach this Calendar Ghost.",
+    )
+    const help = instantSync().querySelector("a")
+    expect(help?.textContent).toBe("Learn why (opens in a new tab)")
+    expect(help?.getAttribute("href")).toBe(
+      "https://calendarghost.com/docs/instant-sync#providers-cannot-reach-the-installation",
+    )
+    expect(help?.getAttribute("aria-describedby")).toBe("own-instant-sync-reason")
+    const choice = syncChoice()
+    expect(choice.value).toBe("instant")
+    expect(choice.disabled).toBe(false)
+    expect(choice.getAttribute("aria-describedby")).toBe("own-instant-sync-reason")
+    await choose(choice, "scheduled")
+    expect(sent("PUT", "/api/v1/account/instant-sync")).toEqual({ instant_sync: false })
+    expect(status()).toBe("Your rules now sync on their schedule only.")
+  })
+
+  it("offers no choice where nothing runs that it could stop", async () => {
+    for (const availability of ["not_in_plan", "no_public_address"] as const) {
+      await renderSection(testI18n(), { signedIn: { ...user, instant_sync_availability: availability } })
+      expect(container.querySelector("#own-instant-sync")).toBeNull()
+      expect(container.querySelector("#own-instant-sync-reason")).not.toBeNull()
+      act(() => root?.unmount())
+      root = null
+    }
   })
 
   it("says instant sync is unavailable for a reason this version does not know, without a link it cannot name", async () => {

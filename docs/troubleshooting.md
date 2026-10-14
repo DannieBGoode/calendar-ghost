@@ -361,25 +361,27 @@ as anyone wants Instant Sync, with **How to fix** linking here.
 ### Instant Sync needs an HTTPS public address
 
 **Symptom.** Installation health says people want instant sync, but this installation's public
-address uses plain HTTP. Each person's **Instant sync** switch under **Settings → Your account** is
-off and says Calendar Ghost needs a public HTTPS address.
+address uses plain HTTP. Each person's **Instant sync** under **Settings → Your account** says
+Calendar Ghost needs a public HTTPS address.
 
 **Confirm.** `CALENDAR_SYNC_PUBLIC_URL` in `.env` starts with `http://` and names a host on the
 internet. A plain HTTP address on this machine or your home network is never hinted: providers
-cannot reach it, and people's switches already say so.
+cannot reach it, and people's settings already say so.
 
 **Fix.** Google and Microsoft report changes only to an `https` address with a valid certificate.
 Serve `/api/v1/watch-notices/` through HTTPS, for example with a reverse proxy or Cloudflare
 Tunnel, set `CALENDAR_SYNC_PUBLIC_URL` to that `https` address, and run `docker compose up -d`.
 Within five minutes, Calendar Ghost asks each provider to report changes there. If you do not want
-Instant Sync, each person can turn **Instant sync** off, and the hint goes away. See
+Instant Sync, the hint does no harm: without an HTTPS address, Calendar Ghost asks no provider to
+report changes, and rules sync on their schedule. See
 [Instant Sync](instant-sync.md#no-public-https-address) for the requirements and proxy examples.
 
 ### Calendar providers cannot reach the installation
 
 **Symptom.** Installation health says people want instant sync, but Google or Microsoft cannot
-reach this installation. When no provider a person uses reaches it, their **Instant sync** switch is
-off and says so, and their rules say "Syncs every 5 minutes".
+reach this installation. When no provider a person uses reaches it, their **Instant sync** says so
+beside its choice, and their rules say "Syncs every 5 minutes". Calendar Ghost keeps asking the
+providers meanwhile; choosing **On schedule** there stops it.
 
 **Confirm.** From a machine outside your network, send a request shaped like Google's to an
 unknown registration. It changes nothing:
