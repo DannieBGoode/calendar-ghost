@@ -61,6 +61,7 @@ from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.watches import (
     CalendarWatch,
     CalendarWatchId,
+    DeliveryEvidence,
     RegistrationState,
     WatchRegistration,
     WatchRegistrationId,
@@ -811,6 +812,10 @@ class MemoryDatabase:
     incidents: dict[UserId, dict[str, MemoryIncident]] = field(default_factory=dict)
     """Each User's Incidents by key; like SQLite's, they change outside any unit of work, except
     as a unit's rule removals and account deletions change them when it commits."""
+    delivery_evidence: dict[tuple[ProviderKind, str], DeliveryEvidence] = field(
+        default_factory=dict
+    )
+    """Whether each provider reached each public address, as SQLite's installation table keeps."""
 
     def state_of(self, user_id: UserId) -> MemoryState:
         return self.partitions.setdefault(user_id, MemoryState())

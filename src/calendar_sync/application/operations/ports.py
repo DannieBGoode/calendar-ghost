@@ -8,7 +8,9 @@ from datetime import date, datetime, timedelta
 from types import TracebackType
 from typing import Literal, Protocol, Self
 
+from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.application.sync.ports import RulePreviewSummary, ScheduledRule
+from calendar_sync.application.sync.watch_ports import WatchNotice
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
@@ -135,6 +137,29 @@ class InstallationUnitOfWork(Protocol):
 
 class InstallationUnitOfWorkFactory(Protocol):
     def __call__(self) -> InstallationUnitOfWork: ...
+
+
+class InboxBusy(ApplicationError):
+    """The store stayed locked past the inbox's short wait; the provider sends the notice again."""
+
+
+class WatchNoticeInbox(Protocol):
+    """Where every User's Watch Notices are recorded (ADR 0029, amended by ADR 0036). It reads
+    and writes only Watch Registrations, Instant Sync Requests, and Delivery Evidence, and makes
+    no provider call."""
+
+    def record(
+        self,
+        notices: Sequence[WatchNotice],
+        provider: ProviderKind,
+        address_base: str,
+        at: datetime,
+    ) -> int:
+        """Apply each authentic notice in one short transaction; how many rule requests it
+        raised. A notice for an unknown or abandoned registration, another provider's, or one that
+        presents a wrong token or handle changes nothing. Raises InboxBusy when the store stays
+        locked past the inbox's wait."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
