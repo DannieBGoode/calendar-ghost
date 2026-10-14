@@ -15,13 +15,13 @@
   --muted: oklch(0.95 0.012 285);
   --muted-foreground: oklch(0.45 0.035 280);
   --primary: oklch(0.47 0.15 278);
-  --primary-foreground: oklch(1 0 0);
+  --primary-foreground: oklch(0.99 0.004 285);
   --primary-soft: oklch(0.94 0.03 280);
   --border: oklch(0.90 0.014 285);
-  --input: oklch(0.65 0.02 285);
+  --input: oklch(0.62 0.02 285);
   --ring: oklch(0.47 0.15 278);
   --destructive: oklch(0.50 0.18 25);
-  --destructive-foreground: oklch(1 0 0);
+  --destructive-foreground: oklch(0.99 0.004 285);
   --destructive-soft: oklch(0.95 0.035 25);
   --destructive-soft-foreground: oklch(0.38 0.14 25);
   --destructive-surface: oklch(0.975 0.014 25);
@@ -413,6 +413,15 @@ p {
 
 .field-hint {
   color: var(--muted-foreground);
+}
+
+/* A status line stays mounted so screen readers announce it, and takes no space while empty. */
+.field-hint:empty {
+  display: none;
+}
+
+.field-hint[data-tone="attention"] {
+  color: var(--warning-foreground);
 }
 
 .field-error {
@@ -1817,16 +1826,6 @@ p {
   display: grid;
   max-width: 28rem;
   gap: 1rem;
-}
-
-/* A preference row's own checkbox sits on the row, not in a padded checkbox box: two classes, so it
-   wins over .checkbox-row, which comes later in this file. Beside its explanation it never shrinks,
-   so its label stays on one line; stacked on a phone it may still wrap. */
-.checkbox-row.incident-email-toggle {
-  min-height: 0;
-  flex: none;
-  padding: 0;
-  background: transparent;
 }
 
 /* A preference's explanation keeps a readable line length beside its control. */
@@ -3650,10 +3649,12 @@ a.recent-change-rule:focus-visible {
   background: var(--surface);
 }
 
+/* The policy groups below reuse the endpoints' columns, so both sections share one left and right edge. */
 .rule-form {
+  --direction-width: 2rem;
   display: grid;
   margin-top: 1.5rem;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--direction-width) minmax(0, 1fr);
   align-items: start;
   gap: 1.5rem;
 }
@@ -3671,55 +3672,72 @@ a.recent-change-rule:focus-visible {
 .rule-form legend {
   margin-bottom: 1rem;
   padding: 0;
-  font-size: 0.875rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 550;
+  line-height: 1.5rem;
 }
 
+/* Sits on the legends' line, so it reads "Source calendar → Destination calendar". */
 .direction-marker {
   display: flex;
-  width: 2rem;
-  height: 2rem;
-  margin-top: 4.75rem;
+  height: 1.5rem;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: var(--muted);
   color: var(--muted-foreground);
 }
 
 .direction-marker svg {
-  width: 1rem;
+  width: 1.125rem;
 }
 
+/* The legend sits on the top border, so the border doubles as the section divider. */
 .rule-form .policy-fields {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.5rem;
-  padding-top: 1.25rem;
+  margin-top: 0.5rem;
   border-top: 1px solid var(--border);
 }
 
 .rule-form .policy-fields legend {
-  grid-column: 1 / -1;
-  margin-bottom: -0.25rem;
+  padding-right: 0.75rem;
+}
+
+.policy-groups,
+.policy-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* How events look on the left, which events to include on the right. */
+.rule-form .policy-groups {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--direction-width) minmax(0, 1fr);
+  align-items: start;
+  gap: 1.5rem;
+}
+
+.rule-form .policy-group + .policy-group {
+  grid-column: 3;
 }
 
 .checkbox-row {
   display: flex;
-  min-height: 4rem;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  background: var(--surface);
   cursor: pointer;
 }
 
 .checkbox-row input {
   width: 1rem;
   height: 1rem;
+  flex: none;
+  margin-top: 0.125rem;
   accent-color: var(--primary);
+}
+
+.checkbox-row input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .checkbox-row span {
@@ -3730,6 +3748,7 @@ a.recent-change-rule:focus-visible {
 
 .checkbox-row strong {
   font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .checkbox-row small {
@@ -3742,6 +3761,7 @@ a.recent-change-rule:focus-visible {
   grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
+  gap: 0.75rem;
 }
 
 .back-link {
@@ -4672,7 +4692,7 @@ thead + .incident-group th {
   gap: 0.75rem;
   padding: 0.25rem 0.75rem;
   border: 1px solid var(--input);
-  border-radius: 0.375rem;
+  border-radius: calc(var(--radius) - 2px);
   background: var(--background);
   color: var(--foreground);
   text-align: left;
@@ -4710,7 +4730,7 @@ thead + .incident-group th {
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   background: var(--background);
-  box-shadow: 0 12px 32px -12px color-mix(in oklch, var(--foreground) 35%, transparent);
+  box-shadow: var(--menu-shadow);
 }
 
 .account-select-list[hidden] {
@@ -4868,7 +4888,7 @@ thead + .incident-group th {
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   background: var(--background);
-  box-shadow: 0 12px 32px -12px color-mix(in oklch, var(--foreground) 35%, transparent);
+  box-shadow: var(--menu-shadow);
 }
 
 .rule-picker-list[hidden] {
@@ -5514,18 +5534,24 @@ thead + .incident-group th {
   }
 
   .direction-marker {
-    margin: -0.25rem 0;
+    width: var(--direction-width);
+    margin: -0.5rem 0;
     transform: rotate(90deg);
   }
 
-  .rule-form .policy-fields {
+  .rule-form .policy-fields,
+  .rule-form .policy-group + .policy-group,
+  .form-actions {
     grid-column: auto;
+  }
+
+  .rule-form .policy-groups {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .rule-form .policy-fields legend,
-  .form-actions {
-    grid-column: auto;
+  /* Stacked, the primary action leads. */
+  .rule-form .form-actions {
+    flex-direction: column-reverse;
   }
 
   .form-actions {

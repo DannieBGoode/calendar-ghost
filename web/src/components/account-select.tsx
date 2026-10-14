@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react"
 import { AccountAvatar } from "@/components/account-avatar"
 import { useI18n } from "@/i18n/provider"
 import type { ConnectedAccount } from "@/lib/api"
+import { accountNoun } from "@/lib/providers"
 import {
   isTypeaheadKey,
   listCommand,
@@ -150,6 +151,7 @@ export function AccountSelect({
 }
 
 function AccountOptionContent({ account }: { account: ConnectedAccount }) {
+  const i18n = useI18n()
   return (
     <span className="account-select-option-content">
       <AccountAvatar
@@ -162,6 +164,8 @@ function AccountOptionContent({ account }: { account: ConnectedAccount }) {
       <span className="account-select-copy">
         <span className="account-select-name">{account.display_name}</span>
         <span className="account-select-email">{account.email}</span>
+        {/* The provider's mark on the avatar is hidden from assistive technology; name it here. */}
+        <span className="sr-only">{accountNoun(i18n, account.provider)}</span>
       </span>
     </span>
   )
