@@ -47,7 +47,8 @@
     "instantSync": {
       "title": "Instant sync",
       "body": "Your rules sync soon after a change in their source calendar, not only on their schedule.",
-      "label": "Sync soon after each change",
+      "instant": "Instantly",
+      "scheduled": "On schedule",
       "on": "Your rules now sync soon after each change in their source calendars.",
       "off": "Your rules now sync on their schedule only.",
       "blocked": {

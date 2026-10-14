@@ -33,7 +33,7 @@ come right after this work and plug into one port; nothing in this design waits 
    administrator toggle.
 4. **The setting explains itself.** When the installation cannot offer Instant Sync, or the User's
    Plan does not include it, or providers are known not to reach the installation, the row shows
-   the reason in place of the switch, with a "Learn why" link to the section of
+   the reason in place of the choice, with a "Learn why" link to the section of
    `docs/instant-sync.md` that explains the fix, as incident emails do without email.
 5. **Durable request, in-process dispatcher.** The webhook records a durable, per-rule Instant Sync
    Request and wakes a dispatcher, which runs the rule through the scheduler's own path.
@@ -339,8 +339,7 @@ rule cadence reasons, and Installation Health. It never removes watches or block
   its docs anchor). Rule responses gain `effective_cadence` with its reason and `poll_every`. The
   OpenAPI file and web types are regenerated.
 - **Web UI:**
-  - In account settings, an "Instant sync" switch. When it is unavailable, the row shows the reason
-    and "Learn why" in its place.
+  - In account settings, an "Instant sync" dropdown: "Instantly" or "On schedule". When it is unavailable, the row shows the reason and "Learn why" in its place.
   - On the rule page, "Syncs instantly" or "Syncs every 5 minutes", with the reason.
   - All text is in the i18n catalogs.
 - **Installation Health hints** for administrators:

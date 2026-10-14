@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { LearnWhyLink } from "@/components/learn-why-link"
+import { NativeSelect } from "@/components/ui/native-select"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { api, type SessionStatus, type SignedInUser } from "@/lib/api"
@@ -8,9 +9,10 @@ import { instantSyncBlock, instantSyncHelpUrl } from "@/lib/instant-sync"
 
 /**
  * Whether the User's rules run soon after their provider reports a change (Instant Sync), beside
- * incident emails. Where it cannot run for them, the row offers no switch: like incident emails
- * without email, it says why and links to the section of the Instant Sync guide that explains the
- * fix.
+ * incident emails: a choice between syncing instantly and on schedule, sized like the Appearance
+ * choices. Where it cannot run for them, the row offers no choice: like incident
+ * emails without email, it says why and links to the section of the Instant Sync guide that
+ * explains the fix.
  */
 export function InstantSyncItem({ user, onDone }: { user: SignedInUser; onDone: (message: string) => void }) {
   const block = instantSyncBlock(user.instant_sync_availability)
@@ -45,26 +47,26 @@ function InstantSyncChoice({ user, onDone }: { user: SignedInUser; onDone: (mess
   const i18n = useI18n()
   const { t } = i18n
   const change = useInstantSyncChange(onDone)
-  const checked = change.isPending ? change.variables : user.instant_sync
+  const instant = change.isPending ? change.variables : user.instant_sync
   return (
     <div className="setting-item">
       <div className="setting-row">
         <div className="setting-copy">
-          <h3>{t("settings.ownAccount.instantSync.title")}</h3>
+          <h3 id="own-instant-sync-title">{t("settings.ownAccount.instantSync.title")}</h3>
           <p>{t("settings.ownAccount.instantSync.body")}</p>
         </div>
-        <label className="checkbox-row instant-sync-toggle" htmlFor="own-instant-sync">
-          <input
+        <div className="appearance-control">
+          <NativeSelect
             id="own-instant-sync"
-            type="checkbox"
-            checked={checked}
+            aria-labelledby="own-instant-sync-title"
+            value={instant ? "instant" : "scheduled"}
             disabled={change.isPending}
-            onChange={(event) => change.mutate(event.target.checked)}
-          />
-          <span>
-            <strong>{t("settings.ownAccount.instantSync.label")}</strong>
-          </span>
-        </label>
+            onChange={(event) => change.mutate(event.target.value === "instant")}
+          >
+            <option value="instant">{t("settings.ownAccount.instantSync.instant")}</option>
+            <option value="scheduled">{t("settings.ownAccount.instantSync.scheduled")}</option>
+          </NativeSelect>
+        </div>
       </div>
       {change.error && (
         <p className="field-error" role="alert">
@@ -76,7 +78,7 @@ function InstantSyncChoice({ user, onDone }: { user: SignedInUser; onDone: (mess
 }
 
 /**
- * Changes the choice. The switch shows the requested value only while the change is pending; then
+ * Changes the choice. The dropdown shows the requested value only while the change is pending; then
  * it shows the session's, which the change's answer updates at once and every later refetch keeps
  * current, such as after another tab changed it.
  */

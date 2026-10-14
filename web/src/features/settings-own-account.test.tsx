@@ -138,6 +138,20 @@ function type(input: HTMLInputElement, value: string) {
   })
 }
 
+function syncChoice(): HTMLSelectElement {
+  const found = container.querySelector<HTMLSelectElement>("select#own-instant-sync")
+  if (!found) throw new Error("No instant sync choice")
+  return found
+}
+
+async function choose(select: HTMLSelectElement, value: string) {
+  act(() => {
+    select.value = value
+    select.dispatchEvent(new Event("change", { bubbles: true }))
+  })
+  await settle()
+}
+
 async function click(target: HTMLElement) {
   act(() => target.click())
   await settle()
@@ -292,11 +306,13 @@ describe("OwnAccountSection", () => {
 
   it("turns instant sync off", async () => {
     await renderSection(testI18n())
-    const toggle = field("own-instant-sync")
-    expect(toggle.checked).toBe(true)
-    expect(toggle.disabled).toBe(false)
+    const choice = syncChoice()
+    expect(choice.value).toBe("instant")
+    expect(choice.disabled).toBe(false)
+    expect([...choice.options].map((option) => option.textContent)).toEqual(["Instantly", "On schedule"])
+    expect(document.getElementById(choice.getAttribute("aria-labelledby") ?? "")?.textContent).toBe("Instant sync")
     expect(container.querySelector("#own-instant-sync-reason")).toBeNull()
-    await click(toggle)
+    await choose(choice, "scheduled")
     expect(sent("PUT", "/api/v1/account/instant-sync")).toEqual({ instant_sync: false })
     expect(status()).toBe("Your rules now sync on their schedule only.")
   })
@@ -306,10 +322,9 @@ describe("OwnAccountSection", () => {
       signedIn: { ...user, instant_sync: false, instant_sync_availability: "off_by_user" },
       answers: { "PUT /api/v1/account/instant-sync": jsonResponse({ ...user, instant_sync: true }) },
     })
-    const toggle = field("own-instant-sync")
-    expect(toggle.checked).toBe(false)
-    expect(toggle.disabled).toBe(false)
-    await click(toggle)
+    const choice = syncChoice()
+    expect(choice.value).toBe("scheduled")
+    await choose(choice, "instant")
     expect(sent("PUT", "/api/v1/account/instant-sync")).toEqual({ instant_sync: true })
     expect(status()).toBe("Your rules now sync soon after each change in their source calendars.")
   })
@@ -317,7 +332,7 @@ describe("OwnAccountSection", () => {
   it("shows the session's latest instant sync choice once a change is done, not the change's answer", async () => {
     const i18n = testI18n()
     await renderSection(i18n)
-    await click(field("own-instant-sync"))
+    await choose(syncChoice(), "scheduled")
     expect(sent("PUT", "/api/v1/account/instant-sync")).toEqual({ instant_sync: false })
     // The session's refetch after the change, then a later one after another tab turned it on.
     for (const instant_sync of [false, true]) {
@@ -331,7 +346,7 @@ describe("OwnAccountSection", () => {
         )
       })
       await settle()
-      expect(field("own-instant-sync").checked).toBe(instant_sync)
+      expect(syncChoice().value).toBe(instant_sync ? "instant" : "scheduled")
     }
   })
 

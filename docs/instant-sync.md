@@ -145,7 +145,7 @@ the reports they bring until then are answered `404` and change nothing.
    [Waiting for the provider](#waiting-for-the-provider).
 2. Edit an event in the rule's Source Calendar. **Activity** usually lists the change within a
    minute.
-3. If **Instant sync** under **Settings → Your account** shows a reason instead of its switch,
+3. If **Instant sync** under **Settings → Your account** shows a reason instead of its choice,
    its **Learn why** link opens the matching section below. Administrators also see the cause on
    **People** under **Installation health**.
 4. If you use Outlook, check from outside your network that the proxy keeps the query string,
@@ -197,7 +197,7 @@ Calendar Ghost answers `202 Accepted` and changes nothing, because no registrati
 identifier. A `404` in JSON comes from Calendar Ghost when its `CALENDAR_SYNC_PUBLIC_URL` is not an
 `https` address, as it then has no notices route. Anything else comes from the proxy or tunnel:
 fix it as [troubleshooting](troubleshooting.md#calendar-providers-cannot-reach-the-installation)
-explains. Once a report arrives, the switch comes back. An authenticated report always counts as
+explains. Once a report arrives, the choice comes back. An authenticated report always counts as
 proof that delivery works, so a rule never waits on this check.
 
 ### Waiting for the provider

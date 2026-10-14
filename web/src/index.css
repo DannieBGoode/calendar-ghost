@@ -1819,11 +1819,10 @@ p {
   gap: 1rem;
 }
 
-/* A preference row's own switch sits on the row, not in a padded checkbox box: two classes, so it
+/* A preference row's own checkbox sits on the row, not in a padded checkbox box: two classes, so it
    wins over .checkbox-row, which comes later in this file. Beside its explanation it never shrinks,
    so its label stays on one line; stacked on a phone it may still wrap. */
-.checkbox-row.incident-email-toggle,
-.checkbox-row.instant-sync-toggle {
+.checkbox-row.incident-email-toggle {
   min-height: 0;
   flex: none;
   padding: 0;
