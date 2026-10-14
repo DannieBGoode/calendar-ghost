@@ -18,9 +18,11 @@ INSTALLATION_TABLES = {
 }
 SOURCE = Path(__file__).resolve().parents[2] / "src" / "calendar_sync"
 # Only these may receive the installation-wide unit of work: the ports that declare it, the
-# adapters that implement it and run migrations, the scheduled pass, the Operator Overview, and
-# the composition root that hands it to both.
+# adapters that implement it and run migrations, the scheduled pass, Instant Sync's upkeep and
+# dispatch, which run beside it (ADR 0036), the Operator Overview, and the composition root that
+# hands it to them.
 INSTALLATION_UNIT_RECEIVERS = {
+    "application/operations/instant_sync.py",
     "application/operations/operator_overview.py",
     "application/operations/ports.py",
     "application/operations/scheduled_pass.py",
