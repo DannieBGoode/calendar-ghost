@@ -258,3 +258,47 @@ def test_a_preview_shows_a_series_deletion_that_only_its_occurrence_reports() ->
 
     removal = (master.reference.event_id.value, "delete", SyncReason.SOURCE_CANCELLED)
     assert planned == _recorded(factory, recorded) == {removal}
+
+
+def _lone_projection_of(
+    calendars: FakeCalendars,
+) -> tuple[CalendarEvent, InMemoryUserUnitOfWorkFactory]:
+    invited = calendars.put(occurrence(series("their-series"), 2, title="Planning"))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    return invited, factory
+
+
+def test_a_preview_keeps_a_lone_projection_its_excluded_series_cannot_find() -> None:
+    # The run reads the occurrence from its series before removing its single projection.
+    calendars = FakeCalendars()
+    invited, factory = _lone_projection_of(calendars)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    declined = replace(series("their-series"), response=InvitationResponse.DECLINED)
+    without_it = tuple(start for start in STARTS if start != week_start(2))
+    calendars.report(calendars.put(declined, starts=without_it))
+
+    planned = _preview_then_run(factory, calendars)
+
+    assert lone in calendars.events
+    assert not any(action == "delete" for _event, action, _reason in planned)
+
+
+def test_a_preview_blocks_removing_a_lone_projection_it_cannot_prove_the_rules() -> None:
+    calendars = FakeCalendars()
+    invited, factory = _lone_projection_of(calendars)
+    lone = factory.state.mappings[(rule().id, invited.reference)].destination
+    calendars.put(replace(calendars.events[lone], managed_origin=None))
+    calendars.put(_cancelled(series("their-series")), starts=STARTS)
+    calendars.report(calendars.put(_cancelled(invited, "invited-deleted")))
+    _pause(factory)
+
+    preview = _preview(factory, calendars)
+
+    assert _planned(preview) == {
+        (
+            invited.reference.event_id.value,
+            "conflict",
+            SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT,
+        )
+    }

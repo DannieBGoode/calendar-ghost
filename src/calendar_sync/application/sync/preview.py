@@ -323,18 +323,12 @@ class _Planner:
         start = event.occurrence.original_start
         mapping = self.destination.mapping(series.reference)
         recorded = self.uow.occurrences.get(mapping.id, start) if mapping else None
-        lone = self.destination.mapping(event.reference)
-        if (
-            lone is not None
-            and lone.occurrence is not None
-            and series_decision.action is not SyncAction.CREATE
-            and (mapping is None or series_decision.action is SyncAction.DELETE)
+        if series_decision.action is not SyncAction.CREATE and (
+            mapping is None or series_decision.action is SyncAction.DELETE
         ):
-            # Projected on its own while its series was not shown; a series the rule does not
-            # project removes that projection, as a run does once it decides the series.
-            reason = self.events.decisions.lone_projection_removal(self.rule, series, event)
-            if reason is not None:
-                return SyncDecision(SyncAction.DELETE, reason)
+            removal = self._lone_removal(event, series)
+            if removal is not None:
+                return removal
         if series_decision.action is SyncAction.CREATE:
             # The run writes the series, or writes it again, then decides the occurrence in it.
             return self.events.decisions.decide_occurrence_in_new_series(
@@ -364,6 +358,31 @@ class _Planner:
                 self.rule, replace(situation, has_live_occurrences=False)
             )
         return decision
+
+    def _lone_removal(self, event: CalendarEvent, series: CalendarEvent) -> SyncDecision | None:
+        """The removal of the occurrence's single projection, projected while its series was not
+        shown, by a series the rule does not project; as a run, it reads the occurrence from that
+        series, and blocks a projection it cannot prove the rule's."""
+        lone = self.destination.mapping(event.reference)
+        if lone is None or lone.occurrence is None:
+            return None
+        decisions = self.events.decisions
+        occurrence = (
+            None
+            if series.status is EventStatus.CANCELLED
+            else self.events.provider.get_occurrence(
+                series.reference, lone.occurrence.original_start
+            )
+        )
+        reason = decisions.lone_projection_removal(self.rule, series, occurrence)
+        if reason is None:
+            return None
+        conflict = decisions.ownership_conflict(
+            self.rule, event.as_single(), lone, self.destination.get(lone.destination)
+        )
+        if conflict is not None:
+            return SyncDecision(SyncAction.CONFLICT, conflict)
+        return SyncDecision(SyncAction.DELETE, reason)
 
     def _has_live_occurrences(self, series: EventRef) -> bool:
         if series not in self._live:

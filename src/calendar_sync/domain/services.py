@@ -309,6 +309,16 @@ class SyncDecisionService:
         return SyncDecision(SyncAction.UPDATE, changed, projection)
 
     @staticmethod
+    def ownership_conflict(
+        rule: SyncRule,
+        source_event: CalendarEvent,
+        mapping: EventMapping,
+        actual_destination: CalendarEvent | None,
+    ) -> SyncReason | None:
+        """Why the mapping or its destination cannot prove the rule owns the projection, if so."""
+        return _identity_conflict(rule, source_event, mapping, actual_destination)
+
+    @staticmethod
     def lone_projection_removal(
         rule: SyncRule, source_series: CalendarEvent, occurrence: CalendarEvent | None
     ) -> SyncReason | None:
