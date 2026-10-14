@@ -196,7 +196,7 @@ class ExecuteSyncRule:
                 self._reproject_remaining(run)
             self.exception_replays.finish_pending(run)
             self.change_feeds.advance(run, feeds)
-        log.finished(run.counts)
+        log.finished(run.counts, run.unrecorded)
 
         counts = run.counts
         return SyncRunResult(

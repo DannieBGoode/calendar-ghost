@@ -147,7 +147,7 @@ def test_a_first_run_logs_its_start_listing_and_finish(logs: pytest.LogCaptureFi
     ]
     assert lines(logs, "run finished") == [
         f"run finished rule=rule-1 run={result.run_id} in 0s created=2 updated=0 deleted=0 "
-        "ignored=0 conflicts=0 provider_calls=1630 token_refreshes=1 rate_limited=2 "
+        "ignored=0 conflicts=0 unrecorded=0 provider_calls=1630 token_refreshes=1 rate_limited=2 "
         "server_errors=1 slowest_call=1.3s"
     ]
 
