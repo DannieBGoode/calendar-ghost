@@ -50,7 +50,9 @@ IncidentStepValue = Literal[
     "see_history",
 ]
 """An Incident's one next step (ADR 0033), as the domain decides it for the Web UI and email."""
-HintKindValue = Literal["shared_cause", "testing_mode", "unrecognized"]
+HintKindValue = Literal[
+    "shared_cause", "testing_mode", "unrecognized", "plain_http_address", "notices_not_arriving"
+]
 InstantSyncAvailabilityValue = Literal[
     "on", "off_by_user", "not_in_plan", "no_public_address", "not_reaching"
 ]
@@ -810,7 +812,8 @@ class InstallationHintResponse(ApiResponse):
     """A likely cause from a pattern across Users; it names none of them (ADR 0031)."""
 
     kind: HintKindValue
-    cause: CauseValue
+    cause: CauseValue | None
+    """The administrator's Cause the pattern shows; null for a hint about Instant Sync."""
     users: int
     """How many Users show the pattern."""
     anchor: str

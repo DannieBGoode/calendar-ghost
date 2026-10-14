@@ -273,13 +273,15 @@ _Avoid_: Error reason, root cause, error message
 **Installation Hint**:
 A likely cause Installation Health suggests to Installation Administrators, never from one User's
 content: an administrator's Cause any User met within a day, since only the administrator can fix
-it; and, as patterns across Users, Google refusing two or more Users' grants about 7 days after they authorized, which an OAuth app
-in Testing mode does; or two or more Users failing within a day for a reason Calendar Ghost does not
-recognize (`unknown`), which the service logs name by the provider's reason code. Each hint is per
-provider and names it. Each names its Cause, how
-many Users show it, and the troubleshooting section that explains the fix. It names no User, rule,
-calendar, or account. Hints are what People flags; a User's own problems are not flagged, and the
-administrator finds them, with what the User does, on that User's page.
+it; as patterns across Users, Google refusing two or more Users' grants about 7 days after they
+authorized, which an OAuth app in Testing mode does, or two or more Users failing within a day for
+a reason Calendar Ghost does not recognize (`unknown`), which the service logs name by the
+provider's reason code; and, while any User who may sign in wants Instant Sync, a public address
+that uses plain `http` at a host the internet reaches, or a provider whose Delivery Evidence is
+failing. Each hint names its provider when it concerns one, its Cause when a failed provider call
+explains it, how many Users show it, and the troubleshooting section that explains the fix. It
+names no User, rule, calendar, or account. Hints are what People flags; a User's own problems are
+not flagged, and the administrator finds them, with what the User does, on that User's page.
 _Avoid_: Diagnosis, alert, recommendation
 
 ## Access

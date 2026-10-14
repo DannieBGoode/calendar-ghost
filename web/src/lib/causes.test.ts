@@ -130,4 +130,19 @@ describe("hintText", () => {
       "3 people failed for a reason Calendar Ghost does not recognize. The service logs name the calendar provider's reason.",
     )
   })
+
+  it("says what keeps instant sync from people, and which provider cannot reach the installation", () => {
+    expect(hintText(i18n, { ...hint("plain_http_address", null), provider: null })).toBe(
+      "3 people want instant sync, but calendar providers report changes only to an HTTPS address, and this installation's public address uses plain HTTP.",
+    )
+    expect(hintText(i18n, { ...hint("plain_http_address", null), provider: null, users: 1 })).toBe(
+      "1 person wants instant sync, but calendar providers report changes only to an HTTPS address, and this installation's public address uses plain HTTP.",
+    )
+    expect(hintText(i18n, hint("notices_not_arriving", null))).toBe(
+      "3 people want instant sync, but Google cannot reach this installation, so changes in Google Calendar wait for the next scheduled sync.",
+    )
+    expect(hintText(i18n, { ...hint("notices_not_arriving", null), provider: "outlook" })).toBe(
+      "3 people want instant sync, but Microsoft cannot reach this installation, so changes in Outlook wait for the next scheduled sync.",
+    )
+  })
 })

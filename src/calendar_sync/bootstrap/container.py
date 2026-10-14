@@ -50,8 +50,13 @@ from calendar_sync.application.operations.activity import (
 )
 from calendar_sync.application.operations.installation_health import (
     GetInstallationHealth,
+    HintSources,
     InstallationIncidentWatch,
     InstallationNotifications,
+)
+from calendar_sync.application.operations.installation_hints import (
+    InstantSyncSignals,
+    instant_sync_signals,
 )
 from calendar_sync.application.operations.instant_sync import (
     InstantDispatch,
@@ -534,8 +539,11 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             lambda users: {user: status.health for user, status in statuses.of(users).items()},
             scheduler,
             adapters.clock,
-            _failure_causes(adapters.installation_units),
-            adapters.providers.guides,
+            HintSources(
+                _failure_causes(adapters.installation_units),
+                adapters.providers.guides,
+                _instant_sync_signals(adapters, public_address(settings)),
+            ),
             adapters.providers.client_secrets,
         ),
         operator_overview=OperatorOverview(
@@ -661,6 +669,21 @@ def _failure_causes(
     def read(since: datetime) -> Sequence[CauseSighting]:
         with installation() as reading:
             return reading.failure_causes(since)
+
+    return read
+
+
+def _instant_sync_signals(
+    adapters: Adapters, address: str | None
+) -> Callable[[], InstantSyncSignals]:
+    """Who wants Instant Sync and whether providers reach the public address, for Installation
+    Hints."""
+
+    def read() -> InstantSyncSignals:
+        with adapters.installation_units() as reading:
+            owners = reading.instant_sync_owners()
+        evidence = adapters.delivery_evidence.evidence(address) if address else {}
+        return instant_sync_signals(owners, adapters.sync_cadence, address, evidence)
 
     return read
 

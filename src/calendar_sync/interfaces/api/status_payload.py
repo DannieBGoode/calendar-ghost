@@ -171,7 +171,7 @@ def installation_health_response(health: InstallationHealth) -> InstallationHeal
         hints=[
             InstallationHintResponse(
                 kind=hint.kind.value,
-                cause=hint.cause.value,
+                cause=hint.cause.value if hint.cause is not None else None,
                 users=hint.users,
                 anchor=hint.anchor,
                 provider=hint.provider.value if hint.provider else None,

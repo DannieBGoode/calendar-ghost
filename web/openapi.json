@@ -1126,25 +1126,34 @@
             "type": "string"
           },
           "cause": {
-            "enum": [
-              "api_disabled",
-              "quota_exceeded",
-              "oauth_client_invalid",
-              "access_revoked",
-              "calendar_forbidden",
-              "calendar_not_found",
-              "rate_limited",
-              "temporary",
-              "unknown"
+            "anyOf": [
+              {
+                "enum": [
+                  "api_disabled",
+                  "quota_exceeded",
+                  "oauth_client_invalid",
+                  "access_revoked",
+                  "calendar_forbidden",
+                  "calendar_not_found",
+                  "rate_limited",
+                  "temporary",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Cause",
-            "type": "string"
+            "title": "Cause"
           },
           "kind": {
             "enum": [
               "shared_cause",
               "testing_mode",
-              "unrecognized"
+              "unrecognized",
+              "plain_http_address",
+              "notices_not_arriving"
             ],
             "title": "Kind",
             "type": "string"

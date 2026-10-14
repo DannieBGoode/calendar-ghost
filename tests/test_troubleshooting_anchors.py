@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.operations.installation_hints import UNRECOGNIZED_ANCHOR
+from calendar_sync.application.operations.installation_hints import (
+    NOT_ARRIVING_ANCHOR,
+    PLAIN_HTTP_ANCHOR,
+    UNRECOGNIZED_ANCHOR,
+)
 from calendar_sync.application.sync.provider_descriptors import ProviderGuide
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import calendar_providers
@@ -73,3 +77,9 @@ def test_no_provider_sends_people_to_another_providers_section(guide: ProviderGu
 
     for anchor in {*guide.cause_anchors.values(), *lifetime}:
         assert not any(name in anchor.split("-") for name in others), anchor
+
+
+def test_every_section_an_instant_sync_hint_links_to_is_in_the_guide() -> None:
+    linked = {PLAIN_HTTP_ANCHOR, NOT_ARRIVING_ANCHOR}
+
+    assert linked <= guide_anchors(), linked - guide_anchors()

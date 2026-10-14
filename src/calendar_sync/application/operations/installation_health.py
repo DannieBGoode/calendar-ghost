@@ -18,7 +18,9 @@ from calendar_sync.application.identity.ports import UserDirectory
 from calendar_sync.application.operations.installation_hints import (
     HINT_WINDOW,
     InstallationHint,
+    InstantSyncSignals,
     installation_hints,
+    instant_sync_hints,
 )
 from calendar_sync.application.operations.ports import (
     CauseSighting,
@@ -151,6 +153,18 @@ class InstallationHealth:
         return self.status in NEEDS_ATTENTION or bool(self.incidents) or bool(self.hints)
 
 
+@dataclass(frozen=True, slots=True)
+class HintSources:
+    """What Installation Hints read, each at once for every User."""
+
+    sightings: Callable[[datetime], Sequence[CauseSighting]] = lambda _since: ()
+    """Every User's failures with a Cause from a time on."""
+    guides: Sequence[ProviderGuide] = ()
+    """Each provider's troubleshooting sections and patterns, which hints link to."""
+    instant_sync: Callable[[], InstantSyncSignals] = InstantSyncSignals
+    """Who wants Instant Sync, and what keeps providers from the public address (ADR 0036)."""
+
+
 @dataclass(slots=True)
 class GetInstallationHealth:
     users: UserDirectory
@@ -158,10 +172,8 @@ class GetInstallationHealth:
     """The Users' Installation Status verdicts, as their own Overviews show them, read at once."""
     scheduler: SchedulerHeartbeat | None
     clock: Clock
-    sightings: Callable[[datetime], Sequence[CauseSighting]] = lambda _since: ()
-    """Every User's failures with a Cause from a time on, read at once."""
-    guides: Sequence[ProviderGuide] = ()
-    """Each provider's troubleshooting sections and patterns, which hints link to."""
+    hint_sources: HintSources = field(default_factory=HintSources)
+    """What Installation Hints read."""
     secrets: Sequence[ClientSecretExpiry] = ()
     """When each configured provider's client secret expires, where the administrator said."""
 
@@ -178,13 +190,19 @@ class GetInstallationHealth:
         status = next(
             (verdict for verdict in _PRECEDENCE if verdict in present), StatusVerdict.SETUP
         )
-        may_sign_in = {user.id for user in active}
-        seen = [seen for seen in self.sightings(now - HINT_WINDOW) if seen.user in may_sign_in]
         return InstallationHealth(
             status=status,
             incidents=incidents,
             users=dict(counts),
             disabled_users=len(everyone) - len(active),
             checked_at=now,
-            hints=installation_hints(seen, now, self.guides),
+            hints=self._hints(now, {user.id for user in active}),
+        )
+
+    def _hints(self, now: datetime, may_sign_in: set[UserId]) -> tuple[InstallationHint, ...]:
+        sources = self.hint_sources
+        seen = [seen for seen in sources.sightings(now - HINT_WINDOW) if seen.user in may_sign_in]
+        return (
+            *installation_hints(seen, now, sources.guides),
+            *instant_sync_hints(sources.instant_sync(), sources.guides),
         )

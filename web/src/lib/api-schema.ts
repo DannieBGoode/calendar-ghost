@@ -1375,16 +1375,13 @@ export interface components {
         InstallationHintResponse: {
             /** Anchor */
             anchor: string;
-            /**
-             * Cause
-             * @enum {string}
-             */
-            cause: "api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown";
+            /** Cause */
+            cause: ("api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown") | null;
             /**
              * Kind
              * @enum {string}
              */
-            kind: "shared_cause" | "testing_mode" | "unrecognized";
+            kind: "shared_cause" | "testing_mode" | "unrecognized" | "plain_http_address" | "notices_not_arriving";
             /** Provider */
             provider: string | null;
             /** Users */
