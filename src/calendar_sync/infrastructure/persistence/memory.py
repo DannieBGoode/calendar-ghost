@@ -33,7 +33,7 @@ from calendar_sync.application.sync.ports import (
 )
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
-from calendar_sync.domain.audit import AuditEntry
+from calendar_sync.domain.audit import AuditEntry, RecordedDecision
 from calendar_sync.domain.causes import WITHOUT_CAUSE, Cause
 from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
@@ -406,6 +406,12 @@ class InMemoryAuditRepository:
 
     def append(self, entry: AuditEntry) -> None:
         self._state.audit.append(entry)
+
+    def latest_for(self, rule_id: SyncRuleId, source_event_id: str) -> RecordedDecision | None:
+        for entry in reversed(self._state.audit):
+            if entry.rule_id == rule_id and entry.source_event_id == source_event_id:
+                return RecordedDecision.of(entry)
+        return None
 
     def forget_change_values(self, before: datetime) -> None:
         self._state.change_values_forgotten_before = before
