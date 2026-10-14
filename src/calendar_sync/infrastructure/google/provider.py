@@ -74,23 +74,7 @@ class GoogleCalendarProvider:
 
     def _call(self, operation: str, request: Any) -> Any:
         """Send one Google request, tallying and logging it by its operation name alone."""
-        started = self._timer()
-        status: int | None = 200
-        rate_limited = False
-        try:
-            return request.execute()
-        except Exception as error:
-            status = _status_code(error)
-            rate_limited = status == 429 or (status == 403 and _is_rate_limit_error(error))
-            raise
-        finally:
-            record_call(
-                ProviderKind.GOOGLE,
-                operation,
-                status,
-                self._timer() - started,
-                rate_limited=rate_limited,
-            )
+        return send(operation, request, self._timer)
 
     def changes(
         self,
@@ -130,7 +114,7 @@ class GoogleCalendarProvider:
         except ProviderFailure:
             raise
         except Exception as error:
-            if cursor is not None and _status_code(error) == 410:
+            if cursor is not None and status_code(error) == 410:
                 return self.changes(source, None, not_ended_before)
             raise self._failure(error, source.connected_account_id) from error
 
@@ -147,7 +131,7 @@ class GoogleCalendarProvider:
             )
             return to_domain_event(payload, reference.calendar)
         except Exception as error:
-            if _status_code(error) == 404:
+            if status_code(error) == 404:
                 return None
             raise self._failure(error, reference.calendar.connected_account_id) from error
 
@@ -268,7 +252,7 @@ class GoogleCalendarProvider:
                 ),
             )
         except Exception as error:
-            if _status_code(error) not in {404, 410}:
+            if status_code(error) not in {404, 410}:
                 raise self._failure(error, destination.calendar.connected_account_id) from error
 
     def list_events(
@@ -348,7 +332,7 @@ class GoogleCalendarProvider:
         except Exception as error:
             # A missing series proves nothing about its occurrences; only an answered lookup may
             # report absence, because absence can authorize cancelling a destination occurrence.
-            if _status_code(error) in {404, 410}:
+            if status_code(error) in {404, 410}:
                 raise ProviderFailure(
                     ProviderFailureKind.TEMPORARY,
                     "Google series could not be read while resolving an occurrence",
@@ -401,7 +385,7 @@ class GoogleCalendarProvider:
                 parameters["pageToken"] = page_token
         except Exception as error:
             # A series Google cannot expand answers nothing; each lookup then decides on its own.
-            if _status_code(error) in UNLISTABLE_SERIES_STATUSES:
+            if status_code(error) in UNLISTABLE_SERIES_STATUSES:
                 return {}
             raise self._failure(error, series.calendar.connected_account_id) from error
         return found
@@ -433,7 +417,7 @@ class GoogleCalendarProvider:
         except Exception as error:
             # Only an answered lookup may report that none remain. A series Google cannot expand
             # counts as live, so it synchronizes as before instead of failing the whole rule.
-            if _status_code(error) in UNLISTABLE_SERIES_STATUSES:
+            if status_code(error) in UNLISTABLE_SERIES_STATUSES:
                 return True
             raise self._failure(error, series.calendar.connected_account_id) from error
         # Pages beyond the limit were not read, so the series is not proven empty.
@@ -471,7 +455,7 @@ class GoogleCalendarProvider:
                     break
                 parameters["pageToken"] = page_token
         except Exception as error:
-            if _status_code(error) in UNLISTABLE_SERIES_STATUSES:
+            if status_code(error) in UNLISTABLE_SERIES_STATUSES:
                 return ()
             raise self._failure(error, series.calendar.connected_account_id) from error
         return tuple(exceptions)
@@ -543,7 +527,7 @@ class GoogleCalendarProvider:
                 ),
             )
         except Exception as error:
-            if _status_code(error) not in {404, 410}:
+            if status_code(error) not in {404, 410}:
                 raise self._failure(
                     error, destination_series.calendar.connected_account_id
                 ) from error
@@ -551,18 +535,12 @@ class GoogleCalendarProvider:
     def _failure(
         self, error: Exception, account: ConnectedAccountId, *, event_scoped: bool = False
     ) -> ProviderFailure:
-        # The clock turns a Retry-After date into the seconds the retry helper waits. The account
-        # names whose access to renew when Google rejected its credentials, and when the request
-        # read them tells whether a Reauthorization has replaced them since.
+        # When the request read the account's credentials tells whether a Reauthorization has
+        # replaced them since.
         now = self._clock.now()
         read: dict[ConnectedAccountId, datetime] = self._credentials_read.__dict__.get("at", {})
-        return replace(
-            # A write to one event its calendar just listed or returned names that event alone.
-            _provider_failure(error, now, event_scoped),
-            account_id=account,
-            provider=ProviderKind.GOOGLE,
-            provider_label=GOOGLE.calendar_name,
-            attempted_at=read.get(account, now),
+        return google_failure(
+            error, account, attempted_at=read.get(account, now), now=now, event_scoped=event_scoped
         )
 
     def _owned_occurrence(
@@ -609,11 +587,57 @@ def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) 
     return origin is not None and origin.rule_id == rule_id and origin.source == source
 
 
+def send(operation: str, request: Any, timer: Callable[[], float]) -> Any:
+    """Send one Google request, tallying and logging it by its operation name alone."""
+    started = timer()
+    status: int | None = 200
+    rate_limited = False
+    try:
+        return request.execute()
+    except Exception as error:
+        status = status_code(error)
+        rate_limited = status == 429 or (status == 403 and _is_rate_limit_error(error))
+        raise
+    finally:
+        record_call(
+            ProviderKind.GOOGLE,
+            operation,
+            status,
+            timer() - started,
+            rate_limited=rate_limited,
+        )
+
+
+def google_failure(
+    error: Exception,
+    account: ConnectedAccountId,
+    *,
+    attempted_at: datetime,
+    now: datetime,
+    event_scoped: bool = False,
+) -> ProviderFailure:
+    """A Google error as the provider failure the account's request met.
+
+    The account names whose access to renew when Google rejected its credentials, and
+    `attempted_at`, when the request read them, tells whether a Reauthorization has replaced them
+    since (ADR 0027). `now` turns a Retry-After date into the seconds the retry helper waits. A
+    write to one event its calendar just listed or returned names that event alone
+    (`event_scoped`).
+    """
+    return replace(
+        _provider_failure(error, now, event_scoped),
+        account_id=account,
+        provider=ProviderKind.GOOGLE,
+        provider_label=GOOGLE.calendar_name,
+        attempted_at=attempted_at,
+    )
+
+
 def _provider_failure(error: Exception, now: datetime, event_scoped: bool) -> ProviderFailure:
     # Refreshing the access token fails before any request is sent, so it carries no status. A
     # revoked or expired grant needs reauthorization; google-auth marks token-endpoint outages
     # retryable. Their text can quote the token endpoint's response, so it is not kept.
-    status = _status_code(error)
+    status = status_code(error)
     cause = cause_of(error, status, event_scoped=event_scoped)
     if isinstance(error, RefreshError):
         if error.retryable:
@@ -680,7 +704,7 @@ def _retry_after_seconds(error: Exception, now: datetime) -> int | None:
     return retry_after_seconds(value if isinstance(value, str) else None, now)
 
 
-def _status_code(error: Exception) -> int | None:
+def status_code(error: Exception) -> int | None:
     response = getattr(error, "resp", None)
     status = getattr(response, "status", None)
     return int(status) if isinstance(status, int) else None

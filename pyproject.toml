@@ -129,6 +129,7 @@ source_modules = [
   "calendar_sync.infrastructure.providers",
   "calendar_sync.infrastructure.provider_calls",
   "calendar_sync.infrastructure.retry_after",
+  "calendar_sync.infrastructure.watch_failures",
 ]
 forbidden_modules = ["calendar_sync.infrastructure.google", "calendar_sync.infrastructure.microsoft"]
 
