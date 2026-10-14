@@ -19,10 +19,10 @@ const user: SignedInUser = {
   email: "robin@example.test",
   role: "user",
   notify_by_email: true,
+  language: null,
   instant_sync: true,
   instant_sync_availability: "on",
   instant_sync_help: null,
-  language: null,
 }
 
 const administrator: SignedInUser = { ...user, role: "installation_administrator" }
@@ -41,6 +41,7 @@ function serve(answers: Record<string, Response> = {}) {
     "PUT /api/v1/account/email": jsonResponse({ ...user, email: "robin@home.example.test" }),
     "PUT /api/v1/account/password": NO_CONTENT,
     "PUT /api/v1/account/notifications": jsonResponse({ ...user, notify_by_email: false }),
+    "PUT /api/v1/account/instant-sync": jsonResponse({ ...user, instant_sync: false, instant_sync_availability: "off_by_user" }),
     "DELETE /api/v1/account": jsonResponse({ rules: 1, deleted: 3, detached: 0, left: 0 }),
     "GET /api/v1/account/deletion": jsonResponse({ needs_another_administrator: false, last_user: false }),
     ...answers,
@@ -170,6 +171,12 @@ function incidentEmails(): HTMLElement {
   return heading.closest<HTMLElement>(".setting-item")!
 }
 
+function instantSync(): HTMLElement {
+  const heading = [...container.querySelectorAll("h3")].find((item) => item.textContent === "Instant sync")
+  if (!heading) throw new Error("No instant sync item")
+  return heading.closest<HTMLElement>(".setting-item")!
+}
+
 function status(): string | null | undefined {
   return container.querySelector("[role='status']")?.textContent
 }
@@ -281,6 +288,80 @@ describe("OwnAccountSection", () => {
     )
     expect(help?.getAttribute("target")).toBe("_blank")
     expect(help?.getAttribute("rel")).toBe("noreferrer")
+  })
+
+  it("turns instant sync off", async () => {
+    await renderSection(testI18n())
+    const toggle = field("own-instant-sync")
+    expect(toggle.checked).toBe(true)
+    expect(toggle.disabled).toBe(false)
+    expect(container.querySelector("#own-instant-sync-reason")).toBeNull()
+    await click(toggle)
+    expect(sent("PUT", "/api/v1/account/instant-sync")).toEqual({ instant_sync: false })
+    expect(status()).toBe("Your rules now sync on their schedule only.")
+  })
+
+  it("lets a User who turned instant sync off turn it on again", async () => {
+    await renderSection(testI18n(), {
+      signedIn: { ...user, instant_sync: false, instant_sync_availability: "off_by_user" },
+      answers: { "PUT /api/v1/account/instant-sync": jsonResponse({ ...user, instant_sync: true }) },
+    })
+    const toggle = field("own-instant-sync")
+    expect(toggle.checked).toBe(false)
+    expect(toggle.disabled).toBe(false)
+    await click(toggle)
+    expect(sent("PUT", "/api/v1/account/instant-sync")).toEqual({ instant_sync: true })
+    expect(status()).toBe("Your rules now sync soon after each change in their source calendars.")
+  })
+
+  it("disables instant sync where it cannot run, with the reason and where to learn why", async () => {
+    await renderSection(testI18n(), {
+      signedIn: { ...user, instant_sync_availability: "no_public_address", instant_sync_help: "no-public-https-address" },
+    })
+    const toggle = field("own-instant-sync")
+    expect(toggle.disabled).toBe(true)
+    expect(toggle.checked).toBe(false)
+    expect(toggle.getAttribute("aria-describedby")).toBe("own-instant-sync-reason")
+    expect(container.querySelector("#own-instant-sync-reason")?.textContent).toContain(
+      "Instant sync needs this Calendar Ghost to have a public HTTPS address, so your rules sync on their schedule.",
+    )
+    const help = instantSync().querySelector("a")
+    expect(help?.textContent).toBe("Learn why (opens in a new tab)")
+    expect(help?.getAttribute("href")).toBe("https://calendarghost.com/docs/instant-sync#no-public-https-address")
+    expect(help?.getAttribute("target")).toBe("_blank")
+    expect(help?.getAttribute("rel")).toBe("noreferrer")
+    await click(toggle)
+    expect(sent("PUT", "/api/v1/account/instant-sync")).toBeUndefined()
+  })
+
+  it("says instant sync is unavailable for a reason this version does not know, without a link it cannot name", async () => {
+    await renderSection(testI18n(), {
+      signedIn: {
+        ...user,
+        instant_sync_availability: "a_reason_from_a_later_server" as SignedInUser["instant_sync_availability"],
+        instant_sync_help: null,
+      },
+    })
+    expect(field("own-instant-sync").disabled).toBe(true)
+    expect(container.querySelector("#own-instant-sync-reason")?.textContent).toBe(
+      "Instant sync is not available here right now, so your rules sync on their schedule. ",
+    )
+    expect(instantSync().querySelector("a")).toBeNull()
+  })
+
+  it("has no untranslated text for each reason instant sync cannot run", async () => {
+    for (const [availability, help] of [
+      ["not_in_plan", "not-in-your-plan"],
+      ["no_public_address", "no-public-https-address"],
+      ["not_reaching", "providers-cannot-reach-the-installation"],
+    ] as const) {
+      await renderSection(pseudoI18n(), {
+        signedIn: { ...user, instant_sync_availability: availability, instant_sync_help: help },
+      })
+      expect(untranslatedText(container, [user.email!])).toEqual([])
+      act(() => root?.unmount())
+      root = null
+    }
   })
 
   it("asks the only administrator to make someone else an administrator before deleting their account", async () => {

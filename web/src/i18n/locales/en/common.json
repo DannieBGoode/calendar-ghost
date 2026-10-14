@@ -166,5 +166,6 @@
     "removalStopped": "Rule Removal stopped: {reason}",
     "authorizationLapsed": "A {account} needs reauthorization"
   },
+  "learnWhy": "Learn why",
   "opensInNewTab": " (opens in a new tab)"
 }

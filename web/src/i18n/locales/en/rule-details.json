@@ -45,11 +45,31 @@
     "title": "Latest runs",
     "activityLink": "This rule's activity",
     "lastSync": "Last sync",
-    "syncExplanation": "Applies changes made in {source} since the previous run. Runs every five minutes.",
+    "syncExplanation": "Applies changes made in {source} since the previous run.",
     "lastReconciliation": "Last reconciliation",
     "reconciliationExplanation": {
       "one": "Compares the events this rule wrote to {destination} from the past {count} day onward with their sources and reports any that differ, without changing them. Runs when you choose Reconcile now.",
       "other": "Compares the events this rule wrote to {destination} from the past {count} days onward with their sources and reports any that differ, without changing them. Runs when you choose Reconcile now."
+    }
+  },
+  "cadence": {
+    "label": "When it syncs",
+    "instant": "Syncs instantly",
+    "every": {
+      "one": "Syncs every minute",
+      "other": "Syncs every {count} minutes"
+    },
+    "instantExplanation": {
+      "one": "Runs soon after a change in {source}, and checks every minute as well.",
+      "other": "Runs soon after a change in {source}, and checks every {count} minutes as well."
+    },
+    "reason": {
+      "not_watchable": "{source} cannot report its changes to Calendar Ghost, as with a calendar shared from another Microsoft mailbox.",
+      "waiting_for_provider": "Instant sync starts once the calendar provider confirms it will report changes in {source}.",
+      "off_by_user": "You turned instant sync off in Settings.",
+      "not_in_plan": "Your plan does not include instant sync.",
+      "no_public_address": "Instant sync needs this Calendar Ghost to have a public HTTPS address.",
+      "not_reaching": "Calendar providers cannot reach this Calendar Ghost, so their change reports do not arrive."
     }
   },
   "outcome": {
