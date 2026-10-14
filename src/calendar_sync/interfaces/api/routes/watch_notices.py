@@ -7,13 +7,13 @@ notices, so it shows no registration. Nothing here logs a token, handle, registr
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import PlainTextResponse
+from starlette.concurrency import run_in_threadpool
 
 from calendar_sync.application.operations.ports import InboxBusy, WatchNoticeInbox
 from calendar_sync.application.sync.watch_ports import (
@@ -88,7 +88,9 @@ async def watch_notice(
             status.HTTP_400_BAD_REQUEST, "malformed_notice", "not a notice this provider sends"
         ) from None
     try:
-        requested = await asyncio.to_thread(
+        # On AnyIO's worker threads, apart from the event loop's default ones, which long requests
+        # such as Sync now or a preview can fill while a provider waits only seconds for the answer.
+        requested = await run_in_threadpool(
             inbox.record, notices, provider, address, datetime.now(UTC)
         )
     except InboxBusy:

@@ -7,6 +7,7 @@ import asyncio
 import threading
 import time
 from collections.abc import Callable, Collection
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -16,13 +17,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 from calendar_sync.application.operations.instant_sync import InstantRun
-from calendar_sync.application.operations.scheduled_pass import ScheduledRun
+from calendar_sync.application.operations.scheduled_pass import ScheduledPass, ScheduledRun
 from calendar_sync.application.sync.ports import ScheduledRule
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_container, instant_sync_address
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.infrastructure.clock import SystemClock
-from calendar_sync.infrastructure.scheduling import InstantSyncDispatcher, WatchKeeper
+from calendar_sync.infrastructure.scheduling import (
+    InstantSyncDispatcher,
+    SyncScheduler,
+    WatchKeeper,
+)
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from tests.helpers import rule
@@ -232,6 +238,57 @@ def test_stopping_the_dispatcher_lets_a_running_run_finish_its_acknowledgement()
 
     # The run's thread acknowledges its request; a request never acknowledged stays durable.
     assert finished.wait(5)
+
+
+class OnePass:
+    """A scheduled pass of one rule, with no account to check; it counts its runs."""
+
+    def __init__(self) -> None:
+        self.runs = 0
+
+    def begin(self) -> tuple[ScheduledRun, ...]:
+        return (_instant("rule-1").scheduled,)
+
+    def run(self, scheduled: ScheduledRun) -> None:
+        self.runs += 1
+
+    def checks_due(self) -> tuple[UserId, ...]:
+        return ()
+
+
+class CountingUpkeep:
+    def __init__(self) -> None:
+        self.cycles = 0
+
+    def run(self) -> None:
+        self.cycles += 1
+
+
+def test_the_loops_never_wait_for_the_threads_web_requests_use() -> None:
+    """The event loop's default threads, which `asyncio.to_thread` takes, are as few as five on
+    one CPU and serve the Web API's requests. Held there, each loop still runs: it has its own."""
+    release = threading.Event()
+    scheduled, dispatch, upkeep = OnePass(), Offering("rule-1"), CountingUpkeep()
+
+    async def scenario() -> None:
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(ThreadPoolExecutor(1))
+        holding = loop.run_in_executor(None, release.wait, 30)
+        try:
+            await asyncio.wait_for(
+                SyncScheduler(cast(ScheduledPass, scheduled)).run_once(), timeout=5
+            )
+            await _running(InstantSyncDispatcher(dispatch), lambda: dispatch.runs >= 1)
+            keeper = asyncio.create_task(WatchKeeper(upkeep).run_forever())
+            await _until(lambda: upkeep.cycles >= 1)
+            keeper.cancel()
+        finally:
+            release.set()
+            await holding
+
+    asyncio.run(scenario())
+
+    assert (scheduled.runs, dispatch.runs >= 1, upkeep.cycles) == (1, True, 1)
 
 
 def test_the_watch_keeper_runs_upkeep_each_interval_and_survives_a_failure(

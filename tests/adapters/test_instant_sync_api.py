@@ -3,8 +3,11 @@ rule's Effective Cadence (ADR 0036)."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 from collections.abc import Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -209,6 +212,41 @@ def test_known_unknown_and_refused_notices_are_answered_alike(tmp_path: Path) ->
         )
     ]
     assert len(ignoring.recorded) == 1
+
+
+class Occupying(Dispatcher):
+    """A loop beside the scheduler that holds every default worker thread of the event loop,
+    which `asyncio.to_thread` takes, as busy sync runs could."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.release, self.holding = threading.Event(), threading.Event()
+
+    async def run_forever(self) -> None:
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(ThreadPoolExecutor(1))
+        await loop.run_in_executor(None, self._hold)
+
+    def _hold(self) -> None:
+        self.holding.set()
+        self.release.wait(10)
+        self.holding.clear()
+
+
+def test_a_notice_is_recorded_while_busy_loops_hold_the_default_worker_threads(
+    tmp_path: Path,
+) -> None:
+    # Graph waits only 3 seconds for an answer.
+    inbox, dispatcher = Inbox(), Occupying()
+    with _client(tmp_path, inbox, dispatcher=dispatcher) as client:
+        assert dispatcher.holding.wait(5)
+        answer = client.post(NOTICE_PATH, content=b"{}", headers={"X-Watch-Token": TOKEN})
+        answered_while_held = dispatcher.holding.is_set()
+        dispatcher.release.set()
+
+    assert answer.status_code == 202
+    assert answered_while_held
+    assert len(inbox.recorded) == 1
 
 
 def test_no_log_line_names_a_notices_registration_token_or_body(

@@ -5,8 +5,10 @@ does is application policy in `application/operations/scheduled_pass.py` and
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 from collections.abc import Callable, Collection
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from datetime import datetime, timedelta
 from functools import partial
@@ -25,6 +27,26 @@ from calendar_sync.infrastructure.clock import SystemClock
 logger = logging.getLogger(__name__)
 
 
+class _Threads:
+    """Worker threads of one loop's own.
+
+    The event loop's default threads, which `asyncio.to_thread` takes, number min(32, CPUs + 4),
+    as few as five on one CPU, and the Web API's requests use them too. A loop that took them
+    could hold up a request, such as a Watch Notice its provider waits seconds for, and requests
+    could hold up its runs.
+    """
+
+    def __init__(self, count: int, name: str) -> None:
+        self._executor = ThreadPoolExecutor(max_workers=count, thread_name_prefix=name)
+
+    async def run[T](self, work: Callable[[], T]) -> T:
+        # As `asyncio.to_thread` does, the work sees the caller's context variables.
+        context = contextvars.copy_context()
+        return await asyncio.get_running_loop().run_in_executor(
+            self._executor, partial(context.run, work)
+        )
+
+
 class SyncScheduler:
     """Runs a scheduled pass each interval, several rules at once (ADR 0029)."""
 
@@ -39,6 +61,8 @@ class SyncScheduler:
         self._interval_seconds = interval_seconds
         self._clock = clock or SystemClock()
         self._concurrency = concurrency
+        # Its pass is listed before any rule runs, so one thread per rule run at once suffices.
+        self._threads = _Threads(concurrency, "scheduler")
         # Read from request threads while the event loop writes; each is one attribute store.
         self._running_since = self._clock.now()
         self._pass_started_at: datetime | None = None
@@ -85,20 +109,20 @@ class SyncScheduler:
     async def _run_pass(self) -> frozenset[str]:
         """Runs every enabled rule once; returns the ids of the rules this pass listed."""
         # In a worker thread: finishing a lapse may wait for a rule's lock.
-        runs = await asyncio.to_thread(self._pass.begin)
+        runs = await self._threads.run(self._pass.begin)
         # Different rules run side by side, so one waiting on a slow provider does not hold up the
         # rest; the same rule never does, because each run holds that rule's lock.
         slots = asyncio.Semaphore(self._concurrency)
 
         async def run(scheduled: ScheduledRun) -> None:
             async with slots:
-                await asyncio.to_thread(self._pass.run, scheduled)
+                await self._threads.run(partial(self._pass.run, scheduled))
 
         # Checks of accounts an administrator's Cause stopped share the same slots, so a provider
         # that answers slowly, or not at all, holds up no rule.
         async def check(one: Callable[[], None]) -> None:
             async with slots:
-                await asyncio.to_thread(one)
+                await self._threads.run(one)
 
         await asyncio.gather(
             *(run(scheduled) for scheduled in runs),
@@ -154,11 +178,12 @@ class InstantRuns(Protocol):
 class InstantSyncDispatcher:
     """Starts instant runs as Watch Notices make them due (ADR 0036).
 
-    The notice route wakes it from its worker thread. Otherwise it looks again when the next
-    pending request becomes due, and at least every `longest_sleep_seconds`. A rule it queued
-    stays reserved until its run ends, so it never runs one rule twice at once, and at most
-    `concurrency` runs go together, apart from the scheduler's. A run meeting a rule a scheduled
-    or manual run holds waits for the rule's lock. Requests are durable: stopping loses none.
+    The notice route wakes it, on the event loop, once the inbox recorded a notice. Otherwise it
+    looks again when the next pending request becomes due, and at least every
+    `longest_sleep_seconds`. A rule it queued stays reserved until its run ends, so it never runs
+    one rule twice at once, and at most `concurrency` runs go together, apart from the
+    scheduler's. A run meeting a rule a scheduled or manual run holds waits for the rule's lock.
+    Requests are durable: stopping loses none.
     """
 
     def __init__(
@@ -172,6 +197,8 @@ class InstantSyncDispatcher:
         self._concurrency = concurrency
         self._clock = clock or SystemClock()
         self._longest_sleep = longest_sleep_seconds
+        # One more than its runs, so a look for due runs never waits behind them.
+        self._threads = _Threads(concurrency + 1, "instant-sync")
         self._reserved: set[str] = set()
         self._runs: set[asyncio.Task[None]] = set()
         # Set while the loop runs; wake() reads them from request threads.
@@ -207,7 +234,9 @@ class InstantSyncDispatcher:
     async def _start_due(self, slots: asyncio.Semaphore) -> float:
         """Start every due run; how long to wait before looking again."""
         try:
-            runs, next_due = await asyncio.to_thread(self._dispatch.due, frozenset(self._reserved))
+            runs, next_due = await self._threads.run(
+                partial(self._dispatch.due, frozenset(self._reserved))
+            )
         except Exception:
             logger.exception("Choosing instant runs failed; looking again shortly")
             return self._longest_sleep
@@ -225,7 +254,7 @@ class InstantSyncDispatcher:
     async def _run(self, item: InstantRun, rule_id: str, slots: asyncio.Semaphore) -> None:
         try:
             async with slots:
-                await asyncio.to_thread(self._dispatch.run, item)
+                await self._threads.run(partial(self._dispatch.run, item))
         except Exception:
             logger.exception(
                 "Instant run of rule %s failed; Scheduled Sync runs it meanwhile", rule_id
@@ -244,19 +273,20 @@ class WatchCycle(Protocol):
 
 
 class WatchKeeper:
-    """Runs watch upkeep every interval in a worker thread, so slow provider calls never delay a
-    rule's run or the scheduler's heartbeat (ADR 0036)."""
+    """Runs watch upkeep every interval in a worker thread of its own, so slow provider calls
+    never delay a rule's run or the scheduler's heartbeat (ADR 0036)."""
 
     def __init__(self, upkeep: WatchCycle, interval_seconds: int = 300) -> None:
         self._upkeep = upkeep
         self._interval_seconds = interval_seconds
+        self._threads = _Threads(1, "watch-upkeep")
 
     async def run_forever(self) -> None:
         while True:
             # As for the scheduler: a failed cycle must not end the loop, and cancellation,
             # a BaseException, still stops it.
             try:
-                await asyncio.to_thread(self._upkeep.run)
+                await self._threads.run(self._upkeep.run)
             except Exception:
                 logger.exception("Watch upkeep failed; trying again at the next interval")
             await asyncio.sleep(self._interval_seconds)
