@@ -30,6 +30,7 @@ import {
   type OpenRulePreview,
   type ViewChange,
 } from "@/lib/navigation"
+import { useRuleDraftSaving } from "@/lib/rule-draft"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
 import { busyCommand, ruleWork, workRefreshInterval, type RuleWork } from "@/lib/rule-work"
@@ -123,6 +124,10 @@ export function RulesView({
             // A new rule's next step is its preview, which shows what it will write.
             onOpenRulePreview(rule.id)
           }}
+          onCancel={() => {
+            setBuilderChoice(false)
+            createButton.current?.focus()
+          }}
         />
       )}
       {rules.data.length === 0 ? (
@@ -163,6 +168,7 @@ function RulesHeading({
   onViewChange: ViewChange
 }) {
   const { t } = useI18n()
+  const saving = useRuleDraftSaving()
   return (
     <div className="page-heading-row">
       <div>
@@ -173,7 +179,7 @@ function RulesHeading({
         <Button
           ref={createButton}
           variant={showBuilder ? "outline" : "default"}
-          disabled={noAccounts}
+          disabled={noAccounts || saving}
           onClick={onToggleBuilder}
           aria-expanded={showBuilder}
           aria-controls="rule-builder"

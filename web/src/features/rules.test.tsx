@@ -101,6 +101,7 @@ function renderBuilder(
   i18n: I18n,
   accounts: ConnectedAccount[] = [accountA, accountB, accountC, accountD],
   onCreated = vi.fn(),
+  onCancel = vi.fn(),
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   for (const [id, calendars] of Object.entries(calendarsByAccount)) {
@@ -114,7 +115,7 @@ function renderBuilder(
         children: createElement(
           QueryClientProvider,
           { client: queryClient },
-          createElement(RuleBuilder, { accounts, onCreated }),
+          createElement(RuleBuilder, { accounts, onCreated, onCancel }),
         ),
       }),
     )
@@ -153,7 +154,7 @@ describe("RuleBuilder", () => {
 
     const options = selectOptions("source-calendar")
     expect(options.map((option) => option.value)).toEqual([workA.id, holidaysA.id])
-    expect(selectElement("source-calendar").disabled).toBe(false)
+    expect(selectElement("source-calendar").getAttribute("aria-disabled")).toBeNull()
   })
 
   it("excludes read-only calendars from Destination options and never defaults to one", () => {
@@ -185,12 +186,78 @@ describe("RuleBuilder", () => {
 
     const destinationSelect = selectElement("destination-calendar")
     expect(selectOptions("destination-calendar")).toHaveLength(0)
-    expect(destinationSelect.disabled).toBe(true)
+    // Still focusable, so keyboard users reach the status that explains why it is empty.
+    expect(destinationSelect.disabled).toBe(false)
+    expect(destinationSelect.getAttribute("aria-disabled")).toBe("true")
     expect(destinationSelect.value).toBe("")
-    expect(container.textContent).toContain("This account has no writable calendars to choose.")
+    const status = container.querySelector("#destination-calendar-status")!
+    expect(status.getAttribute("role")).toBe("status")
+    expect(status.textContent).toBe("This account has no writable calendars to choose.")
+    expect(destinationSelect.getAttribute("aria-describedby")).toBe("destination-calendar-status")
 
+    const fetch = vi.spyOn(globalThis, "fetch")
     const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]')!
-    expect(submit.disabled).toBe(true)
+    expect(submit.getAttribute("aria-disabled")).toBe("true")
+    click(submit)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("says who sees event details once the destination copies them", () => {
+    renderBuilder(testI18n(), [accountA, accountB])
+
+    const hint = container.querySelector("#privacy-policy-hint")!
+    expect(selectElement("privacy-policy").getAttribute("aria-describedby")).toBe("privacy-policy-hint")
+    expect(hint.textContent).toBe("Shown as “Busy”. Titles, descriptions, and locations stay private.")
+    expect(hint.getAttribute("data-tone")).toBeNull()
+
+    const privacy = selectElement("privacy-policy")
+    act(() => {
+      privacy.value = "copy_details"
+      privacy.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+
+    expect(hint.textContent).toBe(
+      "Each event shows its title, description, and location to everyone who can see Work B1.",
+    )
+    expect(hint.getAttribute("data-tone")).toBe("attention")
+  })
+
+  it("names each policy checkbox by its title and describes it with its hint", () => {
+    renderBuilder(testI18n(), [accountA, accountB])
+
+    const allDay = container.querySelector<HTMLInputElement>("#sync-all-day")!
+    const name = container.querySelector(`#${allDay.getAttribute("aria-labelledby")}`)
+    const description = container.querySelector(`#${allDay.getAttribute("aria-describedby")}`)
+    expect(name?.textContent).toBe("Sync all-day events")
+    expect(description?.textContent).toBe("Turn this off to sync timed events only.")
+  })
+
+  it("keeps the builder open while the draft saves", async () => {
+    vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise(() => undefined))
+    renderBuilder(testI18n(), [accountA, accountB])
+
+    const cancel = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Cancel")!
+    expect(cancel.disabled).toBe(false)
+    await act(async () => {
+      container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(cancel.disabled).toBe(true)
+    const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]')!
+    expect(submit.getAttribute("aria-busy")).toBe("true")
+  })
+
+  it("closes through Cancel without saving", () => {
+    const onCancel = vi.fn()
+    const fetch = vi.spyOn(globalThis, "fetch")
+    renderBuilder(testI18n(), [accountA, accountB], vi.fn(), onCancel)
+
+    const cancel = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Cancel")!
+    click(cancel)
+
+    expect(onCancel).toHaveBeenCalledOnce()
+    expect(fetch).not.toHaveBeenCalled()
   })
 })
 

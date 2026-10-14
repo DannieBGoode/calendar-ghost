@@ -90,7 +90,7 @@
     }
   },
   "builder": {
-    "heading": "Choose the calendars",
+    "heading": "Choose what to sync and where",
     "intro": "Saving creates a draft. Nothing is written until you preview the rule and start syncing.",
     "sourceLegend": "Source calendar",
     "destinationLegend": "Destination calendar",
@@ -99,24 +99,32 @@
     "destinationCalendarLabel": "Calendar you can edit",
     "sameEndpointError": "Choose a destination different from the source calendar.",
     "policyLegend": "What the destination shows",
-    "privacyLabel": "Event information",
-    "privacyOption": {
-      "busyOnly": "Busy only (recommended)",
-      "copyDetails": "Copy title, description, and location"
-    },
-    "allDay": {
-      "label": "Sync all-day events",
-      "hint": "Turn this off to synchronize timed events only."
-    },
-    "birthdays": {
-      "label": "Sync birthdays",
-      "hint": "Google Calendar adds your contacts' birthdays to your calendar. Turn this on to sync them too."
-    },
     "calendarsLoadError": "Calendars could not load: {reason}",
     "loadingCalendars": "Loading calendars…",
     "noCalendars": "This account has no calendars to choose.",
     "noWritableCalendars": "This account has no writable calendars to choose.",
     "saving": "Saving draft…",
+    "cancel": "Cancel",
     "submit": "Save rule draft"
+  },
+  "policy": {
+    "privacyLabel": "Event information",
+    "privacyOption": {
+      "busyOnly": "Busy only (recommended)",
+      "copyDetails": "Copy title, description, and location"
+    },
+    "privacyHint": {
+      "busyOnly": "Shown as “{title}”. Titles, descriptions, and locations stay private.",
+      "copyDetails": "Each event shows its title, description, and location to everyone who can see {destination}."
+    },
+    "destinationFallback": "the destination calendar",
+    "allDay": {
+      "label": "Sync all-day events",
+      "hint": "Turn this off to sync timed events only."
+    },
+    "birthdays": {
+      "label": "Sync birthdays",
+      "hint": "Some providers, like Google Calendar, add your contacts' birthdays to your calendar. Turn this on to sync them too."
+    }
   }
 }
