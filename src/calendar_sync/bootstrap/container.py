@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from urllib.parse import urlsplit
@@ -52,6 +52,11 @@ from calendar_sync.application.operations.installation_health import (
     InstallationIncidentWatch,
     InstallationNotifications,
 )
+from calendar_sync.application.operations.instant_sync import (
+    InstantDispatch,
+    InstantSyncStatus,
+    WatchUpkeep,
+)
 from calendar_sync.application.operations.operator_overview import OperatorOverview, UserStatuses
 from calendar_sync.application.operations.ports import (
     CauseSighting,
@@ -59,6 +64,7 @@ from calendar_sync.application.operations.ports import (
     InstallationUnitOfWorkFactory,
     LogFiles,
     SchedulerHeartbeat,
+    WatchNoticeInbox,
 )
 from calendar_sync.application.operations.scheduled_pass import ScheduledPass, ScheduledServices
 from calendar_sync.application.operations.status import GetInstallationStatus
@@ -73,6 +79,11 @@ from calendar_sync.application.sync.accounts import (
     RecheckAdministratorLapses,
 )
 from calendar_sync.application.sync.health import RuleHealth
+from calendar_sync.application.sync.instant_sync import (
+    AccountBackoff,
+    UpkeepWatches,
+    WatchProviders,
+)
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
@@ -102,9 +113,17 @@ from calendar_sync.application.sync.rules import (
 )
 from calendar_sync.application.sync.run_log import UntalliedProviderCalls
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncNow
+from calendar_sync.application.sync.watch_ports import (
+    DeliveryEvidenceLog,
+    EveryUserInstant,
+    NoticeReader,
+    SyncCadencePolicy,
+)
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.logs import configure_logging
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,
@@ -149,12 +168,22 @@ from calendar_sync.infrastructure.persistence.registration import (
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.storage import SqliteStorage
 from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
+from calendar_sync.infrastructure.persistence.watch_inbox import (
+    SqliteDeliveryEvidenceLog,
+    SqliteWatchNoticeInbox,
+)
 from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
 from calendar_sync.infrastructure.providers.routing import (
     RoutingAccountCalendars,
     RoutingCalendarProvider,
+    RoutingCalendarWatcher,
 )
-from calendar_sync.infrastructure.scheduling import SchedulerWatch, SyncScheduler
+from calendar_sync.infrastructure.scheduling import (
+    InstantSyncDispatcher,
+    SchedulerWatch,
+    SyncScheduler,
+    WatchKeeper,
+)
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher, ScryptPasswords
 from calendar_sync.infrastructure.throttle import MemorySignInThrottle
 
@@ -179,6 +208,10 @@ class UserServices:
     replace_sync_rule_calendars: ReplaceSyncRuleCalendars
     rule_health: RuleHealth
     lapsed_authorizations: LapsedAuthorizations
+    instant_sync_status: InstantSyncStatus
+    """Whether Instant Sync is on for a User, and why each of their rules syncs as it does."""
+    watch_upkeep: UpkeepWatches | None
+    """Keeps this User's Calendar Watches; None where accounts cannot be stored."""
     # Each of these needs the installation master key, and synchronization also a provider.
     list_connected_accounts: ListConnectedAccounts | None
     disconnect_connected_account: DisconnectConnectedAccount | None
@@ -246,6 +279,18 @@ class Container:
     """Every User's health for administrators, and what it shows about each User to them."""
     sends_email: bool
     """Whether Incident Notifications can also reach each User by email."""
+    instant_dispatcher: InstantSyncDispatcher | None
+    """Starts rules' instant runs; None unless the installation can offer Instant Sync."""
+    watch_keeper: WatchKeeper | None
+    """Keeps every User's Calendar Watches; None unless the installation can offer Instant Sync."""
+    watch_inbox: WatchNoticeInbox | None
+    """Records Watch Notices; None unless the installation can offer Instant Sync, so the notice
+    route answers as for an unknown path."""
+    notice_readers: Mapping[str, tuple[ProviderKind, NoticeReader]]
+    """Each provider's notice reader, by the slug in its notice address."""
+    instant_sync_status: InstantSyncStatus
+    instant_sync_address: str | None
+    """The public https address providers deliver Watch Notices to; None when there is none."""
     user_services: Callable[[UserId], UserServices]
 
     def for_user(self, user_id: UserId) -> UserServices:
@@ -284,6 +329,9 @@ class Adapters:
     database_storage: DatabaseStorage
     integration_tokens: Callable[[UserId], IntegrationTokens]
     token_authentication: IntegrationTokenAuthentication
+    delivery_evidence: DeliveryEvidenceLog
+    """Whether each provider's Watch Notices reach the installation's address."""
+    watch_inbox: WatchNoticeInbox
     notifications: Callable[[UserId], IncidentNotifications | None] = lambda _owner: None
     """Each User's own Incident Notifications, by email when the installation sends it."""
     installation_notifications: InstallationNotifications | None = None
@@ -295,6 +343,13 @@ class Adapters:
     and adapters (ADR 0022)."""
     account_calendars: AccountCalendars | None = None
     """Lists each account's calendars through its provider's adapter."""
+    watchers: RoutingCalendarWatcher | None = None
+    """Each account's provider's Calendar Watcher, where accounts can be stored."""
+    sync_cadence: SyncCadencePolicy = field(default_factory=EveryUserInstant)
+    """Each User's Sync Cadence; every User may sync instantly while Plans are off (ADR 0028)."""
+    watch_backoff: AccountBackoff = field(default_factory=AccountBackoff)
+    """One per process: how long each account waits before upkeep asks its provider again,
+    shared by every User's upkeep."""
     calendar_provider: CalendarProvider | None = None
     call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
     """Counts the calendar provider's calls for each run's log lines."""
@@ -354,6 +409,8 @@ def build_adapters(settings: Settings) -> Adapters:
         database_storage=SqliteStorage(database),
         integration_tokens=tokens.for_user,
         token_authentication=tokens,
+        delivery_evidence=SqliteDeliveryEvidenceLog(database),
+        watch_inbox=SqliteWatchNoticeInbox(database),
         notifications=lambda owner: (
             OwnerNotifier(users, owner, mail, public_address(settings)) if mail else None
         ),
@@ -374,6 +431,7 @@ def build_adapters(settings: Settings) -> Adapters:
         providers=providers,
         account_calendars=RoutingAccountCalendars.of(accounts, providers),
         calendar_provider=RoutingCalendarProvider.of(accounts, providers),
+        watchers=RoutingCalendarWatcher.of(accounts, providers),
         call_stats=ContextProviderCallStats(),
     )
 
@@ -419,19 +477,30 @@ def calendar_providers(
 def compose(settings: Settings, adapters: Adapters) -> Container:
     def user_services(user_id: UserId) -> UserServices:
         # Read when called, after the scheduler exists: every User's status reads its heartbeat.
-        return _compose_user(user_id, adapters, scheduler)
+        return _compose_user(user_id, adapters, scheduler, instant_status)
 
-    scheduler = (
-        SyncScheduler(
-            ScheduledPass(
-                adapters.installation_units,
-                lambda owner: _scheduled_services(user_services(owner)),
-                adapters.clock,
-            ),
-            clock=adapters.clock,
-        )
-        if adapters.calendar_provider is not None and adapters.accounts is not None
-        else None
+    scheduled_pass = ScheduledPass(
+        adapters.installation_units,
+        lambda owner: _scheduled_services(user_services(owner)),
+        adapters.clock,
+    )
+    runs_rules = adapters.calendar_provider is not None and adapters.accounts is not None
+    scheduler = SyncScheduler(scheduled_pass, clock=adapters.clock) if runs_rules else None
+    cadence = adapters.sync_cadence
+    address = instant_sync_address(settings) if runs_rules else None
+    instant_status = InstantSyncStatus(
+        adapters.users,
+        adapters.unit_of_work,
+        cadence,
+        adapters.delivery_evidence,
+        adapters.watchers.provider_of if adapters.watchers is not None else _no_provider,
+        address,
+        adapters.clock,
+    )
+    instant = (
+        _instant_sync(adapters, scheduled_pass, user_services, cadence, address)
+        if address is not None
+        else _InstantSync()
     )
     # Installation Health counts the verdicts People shows, so the two never disagree.
     statuses = UserStatuses(adapters.installation_units, adapters.locks, adapters.clock, scheduler)
@@ -440,10 +509,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         providers=adapters.providers,
         identity=_identity(adapters),
         administration=_administration(
-            adapters,
-            lambda owner: OwnedRules(
-                adapters.unit_of_work(owner), user_services(owner).remove_sync_rule
-            ),
+            adapters, lambda owner: _owned_rules(owner, adapters, user_services(owner))
         ),
         token_authentication=adapters.token_authentication,
         storage=StorageAdministration(
@@ -474,8 +540,115 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             adapters.users, statuses, adapters.installation_units, adapters.clock
         ),
         sends_email=adapters.sends_email,
+        instant_dispatcher=instant.dispatcher,
+        watch_keeper=instant.keeper,
+        watch_inbox=instant.inbox,
+        notice_readers=_notice_readers(adapters.providers),
+        instant_sync_status=instant_status,
+        instant_sync_address=address,
         user_services=user_services,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _InstantSync:
+    """Instant Sync's loops and notice intake; none unless the installation can offer it."""
+
+    dispatcher: InstantSyncDispatcher | None = None
+    keeper: WatchKeeper | None = None
+    inbox: WatchNoticeInbox | None = None
+
+
+def _instant_sync(
+    adapters: Adapters,
+    scheduled_pass: ScheduledPass,
+    user_services: Callable[[UserId], UserServices],
+    cadence: SyncCadencePolicy,
+    address: str,
+) -> _InstantSync:
+    """Instant runs share the scheduled pass's path, each User's services, and rule locks."""
+    upkeep = WatchUpkeep(
+        adapters.installation_units,
+        lambda owner: user_services(owner).watch_upkeep,
+        cadence,
+        address,
+        adapters.clock,
+    )
+    dispatch = InstantDispatch(
+        adapters.installation_units,
+        scheduled_pass,
+        adapters.unit_of_work,
+        cadence,
+        adapters.clock,
+    )
+    return _InstantSync(
+        InstantSyncDispatcher(dispatch, clock=adapters.clock),
+        WatchKeeper(upkeep),
+        adapters.watch_inbox,
+    )
+
+
+def _notice_readers(
+    providers: ProviderDirectory,
+) -> Mapping[str, tuple[ProviderKind, NoticeReader]]:
+    """Each provider's notice reader, by the slug in its notice address."""
+    return {
+        descriptor.guide.slug: (descriptor.kind, descriptor.notice_reader)
+        for descriptor in providers.descriptors
+        if descriptor.notice_reader is not None
+    }
+
+
+def _owned_rules(owner: UserId, adapters: Adapters, services: UserServices) -> OwnedRules:
+    """What deleting `owner` needs: their units, Rule Removal, and stopping their watches."""
+    upkeep = services.watch_upkeep
+    return OwnedRules(
+        adapters.unit_of_work(owner),
+        services.remove_sync_rule,
+        upkeep.stop_all if upkeep is not None else _no_watches,
+    )
+
+
+def _watch_upkeep(
+    adapters: Adapters, unit_of_work: UnitOfWorkFactory, lapses: LapsedAuthorizations
+) -> UpkeepWatches | None:
+    """One User's watch upkeep, wherever accounts can be stored and so watched."""
+    watchers = adapters.watchers
+    if watchers is None:
+        return None
+    return UpkeepWatches(
+        unit_of_work,
+        WatchProviders(
+            watchers,
+            watchers.provider_of,
+            adapters.providers.slug_of,
+            backoff=adapters.watch_backoff,
+        ),
+        adapters.delivery_evidence,
+        adapters.clock,
+        lapses=lapses,
+        call_stats=adapters.call_stats,
+    )
+
+
+def _account_watches(upkeep: UpkeepWatches | None) -> Callable[[ConnectedAccountId], None]:
+    """Stops one account's watches before disconnecting it discards their credentials."""
+    if upkeep is None:
+        return _no_account_watches
+    return upkeep.stop_all
+
+
+def _no_watches() -> None:
+    """Where no provider can watch, nothing is watched to stop."""
+
+
+def _no_account_watches(_account: ConnectedAccountId) -> None:
+    """Where no provider can watch, nothing is watched to stop."""
+
+
+def _no_provider(_account: ConnectedAccountId) -> ProviderKind | None:
+    """Without the master key no account is stored, so none has a provider."""
+    return None
 
 
 def _failure_causes(
@@ -546,7 +719,10 @@ def _scheduled_services(services: UserServices) -> ScheduledServices:
 
 
 def _compose_user(
-    user_id: UserId, adapters: Adapters, heartbeat: SchedulerHeartbeat | None
+    user_id: UserId,
+    adapters: Adapters,
+    heartbeat: SchedulerHeartbeat | None,
+    instant: InstantSyncStatus,
 ) -> UserServices:
     unit_of_work, locks, clock = adapters.unit_of_work(user_id), adapters.locks, adapters.clock
     provider = adapters.calendar_provider
@@ -563,6 +739,7 @@ def _compose_user(
         adapters.notifications(user_id),
     )
     call_stats = adapters.call_stats
+    watch_upkeep = _watch_upkeep(adapters, unit_of_work, rule_health.lapses)
     remove_sync_rule = RemoveSyncRule(
         unit_of_work, provider, accounts, clock, locks, incidents=rule_health, call_stats=call_stats
     )
@@ -623,11 +800,17 @@ def _compose_user(
         ),
         rule_health=rule_health,
         lapsed_authorizations=rule_health.lapses,
+        instant_sync_status=instant,
+        watch_upkeep=watch_upkeep,
         list_connected_accounts=(
             ListConnectedAccounts(unit_of_work, accounts) if accounts else None
         ),
         disconnect_connected_account=(
-            DisconnectConnectedAccount(unit_of_work, accounts, locks) if accounts else None
+            DisconnectConnectedAccount(
+                unit_of_work, accounts, locks, _account_watches(watch_upkeep)
+            )
+            if accounts
+            else None
         ),
         delete_connected_account=(
             DeleteConnectedAccount(unit_of_work, locks) if accounts else None
@@ -664,6 +847,15 @@ def public_address(settings: Settings) -> str | None:
     if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
         return None
     return configured.rstrip("/")
+
+
+def instant_sync_address(settings: Settings) -> str | None:
+    """Where providers deliver Watch Notices: the public address, only when it is https, as
+    providers deliver nowhere else (ADR 0036)."""
+    address = public_address(settings)
+    if address is None or urlsplit(address).scheme != "https":
+        return None
+    return address
 
 
 def _mail_server(settings: Settings) -> SmtpServer | None:

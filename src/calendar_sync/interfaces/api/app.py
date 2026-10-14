@@ -101,6 +101,10 @@ def create_app(container: Container | None = None) -> FastAPI:
             tasks.append(asyncio.create_task(resolved.scheduler.run_forever()))
         if resolved.scheduler_watch is not None:
             tasks.append(asyncio.create_task(resolved.scheduler_watch.run_forever()))
+        if resolved.instant_dispatcher is not None:
+            tasks.append(asyncio.create_task(resolved.instant_dispatcher.run_forever()))
+        if resolved.watch_keeper is not None:
+            tasks.append(asyncio.create_task(resolved.watch_keeper.run_forever()))
         try:
             async with mcp.running():
                 yield

@@ -1,18 +1,22 @@
-"""When scheduled passes run, and how many rules run at once; a pass itself is application
-policy in `application/operations/scheduled_pass.py`."""
+"""When scheduled passes, instant runs, and watch upkeep run, and how many at once; what each
+does is application policy in `application/operations/scheduled_pass.py` and
+`application/operations/instant_sync.py`."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Collection
+from contextlib import suppress
 from datetime import datetime, timedelta
 from functools import partial
+from typing import Protocol
 
 from calendar_sync.application.operations.installation_health import (
     InstallationIncidentWatch,
     InstallationNotifications,
 )
+from calendar_sync.application.operations.instant_sync import InstantRun
 from calendar_sync.application.operations.ports import SchedulerHeartbeat, SchedulerProgress
 from calendar_sync.application.operations.scheduled_pass import ScheduledPass, ScheduledRun
 from calendar_sync.application.shared.ports import Clock
@@ -137,3 +141,122 @@ class SchedulerWatch:
         """Notify each installation incident that has opened since the last check."""
         for incident in self._incidents.opened(self._heartbeat.progress(), self._clock.now()):
             self._notifications.installation_incident_opened(incident)
+
+
+class InstantRuns(Protocol):
+    """What the dispatcher asks of `InstantDispatch`."""
+
+    def due(self, reserved: Collection[str]) -> tuple[tuple[InstantRun, ...], datetime | None]: ...
+
+    def run(self, item: InstantRun) -> None: ...
+
+
+class InstantSyncDispatcher:
+    """Starts instant runs as Watch Notices make them due (ADR 0036).
+
+    The notice route wakes it from its worker thread. Otherwise it looks again when the next
+    pending request becomes due, and at least every `longest_sleep_seconds`. A rule it queued
+    stays reserved until its run ends, so it never runs one rule twice at once, and at most
+    `concurrency` runs go together, apart from the scheduler's. A run meeting a rule a scheduled
+    or manual run holds waits for the rule's lock. Requests are durable: stopping loses none.
+    """
+
+    def __init__(
+        self,
+        dispatch: InstantRuns,
+        concurrency: int = 2,
+        clock: Clock | None = None,
+        longest_sleep_seconds: float = 60.0,
+    ) -> None:
+        self._dispatch = dispatch
+        self._concurrency = concurrency
+        self._clock = clock or SystemClock()
+        self._longest_sleep = longest_sleep_seconds
+        self._reserved: set[str] = set()
+        self._runs: set[asyncio.Task[None]] = set()
+        # Set while the loop runs; wake() reads them from request threads.
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._woken: asyncio.Event | None = None
+
+    def wake(self) -> None:
+        """Look for due runs now; safe from any thread. Before the loop starts there is nothing
+        to wake: its first look finds every pending request."""
+        loop, woken = self._loop, self._woken
+        if loop is None or woken is None:
+            return
+        # The loop may close while the service stops; the request stays durable.
+        with suppress(RuntimeError):
+            loop.call_soon_threadsafe(woken.set)
+
+    async def run_forever(self) -> None:
+        woken = asyncio.Event()
+        self._woken, self._loop = woken, asyncio.get_running_loop()
+        slots = asyncio.Semaphore(self._concurrency)
+        try:
+            while True:
+                # Cleared before looking, so a wake during the look is not lost.
+                woken.clear()
+                delay = await self._start_due(slots)
+                with suppress(TimeoutError):
+                    await asyncio.wait_for(woken.wait(), delay)
+        finally:
+            self._woken, self._loop = None, None
+            for task in self._runs:
+                task.cancel()
+
+    async def _start_due(self, slots: asyncio.Semaphore) -> float:
+        """Start every due run; how long to wait before looking again."""
+        try:
+            runs, next_due = await asyncio.to_thread(self._dispatch.due, frozenset(self._reserved))
+        except Exception:
+            logger.exception("Choosing instant runs failed; looking again shortly")
+            return self._longest_sleep
+        for item in runs:
+            rule_id = item.scheduled.scheduled.rule.id.value
+            self._reserved.add(rule_id)
+            task = asyncio.create_task(self._run(item, rule_id, slots))
+            self._runs.add(task)
+            task.add_done_callback(self._runs.discard)
+        if next_due is None:
+            return self._longest_sleep
+        wait = (next_due - self._clock.now()).total_seconds()
+        return min(max(wait, 0.0), self._longest_sleep)
+
+    async def _run(self, item: InstantRun, rule_id: str, slots: asyncio.Semaphore) -> None:
+        try:
+            async with slots:
+                await asyncio.to_thread(self._dispatch.run, item)
+        except Exception:
+            logger.exception(
+                "Instant run of rule %s failed; Scheduled Sync runs it meanwhile", rule_id
+            )
+        finally:
+            self._reserved.discard(rule_id)
+            # A notice that came during the run may have made the rule due again.
+            if self._woken is not None:
+                self._woken.set()
+
+
+class WatchCycle(Protocol):
+    """One upkeep cycle across every User, as `WatchUpkeep.run` does it."""
+
+    def run(self) -> None: ...
+
+
+class WatchKeeper:
+    """Runs watch upkeep every interval in a worker thread, so slow provider calls never delay a
+    rule's run or the scheduler's heartbeat (ADR 0036)."""
+
+    def __init__(self, upkeep: WatchCycle, interval_seconds: int = 300) -> None:
+        self._upkeep = upkeep
+        self._interval_seconds = interval_seconds
+
+    async def run_forever(self) -> None:
+        while True:
+            # As for the scheduler: a failed cycle must not end the loop, and cancellation,
+            # a BaseException, still stops it.
+            try:
+                await asyncio.to_thread(self._upkeep.run)
+            except Exception:
+                logger.exception("Watch upkeep failed; trying again at the next interval")
+            await asyncio.sleep(self._interval_seconds)

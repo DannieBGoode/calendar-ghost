@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+import logging
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime
@@ -25,6 +26,8 @@ from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountStat
 from calendar_sync.domain.causes import ADMINISTRATOR_CAUSES
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId
 from calendar_sync.domain.providers import AUTHORIZATION_FAILURES
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,12 +165,15 @@ class DisconnectConnectedAccount:
     writes nothing and restarts only through a preview, as it would after the disconnection the
     User asked for. The User sees the account still connected and retries, which stops the
     remaining rules and then disconnects it. So retrying completes it, and it is not made atomic
-    as deletion is.
+    as deletion is. The account's Calendar Watches stop just before, best effort, while the
+    credentials that stopping them needs still exist.
     """
 
     unit_of_work: UnitOfWorkFactory
     accounts: ConnectedAccountRepository
     locks: RuleLocks
+    stop_watches: Callable[[ConnectedAccountId], None] = lambda _account: None
+    """Stops and removes the account's Calendar Watches, best effort."""
 
     def execute(self, account_id: ConnectedAccountId) -> ConnectedAccountSummary:
         if not any(account.id == account_id for account in self.accounts.list()):
@@ -182,10 +188,20 @@ class DisconnectConnectedAccount:
                 if stopped is not None and stopped != rule:
                     uow.rules.save(stopped)
                     uow.commit()
+        _stop_watches(self.stop_watches, account_id)
         account = self.accounts.disconnect(account_id)
         with self.unit_of_work() as uow:
             rules = tuple(uow.rules.list())
         return _summary(account, rules)
+
+
+def _stop_watches(
+    stop: Callable[[ConnectedAccountId], None], account_id: ConnectedAccountId
+) -> None:
+    try:
+        stop(account_id)
+    except Exception:
+        logger.exception("Could not stop the watches of a disconnecting account; they expire")
 
 
 @dataclass(slots=True)
