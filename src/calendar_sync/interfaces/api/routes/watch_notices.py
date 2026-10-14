@@ -74,7 +74,10 @@ async def watch_notice(
     # A provider validating the address waits only seconds, and its body is never a notice.
     token = reader.validation_token(NoticeRequest(headers, query, b""))
     if token is not None:
-        return PlainTextResponse(token[:VALIDATION_TOKEN_LIMIT])
+        # Text the caller chose, so a browser must not read it as anything else.
+        return PlainTextResponse(
+            token[:VALIDATION_TOKEN_LIMIT], headers={"X-Content-Type-Options": "nosniff"}
+        )
     body = await _body(request)
     try:
         registration = WatchRegistrationId(registration_id)

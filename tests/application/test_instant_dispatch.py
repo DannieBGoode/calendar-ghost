@@ -430,11 +430,39 @@ def test_a_crash_before_the_acknowledgement_runs_the_rule_again(
     with caplog.at_level("ERROR", logger="calendar_sync.application.operations.instant_sync"):
         world.dispatch.run(item)
     world.requests.acknowledging_fails = False
-    again, _ = world.dispatch.due(frozenset())
+    # The process restarts: a new dispatch finds the request still pending.
+    restarted = replace(world.dispatch)
+    again, _ = restarted.due(frozenset())
 
     assert world.requests.waiting(USER, rule().id)
     assert _ids(again) == ["rule-1"]
     assert "Could not acknowledge the instant run of rule rule-1" in caplog.text
+
+
+def test_a_rule_whose_acknowledgement_failed_waits_the_gap_before_it_runs_again() -> None:
+    world = World((USER, rule()))
+    world.requests.notice(USER, rule().id, NOW - QUIET)
+    world.requests.acknowledging_fails = True
+    ran_at = NOW + timedelta(seconds=3)
+
+    def run_once_more() -> tuple[tuple[InstantRun, ...], datetime | None]:
+        (item,), _ = world.dispatch.due(frozenset())
+        world.clock.moment = ran_at
+        world.dispatch.run(item)
+        return world.dispatch.due(frozenset())
+
+    # Storage that keeps refusing the acknowledgement must not run the rule back to back.
+    held = run_once_more()
+    world.clock.moment = ran_at + MIN_GAP
+    again, _ = world.dispatch.due(frozenset())
+    world.requests.acknowledging_fails = False
+    world.dispatch.run(again[0])
+    after_success, _ = world.dispatch.due(frozenset())
+
+    assert held == ((), ran_at + MIN_GAP)
+    assert _ids(again) == ["rule-1"]
+    assert world.runs.ran == [("rule-1", False), ("rule-1", False)]
+    assert after_success == ()
 
 
 def test_an_unexpected_failure_still_acknowledges_the_request() -> None:

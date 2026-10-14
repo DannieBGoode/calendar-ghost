@@ -269,6 +269,7 @@ class FakeWatcher:
     """False for a provider that renews only by replacement."""
     adoptable: Receipt | None = None
     calls: list[tuple[str, str]] = field(default_factory=list)
+    stopped_handles: list[str | None] = field(default_factory=list)
 
     def scope(self, calendar: CalendarEndpoint) -> WatchScope | None:
         self._call("scope", calendar.calendar_id.value)
@@ -309,6 +310,7 @@ class FakeWatcher:
         return self.adoptable
 
     def stop(self, account: ConnectedAccountId, registration: WatchRegistration) -> None:
+        self.stopped_handles.append(registration.handle)
         self._call("stop", registration.id.value)
 
     def _call(self, operation: str, subject: str) -> None:
@@ -571,19 +573,25 @@ def test_a_creation_still_in_progress_is_left_alone() -> None:
     assert "register" not in scenario.watcher.operations()
 
 
+def _abandon_creations(records: Records) -> None:
+    for registration in list(records.registrations.values()):
+        abandoned = replace(registration, state=RegistrationState.ABANDONED)
+        records.registrations[registration.id] = abandoned
+
+
 def test_a_late_receipt_for_a_registration_abandoned_meanwhile_changes_nothing() -> None:
-    def abandon_creations(records: Records) -> None:
-        for registration in list(records.registrations.values()):
-            abandoned = replace(registration, state=RegistrationState.ABANDONED)
-            records.registrations[registration.id] = abandoned
-
     scenario = world()
-    scenario.watcher.during["register"] = abandon_creations
+    scenario.watcher.during["register"] = _abandon_creations
 
-    scenario.run()
+    budget = scenario.run()
 
     registration = scenario.registration()
     assert (registration.state, registration.handle) == (RegistrationState.ABANDONED, None)
+    # What the provider made is stopped at once, rather than living on for days unknown, and
+    # the stop spends the budget as any call does.
+    assert scenario.watcher.operations() == ["scope", "register", "stop"]
+    assert scenario.watcher.stopped_handles == [f"handle-{registration.id.value}"]
+    assert budget.remaining == 98
 
 
 def test_a_late_receipt_for_a_registration_deleted_meanwhile_brings_nothing_back() -> None:
@@ -593,6 +601,20 @@ def test_a_late_receipt_for_a_registration_deleted_meanwhile_brings_nothing_back
     scenario.run()
 
     assert scenario.registrations() == []
+    assert scenario.watcher.operations() == ["scope", "register", "stop"]
+    assert scenario.watcher.stopped_handles[0] is not None
+
+
+def test_a_failed_stop_of_what_a_late_receipt_named_changes_nothing() -> None:
+    scenario = world()
+    scenario.watcher.during["register"] = _abandon_creations
+    scenario.watcher.refusals["stop"] = refusal(WatchFailureKind.TEMPORARY)
+
+    scenario.run()
+
+    registration = scenario.registration()
+    assert (registration.state, registration.handle) == (RegistrationState.ABANDONED, None)
+    assert scenario.watcher.operations() == ["scope", "register", "stop"]
 
 
 def test_a_start_notice_that_arrives_before_register_returns_is_kept() -> None:

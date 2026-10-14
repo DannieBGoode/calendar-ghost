@@ -169,6 +169,8 @@ def test_a_validation_request_is_echoed_before_its_body_is_read(tmp_path: Path) 
 
     assert echoed.status_code == 200
     assert echoed.headers["content-type"].startswith("text/plain")
+    # A browser must never read the echoed text as anything but plain text.
+    assert echoed.headers["x-content-type-options"] == "nosniff"
     assert echoed.text == "synthetic-validation"
     assert long.text == "v" * VALIDATION_TOKEN_LIMIT
     assert (reader.reads, inbox.recorded, dispatcher.woken) == (0, [], 0)

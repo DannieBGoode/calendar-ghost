@@ -90,7 +90,8 @@ come right after this work and plug into one port; nothing in this design waits 
   | Inbox | set `confirmed_at` on every authenticated notice (idempotent) · set `renew_requested_at` (idempotent) · `live → retiring` or `creating → abandoned` on `subscriptionRemoved` |
 
   A receipt for a row that is no longer `creating` updates nothing, so a removed registration is
-  never brought back. Upkeep clears `renew_requested_at` only if it still holds the value upkeep
+  never brought back. Upkeep then stops what the provider made, best effort, with the receipt's
+  handle: one more call, counted in the budget, so no unknown registration lives until it expires. Upkeep clears `renew_requested_at` only if it still holds the value upkeep
   read.
 - **`InstantSyncAvailability`**, a pure decision in the style of ADR 0033. Its inputs:
   - whether the address is `https`
@@ -222,7 +223,10 @@ registrations are unknown and acknowledged without effect.
 
   This is a deliberate trade. A failed run consumes its request, and Scheduled Sync retries the
   rule with its own failure handling and backoff, as it does today. A crash before
-  acknowledgement leaves the request pending, so the run happens again after restart.
+  acknowledgement leaves the request pending, so the run happens again after restart. An
+  acknowledgement that fails while the process lives also leaves it pending; the dispatcher then
+  holds the rule for 30 seconds in the process, as if `last_run_at` had been written, so storage
+  that keeps refusing never runs it back to back.
 
 ### Notice intake: `WatchNoticeInbox` (operations context)
 

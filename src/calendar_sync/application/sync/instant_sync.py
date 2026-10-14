@@ -544,8 +544,20 @@ class _Cycle:
             uow.commit()
         if receipt.confirmed:
             self.upkeep.evidence.succeeded(target.provider, target.address, at)
-        if recorded and replacing is not None:
+        if not recorded:
+            self._stop_unrecorded(target, registration, receipt)
+        elif replacing is not None:
             self._stop(target.watcher, target.watch, replacing)
+
+    def _stop_unrecorded(
+        self, target: _Target, registration: WatchRegistration, receipt: Receipt
+    ) -> None:
+        """Stop, best effort, what the provider made for a registration abandoned or deleted
+        while it was asked. No row holds its handle, so nothing else would stop it before it
+        expires. It is one call, made even when the budget is spent, as the creation was."""
+        made = replace(registration, handle=receipt.handle, expires_at=receipt.expires_at)
+        with suppress(WatchFailure):
+            self.meter.paid(lambda: target.watcher.stop(target.watch.account, made))
 
     def _renew(self, target: _Target, current: WatchRegistration) -> None:
         if self.meter.exhausted:

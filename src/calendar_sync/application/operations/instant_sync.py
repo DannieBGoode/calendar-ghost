@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from calendar_sync.application.identity.ports import UserDirectory
@@ -167,6 +167,10 @@ class InstantDispatch:
     """Each User's units, which acknowledge that User's requests."""
     cadence: SyncCadencePolicy
     clock: Clock
+    _held_until: dict[SyncRuleId, datetime] = field(default_factory=dict, init=False)
+    """Rules whose acknowledgement failed, and until when they wait, as if it had succeeded.
+    Kept in the process only: after a restart, the request runs again at once. Runs write it
+    and looks read it from different threads, each access one dictionary operation."""
 
     def due(self, reserved: Collection[str]) -> tuple[tuple[InstantRun, ...], datetime | None]:
         """The runs to start now, taking turns between Users, and when the next pending request
@@ -182,7 +186,7 @@ class InstantDispatch:
                 continue
             if not _eligible(item, instant):
                 self._drop(item, now)
-            elif (at := due_at(item.request)) <= now:
+            elif (at := self._due_at(item)) <= now:
                 ready.append(item)
             else:
                 later.append(at)
@@ -206,13 +210,26 @@ class InstantDispatch:
         try:
             self.scheduled_pass.run(item.scheduled)
         finally:
+            ran_at = self.clock.now()
             try:
-                self._acknowledge(scheduled.owner, scheduled.rule.id, item.seq, self.clock.now())
+                self._acknowledge(scheduled.owner, scheduled.rule.id, item.seq, ran_at)
             except Exception:
+                # Its request still looks unanswered, so the rule waits the gap here instead:
+                # storage that keeps refusing must not run it back to back.
+                self._held_until[scheduled.rule.id] = ran_at + MIN_GAP
                 logger.exception(
                     "Could not acknowledge the instant run of rule %s; it runs again",
                     scheduled.rule.id.value,
                 )
+            else:
+                self._held_until.pop(scheduled.rule.id, None)
+
+    def _due_at(self, item: PendingInstantRun) -> datetime:
+        """When a pending request may run, and not before the gap after a run whose
+        acknowledgement failed."""
+        at = due_at(item.request)
+        held = self._held_until.get(item.scheduled.rule.id)
+        return at if held is None else max(at, held)
 
     def _recheck(self, item: InstantRun) -> tuple[PendingInstantRun | None, frozenset[UserId]]:
         """The run's request as it is pending now, if it still is, and who may run instantly."""
