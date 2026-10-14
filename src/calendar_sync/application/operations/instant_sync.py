@@ -8,18 +8,26 @@ each rule's run through the scheduled pass, and each acknowledgement.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from calendar_sync.application.operations.ports import (
     InstallationUnitOfWorkFactory,
     InstantSyncOwner,
+    PendingInstantRun,
+)
+from calendar_sync.application.operations.scheduled_pass import (
+    ScheduledPass,
+    ScheduledRun,
+    fairly_ordered,
 )
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.instant_sync import CallBudget, UpkeepWatches
-from calendar_sync.application.sync.watch_ports import SyncCadencePolicy
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
+from calendar_sync.application.sync.watch_ports import PendingRequest, SyncCadencePolicy
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.model import SyncRuleId, SyncRuleState
 
 logger = logging.getLogger(__name__)
 
@@ -101,3 +109,142 @@ class WatchUpkeep:
             and owner.wanted
             and self.cadence.cadence(owner.user).instant
         )
+
+
+@dataclass(frozen=True, slots=True)
+class InstantRun:
+    """A rule's run for its Instant Sync Request, and the request's sequence it answers."""
+
+    scheduled: ScheduledRun
+    seq: int
+    """The request's `requested_seq` when the run was chosen; notices after it stay pending."""
+
+
+def due_at(request: PendingRequest) -> datetime:
+    """When a pending request may run: once its notices were quiet for QUIET, or MAX_WAIT after
+    the first, and never within MIN_GAP of the rule's last instant run."""
+    settled = min(request.last_requested_at + QUIET, request.first_requested_at + MAX_WAIT)
+    if request.last_run_at is None:
+        return settled
+    return max(settled, request.last_run_at + MIN_GAP)
+
+
+@dataclass(slots=True)
+class InstantDispatch:
+    """Chooses which rules run now for their Instant Sync Requests, and runs them.
+
+    A request whose rule may no longer run instantly is acknowledged and dropped: its owner turned
+    Instant Sync off, their Plan no longer includes it, or the rule's last run failed, which
+    Scheduled Sync retries with its own backoff. Requests of a paused rule or a disabled User are
+    not listed, so they wait, and run or are dropped once the rule or User is active again.
+    Delivery Evidence never holds a run back: an authenticated notice proves delivery works.
+    """
+
+    installation: InstallationUnitOfWorkFactory
+    scheduled_pass: ScheduledPass
+    requests_for: Callable[[UserId], UnitOfWorkFactory]
+    """Each User's units, which acknowledge that User's requests."""
+    cadence: SyncCadencePolicy
+    clock: Clock
+
+    def due(self, reserved: Collection[str]) -> tuple[tuple[InstantRun, ...], datetime | None]:
+        """The runs to start now, taking turns between Users, and when the next pending request
+        becomes due. Rules in `reserved` are queued or running already and are left alone."""
+        now = self.clock.now()
+        with self.installation() as installation:
+            instant = self._instant_users(installation.instant_sync_owners())
+            pending = installation.pending_instant_runs()
+        ready: list[PendingInstantRun] = []
+        later: list[datetime] = []
+        for item in pending:
+            if item.scheduled.rule.id.value in reserved:
+                continue
+            if not _eligible(item, instant):
+                self._drop(item, now)
+            elif (at := due_at(item.request)) <= now:
+                ready.append(item)
+            else:
+                later.append(at)
+        return _fair_runs(ready), min(later, default=None)
+
+    def run(self, item: InstantRun) -> None:
+        """Run the rule as the scheduler does, then acknowledge the request whether the run
+        succeeded or failed. A notice that came during the run raised the request past the
+        captured sequence, so another run follows; a crash before acknowledging runs it again.
+
+        A run may wait in the dispatcher's queue, so the request is read again first. One no
+        longer listed waits, as `due` leaves it: its rule was paused or its owner disabled. One
+        whose rule may no longer run instantly is dropped without running."""
+        scheduled = item.scheduled.scheduled
+        current, instant = self._recheck(item)
+        if current is None:
+            return
+        if not _eligible(current, instant):
+            self._drop(current, self.clock.now())
+            return
+        try:
+            self.scheduled_pass.run(item.scheduled)
+        finally:
+            try:
+                self._acknowledge(scheduled.owner, scheduled.rule.id, item.seq, self.clock.now())
+            except Exception:
+                logger.exception(
+                    "Could not acknowledge the instant run of rule %s; it runs again",
+                    scheduled.rule.id.value,
+                )
+
+    def _recheck(self, item: InstantRun) -> tuple[PendingInstantRun | None, frozenset[UserId]]:
+        """The run's request as it is pending now, if it still is, and who may run instantly."""
+        owner, rule_id = item.scheduled.scheduled.owner, item.scheduled.scheduled.rule.id
+        with self.installation() as installation:
+            instant = self._instant_users(installation.instant_sync_owners())
+            pending = installation.pending_instant_runs()
+        current = next(
+            (
+                each
+                for each in pending
+                if each.scheduled.owner == owner and each.scheduled.rule.id == rule_id
+            ),
+            None,
+        )
+        return current, instant
+
+    def _instant_users(self, owners: Sequence[InstantSyncOwner]) -> frozenset[UserId]:
+        """The Users whose rules may run instantly now."""
+        return frozenset(
+            owner.user
+            for owner in owners
+            if owner.wanted and not owner.disabled and self.cadence.cadence(owner.user).instant
+        )
+
+    def _drop(self, item: PendingInstantRun, now: datetime) -> None:
+        """Acknowledge a request no instant run will answer; Scheduled Sync runs the rule."""
+        scheduled = item.scheduled
+        try:
+            self._acknowledge(scheduled.owner, scheduled.rule.id, item.request.requested_seq, now)
+        except Exception:
+            logger.exception("Could not drop an Instant Sync Request; trying again next look")
+
+    def _acknowledge(self, owner: UserId, rule_id: SyncRuleId, seq: int, at: datetime) -> None:
+        with self.requests_for(owner)() as uow:
+            uow.instant_requests.acknowledge(rule_id, seq, at)
+            uow.commit()
+
+
+def _eligible(item: PendingInstantRun, instant: frozenset[UserId]) -> bool:
+    return (
+        item.scheduled.owner in instant
+        and item.scheduled.rule.state is SyncRuleState.ENABLED
+        and not item.last_run_failed
+    )
+
+
+def _fair_runs(ready: Sequence[PendingInstantRun]) -> tuple[InstantRun, ...]:
+    """Due runs taking turns between Users, as a scheduled pass orders its rules."""
+    seqs = {
+        (item.scheduled.owner, item.scheduled.rule.id): item.request.requested_seq for item in ready
+    }
+    return tuple(
+        InstantRun(ScheduledRun(scheduled, full=False), seqs[scheduled.owner, scheduled.rule.id])
+        for scheduled in fairly_ordered([item.scheduled for item in ready])
+    )
