@@ -61,6 +61,7 @@ from calendar_sync.application.operations.installation_hints import (
 from calendar_sync.application.operations.instant_sync import (
     InstantDispatch,
     InstantSyncStatus,
+    WatchedSources,
     WatchUpkeep,
 )
 from calendar_sync.application.operations.operator_overview import OperatorOverview, UserStatuses
@@ -500,7 +501,10 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         adapters.unit_of_work,
         cadence,
         adapters.delivery_evidence,
-        adapters.watchers.provider_of if adapters.watchers is not None else _no_provider,
+        WatchedSources(
+            adapters.watchers.provider_of if adapters.watchers is not None else _no_provider,
+            adapters.watch_backoff.known_unwatchable,
+        ),
         address,
         adapters.clock,
     )

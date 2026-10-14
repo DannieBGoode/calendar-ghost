@@ -408,10 +408,10 @@ def _apply(
     state: MemoryState, registration: WatchRegistration, kind: NoticeKind, at: datetime
 ) -> int:
     key = registration.id
+    # Any authentic notice proves the provider reaches the installation through it.
+    registration = replace(registration, confirmed_at=registration.confirmed_at or at)
+    state.registrations[key] = registration
     if kind is NoticeKind.STARTED:
-        state.registrations[key] = replace(
-            registration, confirmed_at=registration.confirmed_at or at
-        )
         return 0
     if kind is NoticeKind.REAUTHORIZE:
         asked = registration.renew_requested_at

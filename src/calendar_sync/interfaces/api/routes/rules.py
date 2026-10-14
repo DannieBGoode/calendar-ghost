@@ -476,7 +476,7 @@ def _named_rule_response(rule: SyncRule, names: Mapping[CalendarEndpoint, str]) 
 def _cadence_fields(reason: CadenceReason | None, poll_every: timedelta) -> dict[str, Any]:
     """How the rule syncs; a rule created since the cadences were read is not watched yet."""
     return {
-        "effective_cadence": (reason or CadenceReason.NOT_WATCHABLE).value,
+        "effective_cadence": (reason or CadenceReason.WAITING_FOR_PROVIDER).value,
         "poll_every_minutes": int(poll_every.total_seconds() // 60),
     }
 

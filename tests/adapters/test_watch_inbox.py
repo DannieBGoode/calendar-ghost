@@ -266,6 +266,28 @@ def test_a_start_notice_confirms_a_registration_even_before_its_receipt(store: S
     )
 
 
+@pytest.mark.parametrize("kind", list(NoticeKind), ids=[kind.value for kind in NoticeKind])
+def test_every_authentic_notice_confirms_its_registration_once(
+    store: Store, kind: NoticeKind
+) -> None:
+    # Google's start notice may be lost, and Graph's creation may predate a fixed proxy; any
+    # notice that arrives proves that the provider reaches the installation through it.
+    _seed(store, _registration())
+
+    _record(store, _notice(kind), after=MINUTE)
+    _record(store, _notice(kind), after=2 * MINUTE)
+
+    assert _registrations(store)[0].confirmed_at == NOW + MINUTE
+
+
+def test_a_refused_notice_confirms_nothing(store: Store) -> None:
+    _seed(store, _registration())
+
+    _record(store, _notice(token="token-guessed"))
+
+    assert _registrations(store)[0].confirmed_at is None
+
+
 def test_a_change_requests_only_the_covered_enabled_rules_of_the_owner(store: Store) -> None:
     _seed(store, _registration(), rules=(RULE, UNCOVERED, PAUSED))
     _seed(
@@ -364,7 +386,9 @@ def test_a_removal_before_the_receipt_abandons_the_registration_for_good(store: 
         uow.commit()
 
     assert not late
-    assert _registrations(store) == (replace(creating, state=RegistrationState.ABANDONED),)
+    assert _registrations(store) == (
+        replace(creating, state=RegistrationState.ABANDONED, confirmed_at=NOW),
+    )
     # Its later notices are recognized and ignored.
     assert _record(store, _notice(), after=2 * MINUTE) == 0
 

@@ -9,7 +9,7 @@ import threading
 from collections.abc import Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
@@ -24,8 +24,9 @@ from calendar_sync.application.sync.watch_ports import (
     WatchNotice,
 )
 from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import build_container
+from calendar_sync.bootstrap.container import build_adapters, build_container, compose
 from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.model import CalendarEndpoint
 from calendar_sync.domain.watches import WatchRegistrationId
 from calendar_sync.infrastructure.scheduling import InstantSyncDispatcher
 from calendar_sync.infrastructure.security import CredentialCipher
@@ -267,12 +268,18 @@ def test_no_log_line_names_a_notices_registration_token_or_body(
         assert secret not in ours
 
 
-def _signed_in_app(tmp_path: Path, public_url: str) -> TestClient:
+def _signed_in_app(
+    tmp_path: Path, public_url: str, *, unwatchable: tuple[CalendarEndpoint, ...] = ()
+) -> TestClient:
     settings = Settings(
         tmp_path / "test.db", master_key=CredentialCipher.generate_key(), public_url=public_url
     )
+    adapters = build_adapters(settings)
+    for calendar in unwatchable:
+        # As upkeep records a calendar its provider cannot watch.
+        adapters.watch_backoff.cannot_watch(calendar, datetime.now(UTC))
     container = replace(
-        build_container(settings), scheduler=None, instant_dispatcher=None, watch_keeper=None
+        compose(settings, adapters), scheduler=None, instant_dispatcher=None, watch_keeper=None
     )
     return TestClient(create_app(container))
 
@@ -312,13 +319,19 @@ def test_without_a_public_https_address_the_switch_says_why_and_links_the_fix(
 
 
 @pytest.mark.parametrize(
-    ("public_url", "cadence"),
-    [(ADDRESS, "not_watchable"), ("", "no_public_address")],
-    ids=["https, nothing watched yet", "no public address"],
+    ("public_url", "unwatchable", "cadence"),
+    [
+        (ADDRESS, (), "waiting_for_provider"),
+        (ADDRESS, (rule().source,), "not_watchable"),
+        ("", (), "no_public_address"),
+    ],
+    ids=["https, nothing watched yet", "https, found unwatchable", "no public address"],
 )
-def test_each_rule_says_how_often_it_syncs(tmp_path: Path, public_url: str, cadence: str) -> None:
+def test_each_rule_says_how_often_it_syncs(
+    tmp_path: Path, public_url: str, unwatchable: tuple[CalendarEndpoint, ...], cadence: str
+) -> None:
     database = tmp_path / "test.db"
-    client = _signed_in_app(tmp_path, public_url)
+    client = _signed_in_app(tmp_path, public_url, unwatchable=unwatchable)
     owner = first_user(database)
     with sqlite_units(database, user=owner)() as uow:
         uow.rules.add(rule())

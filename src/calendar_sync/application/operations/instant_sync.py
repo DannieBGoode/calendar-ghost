@@ -271,6 +271,15 @@ def _fair_runs(ready: Sequence[PendingInstantRun]) -> tuple[InstantRun, ...]:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class WatchedSources:
+    """What watch upkeep knows of each Source Calendar's provider."""
+
+    provider_of: Callable[[ConnectedAccountId], ProviderKind | None]
+    known_unwatchable: Callable[[CalendarEndpoint, datetime], bool]
+    """Whether upkeep found lately that the calendar's provider cannot watch it."""
+
+
 @dataclass(slots=True)
 class InstantSyncStatus:
     """Whether Instant Sync is on for a User, and why each of their rules syncs as it does.
@@ -283,7 +292,7 @@ class InstantSyncStatus:
     unit_of_work: Callable[[UserId], UnitOfWorkFactory]
     cadence: SyncCadencePolicy
     evidence: DeliveryEvidenceLog
-    provider_of: Callable[[ConnectedAccountId], ProviderKind | None]
+    sources: WatchedSources
     address: str | None
     """The installation's public https address; None when it cannot offer Instant Sync."""
     clock: Clock
@@ -308,7 +317,15 @@ class InstantSyncStatus:
             if self.address is not None and registration.address.startswith(f"{self.address}/")
         )
         return {
-            rule.id: _cadence_of(rule.source, availability, watches, current, now) for rule in rules
+            rule.id: _cadence_of(
+                rule.source,
+                availability,
+                watches,
+                current,
+                now,
+                unwatchable=self.sources.known_unwatchable(rule.source, now),
+            )
+            for rule in rules
         }
 
     def poll_every(self, user: UserId) -> timedelta:
@@ -330,7 +347,7 @@ class InstantSyncStatus:
         if self.address is None or not watches:
             return ()
         evidence = self.evidence.evidence(self.address)
-        providers = {self.provider_of(watch.account) for watch in watches}
+        providers = {self.sources.provider_of(watch.account) for watch in watches}
         return tuple(
             evidence[provider].state if provider in evidence else DeliveryState.UNKNOWN
             for provider in providers
@@ -344,6 +361,8 @@ def _cadence_of(
     watches: Sequence[CalendarWatch],
     registrations: Sequence[WatchRegistration],
     now: datetime,
+    *,
+    unwatchable: bool,
 ) -> CadenceReason:
     """One rule's Effective Cadence, from the watch covering its Source Calendar, if any."""
     watch = next((each for each in watches if each.covers(source)), None)
@@ -352,4 +371,4 @@ def _cadence_of(
         for registration in registrations
         if watch is not None and registration.watch_id == watch.id
     )
-    return effective_cadence(availability, watch, own, now)
+    return effective_cadence(availability, watch, own, now, unwatchable=unwatchable)

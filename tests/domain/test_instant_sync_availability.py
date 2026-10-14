@@ -126,8 +126,21 @@ def test_a_rule_syncs_on_schedule_for_its_owners_reason_even_with_a_delivering_w
     assert effective_cadence(availability, WATCH, (DELIVERING,), NOW) is reason
 
 
-def test_a_rule_whose_source_no_watch_covers_is_not_watchable() -> None:
-    assert effective_cadence(Availability.ON, None, (), NOW) is CadenceReason.NOT_WATCHABLE
+def test_a_rule_whose_source_its_provider_cannot_watch_is_not_watchable() -> None:
+    reason = effective_cadence(Availability.ON, None, (), NOW, unwatchable=True)
+
+    assert reason is CadenceReason.NOT_WATCHABLE
+
+
+def test_a_rule_whose_source_no_watch_covers_yet_waits_for_the_provider() -> None:
+    # A new or resumed rule, until upkeep reaches it, or while its account's lookup backs off.
+    assert effective_cadence(Availability.ON, None, (), NOW) is CadenceReason.WAITING_FOR_PROVIDER
+
+
+def test_an_availability_reason_comes_before_an_unwatchable_source() -> None:
+    reason = effective_cadence(Availability.OFF_BY_USER, None, (), NOW, unwatchable=True)
+
+    assert reason is CadenceReason.OFF_BY_USER
 
 
 def test_a_rule_syncs_instantly_while_its_watch_has_a_delivering_registration() -> None:

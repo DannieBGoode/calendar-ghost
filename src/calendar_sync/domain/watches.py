@@ -325,10 +325,11 @@ class CadenceReason(StrEnum):
 
     INSTANT = "instant"
     NOT_WATCHABLE = "not_watchable"
-    """Its Source Calendar's provider cannot watch it, such as a calendar shared from another
-    mailbox."""
+    """Upkeep found that its Source Calendar's provider cannot watch it, such as a calendar
+    shared from another mailbox."""
     WAITING_FOR_PROVIDER = "waiting_for_provider"
-    """Its watch exists, but no registration has proved yet that notices arrive."""
+    """No registration has proved yet that notices arrive: upkeep has not watched its source
+    yet, or its provider has not confirmed the watch."""
     OFF_BY_USER = "off_by_user"
     NOT_IN_PLAN = "not_in_plan"
     NO_PUBLIC_ADDRESS = "no_public_address"
@@ -350,15 +351,19 @@ def effective_cadence(
     watch: CalendarWatch | None,
     registrations: Collection[WatchRegistration],
     now: datetime,
+    *,
+    unwatchable: bool = False,
 ) -> CadenceReason:
     """How a rule syncs now, given its owner's availability and the watch covering its source.
 
-    It syncs instantly only while one of that watch's registrations is delivering.
+    It syncs instantly only while one of that watch's registrations is delivering. A source no
+    watch covers is `unwatchable` only when upkeep found that its provider cannot watch it; until
+    upkeep reaches a new or resumed rule, it waits for the provider like one being watched.
     """
     if availability is not Availability.ON:
         return _AVAILABILITY_REASONS[availability]
     if watch is None:
-        return CadenceReason.NOT_WATCHABLE
+        return CadenceReason.NOT_WATCHABLE if unwatchable else CadenceReason.WAITING_FOR_PROVIDER
     if any(
         registration.watch_id == watch.id and registration.delivering(now)
         for registration in registrations

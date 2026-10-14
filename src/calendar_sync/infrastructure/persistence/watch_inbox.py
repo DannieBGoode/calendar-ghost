@@ -111,14 +111,16 @@ def _authentic(
 def _apply(connection: sqlite3.Connection, found: sqlite3.Row, kind: NoticeKind, at: str) -> int:
     """What one authentic notice does, by kind; how many rule requests it raised."""
     owned = (str(found["id"]), str(found["user_id"]))
+    # Any authentic notice proves the provider reaches the installation through it, so a lost
+    # start notice, or a proxy fixed after creation, does not leave its rules waiting.
+    connection.execute(
+        """
+        UPDATE watch_registrations SET confirmed_at = COALESCE(confirmed_at, ?)
+        WHERE id = ? AND user_id = ?
+        """,
+        (at, *owned),
+    )
     if kind is NoticeKind.STARTED:
-        connection.execute(
-            """
-            UPDATE watch_registrations SET confirmed_at = COALESCE(confirmed_at, ?)
-            WHERE id = ? AND user_id = ?
-            """,
-            (at, *owned),
-        )
         return 0
     if kind is NoticeKind.REAUTHORIZE:
         # The latest time, so upkeep that read an earlier one keeps this request for later.

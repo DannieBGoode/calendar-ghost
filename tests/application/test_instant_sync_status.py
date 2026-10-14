@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.operations.instant_sync import InstantSyncStatus
+from calendar_sync.application.operations.instant_sync import InstantSyncStatus, WatchedSources
 from calendar_sync.application.sync.watch_ports import (
     EveryUserInstant,
     Receipt,
@@ -19,7 +19,7 @@ from calendar_sync.application.sync.watch_ports import (
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.cadence import SCHEDULED_EVERY, SyncCadence
-from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.domain.model import CalendarEndpoint, SyncRuleId
 from calendar_sync.domain.watches import (
     Availability,
     CadenceReason,
@@ -98,6 +98,7 @@ def _status(
     address: str | None = ADDRESS,
     evidence: Evidence | None = None,
     plan: SyncCadencePolicy | None = None,
+    unwatchable: frozenset[CalendarEndpoint] = frozenset(),
 ) -> InstantSyncStatus:
     directory = MemoryUsers()
     for user in users:
@@ -107,7 +108,10 @@ def _status(
         unit_of_work=database.for_user,
         cadence=plan or EveryUserInstant(),
         evidence=evidence or Evidence(),
-        provider_of=lambda _account: ProviderKind.GOOGLE,
+        sources=WatchedSources(
+            provider_of=lambda _account: ProviderKind.GOOGLE,
+            known_unwatchable=lambda calendar, _now: calendar in unwatchable,
+        ),
         address=address,
         clock=FixedClock(),
     )
@@ -202,6 +206,23 @@ def test_failing_evidence_matters_only_for_providers_the_users_watches_use() -> 
     status = _status(database, evidence=Evidence(FAILING))
 
     assert status.availability(USER) is Availability.ON
+    assert status.cadences(USER) == {rule().id: CadenceReason.WAITING_FOR_PROVIDER}
+
+
+def test_a_rule_upkeep_has_not_watched_yet_waits_for_the_provider() -> None:
+    # A new or resumed rule, until the next upkeep cycle reaches it.
+    database = InMemoryUnitOfWorkFactory()
+    _with_rule(database)
+
+    assert _status(database).cadences(USER) == {rule().id: CadenceReason.WAITING_FOR_PROVIDER}
+
+
+def test_a_rule_whose_source_upkeep_found_unwatchable_is_not_watchable() -> None:
+    database = InMemoryUnitOfWorkFactory()
+    _with_rule(database)
+
+    status = _status(database, unwatchable=frozenset({rule().source}))
+
     assert status.cadences(USER) == {rule().id: CadenceReason.NOT_WATCHABLE}
 
 
@@ -242,7 +263,7 @@ def test_another_users_watch_never_makes_a_rule_instant() -> None:
 
     status = _status(database, users=(_user(), _user(OTHER_USER)))
 
-    assert status.cadences(USER) == {rule().id: CadenceReason.NOT_WATCHABLE}
+    assert status.cadences(USER) == {rule().id: CadenceReason.WAITING_FOR_PROVIDER}
     assert status.cadences(OTHER_USER) == {SyncRuleId("rule-2"): CadenceReason.INSTANT}
 
 

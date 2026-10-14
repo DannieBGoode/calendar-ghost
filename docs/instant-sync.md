@@ -132,9 +132,11 @@ the reports they bring until then are answered `404` and change nothing.
 ## Check that it works
 
 1. Open a rule. **When it syncs** says **Syncs instantly** once its provider confirmed it will
-   report changes. Google confirms with its first report, usually within seconds; Microsoft
-   confirms when it accepts the request, because it checks the address first. Until then it says
-   **Syncs every 5 minutes** with [Waiting for the provider](#waiting-for-the-provider).
+   report changes. Calendar Ghost asks the provider within five minutes after the rule is enabled.
+   Google confirms with its first report, usually within seconds; Microsoft confirms when it
+   accepts the request, because it checks the address first; and any later report confirms it
+   too. Until then it says **Syncs every 5 minutes** with
+   [Waiting for the provider](#waiting-for-the-provider).
 2. Edit an event in the rule's Source Calendar. **Activity** usually lists the change within a
    minute.
 3. If the **Instant sync** switch under **Settings → Your account** is off with a reason, its
@@ -182,8 +184,9 @@ proof that delivery works, so a rule never waits on this check.
 
 ### Waiting for the provider
 
-The rule's watch exists, but its provider has not confirmed it yet. This usually lasts seconds. It
-lasts longer when:
+Calendar Ghost has not asked the rule's provider to report changes yet, or the provider has not
+confirmed it yet. A rule just created or resumed waits until Calendar Ghost asks, within five
+minutes, and the provider usually confirms within seconds. It lasts longer when:
 
 - the provider is refusing or limiting requests for now: Calendar Ghost tries again later, waiting
   longer after each failure, at most a day;
@@ -196,9 +199,10 @@ lasts longer when:
 
 ### This calendar cannot be watched
 
-Its provider cannot report changes in this calendar to Calendar Ghost. Microsoft reports changes
-only for the signed-in person's own mailbox, so a calendar shared from another mailbox cannot be
-watched. Calendar Ghost asks again once a day. Its rules sync every five minutes.
+Its provider said it cannot report changes in this calendar to Calendar Ghost. Microsoft reports
+changes only for the signed-in person's own mailbox, so a calendar shared from another mailbox
+cannot be watched. Calendar Ghost asks again once a day, and after a restart. Its rules sync every
+five minutes.
 
 ### You turned it off
 

@@ -87,7 +87,7 @@ come right after this work and plug into one port; nothing in this design waits 
   | Writer | Transition |
   | --- | --- |
   | Upkeep | insert `creating` · `creating → live` (receipt) · `live → retiring` (Google replacement recorded) · any → `abandoned` · delete |
-  | Inbox | set `confirmed_at` (idempotent) · set `renew_requested_at` (idempotent) · `live → retiring` or `creating → abandoned` on `subscriptionRemoved` |
+  | Inbox | set `confirmed_at` on every authenticated notice (idempotent) · set `renew_requested_at` (idempotent) · `live → retiring` or `creating → abandoned` on `subscriptionRemoved` |
 
   A receipt for a row that is no longer `creating` updates nothing, so a removed registration is
   never brought back. Upkeep clears `renew_requested_at` only if it still holds the value upkeep
@@ -113,6 +113,10 @@ come right after this work and plug into one port; nothing in this design waits 
     `live`, confirmed, unexpired registration that points at the current public address.
   - Otherwise it is `scheduled`, with one reason: an availability reason, `not_watchable`, or
     `waiting_for_provider`.
+  - `not_watchable` means upkeep found, within the last day, that the source's provider cannot
+    watch it (the process-wide record of `AccountBackoff`). A source no watch covers for any other
+    reason, such as a new or resumed rule upkeep has not reached yet, or an account whose scope
+    lookup backs off, is `waiting_for_provider`.
 
 ## Application
 
@@ -229,11 +233,14 @@ Evidence. The dispatcher, which is part of the scheduler, joins `INSTALLATION_UN
 
 For each notice, it locates the registration by the id in the path, then checks two things in
 constant time: the token hash, and the provider handle when the notice carries one. Unknown,
-`abandoned`, and refused notices change nothing. The others act by kind:
+`abandoned`, and refused notices change nothing. Every other notice, of any kind, sets the
+registration's `confirmed_at` if it is unset: it proves that the provider reaches the installation
+through it, so a dropped Google `sync` notice, or a proxy fixed after a registration was created,
+does not leave rules waiting for the provider while notices flow. Then each acts by kind:
 
 | Kind | Effect |
 | --- | --- |
-| `started` (Google `sync`) | set `confirmed_at` |
+| `started` (Google `sync`) | nothing more |
 | `changed`, `missed` | one statement upserts a request for each enabled rule of the owner whose source is in the watch's coverage, raising `requested_seq` |
 | `reauthorize` | set `renew_requested_at` |
 | `removed` | `live → retiring`, or `creating → abandoned` so a late receipt cannot revive it, and raise requests (catch-up) |
@@ -362,7 +369,9 @@ review raised:
 - During Google renewal overlap, both registrations are accepted.
 - A Graph `409` adopts only an exact registration id. Another User's subscription is never touched
   or deleted.
-- A shared Outlook calendar is `not_watchable`.
+- A shared Outlook calendar is `not_watchable`; a source upkeep has not reached yet is
+  `waiting_for_provider`.
+- Any authenticated notice confirms its registration, not only Google's `sync`.
 - A disabled User's watches are stopped, and a deleted User's notices become unknown.
 - A spoofed `validationToken` produces no evidence.
 - Evidence recovers after the address changes. Evidence does not block runs.
