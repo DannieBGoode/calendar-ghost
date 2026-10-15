@@ -21,8 +21,9 @@ function revealOnArrival(section: HTMLElement | null) {
 /**
  * What the signed-in User's Plan allows and how much of it they use, in one line, and a note when
  * more rules count than it allows. An administrator reads that no plan limits them. Hidden while
- * Plans are off and for an administrator under Only Me, where Plans have no effect; a failed load
- * shows its own error, and the server still checks every limit.
+ * Plans are off and for an administrator under Only Me, where Plans have no effect. A failed load
+ * shows its own error; an administrator sees it only once the Registration Policy loads and is not
+ * Only Me. The server still checks every limit.
  */
 export function OwnPlanSection({ administrator }: { administrator: boolean }) {
   const { t } = useI18n()
@@ -30,7 +31,7 @@ export function OwnPlanSection({ administrator }: { administrator: boolean }) {
   // Only administrators may read the Registration Policy; under Only Me the only User administers.
   const registration = useQuery({ queryKey: ["registration"], queryFn: api.registration, enabled: administrator })
   const policy = registration.data?.policy
-  const failed = ownPlan.isError && !(administrator && policy === "only_me")
+  const failed = ownPlan.isError && (!administrator || (policy !== undefined && policy !== "only_me"))
   if (!failed && !ownPlanShown(ownPlan.data, policy)) return null
   return (
     <section ref={revealOnArrival} id={ANCHOR} className="settings-section" aria-labelledby="your-plan-title">

@@ -114,13 +114,16 @@ async function settle(times = 6) {
   }
 }
 
-/** What the section reads: the own plan, the Registration Policy, and whether the User administers. */
-type Scenario = { ownPlan: Response; registration?: Registration; administrator?: boolean }
+/**
+ * What the section reads: the own plan, the Registration Policy (or the answer that reads it, as for
+ * a failed read), and whether the User administers.
+ */
+type Scenario = { ownPlan: Response; registration?: Registration | Response; administrator?: boolean }
 
 async function renderSection(i18n: I18n, { ownPlan, registration = invitationOnly, administrator = false }: Scenario) {
   const answers: Record<string, Response> = {
     "GET /api/v1/account/plan": ownPlan,
-    "GET /api/v1/registration": jsonResponse(registration),
+    "GET /api/v1/registration": "policy" in registration ? jsonResponse(registration) : registration,
   }
   serve(answers)
   root = createRoot(container)
@@ -256,6 +259,27 @@ describe("OwnPlanSection", () => {
   it("hides a failed load from an administrator under Only Me, where plans have no effect", async () => {
     await renderSection(testI18n(), { ownPlan: jsonResponse(UNREADABLE, 500), registration: onlyMe, administrator: true })
     expect(section()).toBeNull()
+  })
+
+  it("shows its own error with Try again to an administrator under Invitation Only when it cannot load", async () => {
+    await renderSection(testI18n(), {
+      ownPlan: jsonResponse(UNREADABLE, 500),
+      registration: invitationOnly,
+      administrator: true,
+    })
+    expect(section()?.querySelector("[role='alert']")?.textContent).toBe("Your plan could not load.Try again")
+    expect(button("Try again")).not.toBeNull()
+  })
+
+  it("hides a failed load from an administrator while the Registration Policy cannot load either", async () => {
+    await renderSection(testI18n(), {
+      ownPlan: jsonResponse(UNREADABLE, 500),
+      registration: jsonResponse(UNREADABLE, 500),
+      administrator: true,
+    })
+    expect(section()).toBeNull()
+    expect(container.querySelector("#your-plan-title")).toBeNull()
+    expect(container.textContent).not.toContain("Your plan could not load.")
   })
 
   const SHOWN: [string, Scenario][] = [
