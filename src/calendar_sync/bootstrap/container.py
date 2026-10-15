@@ -885,7 +885,7 @@ def _compose_user(
         get_sync_rule_details=GetSyncRuleDetails(unit_of_work, locks, adapters.allowances, user_id),
         remove_sync_rule=remove_sync_rule,
         replace_sync_rule_calendars=ReplaceSyncRuleCalendars(
-            unit_of_work, remove_sync_rule, create_sync_rule, adapters.ids
+            unit_of_work, remove_sync_rule, adapters.ids
         ),
         rule_health=rule_health,
         lapsed_authorizations=rule_health.lapses,

@@ -4,7 +4,7 @@ import hashlib
 import logging
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import (
@@ -28,6 +28,7 @@ from calendar_sync.application.sync.ports import (
 )
 from calendar_sync.application.sync.resource_use import record_provider_calls
 from calendar_sync.application.sync.retry import with_retries
+from calendar_sync.application.sync.rule_insertion import insert_rule
 from calendar_sync.application.sync.run_log import UntalliedProviderCalls, call_summary, duration
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import EventMapping, ProjectionHandling, SyncRule, SyncRuleId
@@ -40,6 +41,8 @@ class RemovalResult:
     deleted: int
     detached: int
     conflicts: int
+    successor: SyncRule | None = None
+    """A Rule Replacement's new draft, as inserted when the removal began."""
 
 
 @dataclass(slots=True)
@@ -61,7 +64,17 @@ class RemoveSyncRule:
             rule = uow.rules.get(rule_id)
         self._require_possible(rule, rule_id, handling)
 
-    def execute(self, rule_id: SyncRuleId, handling: ProjectionHandling) -> RemovalResult:
+    def execute(
+        self,
+        rule_id: SyncRuleId,
+        handling: ProjectionHandling,
+        *,
+        successor: SyncRule | None = None,
+    ) -> RemovalResult:
+        """Remove the rule. A Rule Replacement passes its new draft as `successor`: it is
+        inserted, holding the rule's place under its User's rule limit when the rule counted,
+        in the transaction that begins the removal, so both happen or neither does (ADR 0010,
+        ADR 0038). Once that commits, nothing removes the draft."""
         work = RuleWork(RuleWorkKind.REMOVAL, self.clock.now(), handling=handling)
         with (
             self.locks.for_rule(rule_id),
@@ -69,7 +82,7 @@ class RemoveSyncRule:
             self.call_stats.measure() as calls,
         ):
             try:
-                return self._execute_measured(rule_id, handling, work, calls)
+                return self._execute_measured(rule_id, handling, work, calls, successor)
             finally:
                 # After the removal's unit of work closed, so the count never waits on it.
                 record_provider_calls(self.unit_of_work, self.clock, calls)
@@ -80,11 +93,15 @@ class RemoveSyncRule:
         handling: ProjectionHandling,
         work: RuleWork,
         calls: ProviderCallTally,
+        successor: SyncRule | None,
     ) -> RemovalResult:
         with self.unit_of_work() as uow:
             with self.locks.for_writes(rule_id):
                 rule = self._require_possible(uow.rules.get(rule_id), rule_id, handling)
+                # The save takes SQLite's writer lock, so the successor's checks below see
+                # every committed rule and account, and any of them raising rolls both back.
                 uow.rules.save(rule.begin_removal())
+                placed = _place_successor(uow, successor, rule)
                 uow.commit()
             mappings = uow.mappings.for_rule(rule.id)
             work.total = len(mappings)
@@ -116,7 +133,7 @@ class RemoveSyncRule:
                 result.conflicts,
                 call_summary(calls),
             )
-        return result
+        return result if placed is None else replace(result, successor=placed)
 
     def _remove(
         self,
@@ -225,6 +242,18 @@ class RemoveSyncRule:
             destination_event_id=mapping.destination.event_id.value,
             detail=detail,
         )
+
+
+def _place_successor(uow: UnitOfWork, successor: SyncRule | None, old: SyncRule) -> SyncRule | None:
+    """Insert a Rule Replacement's new draft in the unit that begins `old`'s removal; it keeps
+    `old`'s place, and ranks where `old` ranked, when `old` counted toward its User's Plan."""
+    if successor is None:
+        return None
+    placed = successor.take_place_of(old)
+    insert_rule(uow, placed)
+    if placed.keeps_place:
+        uow.rules.inherit_place(placed.id, of=old.id)
+    return placed
 
 
 def _operation_key(mapping: EventMapping) -> str:

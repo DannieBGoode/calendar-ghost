@@ -2,10 +2,8 @@ import logging
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 
-from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.application.shared.ports import Clock, IdGenerator
 from calendar_sync.application.sync.errors import (
-    ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
     NotACalendarChange,
     RemovalInterrupted,
@@ -20,6 +18,7 @@ from calendar_sync.application.sync.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.application.sync.removal import RemovalResult, RemoveSyncRule
+from calendar_sync.application.sync.rule_insertion import insert_rule
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import (
@@ -46,16 +45,7 @@ class CreateSyncRule:
 
     def execute(self, rule: SyncRule) -> SyncRule:
         with self.unit_of_work() as uow:
-            if uow.rules.relationship_exists(rule.source, rule.destination):
-                raise DuplicateDirectionalRelationship(
-                    "a rule already exists for this source and destination"
-                )
-            uow.rules.add(rule)
-            # Checked after the insert holds the write lock, so an account deleted meanwhile
-            # cannot be left with a rule that names it. Raising rolls the insert back.
-            for endpoint in (rule.source, rule.destination):
-                if uow.accounts.state(endpoint.connected_account_id) is None:
-                    raise ConnectedAccountRequired("connect both accounts before creating a rule")
+            insert_rule(uow, rule)
             uow.commit()
         return rule
 
@@ -296,16 +286,17 @@ class GetSyncRuleDetails:
 @dataclass(frozen=True, slots=True)
 class RuleReplacement:
     rule: SyncRule
+    """The new draft as inserted; it keeps the previous rule's place when that rule counted."""
     removal: RemovalResult
 
 
 @dataclass(slots=True)
 class ReplaceSyncRuleCalendars:
-    """Rule Replacement: reserve a new Draft with the same policy, then remove the old rule."""
+    """Rule Replacement: remove the old rule, inserting a new Draft with the same policy in the
+    step that begins the removal (ADR 0010, ADR 0038)."""
 
     unit_of_work: UnitOfWorkFactory
     remove_rule: RemoveSyncRule
-    create_rule: CreateSyncRule
     ids: IdGenerator
 
     def execute(
@@ -334,17 +325,12 @@ class ReplaceSyncRuleCalendars:
                 "a rule already exists for this source and destination"
             )
         self.remove_rule.check(rule_id, handling)
-        # Creating first reserves the relationship through its uniqueness constraint, so a
-        # concurrent duplicate fails here, before anything destructive happens.
-        self.create_rule.execute(replacement)
+        # The removal inserts the draft in the transaction that begins it, with the checks every
+        # new rule passes: a duplicate that appeared meanwhile, or an account deleted meanwhile,
+        # rolls both back before anything is removed, and no draft exists without its removal.
         try:
-            removal = self.remove_rule.execute(rule_id, handling)
+            removal = self.remove_rule.execute(rule_id, handling, successor=replacement)
         except RemovalInterrupted as interrupted:
             raise ReplacementInterrupted(replacement.id, interrupted) from interrupted
-        except ApplicationError:
-            # Removal did not start, so withdraw the unused draft and leave the old rule as is.
-            with self.unit_of_work() as uow:
-                uow.rules.remove(replacement.id)
-                uow.commit()
-            raise
-        return RuleReplacement(replacement, removal)
+        assert removal.successor is not None
+        return RuleReplacement(removal.successor, removal)

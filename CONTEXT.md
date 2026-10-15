@@ -412,7 +412,7 @@ Permanent removal of a rule after its User explicitly chooses to delete its mapp
 _Avoid_: Disable rule, pause rule
 
 **Rule Replacement**:
-A change of a rule's source or destination calendar, performed as a new draft rule with the same transformation policy followed by Rule Removal of the previous rule. The new draft is created first, so a duplicate relationship is rejected before anything is removed; if the removal is interrupted, the new draft remains and the previous rule's removal can be retried.
+A change of a rule's source or destination calendar, performed as a new draft rule with the same transformation policy followed by Rule Removal of the previous rule. The new draft is created in the step that begins the previous rule's removal, so a duplicate relationship is refused before anything is removed, and no draft exists without that removal. When the previous rule counted toward its User's rule limit, the new draft keeps its place until it starts or is removed. If the removal is interrupted, the new draft remains with its place, and the previous rule's removal can be retried.
 _Avoid_: Calendar edit, rule move
 
 **Detached Event**:

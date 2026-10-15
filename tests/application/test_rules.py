@@ -6,7 +6,11 @@ from threading import Thread
 
 import pytest
 
-from calendar_sync.application.sync.errors import ConnectedAccountRequired, RuleNotFound
+from calendar_sync.application.sync.errors import (
+    ConnectedAccountRequired,
+    DuplicateDirectionalRelationship,
+    RuleNotFound,
+)
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.sync.rules import (
     ChangeSyncRulePolicy,
@@ -272,3 +276,14 @@ def test_new_rules_require_both_connected_accounts_to_exist(missing: str) -> Non
         CreateSyncRule(unit_of_work).execute(rule(state=SyncRuleState.DRAFT))
 
     assert unit_of_work.state.rules == {}
+
+
+def test_new_rules_refuse_a_relationship_another_rule_has() -> None:
+    unit_of_work = memory_units()
+    unit_of_work.state.rules[rule().id] = rule()
+    twin = SyncRule(SyncRuleId("twin"), rule().source, rule().destination)
+
+    with pytest.raises(DuplicateDirectionalRelationship):
+        CreateSyncRule(unit_of_work).execute(twin)
+
+    assert unit_of_work.state.rules == {rule().id: rule()}
