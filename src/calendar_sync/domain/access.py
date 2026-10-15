@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 
 from calendar_sync.domain.errors import DomainValidationError
+from calendar_sync.domain.plans import PlanKey
 
 EMAIL_LIMIT = 254
 """The longest address SMTP can deliver to."""
@@ -67,6 +68,8 @@ class User:
     instant_sync: bool = True
     """Whether their rules run soon after a change is reported, where their Plan and the
     installation allow it."""
+    plan: PlanKey | None = None
+    """Their own Plan; None means the Default Plan (ADR 0038)."""
 
     @property
     def needs_email(self) -> bool:

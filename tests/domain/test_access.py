@@ -17,6 +17,7 @@ from calendar_sync.domain.access import (
     require_administrator_remains,
     require_registration_change,
 )
+from calendar_sync.domain.plans import PlanKey
 
 CREATED = datetime(2026, 10, 1, tzinfo=UTC)
 
@@ -71,6 +72,11 @@ def test_a_user_who_adds_an_email_keeps_everything_else() -> None:
     added = _user(email=None).with_email("person@example.test")
 
     assert added == _user()
+
+
+def test_a_user_has_the_default_plan_until_one_of_their_own_is_assigned() -> None:
+    assert _user().plan is None
+    assert replace(_user(), plan=PlanKey("family")).plan == PlanKey("family")
 
 
 def test_only_me_is_the_default_registration_policy() -> None:
