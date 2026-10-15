@@ -1,7 +1,9 @@
 # Record the decisions worth explaining
 
 Amended by [ADR 0019](0019-administrator-chosen-activity-retention.md), which lets the
-administrator clear Activity older than a chosen age.
+administrator clear Activity older than a chosen age, and by
+[ADR 0036](0036-record-a-decision-only-when-it-says-something-new.md), which leaves out a skip
+that repeats the event's previous entry on an incremental run and adds provenance to entries.
 
 ## Context
 

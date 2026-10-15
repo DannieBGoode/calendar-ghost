@@ -123,6 +123,10 @@ _Avoid_: Cached event, event copy in the database
 The tracked fields a new revision of a source event changed since its Source Observation, with their values before and after, recorded on that decision's Audit Entry. It never says who made the change. A revision that changed nothing a rule projects needs no destination write.
 _Avoid_: Event diff, edit history
 
+**Source Comparison**:
+How a source event compared with the rule's Source Observation of it before its decision: changed, untracked (a new revision with no tracked field difference), same revision, cancelled, or no baseline. It decides whether a repeated skip is recorded and appears in an Audit Entry's details.
+_Avoid_: Diff result, change check
+
 ## Recurrence
 
 A recurring source event projects as one recurring destination series, never as unrelated single

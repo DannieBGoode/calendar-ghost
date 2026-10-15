@@ -224,6 +224,12 @@ the projections of the contacts' birthdays Google keeps in a primary calendar. A
 these as `birthday_removed`. Rolling back works with the same database: earlier releases ignore the
 column and project birthdays again on their next full pass.
 
+Migration 31 adds the nullable `audit_entries.run_reason`, `found_by`, and `source_comparison`
+columns: codes that say why a Sync Run read the calendars, which work found the event, and how the
+source compared with the rule's Source Observation ([ADR 0036](adr/0036-record-a-decision-only-when-it-says-something-new.md)).
+Earlier entries keep `NULL`. Rolling back works with the same database: earlier releases ignore the
+columns, and record the repeated skips the newer release leaves out.
+
 Sign-in failures are counted per email and per client address for 15 minutes: after five failures
 for one email, or twenty from one address, sign-in answers `429` with a `Retry-After` header until
 the oldest failure leaves the window. Behind a reverse proxy every request comes from the proxy's
