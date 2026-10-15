@@ -221,7 +221,7 @@ def test_a_blocked_event_decided_again_without_a_change_is_recorded_and_unblocks
         latest = connection.execute(
             "SELECT action, reason, source_comparison FROM audit_entries ORDER BY id DESC LIMIT 1"
         ).fetchone()
-    # Regression: ISSUE-001 — without a History Cipher every comparison was no_baseline, so this
+    # Regression: ISSUE-001: without a History Cipher every comparison was no_baseline, so this
     # test could not reach the repeat check it guards.
     # Found by /qa on 2026-10-15
     # Report: .gstack/qa-reports/run-20261015T080853Z/qa-report-calendar-ghost-2026-10-15.md

@@ -549,7 +549,7 @@ describe("ActivityView", () => {
     const terms = [...(detail?.querySelectorAll(".activity-detail-facts dt") ?? [])]
     const why = terms.find((term) => term.textContent === "Why it was checked")
     expect(why?.nextElementSibling?.textContent).toBe("Family reported a change to this event or its series.")
-    // Regression: ISSUE-002 — the line claimed a version was new since the last comparison, but a
+    // Regression: ISSUE-002: the line claimed a version was new since the last comparison, but a
     // run that left a revision out had already compared it; the baseline is the last recorded one.
     // Found by /qa on 2026-10-15
     // Report: .gstack/qa-reports/run-20261015T080853Z/qa-report-calendar-ghost-2026-10-15.md
