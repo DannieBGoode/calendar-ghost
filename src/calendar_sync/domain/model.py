@@ -252,6 +252,8 @@ _PREVIEWABLE = frozenset(
 )
 # States that could still write, or be enabled, without a disconnected account's authorization.
 _DEGRADED_ON_DISCONNECT = frozenset({SyncRuleState.PREVIEWED, SyncRuleState.ENABLED})
+# A Rule Replacement draft keeps its place under the rule limit until it starts (ADR 0038).
+_KEEPS_PLACE = frozenset({SyncRuleState.DRAFT, SyncRuleState.PREVIEWED})
 
 
 @dataclass(frozen=True, slots=True)
@@ -443,12 +445,17 @@ class SyncRule:
     awaiting_reauthorization: bool = False
     """Degraded only by Lapsed Authorization, so it resumes once its accounts are authorized
     again instead of needing a recovery preview (ADR 0027)."""
+    keeps_place: bool = False
+    """A Rule Replacement draft that holds the place of the rule it replaced under its User's rule
+    limit, until it starts or is removed (ADR 0038). Not part of material_signature."""
 
     def __post_init__(self) -> None:
         if self.source == self.destination:
             raise DomainValidationError("a directional sync rule cannot target its source")
         if self.initial_lookback_days < 0:
             raise DomainValidationError("initial lookback days cannot be negative")
+        if self.keeps_place and self.state not in _KEEPS_PLACE:
+            raise DomainValidationError("only a draft or previewed rule keeps a place")
 
     def uses_account(self, account_id: ConnectedAccountId) -> bool:
         """Whether either calendar of this rule belongs to the Connected Account."""
@@ -476,6 +483,18 @@ class SyncRule:
         """Degraded only by Lapsed Authorization, so it resumes without a preview (ADR 0027)."""
         return self.state is SyncRuleState.DEGRADED and self.awaiting_reauthorization
 
+    @property
+    def holdable(self) -> bool:
+        """Enabled, or stopped only by Lapsed Authorization: a rule that runs, or resumes on its
+        own, and so takes a place under its User's rule limit (ADR 0038)."""
+        return self.synchronizes or self.stopped_by_lapsed_authorization
+
+    @property
+    def counts_toward_plan(self) -> bool:
+        """Whether the rule takes one of the places its User's Plan allows: it runs, resumes on
+        its own, or is a Rule Replacement draft keeping the place of the rule it replaced."""
+        return self.holdable or self.keeps_place
+
     def eligible(self, event: CalendarEvent) -> bool:
         """Whether the rule projects a source event: a Native Event, not cancelled, that its
         Transformation Policy does not exclude.
@@ -490,21 +509,27 @@ class SyncRule:
         return replace(self, state=SyncRuleState.PREVIEWED, awaiting_reauthorization=False)
 
     def enable(self) -> Self:
+        """Start the rule; a Rule Replacement draft now counts as enabled, not by a kept place."""
         if self.state is not SyncRuleState.PREVIEWED:
             raise InvalidStateTransition(f"cannot enable a rule in state {self.state}")
-        return replace(self, state=SyncRuleState.ENABLED)
+        return replace(self, state=SyncRuleState.ENABLED, keeps_place=False)
 
     def pause(self) -> Self:
         if self.state not in {SyncRuleState.ENABLED, SyncRuleState.DEGRADED}:
             raise InvalidStateTransition(f"cannot pause a rule in state {self.state}")
-        return replace(self, state=SyncRuleState.PAUSED, awaiting_reauthorization=False)
+        return replace(
+            self, state=SyncRuleState.PAUSED, awaiting_reauthorization=False, keeps_place=False
+        )
 
     def degrade(self, *, awaiting_reauthorization: bool = False) -> Self:
         """Stop the rule; one stopped only by Lapsed Authorization awaits reauthorization."""
         if self.state not in {SyncRuleState.PREVIEWED, SyncRuleState.ENABLED}:
             raise InvalidStateTransition(f"cannot degrade a rule in state {self.state}")
         return replace(
-            self, state=SyncRuleState.DEGRADED, awaiting_reauthorization=awaiting_reauthorization
+            self,
+            state=SyncRuleState.DEGRADED,
+            awaiting_reauthorization=awaiting_reauthorization,
+            keeps_place=False,
         )
 
     def resume_after_reauthorization(self) -> Self:
@@ -513,22 +538,28 @@ class SyncRule:
             raise InvalidStateTransition(
                 "only a rule stopped by lapsed authorization resumes without a preview"
             )
-        return replace(self, state=SyncRuleState.ENABLED, awaiting_reauthorization=False)
+        return replace(
+            self, state=SyncRuleState.ENABLED, awaiting_reauthorization=False, keeps_place=False
+        )
 
     def require_preview(self) -> Self:
-        """A stopped rule whose recovery now needs a preview, whatever stopped it first."""
-        return replace(self, awaiting_reauthorization=False)
+        """A stopped rule whose recovery now needs a preview, whatever stopped it first; it keeps
+        no place under its User's rule limit."""
+        return replace(self, awaiting_reauthorization=False, keeps_place=False)
 
     def on_account_disconnected(self) -> Self:
         """The rule once one of its Connected Accounts is disconnected; itself if unchanged.
 
         A rule that could still write, or be enabled, stops. Disconnecting is a deliberate stop,
-        so a rule stopped by Lapsed Authorization needs a preview to recover.
+        so a rule stopped by Lapsed Authorization needs a preview to recover, and a Rule
+        Replacement draft gives up the place it kept.
         """
         if self.state in _DEGRADED_ON_DISCONNECT:
             return self.degrade()
         if self.awaiting_reauthorization:
             return self.require_preview()
+        if self.keeps_place:
+            return replace(self, keeps_place=False)
         return self
 
     def change_policy(self, transformation: TransformationPolicy) -> Self:
@@ -549,6 +580,7 @@ class SyncRule:
             state=state,
             reprojection_required=True,
             awaiting_reauthorization=False,
+            keeps_place=self.keeps_place and state is SyncRuleState.DRAFT,
         )
 
     def complete_reprojection(self) -> Self:
@@ -556,7 +588,16 @@ class SyncRule:
 
     def begin_removal(self) -> Self:
         """Removing marks a Rule Removal that started and has not finished."""
-        return replace(self, state=SyncRuleState.REMOVING, awaiting_reauthorization=False)
+        return replace(
+            self, state=SyncRuleState.REMOVING, awaiting_reauthorization=False, keeps_place=False
+        )
+
+    def take_place_of(self, old: SyncRule) -> Self:
+        """This new Rule Replacement draft, keeping the place `old` took under its User's rule
+        limit; a rule that did not count leaves no place to keep (ADR 0038)."""
+        if self.state not in _KEEPS_PLACE:
+            raise InvalidStateTransition("only a new draft takes the place of the rule it replaces")
+        return replace(self, keeps_place=old.counts_toward_plan)
 
 
 @dataclass(frozen=True, slots=True)

@@ -11,9 +11,13 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from calendar_sync.domain.cadence import DEFAULT_CADENCE, SCHEDULED_EVERY, SyncCadence
 from calendar_sync.domain.errors import DomainError, DomainValidationError
+
+if TYPE_CHECKING:
+    from calendar_sync.domain.model import SyncRule
 
 PLAN_KEY_LIMIT = 32
 """The longest Plan key."""
@@ -293,3 +297,10 @@ def require_room(resource: LimitedResource, in_use: int, limit: int | None) -> N
     """Refuse one more of `resource` when `in_use` already reaches the limit."""
     if limit is not None and not has_room(in_use, limit):
         raise PlanLimitReached(resource, limit)
+
+
+def may_start(before: SyncRule, counting_after: int, limit: int | None) -> bool:
+    """Whether a Start fits the rule limit. A rule that keeps a place always starts, because its
+    Start does not change the count; any other starts while `counting_after`, the rules that
+    count once it runs, stays within `limit`."""
+    return limit is None or before.keeps_place or counting_after <= limit
