@@ -5,6 +5,7 @@ import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
 import { api, type IssuedLink, type PeopleQuery, type Person, type UserDeletion } from "@/lib/api"
 import { deletionMessage, personName } from "@/lib/people"
+import { PLANS_QUERY } from "@/lib/use-plans"
 
 /** What an Installation Administrator can do to another User. */
 type PersonAction = "promote" | "demote" | "disable" | "enable" | "reset" | "delete" | "plan"
@@ -86,10 +87,12 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     mutationFn: run,
     onSuccess: async (outcome, command) => {
       finish(outcome, command)
-      // Whether Only Me is available depends on who is left.
+      // Whether Only Me is available depends on who is left, and each Plan's people counts
+      // depend on who has it and whom it limits.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["people"] }),
         queryClient.invalidateQueries({ queryKey: ["registration"] }),
+        queryClient.invalidateQueries({ queryKey: PLANS_QUERY }),
       ])
     },
   })
@@ -136,6 +139,10 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     setMessage("")
     setResult(null)
     setDeletedMessage("")
+    // One next step at a time: a new command closes an open deletion or Plan choice. A shown
+    // Password Reset Link stays, since it cannot be shown again.
+    setDeleting(null)
+    setChoosingPlan(null)
     if (next.action === "delete") setDeleting(next.person.id)
     else if (next.action === "plan" && next.plan === undefined) setChoosingPlan(next.person.id)
     else send(next)

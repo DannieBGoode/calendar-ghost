@@ -612,6 +612,41 @@ describe("A person's page", () => {
       expect(container.querySelector("#person-plan-user-robin")).toBeNull()
     })
 
+    it("refreshes the plans after a change, since each plan's people counts depend on who has it", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily, { "PUT /api/v1/users/user-robin/plan": jsonResponse(onFree) }))
+      const plansRead = () => calls.filter((call) => call.method === "GET" && call.path === "/api/v1/plans").length
+      await choose("Change plan")
+      expect(plansRead()).toBe(1)
+
+      await pick("")
+      await click(button("Save plan"))
+      expect(plansRead()).toBe(2)
+    })
+
+    it("keeps one next step open: a command from the menu closes the deletion or the plan choice", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily))
+      await choose("Delete")
+      await choose("Change plan")
+      expect(container.querySelector("#delete-person-user-robin")).toBeNull()
+      expect(container.querySelector("#person-plan-user-robin")).not.toBeNull()
+
+      await choose("Delete")
+      expect(container.querySelector("#person-plan-user-robin")).toBeNull()
+      expect(container.querySelector("#delete-person-user-robin")).not.toBeNull()
+    })
+
+    it("states a plan named like another fact without confusing the two", async () => {
+      const onUser: PersonPlan = {
+        basis: "plan",
+        plan: { key: "user", name: "User", on_default: false },
+        assigned: { key: "user", name: "User" },
+      }
+      const errors = vi.spyOn(console, "error")
+      await renderPerson(testI18n(), "user-robin", withPlan(onUser))
+      expect(facts()).toEqual(["User", "User", "Joined just now", "Never signed in"])
+      expect(errors).not.toHaveBeenCalled()
+    })
+
     it("gives them a plan of their own by its key", async () => {
       await renderPerson(testI18n(), "user-robin", withPlan(onFree, { "PUT /api/v1/users/user-robin/plan": jsonResponse(onFamily) }))
       await choose("Change plan")

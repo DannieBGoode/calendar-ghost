@@ -170,18 +170,22 @@ function BackToPeople({ href, onBack }: { href: string; onBack: () => void }) {
 function PersonFacts({ person, plan, now }: { person: Person; plan: PersonPlan | null; now: number }) {
   const i18n = useI18n()
   const { t } = i18n
-  const facts = [
-    t(`people.roles.${person.role}`),
-    ...(plan ? [personPlanFact(i18n, plan)] : []),
-    t("people.person.joined", { relative: i18n.format.relative(person.created_at, now) }),
-    person.last_sign_in_at
-      ? t("people.person.lastSignIn", { relative: i18n.format.relative(person.last_sign_in_at, now) })
-      : t("people.person.neverSignedIn"),
+  // Keyed by which fact each is, since a Plan's name can equal another fact, such as "User".
+  const facts: [id: string, fact: string][] = [
+    ["role", t(`people.roles.${person.role}`)],
+    ...(plan ? [["plan", personPlanFact(i18n, plan)] satisfies [string, string]] : []),
+    ["joined", t("people.person.joined", { relative: i18n.format.relative(person.created_at, now) })],
+    [
+      "last-sign-in",
+      person.last_sign_in_at
+        ? t("people.person.lastSignIn", { relative: i18n.format.relative(person.last_sign_in_at, now) })
+        : t("people.person.neverSignedIn"),
+    ],
   ]
   return (
     <ul className="person-facts" data-administrator={isAdministrator(person)}>
-      {facts.map((fact) => (
-        <li key={fact}>{fact}</li>
+      {facts.map(([id, fact]) => (
+        <li key={id}>{fact}</li>
       ))}
     </ul>
   )
