@@ -2,6 +2,7 @@
 
 import ast
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,11 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from calendar_sync.application.identity.errors import InvalidIntegrationTokenName
+from calendar_sync.application.identity.errors import (
+    InvalidIntegrationTokenName,
+    PlanKeyTaken,
+    PlanNotFound,
+)
 from calendar_sync.application.sync.errors import (
     ProviderFailure,
     RemovalInterrupted,
@@ -18,8 +23,18 @@ from calendar_sync.application.sync.errors import (
     RuleNotFound,
 )
 from calendar_sync.domain.accounts import ProviderKind
-from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
+from calendar_sync.domain.errors import DomainError, DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.domain.plans import (
+    InvalidPlan,
+    InvalidPlanReason,
+    LimitedResource,
+    PlanInUse,
+    PlanKey,
+    PlanLimitReached,
+    require_plans_setting,
+    require_removable,
+)
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.interfaces.api import problems
 from calendar_sync.interfaces.api.problems import install_problem_handlers, problem, problem_from
@@ -119,6 +134,18 @@ def test_validation_errors_pass_the_maximum_length() -> None:
 GOOGLE_LIMIT = ProviderFailure(ProviderFailureKind.RATE_LIMIT, "429", provider=ProviderKind.GOOGLE)
 
 
+def _refusal(check: Callable[[], object]) -> DomainError:
+    """The error a domain policy raises, built as the policy builds it."""
+    try:
+        check()
+    except DomainError as error:
+        return error
+    raise AssertionError("the policy refused nothing")
+
+
+FAMILY_KEY = PlanKey("family")
+
+
 @pytest.mark.parametrize(
     ("error", "code", "params"),
     [
@@ -154,6 +181,32 @@ GOOGLE_LIMIT = ProviderFailure(ProviderFailureKind.RATE_LIMIT, "429", provider=P
             "invalid_integration_token_name",
             {},
         ),
+        (
+            PlanLimitReached(LimitedResource.RULES, 3),
+            "plan_limit_reached",
+            {"reason": "rules", "limit": 3, "count": 3},
+        ),
+        (
+            PlanLimitReached(LimitedResource.INTEGRATION_TOKENS, 0),
+            "plan_limit_reached",
+            {"reason": "integration_tokens", "limit": 0, "count": 0},
+        ),
+        (PlanInUse(2), "plan_in_use", {"people": 2, "count": 2}),
+        # A DomainValidationError, but never "invalid_rule": its own code comes first.
+        (
+            InvalidPlan(InvalidPlanReason.KEY, "a plan key is 1 to 32 lower-case letters"),
+            "invalid_plan",
+            {"reason": "key"},
+        ),
+        (
+            InvalidPlan(InvalidPlanReason.INTERVAL, "choose one of the offered sync intervals"),
+            "invalid_plan",
+            {"reason": "interval"},
+        ),
+        (_refusal(lambda: require_plans_setting(True, None)), "plans_need_default", {}),
+        (_refusal(lambda: require_removable(FAMILY_KEY, FAMILY_KEY, 0)), "plan_is_default", {}),
+        (PlanNotFound("plan family does not exist"), "plan_not_found", {}),
+        (PlanKeyTaken("a plan with the key family already exists"), "plan_key_taken", {}),
     ],
 )
 def test_problem_from_maps_exceptions(

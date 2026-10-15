@@ -63,6 +63,11 @@
     "invalid_authorization_state": "This sign-in link expired or was already used. Start again from Settings.",
     "invalid_email": "Enter an email address, such as name@example.com.",
     "invalid_integration_token_name": "Give the token a name of 1 to 80 characters, without line breaks or other control characters.",
+    "invalid_plan": "This plan is not valid. Check its key, name, and limits.",
+    "invalid_plan_interval": "Choose one of the offered sync intervals.",
+    "invalid_plan_key": "Use 1 to 32 lower-case letters, digits, and hyphens for the key, starting with a letter or digit.",
+    "invalid_plan_limit": "Enter each limit as a whole number up to 10000, at least 1 for rules and calendar accounts, or choose Unlimited.",
+    "invalid_plan_name": "Give the plan a name of 1 to 60 characters, without line breaks or other control characters.",
     "invalid_request": "Some of the information is not valid. Check it and try again.",
     "invalid_request_string_too_long": {
       "one": "Use at most {count} character.",
@@ -83,6 +88,23 @@
     "oauth_result_missing": "The provider did not return a sign-in result. Try connecting the account again.",
     "only_me_needs_one_user": "Only Me works only while you are the only person here. Delete the other people first.",
     "password_policy": "Choose a password of at least 12 characters.",
+    "plan_in_use": {
+      "one": "{count} person has this plan. Give them another plan before you remove it.",
+      "other": "{count} people have this plan. Give them another plan before you remove it."
+    },
+    "plan_is_default": "This is the default plan. Choose another default before you remove it.",
+    "plan_key_taken": "Another plan already uses this key. Choose a different key.",
+    "plan_limit_reached": "Your plan's limit is reached. Settings, Your account, Your plan shows what it allows.",
+    "plan_limit_reached_integration_tokens": {
+      "one": "Your plan allows at most {count} Integration Token. Revoked tokens do not count.",
+      "other": "Your plan allows at most {count} Integration Tokens. Revoked tokens do not count."
+    },
+    "plan_limit_reached_rules": {
+      "one": "Your plan lets {count} rule sync. Pause or remove it to start this rule.",
+      "other": "Your plan lets {count} rules sync. Pause or remove one to start this rule."
+    },
+    "plan_not_found": "This plan no longer exists. Reload to see the current plans.",
+    "plans_need_default": "Choose a default plan before you turn plans on.",
     "provider_failed": "{Provider} reported a problem. Try again shortly.",
     "provider_not_configured": "No calendar provider is configured on this installation.",
     "provider_not_found": "No calendar provider connects through this address.",

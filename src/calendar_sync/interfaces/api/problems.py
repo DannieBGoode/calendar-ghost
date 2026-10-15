@@ -34,6 +34,8 @@ from calendar_sync.application.identity.errors import (
     IncorrectPassword,
     InvalidIntegrationTokenName,
     PasswordPolicyViolation,
+    PlanKeyTaken,
+    PlanNotFound,
     SignInThrottled,
     UserDisabled,
 )
@@ -66,6 +68,13 @@ from calendar_sync.application.sync.errors import (
 )
 from calendar_sync.domain.access import InvalidEmail, LastAdministrator, OnlyMeNeedsOneUser
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
+from calendar_sync.domain.plans import (
+    InvalidPlan,
+    PlanInUse,
+    PlanIsDefault,
+    PlanLimitReached,
+    PlansNeedDefault,
+)
 
 type ParamValue = str | int | None
 
@@ -143,6 +152,15 @@ _CODES: dict[type[Exception], str] = {
     LastAdministrator: "last_administrator",
     OnlyMeNeedsOneUser: "only_me_needs_one_user",
     UserDeletionInterrupted: "user_deletion_interrupted",
+    # Plans (ADR 0038).
+    PlanLimitReached: "plan_limit_reached",
+    PlansNeedDefault: "plans_need_default",
+    PlanNotFound: "plan_not_found",
+    PlanKeyTaken: "plan_key_taken",
+    PlanInUse: "plan_in_use",
+    PlanIsDefault: "plan_is_default",
+    # A DomainValidationError too; the MRO reaches this code before "invalid_rule".
+    InvalidPlan: "invalid_plan",
     DomainValidationError: "invalid_rule",
     # Every rejected lifecycle change (enable, pause, policy edit) with a message naming the state.
     InvalidStateTransition: "invalid_state_transition",
@@ -185,6 +203,17 @@ def _params(error: Exception) -> dict[str, ParamValue]:
         return {"retry_after": error.retry_after}
     if isinstance(error, UserDeletionInterrupted):
         return {"removed": error.removed, "remaining": error.remaining}
+    return _plan_params(error)
+
+
+def _plan_params(error: Exception) -> dict[str, ParamValue]:
+    """What a Plan's refusal names; `count` beside each number picks the message's plural form."""
+    if isinstance(error, PlanLimitReached):
+        return {"reason": error.resource.value, "limit": error.limit, "count": error.limit}
+    if isinstance(error, PlanInUse):
+        return {"people": error.people, "count": error.people}
+    if isinstance(error, InvalidPlan):
+        return {"reason": error.reason.value}
     return {}
 
 

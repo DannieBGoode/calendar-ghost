@@ -45,6 +45,28 @@ describe("apiErrorMessage", () => {
     expect(apiErrorMessage(i18n, other)).toBe("Some of the information is not valid. Check it and try again.")
   })
 
+  it("words a plan's refusals with the numbers the server sends", () => {
+    const rules = (limit: number) => coded("plan_limit_reached", { reason: "rules", limit, count: limit })
+    expect(apiErrorMessage(i18n, rules(1))).toBe("Your plan lets 1 rule sync. Pause or remove it to start this rule.")
+    expect(apiErrorMessage(i18n, rules(3))).toBe("Your plan lets 3 rules sync. Pause or remove one to start this rule.")
+    const tokens = coded("plan_limit_reached", { reason: "integration_tokens", limit: 0, count: 0 })
+    expect(apiErrorMessage(i18n, tokens)).toBe("Your plan allows at most 0 Integration Tokens. Revoked tokens do not count.")
+    const later = coded("plan_limit_reached", { reason: "a_later_resource", limit: 2, count: 2 })
+    expect(apiErrorMessage(i18n, later)).toBe(
+      "Your plan's limit is reached. Settings, Your account, Your plan shows what it allows.",
+    )
+    expect(apiErrorMessage(i18n, coded("plan_in_use", { people: 1, count: 1 }))).toBe(
+      "1 person has this plan. Give them another plan before you remove it.",
+    )
+    expect(apiErrorMessage(i18n, coded("plan_in_use", { people: 2, count: 2 }))).toBe(
+      "2 people have this plan. Give them another plan before you remove it.",
+    )
+    expect(apiErrorMessage(i18n, coded("invalid_plan", { reason: "key" }))).toBe(
+      "Use 1 to 32 lower-case letters, digits, and hyphens for the key, starting with a letter or digit.",
+    )
+    expect(apiErrorMessage(i18n, coded("plans_need_default"))).toBe("Choose a default plan before you turn plans on.")
+  })
+
   it("shows the server's detail for an unknown code or a missing param, then a generic message", () => {
     expect(apiErrorMessage(i18n, coded("brand_new"))).toBe("English detail")
     expect(apiErrorMessage(i18n, coded("removal_interrupted", {}, "removal stopped"))).toBe("removal stopped")
