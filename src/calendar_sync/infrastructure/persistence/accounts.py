@@ -10,9 +10,11 @@ from calendar_sync.application.sync.errors import (
     ConnectedAccountDisconnected,
     ConnectedAccountNotFound,
 )
+from calendar_sync.application.sync.ports import Allowances
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.domain.plans import LimitedResource, require_room
 from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.connections import transaction
@@ -28,7 +30,9 @@ class SqliteConnectedAccountStore:
 
     Provider adapters read and renew credentials by account; everything else about accounts goes
     through `for_user`, which sees only one User's (ADR 0029). Account identifiers are generated,
-    so a provider adapter reached with one reads only that account's credentials.
+    so a provider adapter reached with one reads only that account's credentials. With
+    `allowances`, connecting a new account stays within its User's Plan (ADR 0038); without, as
+    in tests and the development preview, nobody is limited.
     """
 
     def __init__(
@@ -37,15 +41,22 @@ class SqliteConnectedAccountStore:
         cipher: CredentialCipher,
         clock: Clock | None = None,
         ids: IdGenerator | None = None,
+        allowances: Allowances | None = None,
     ) -> None:
         self._database_path = database_path
         self._cipher = cipher
         self._clock = clock or SystemClock()
         self._ids = ids or UuidIdGenerator()
+        self._allowances = allowances
 
     def for_user(self, user_id: UserId) -> SqliteUserConnectedAccounts:
         return SqliteUserConnectedAccounts(
-            self._database_path, user_id, self._cipher, self._clock, self._ids
+            self._database_path,
+            user_id,
+            self._cipher,
+            self._clock,
+            self._ids,
+            allowances=self._allowances,
         )
 
     def provider_of(self, account_id: ConnectedAccountId) -> ProviderKind | None:
@@ -110,12 +121,15 @@ class SqliteUserConnectedAccounts:
         cipher: CredentialCipher,
         clock: Clock,
         ids: IdGenerator,
+        allowances: Allowances | None = None,
     ) -> None:
         self._database_path = database_path
+        self._owner = user_id
         self._user = user_id.value
         self._cipher = cipher
         self._clock = clock
         self._ids = ids
+        self._allowances = allowances
 
     def list(self) -> tuple[ConnectedAccount, ...]:
         with transaction(self._database_path) as connection:
@@ -156,21 +170,23 @@ class SqliteUserConnectedAccounts:
         """Connect an account, or reauthorize this User's one with this provider and email.
 
         Reauthorizing clears Lapsed Authorization; resuming the rules it stopped is the
-        application's to do (ADR 0027).
+        application's to do (ADR 0027). A new account beyond the User's Plan's account limit
+        raises PlanLimitReached and stores nothing; Reauthorization is never refused (ADR 0038).
         """
         # In UTC, so recording a lapse can compare it with a request's start as text.
         now = self._clock.now().astimezone(UTC).isoformat()
         account_id = self._ids.new()
         encrypted = self._cipher.encrypt(credential_json)
         with transaction(self._database_path) as connection:
-            # Held from the check to the save: a User disabled while the provider answered
-            # connects nothing.
+            # Held from the checks to the save: a User disabled while the provider answered
+            # connects nothing, and two connects never both take the last account place.
             connection.execute("BEGIN IMMEDIATE")
             active = connection.execute(
                 "SELECT 1 FROM users WHERE id = ? AND state = 'active'", (self._user,)
             ).fetchone()
             if active is None:
                 raise UserDisabled("this User can no longer connect accounts")
+            self._require_room_for(connection, provider, email)
             connection.execute(
                 """
                 INSERT INTO connected_accounts (
@@ -204,6 +220,30 @@ class SqliteUserConnectedAccounts:
             ).fetchone()
         assert row is not None
         return _account_from_row(row)
+
+    def _require_room_for(
+        self, connection: sqlite3.Connection, provider: ProviderKind, email: str
+    ) -> None:
+        """Refuse a new account beyond the User's Plan's account limit, inside the save's lock.
+
+        Only a new provider and email is counted against the limit: Reauthorization of an
+        account this User has, Disconnected or not, never reads Plans. Disconnected Accounts
+        count, because reconnecting one is Reauthorization. A raising read fails the save, so a
+        fault never admits an account past the limit.
+        """
+        if self._allowances is None:
+            return
+        known = connection.execute(
+            "SELECT 1 FROM connected_accounts WHERE user_id = ? AND provider = ? AND email = ?",
+            (self._user, provider.value, email),
+        ).fetchone()
+        if known is not None:
+            return
+        limit = self._allowances.of(self._owner).limits.connected_accounts
+        counted = connection.execute(
+            "SELECT COUNT(*) FROM connected_accounts WHERE user_id = ?", (self._user,)
+        ).fetchone()
+        require_room(LimitedResource.CONNECTED_ACCOUNTS, int(counted[0]), limit)
 
     def disconnect(self, account_id: ConnectedAccountId) -> ConnectedAccount:
         now = self._clock.now().isoformat()

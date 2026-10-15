@@ -213,6 +213,19 @@ class CalendarPermissionRequired(AuthorizationFailed):
     """An authorization was completed without the calendar permissions synchronization needs."""
 
 
+class AccountLimitReached(AuthorizationFailed):
+    """Connecting a new calendar account would pass the User's Plan's account limit (ADR 0038).
+
+    The provider's consent is already given, because only then is the account's address known;
+    nothing is stored, and the User's existing accounts and rules are unchanged.
+    """
+
+    def __init__(self, limit: int) -> None:
+        super().__init__(f"the plan allows {limit} calendar accounts")
+        self.limit = limit
+        """How many calendar accounts the User's Plan allows."""
+
+
 class AccountAccessCheckFailed(ApplicationError):
     """The provider did not confirm a Connected Account's calendar access."""
 

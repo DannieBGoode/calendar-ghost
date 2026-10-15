@@ -466,8 +466,11 @@ def build_adapters(settings: Settings) -> Adapters:
         sends_email=mail is not None,
         sync_cadence=PlanCadence(plans),
     )
+    # Connecting a new account stays within its User's Plan (ADR 0038).
     accounts = (
-        SqliteConnectedAccountStore(database, CredentialCipher(settings.master_key), clock, ids)
+        SqliteConnectedAccountStore(
+            database, CredentialCipher(settings.master_key), clock, ids, allowances=plans
+        )
         if settings.master_key
         else None
     )

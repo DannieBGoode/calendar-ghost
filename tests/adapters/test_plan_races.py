@@ -23,6 +23,7 @@ from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import Allowances, UnitOfWorkFactory
 from calendar_sync.application.sync.rules import EnableSyncRule
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
 from calendar_sync.domain.plans import (
     Allowance,
@@ -36,12 +37,14 @@ from calendar_sync.domain.plans import (
 from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
+from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
+from calendar_sync.infrastructure.security import CredentialCipher
 from tests.helpers import NOW, endpoint, rule
-from tests.plans import FAMILY, plans_on
+from tests.plans import FAMILY, FREE, plans_on
 from tests.users import USER, add_user, limited_user, sqlite_units
 
 STATUS = frozenset({IntegrationTokenScope.STATUS_READ})
@@ -377,3 +380,47 @@ def test_a_start_that_waits_for_plans_to_turn_on_reads_the_limit(tmp_path: Path)
     assert waited
     assert outcome == ["refused"]
     assert _rule_state(units, NEXT_RULE) is SyncRuleState.PREVIEWED
+
+
+# Connected Accounts
+
+
+def test_two_connects_for_the_last_account_place_store_exactly_one(tmp_path: Path) -> None:
+    """The account limit is read inside the save's BEGIN IMMEDIATE, so a second connect waits
+    for the first to commit, then counts its account (Review Focus 3)."""
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    plans = SqlitePlans(database)
+    plans_on(plans, FREE)
+    member = limited_user(database)
+    held = HeldAllowances(plans)
+    store = SqliteConnectedAccountStore(
+        database, CredentialCipher(CredentialCipher.generate_key()), allowances=held
+    )
+    outcomes: dict[str, str] = {}
+
+    def connect(email: str) -> None:
+        try:
+            store.for_user(member).save("Synthetic", email, "{}", provider=ProviderKind.GOOGLE)
+        except PlanLimitReached as refused:
+            outcomes[email] = f"refused at {refused.limit}"
+        else:
+            outcomes[email] = "connected"
+
+    first = Thread(target=connect, args=("first@example.test",))
+    first.start()
+    assert held.reading.wait(5)
+    second = Thread(target=connect, args=("second@example.test",))
+    second.start()
+    second.join(WAIT)
+    # The first connect holds the writer lock while it reads the limit, so the second waits.
+    assert second.is_alive()
+    held.released.set()
+    first.join(5)
+    second.join(5)
+
+    assert outcomes == {
+        "first@example.test": "connected",
+        "second@example.test": "refused at 1",
+    }
+    assert [account.email for account in store.for_user(member).list()] == ["first@example.test"]
