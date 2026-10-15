@@ -209,6 +209,10 @@ class SyncRuleRepository(Protocol):
     def purge(self, rule_id: SyncRuleId) -> None:
         """Delete the rule like `remove`, and its audit entries and incidents with it."""
 
+    def inherit_place(self, rule: SyncRuleId, of: SyncRuleId) -> None:
+        """Give `rule` the creation order of `of`, so it ranks where `of` ranked; both are this
+        User's. Called only in the transaction that moves a Rule Replacement's place."""
+
 
 class EventMappingRepository(Protocol):
     def for_source(self, rule_id: SyncRuleId, source: EventRef) -> EventMapping | None: ...

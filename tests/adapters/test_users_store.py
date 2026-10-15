@@ -1,5 +1,6 @@
 """Users and failed sign-ins as the installation stores them."""
 
+import logging
 import sqlite3
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,8 @@ from calendar_sync.domain.access import (
     UserId,
     UserState,
 )
+from calendar_sync.domain.plans import PlanKey
+from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.registration import (
     SqliteInvitations,
@@ -252,6 +255,41 @@ def test_a_new_user_wants_instant_sync(tmp_path: Path) -> None:
 
     assert stored is not None
     assert stored.instant_sync
+
+
+def test_a_users_own_plan_is_read_and_a_key_this_release_cannot_read_names_none(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    users = _users(tmp_path)
+    later = replace(SECOND, id=UserId("later"), email="later@example.test")
+    for user in (FIRST, SECOND, later):
+        users.add(user, "hash")
+    with transaction(tmp_path / "test.db") as connection:
+        # A later release may write a key this one refuses; the foreign key still needs its Plan.
+        for key in ("family", "Later Key"):
+            connection.execute(
+                """
+                INSERT INTO plans (key, name, sync_interval, created_at, updated_at)
+                VALUES (?, 'Family', 'instant', ?, ?)
+                """,
+                (key, NOW.isoformat(), NOW.isoformat()),
+            )
+        connection.execute("UPDATE users SET plan_key = 'family' WHERE id = ?", (SECOND.id.value,))
+        connection.execute(
+            "UPDATE users SET plan_key = 'Later Key' WHERE id = ?", (later.id.value,)
+        )
+
+    with caplog.at_level(logging.WARNING, logger="calendar_sync.infrastructure.persistence"):
+        found = users.get(later.id)
+        listed = users.list()
+
+    assert users.get(FIRST.id) == FIRST
+    assert users.get(SECOND.id) == replace(SECOND, plan=PlanKey("family"))
+    assert found == later
+    assert listed == (FIRST, replace(SECOND, plan=PlanKey("family")), later)
+    assert [record.getMessage() for record in caplog.records] == [
+        "User later names a plan this release cannot read; the Default Plan applies"
+    ] * 2
 
 
 def test_one_email_signs_in_one_user_whatever_its_case(tmp_path: Path) -> None:

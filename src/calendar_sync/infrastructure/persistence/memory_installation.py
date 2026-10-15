@@ -250,12 +250,15 @@ def _status_records(database: MemoryDatabase, user: UserId) -> StatusRecords:
         if kind is RunKind.SYNC and outcome.last_succeeded_at is not None
     ]
     return StatusRecords(
-        # Rules keep the order they were added in, as a dictionary keeps its keys'.
+        # Rules in the order they were created, then by identifier, as SQLite lists them.
         rules=tuple(
             RecordedRule(
                 rule, state.outcomes.get((rule.id, RunKind.SYNC)), state.previews.get(rule.id)
             )
-            for rule in state.rules.values()
+            for rule in sorted(
+                state.rules.values(),
+                key=lambda rule: (state.rule_order.get(rule.id, 0), rule.id.value),
+            )
         ),
         overview=OperationsOverview(
             connected_accounts=sum(s is ConnectedAccountState.CONNECTED for s in standings),
