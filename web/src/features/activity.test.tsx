@@ -554,6 +554,14 @@ describe("ActivityView", () => {
     )
   })
 
+  it("names the destination calendar when it reported the change that brought the event in", async () => {
+    const checked = entry(11, { run_reason: "changes", found_by: "destination_feed", event: recorded("Seminar") })
+    await renderActivity(testI18n(), { entries: [checked, ...ENTRIES] }, "?entry=11")
+    const terms = [...container.querySelectorAll(".activity-detail .activity-detail-facts dt")]
+    const why = terms.find((term) => term.textContent === "Why it was checked")
+    expect(why?.nextElementSibling?.textContent).toBe("Work reported a change to the event Calendar Ghost wrote there.")
+  })
+
   it("says nothing about why an entry recorded before runs said so was checked", async () => {
     await renderActivity(testI18n(), {}, "?entry=4")
     const detail = container.querySelector(".activity-detail")

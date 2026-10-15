@@ -84,6 +84,42 @@ def test_entries_say_why_their_run_checked_the_event(tmp_path: Path) -> None:
     ] == [(None, None, None), ("daily_pass", "source_feed", "untracked")]
 
 
+def test_entries_list_when_a_later_release_recorded_codes_this_one_does_not_know(
+    tmp_path: Path,
+) -> None:
+    # A rollback keeps the entries a later release recorded; their unknown codes read as none.
+    database = tmp_path / "test.db"
+    app = create_app(build_container(Settings(database)))
+
+    with TestClient(app) as client:
+        client.post(
+            "/api/v1/setup/admin", json={"email": "admin@example.test", "password": PASSWORD}
+        )
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                """
+                INSERT INTO audit_entries (
+                    occurred_at, rule_id, action, outcome, detail, reason, run_reason, found_by,
+                    source_comparison, user_id
+                )
+                VALUES ('2026-09-01T10:00:00+00:00', 'rule-1', 'update', 'completed', '',
+                    'source_changed', 'from_the_future', 'a_new_feed', 'a_new_kind',
+                    (SELECT id FROM users ORDER BY rowid LIMIT 1))
+                """
+            )
+        listed = client.get("/api/v1/audit-entries")
+        one = client.get("/api/v1/audit-entries/1")
+
+    assert listed.status_code == 200
+    assert one.status_code == 200
+    for entry in (listed.json()[0], one.json()):
+        assert (entry["run_reason"], entry["found_by"], entry["source_comparison"]) == (
+            None,
+            None,
+            None,
+        )
+
+
 def test_skips_of_cancelled_occurrences_recorded_by_earlier_releases_are_hidden(
     tmp_path: Path,
 ) -> None:
