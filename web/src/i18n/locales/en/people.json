@@ -308,6 +308,16 @@
     },
     "documentTitle": "{name} – People"
   },
+  "plan": {
+    "fact": {
+      "own": "{name}",
+      "default": "{name} (default)",
+      "later": "{name}, once plans are on",
+      "laterDefault": "The default plan, once plans are on",
+      "administrator": "No plan limits administrators",
+      "administratorAssigned": "No plan limits administrators (assigned: {name})"
+    }
+  },
   "tabs": {
     "label": "People sections",
     "everyone": "Everyone",

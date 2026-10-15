@@ -212,6 +212,22 @@ export type IntegrationScope = IntegrationToken["scopes"][number]
 /** Who may become a User: Only Me, the default, or Invitation Only. */
 export type Registration = Schemas["RegistrationResponse"]
 export type RegistrationPolicy = Registration["policy"]
+/** Every Plan, whether Plans limit people, the Default Plan, and the sync intervals offered now. */
+export type PlansOverview = Schemas["PlansResponse"]
+/** One Plan as an administrator manages it: its limits, and who has it. */
+export type PlanSummary = Schemas["PlanResponse"]
+/** What a Plan allows; null means unlimited. */
+export type PlanLimits = Schemas["PlanLimitsResponse"]
+/** How soon a Plan's rules sync (ADR 0038). */
+export type SyncInterval = PlanLimits["sync_interval"]
+/** A new Plan: its key, chosen once, its name, and its limits. */
+export type PlanPayload = Schemas["DefinePlanRequest"]
+/** A Plan's new name and limits; its key never changes. */
+export type PlanChange = Schemas["ChangePlanRequest"]
+/** Which Plan limits one person, as the Operator Overview shows it, and the Plan they were given. */
+export type PersonPlan = Schemas["PersonPlanResponse"]
+/** What the signed-in User's Plan allows and how much of it they have, for Your plan. */
+export type OwnPlan = Schemas["OwnPlanResponse"]
 /** A User as an Installation Administrator sees them: never their calendars, rules, or events. */
 export type Person = Schemas["UserResponse"]
 export type PersonRole = Person["role"]
@@ -279,6 +295,8 @@ export const api = {
   /** Whether the signed-in User's rules run soon after their provider reports a change. */
   setInstantSync: (instantSync: boolean) =>
     call("/api/v1/account/instant-sync", "put", { body: { instant_sync: instantSync } }),
+  /** What the signed-in User's Plan allows and how much of it they have. */
+  ownPlan: () => call("/api/v1/account/plan", "get"),
   /** What the Operator Overview shows administrators about the signed-in User. */
   /** Whether the signed-in User may delete themself now, and whether nobody would remain. */
   ownAccountDeletion: () => call("/api/v1/account/deletion", "get"),
@@ -286,6 +304,14 @@ export const api = {
     call("/api/v1/account", "delete", { body: { password, projections } }),
   registration: () => call("/api/v1/registration", "get"),
   setRegistrationPolicy: (policy: RegistrationPolicy) => call("/api/v1/registration", "put", { body: { policy } }),
+  plans: () => call("/api/v1/plans", "get"),
+  /** Turning Plans off keeps every Plan; send the current default when only the switch changes. */
+  setPlansSetting: (enabled: boolean, defaultPlan: string | null) =>
+    call("/api/v1/plan-settings", "put", { body: { enabled, default_plan: defaultPlan } }),
+  definePlan: (payload: PlanPayload) => call("/api/v1/plans", "post", { body: payload }),
+  changePlan: (key: string, payload: PlanChange) =>
+    call("/api/v1/plans/{plan_key}", "put", { params: { plan_key: key }, body: payload }),
+  removePlan: (key: string) => call("/api/v1/plans/{plan_key}", "delete", { params: { plan_key: key } }),
   invitations: () => call("/api/v1/invitations", "get"),
   invite: () => call("/api/v1/invitations", "post"),
   revokeInvitation: (invitationId: string) =>
@@ -314,6 +340,9 @@ export const api = {
     call("/api/v1/users/{user_id}/role", "put", { params: { user_id: userId }, body: { role } }),
   setPersonState: (userId: string, state: PersonState) =>
     call("/api/v1/users/{user_id}/state", "put", { params: { user_id: userId }, body: { state } }),
+  /** Gives a person their own Plan; null returns them to the Default Plan. */
+  setPersonPlan: (userId: string, plan: string | null) =>
+    call("/api/v1/users/{user_id}/plan", "put", { params: { user_id: userId }, body: { plan } }),
   issuePasswordResetLink: (userId: string) =>
     call("/api/v1/users/{user_id}/password-reset-links", "post", { params: { user_id: userId } }),
   deletePerson: (userId: string) => call("/api/v1/users/{user_id}", "delete", { params: { user_id: userId } }),

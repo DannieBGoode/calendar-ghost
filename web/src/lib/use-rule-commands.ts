@@ -11,6 +11,7 @@ import {
   reconcileResultMessage,
   syncResultMessage,
 } from "@/lib/rule-run"
+import { OWN_PLAN_QUERY } from "@/lib/use-own-plan"
 import { withoutKey } from "@/lib/utils"
 
 /**
@@ -67,6 +68,8 @@ export const RULE_CHANGE_QUERIES = [
   ["accounts"],
   ["recent-changes"],
   ["incidents"],
+  // Starting, pausing, previewing, or removing a rule changes how many rules count toward the Plan.
+  OWN_PLAN_QUERY,
 ] as const
 
 /** What a command did, in the active language. */

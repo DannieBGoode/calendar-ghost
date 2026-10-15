@@ -3,6 +3,7 @@ import { useState } from "react"
 
 import { useI18n } from "@/i18n/provider"
 import { type ConnectedAccount, api } from "@/lib/api"
+import { OWN_PLAN_QUERY } from "@/lib/use-own-plan"
 import { withoutKey } from "@/lib/utils"
 
 export type AccessCheck = Awaited<ReturnType<typeof api.verifyAccountAccess>>
@@ -38,10 +39,12 @@ export function useAccountCommands(accounts: ConnectedAccount[] | undefined) {
       setConfirmingAccountId(null)
       setStatusMessage(t("settings.accounts.status.disconnected", { name: account.display_name }))
       setAccessChecks((current) => withoutKey(current, account.id))
+      // A disconnect stops the account's rules, so fewer may count toward the Plan.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
         queryClient.invalidateQueries({ queryKey: ["rules"] }),
+        queryClient.invalidateQueries({ queryKey: OWN_PLAN_QUERY }),
       ])
     },
   })
@@ -69,6 +72,7 @@ export function useAccountCommands(accounts: ConnectedAccount[] | undefined) {
         queryClient.invalidateQueries({ queryKey: ["rules"] }),
         queryClient.invalidateQueries({ queryKey: ["activity"] }),
         queryClient.invalidateQueries({ queryKey: ["incidents"] }),
+        queryClient.invalidateQueries({ queryKey: OWN_PLAN_QUERY }),
       ])
     },
   })

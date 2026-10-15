@@ -77,6 +77,43 @@
       "pending": "Deleting…"
     }
   },
+  "ownPlan": {
+    "name": "{name}",
+    "nameDefault": "{name} (default)",
+    "summary": "{plan}: {rules}, {accounts}, {tokens}, {cadence}",
+    "rules": {
+      "one": "{used} of {count} rule counted",
+      "other": "{used} of {count} rules counted"
+    },
+    "rulesUnlimited": {
+      "one": "{count} rule counted",
+      "other": "{count} rules counted"
+    },
+    "accounts": {
+      "one": "{used} of {count} calendar account",
+      "other": "{used} of {count} calendar accounts"
+    },
+    "accountsUnlimited": {
+      "one": "{count} calendar account",
+      "other": "{count} calendar accounts"
+    },
+    "tokens": {
+      "one": "{used} of {count} token",
+      "other": "{used} of {count} tokens"
+    },
+    "tokensUnlimited": {
+      "one": "{count} token",
+      "other": "{count} tokens"
+    },
+    "noTokens": "no Integration Tokens",
+    "cadence": {
+      "instant": "instant sync included",
+      "every": {
+        "one": "syncs about every minute",
+        "other": "syncs about every {count} minutes"
+      }
+    }
+  },
   "registration": {
     "title": "Who can join",
     "intro": "Everyone keeps their own calendars, rules, and Activity private. This decides only who can join.",
@@ -90,6 +127,42 @@
     "saved": {
       "onlyMe": "Only you can use this Calendar Ghost now.",
       "invitationOnly": "People can now join with an invitation link."
+    }
+  },
+  "plans": {
+    "limits": {
+      "rules": {
+        "one": "{count} rule",
+        "other": "{count} rules"
+      },
+      "accounts": {
+        "one": "{count} calendar account",
+        "other": "{count} calendar accounts"
+      },
+      "tokens": {
+        "one": "{count} token",
+        "other": "{count} tokens"
+      },
+      "unlimitedRules": "Unlimited rules",
+      "unlimitedAccounts": "unlimited calendar accounts",
+      "unlimitedTokens": "unlimited tokens",
+      "noTokens": "no tokens"
+    },
+    "interval": {
+      "instant": "Instant sync, and a check every 5 minutes",
+      "5_minutes": "Every 5 minutes",
+      "10_minutes": "Every 10 minutes",
+      "15_minutes": "Every 15 minutes",
+      "30_minutes": "Every 30 minutes",
+      "60_minutes": "Every hour"
+    },
+    "saved": {
+      "on": "Plans now limit people.",
+      "off": "Plans no longer limit anyone.",
+      "defaultChanged": "{name} is now the default plan.",
+      "defined": "{name} was added.",
+      "changed": "{name} was saved.",
+      "removed": "{name} was removed."
     }
   },
   "links": {

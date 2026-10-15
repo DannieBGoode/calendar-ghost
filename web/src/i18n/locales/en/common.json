@@ -191,6 +191,10 @@
   "learnWhy": "Learn why",
   "opensInNewTab": " (opens in a new tab)",
   "plan": {
-    "seeYourPlan": "See your plan"
+    "seeYourPlan": "See your plan",
+    "accountLimit": {
+      "one": "Your plan allows {count} calendar account, and disconnected accounts count too.",
+      "other": "Your plan allows {count} calendar accounts, and disconnected accounts count too."
+    }
   }
 }
