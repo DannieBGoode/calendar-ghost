@@ -27,6 +27,7 @@ from calendar_sync.interfaces.api.routes import (
     health,
     incidents,
     integrations,
+    plans,
     rules,
     session,
     setup,
@@ -52,6 +53,7 @@ class UserApiServices(
     activity.ActivityServices,
     incidents.IncidentServices,
     integrations.IntegrationServices,
+    plans.OwnPlanServices,
     rules.RuleServices,
     McpUserServices,
     Protocol,
@@ -76,6 +78,7 @@ class ApiServices(
     account.OwnAccountServices,
     accounts.AuthorizationServices,
     integrations.StatusServices,
+    plans.PlansApiServices,
     storage.StorageServices,
     watch_notices.NoticeServices,
     McpServices,
@@ -140,6 +143,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         storage,
         integrations,
         users,
+        plans,
         watch_notices,
     ):
         app.router.routes.extend(module.router.routes)

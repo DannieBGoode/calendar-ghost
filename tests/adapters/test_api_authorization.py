@@ -41,7 +41,7 @@ PUBLIC_API_ROUTES = {
     ("POST", "/api/v1/password-resets"),
     ("POST", "/api/v1/watch-notices/{provider_slug}/{registration_id}"),
 }
-# Only an Installation Administrator may use these (ADR 0030).
+# Only an Installation Administrator may use these (ADR 0030), Plans among them (ADR 0038).
 ADMINISTRATOR_ROUTES = {
     ("GET", "/api/v1/registration"),
     ("PUT", "/api/v1/registration"),
@@ -53,6 +53,12 @@ ADMINISTRATOR_ROUTES = {
     ("PUT", "/api/v1/users/{user_id}/state"),
     ("POST", "/api/v1/users/{user_id}/password-reset-links"),
     ("DELETE", "/api/v1/users/{user_id}"),
+    ("PUT", "/api/v1/users/{user_id}/plan"),
+    ("GET", "/api/v1/plans"),
+    ("POST", "/api/v1/plans"),
+    ("PUT", "/api/v1/plans/{plan_key}"),
+    ("DELETE", "/api/v1/plans/{plan_key}"),
+    ("PUT", "/api/v1/plan-settings"),
     ("GET", "/api/v1/storage"),
     ("GET", "/api/v1/storage/activity"),
     ("POST", "/api/v1/storage/activity/clear"),
@@ -121,13 +127,15 @@ def test_an_administrator_naming_a_malformed_user_is_told_nobody_has_it(tmp_path
         sign_in(client)
         answers = {
             (method, path): client.request(
-                method, path.replace("{user_id}", "%20"), json={"role": "user", "state": "active"}
+                method,
+                path.replace("{user_id}", "%20"),
+                json={"role": "user", "state": "active", "plan": None},
             ).status_code
             for method, path in ADMINISTRATOR_ROUTES | USER_NAMING_ADMINISTRATOR_ROUTES
             if "{user_id}" in path
         }
 
-    assert len(answers) == 5
+    assert len(answers) == 6
     assert set(answers.values()) == {404}, answers
 
 

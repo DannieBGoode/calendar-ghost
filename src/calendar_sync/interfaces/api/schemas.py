@@ -67,6 +67,12 @@ EffectiveCadenceValue = Literal[
     "not_reaching",
 ]
 """How a rule syncs: "instant", or why Scheduled Sync runs it instead."""
+SyncIntervalValue = Literal[
+    "instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"
+]
+"""How soon a Plan's rules sync (ADR 0038); only the offered ones may be saved."""
+AllowanceBasisValue = Literal["plans_off", "administrator", "plan"]
+"""Why a User has the limits they have: Plans are off, they administer, or a Plan limits them."""
 RunReasonValue = Literal[
     "changes", "first_run", "daily_pass", "reconcile_now", "reprojection", "relisted"
 ]
@@ -745,6 +751,123 @@ class ResourceUseResponse(ApiResponse):
     """The first UTC day the provider calls count, as an ISO date."""
 
 
+class PlanNameResponse(ApiResponse):
+    """A Plan as people know it: its key, which never changes, and its name."""
+
+    key: str
+    name: str
+
+
+class AppliedPlanResponse(PlanNameResponse):
+    """The Plan that limits a User now."""
+
+    on_default: bool
+    """It is the Default Plan, because they have no Plan of their own."""
+
+
+class PlanLimitsResponse(ApiResponse):
+    """What a Plan allows; null is unlimited."""
+
+    rules: int | None
+    """Rules that count: enabled, stopped only by Lapsed Authorization, or a Rule Replacement
+    draft that keeps its place."""
+    connected_accounts: int | None
+    """Calendar accounts, Disconnected Accounts included."""
+    integration_tokens: int | None
+    """Unrevoked Integration Tokens; 0 offers none."""
+    sync_interval: SyncIntervalValue
+
+
+class PlanResponse(ApiResponse):
+    """One Plan, as Administration lists it."""
+
+    key: str
+    name: str
+    limits: PlanLimitsResponse
+    is_default: bool
+    people: int
+    """Everyone who has it: their own Plan, plus, for the default, everyone with none."""
+    limited_people: int
+    """Active Users who do not administer and have it, whom it limits while Plans are on."""
+
+
+class PlansResponse(ApiResponse):
+    """The Plans setting, the sync intervals offered now, and every Plan by name."""
+
+    enabled: bool
+    """Whether Plans limit anyone; while they are off, nobody is limited."""
+    default_plan: str | None
+    """The Default Plan's key; null until an administrator chooses one."""
+    sync_intervals: list[SyncIntervalValue]
+    """The sync intervals a Plan may be given now, in order."""
+    plans: list[PlanResponse]
+
+
+class PersonPlanResponse(ApiResponse):
+    """A person's Plan, as the Operator Overview shows it (ADR 0038)."""
+
+    basis: AllowanceBasisValue
+    plan: AppliedPlanResponse | None
+    """The Plan that limits them; null unless the basis is "plan"."""
+    assigned: PlanNameResponse | None
+    """Their own Plan, whatever the basis; null when they have the Default Plan."""
+
+
+class OwnPlanResponse(ApiResponse):
+    """What the signed-in User's Plan allows and how much of it they have, for Your plan."""
+
+    basis: AllowanceBasisValue
+    plan: AppliedPlanResponse | None
+    """The Plan that limits them; null unless the basis is "plan"."""
+    limits: PlanLimitsResponse | None
+    """What their Plan allows; null unless the basis is "plan", since then nothing limits them."""
+    rules_counted: int
+    connected_accounts: int
+    """Every calendar account, Disconnected Accounts included."""
+    integration_tokens: int
+    """Unrevoked Integration Tokens."""
+    instant: bool
+    """Whether their Plan includes Instant Sync."""
+    poll_every_minutes: int
+    """How often Scheduled Sync runs their rules, as their Plan says."""
+    may_connect_account: bool
+    may_issue_token: bool
+    over_rule_limit: bool
+    """More rules count than the rule limit: nothing stops, but no other rule can start."""
+
+
+class PlanLimitsRequest(BaseModel):
+    """Each limit is a whole number, or null for unlimited."""
+
+    rules: int | None
+    connected_accounts: int | None
+    integration_tokens: int | None
+    sync_interval: SyncIntervalValue
+
+
+class DefinePlanRequest(BaseModel):
+    key: str = Field(max_length=200)
+    """1 to 32 lower-case letters, digits, and hyphens; it never changes."""
+    name: str = Field(max_length=200)
+    limits: PlanLimitsRequest
+
+
+class ChangePlanRequest(BaseModel):
+    name: str = Field(max_length=200)
+    limits: PlanLimitsRequest
+
+
+class PlansSettingRequest(BaseModel):
+    enabled: bool
+    default_plan: str | None = Field(max_length=200)
+    """Required. Null clears the default, which Plans allow only while they are off."""
+
+
+class AssignPlanRequest(BaseModel):
+    plan: str | None = Field(max_length=200)
+    """Required: the Plan's key, or null to return the User to the Default Plan."""
+
+
 class PersonResponse(UserResponse):
     """A row of People: who the User is, and the Operator Overview's summary of them."""
 
@@ -763,6 +886,8 @@ class UserOverviewResponse(ApiResponse):
     user: UserResponse
     status: StatusResponse
     resources: ResourceUseResponse
+    plan: PersonPlanResponse | None
+    """Their Plan, and their own if it differs; null while no Plan exists (ADR 0038)."""
 
 
 class UserPageResponse(ApiResponse):

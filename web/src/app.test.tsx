@@ -51,6 +51,7 @@ const NOTHING_SET_UP: UserOverview = {
     incidents: [],
   },
   resources: { rules: 0, connected_accounts: 0, activity_entries: 0, provider_calls: [], since: "2026-09-01" },
+  plan: null,
 }
 
 const RESPONSES: Record<string, unknown> = {

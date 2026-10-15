@@ -69,6 +69,7 @@ const robin: UserOverview = {
     provider_calls: [{ provider: "google", calls: 75, rate_limited: 1, failed: 0 }],
     since: "2026-09-10",
   },
+  plan: null,
 }
 
 const session: SessionStatus = {

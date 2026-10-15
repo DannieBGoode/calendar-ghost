@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from calendar_sync.application.identity.ports import AssignmentChange
 from calendar_sync.application.operations.installation_health import (
     InstallationIncident,
     InstallationNotifications,
@@ -28,9 +29,11 @@ from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
+from calendar_sync.domain.plans import AssignmentSource
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.infrastructure.scheduling import SchedulerWatch
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
@@ -38,6 +41,7 @@ from tests.adapters.microsoft.test_calendar_provider_contract import outlook
 from tests.adapters.test_notifications import RecordingSmtp
 from tests.fake_microsoft_graph_api import Refusal
 from tests.helpers import endpoint, rule
+from tests.plans import FAMILY, FREE, plans_on
 from tests.users import OTHER_USER, add_user, administrator, session_for, sqlite_units
 
 MEMBER_EMAIL = "member@example.test"
@@ -400,3 +404,49 @@ def test_each_problem_says_its_cause_and_when_it_was_last_tried(
     # Problems no provider failure explains name no Cause.
     assert {p["cause"] for p in status["problems"] if p["kind"] == "blocked"} == {None}
     assert "next_pass_at" in status["scheduler"]
+
+
+def test_the_person_page_shows_no_plan_until_one_exists(installation: Installation) -> None:
+    client = installation.client
+    seen = client.get(f"/api/v1/users/{installation.member.user.value}/overview").json()
+    people = client.get("/api/v1/users").json()["users"]
+
+    assert seen["plan"] is None
+    # People rows never carry a Plan; only the person page shows it.
+    assert all("plan" not in row for row in people)
+
+
+def test_the_person_page_shows_the_plan_that_limits_them_and_their_own(
+    installation: Installation,
+) -> None:
+    client = installation.client
+    plans = SqlitePlans(installation.database)
+    plans_on(plans, FREE, FAMILY)
+    admin = installation.admin.user
+    given = AssignmentChange(AssignmentSource.ADMINISTRATOR, admin, datetime.now(UTC))
+    assigned = plans.assign(admin, FAMILY.key, given)
+
+    def plan_of(user: UserId) -> Any:
+        return client.get(f"/api/v1/users/{user.value}/overview").json()["plan"]
+
+    member_while_on = plan_of(installation.member.user)
+    admin_while_on = plan_of(admin)
+    plans.change_settings(False, FREE.key)
+    member_while_off = plan_of(installation.member.user)
+    people = client.get("/api/v1/users").json()["users"]
+
+    assert assigned
+    assert member_while_on == {
+        "basis": "plan",
+        "plan": {"key": "free", "name": "Free", "on_default": True},
+        "assigned": None,
+    }
+    # No Plan limits an administrator; the one they were given waits until they stop.
+    assert admin_while_on == {
+        "basis": "administrator",
+        "plan": None,
+        "assigned": {"key": "family", "name": "Family"},
+    }
+    # Once a Plan exists, the person page shows it even while Plans are off.
+    assert member_while_off == {"basis": "plans_off", "plan": None, "assigned": None}
+    assert all("plan" not in row for row in people)

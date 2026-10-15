@@ -23,10 +23,12 @@ from calendar_sync.domain.model import (
     TentativeEventPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.plans import AllowanceBasis, SyncInterval
 from calendar_sync.domain.watches import Availability, CadenceReason
 from calendar_sync.interfaces.api import schemas
 
 MIRRORS: dict[str, type[StrEnum]] = {
+    "AllowanceBasisValue": AllowanceBasis,
     "CauseValue": Cause,
     "EffectiveCadenceValue": CadenceReason,
     "FoundByValue": FoundBy,
@@ -41,6 +43,7 @@ MIRRORS: dict[str, type[StrEnum]] = {
     "RunReasonValue": RunReason,
     "SourceComparisonValue": ComparisonKind,
     "StatusVerdictValue": StatusVerdict,
+    "SyncIntervalValue": SyncInterval,
     "TentativeChoice": TentativeEventPolicy,
     "TokenScope": IntegrationTokenScope,
     "UnansweredChoice": UnansweredInvitationPolicy,
