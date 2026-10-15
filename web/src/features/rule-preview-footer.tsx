@@ -7,7 +7,7 @@ import { OutcomeSigns } from "@/features/rule-preview-table"
 import { useI18n } from "@/i18n/provider"
 import { ApiError, api, type RuleDetail } from "@/lib/api"
 import { appPathForRule, isPlainLeftClick, type OpenRule } from "@/lib/navigation"
-import { outcomeCounts, type PreviewNames, type PreviewRun } from "@/lib/rule-preview"
+import { newSeries, outcomeCounts, type PreviewNames, type PreviewRun } from "@/lib/rule-preview"
 import { outcomeParts } from "@/lib/rule-preview-text"
 import { enabledMessage } from "@/lib/rule-run"
 import { RULE_CHANGE_QUERIES, rulePreviewKey } from "@/lib/use-rule-commands"
@@ -140,7 +140,7 @@ function StartSummary({
     <div className="rule-preview-summary">
       <p className="rule-preview-counts">
         <span className="sr-only">{t("rulePreview.counts.label", { destination })}</span>
-        <OutcomeSigns parts={outcomeParts(i18n, outcomeCounts(run.items))} />
+        <OutcomeSigns parts={outcomeParts(i18n, outcomeCounts(run.items, newSeries(run.items)))} />
       </p>
       <p className="rule-preview-consequence">{t("rulePreview.page.pauseAnyTime")}</p>
     </div>

@@ -18,7 +18,37 @@ export const OUTCOME_MARKS: Record<PreviewOutcome, ChangeMark> = {
   skipped: "skipped",
 }
 
-export function previewOutcome(item: PreviewItem): PreviewOutcome {
+/**
+ * The series this preview adds to the destination, by source event id. A run writes a new series
+ * from its recurrence and then fixes its changed and cancelled dates, but to the reader those dates
+ * are part of adding it.
+ */
+export type NewSeries = ReadonlySet<string>
+
+export function newSeries(items: readonly PreviewItem[]): NewSeries {
+  return new Set(items.filter((item) => item.kind === "series" && item.planned_action === "create").map((item) => item.source_event_id))
+}
+
+/**
+ * How an occurrence of a series being added reads: added with it, or not synced when the series
+ * will not hold that date; null for one of a series the destination already has.
+ */
+function withNewSeries(item: PreviewItem, added: NewSeries): PreviewOutcome | null {
+  if (item.kind !== "occurrence" || item.series_event_id === null || !added.has(item.series_event_id)) return null
+  switch (item.planned_action) {
+    case "update":
+      return "add"
+    case "delete":
+      return "skipped"
+    case "ignore":
+      return item.projection ? "add" : "skipped"
+    default:
+      return null
+  }
+}
+
+/** What the run's own action does to the destination. */
+function actionOutcome(item: PreviewItem): PreviewOutcome {
   switch (item.planned_action) {
     case "create":
       return "add"
@@ -31,6 +61,11 @@ export function previewOutcome(item: PreviewItem): PreviewOutcome {
     case "ignore":
       return item.projection ? "current" : "skipped"
   }
+}
+
+/** What starting the rule does to the destination for one event, as the reader sees it. */
+export function previewOutcome(item: PreviewItem, added: NewSeries): PreviewOutcome {
+  return withNewSeries(item, added) ?? actionOutcome(item)
 }
 
 /** The kinds of event the preview can be narrowed to, in their order. */
@@ -116,7 +151,8 @@ function tally<K extends string>(items: readonly PreviewItem[], keys: (item: Pre
   return counts
 }
 
-export const outcomeCounts = (items: readonly PreviewItem[]) => tally(items, (item) => [previewOutcome(item)])
+/** How many items have each outcome; `added` names the series being added among all of the run's items. */
+export const outcomeCounts = (items: readonly PreviewItem[], added: NewSeries) => tally(items, (item) => [previewOutcome(item, added)])
 
 /**
  * One row in its place on the calendar; `at` is null for a deleted event the provider no longer

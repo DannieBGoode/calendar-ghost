@@ -2,13 +2,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowRight, Eye, Lock } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react"
 
-import { GhostMark } from "@/components/ghost-mark"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { LiveAnnouncement } from "@/components/rule-commands"
 import { Button } from "@/components/ui/button"
 import { PreviewFilterBar } from "@/features/rule-preview-filters"
 import { PreviewFooter } from "@/features/rule-preview-footer"
-import { PreviewEmpty, PreviewFailurePanel, PreviewSkeleton } from "@/features/rule-preview-states"
+import { PreviewEmpty, PreviewFailurePanel, PreviewReading, PreviewSkeleton } from "@/features/rule-preview-states"
 import { PreviewAccounts, PreviewSettings } from "@/features/rule-preview-rule"
 import { PreviewTable } from "@/features/rule-preview-table"
 import { useI18n } from "@/i18n/provider"
@@ -24,6 +23,7 @@ import {
   isFiltered,
   matchesFilters,
   narrowLayout,
+  newSeries,
   type PreviewNames,
   type PreviewRun,
   previewSettings,
@@ -185,16 +185,12 @@ function RulePreviewPage({
         detail={detail}
         names={names}
         accounts={<PreviewAccounts detail={detail} accounts={accounts} />}
-        lead={
-          <PreviewLead
-            run={run}
-            reading={preview.isFetching ? readingText(i18n, detail, names) : null}
-            refreshRef={refresh}
-            onRetry={retry}
-          />
-        }
+        lead={<PreviewLead run={run} reading={preview.isFetching} refreshRef={refresh} onRetry={retry} />}
         settings={<PreviewSettings detail={detail} onChange={openRule} />}
       />
+      {/* Above whatever waits on the read: the first rows, a failure being retried, or the last
+          results, dimmed, so the reader sees it is moving on in the place they are looking. */}
+      {preview.isFetching && <PreviewReading text={readingText(i18n, detail, names)} />}
       {failure ? (
         <PreviewFailurePanel failure={failure} ruleId={detail.id} busy={preview.isFetching} onRetry={retry} onOpenRule={openRule} onViewChange={onViewChange} />
       ) : preview.data ? (
@@ -289,6 +285,7 @@ function PreviewResults({
   // Placing a series at its next date steps through its rule, so it is not redone on every render.
   const placed = useMemo(() => layOut(run.items, now), [run.items, now])
   const layout = useMemo(() => narrowLayout(placed, (item) => matchesFilters(item, filters)), [placed, filters])
+  const added = useMemo(() => newSeries(run.items), [run.items])
   const empty = !layout.undated.length && !layout.earlier.length && !layout.upcoming.length
   const zone = useMemo(() => timeZoneName(i18n.formatLocale, now), [i18n.formatLocale, now])
   if (!run.items.length) {
@@ -322,6 +319,7 @@ function PreviewResults({
           now={now}
           zone={zone}
           complete={!isFiltered(filters)}
+          added={added}
         />
       ) : (
         <p className="rule-preview-no-match">{i18n.t("rulePreview.filters.noMatch")}</p>
@@ -351,9 +349,9 @@ function leadText(i18n: I18n, run: PreviewRun): string {
 }
 
 /**
- * That nothing is written yet, when the preview was made, and a way to make it again; while it
- * reads, what it is reading, in the same place so nothing below moves. Refresh stays put while it
- * reads, so focus does not fall back to the page.
+ * That nothing is written yet, when the preview was made, and a way to make it again. While it
+ * reads, the status above the results says so; Refresh stays put, so focus does not fall back to
+ * the page.
  */
 function PreviewLead({
   run,
@@ -362,22 +360,14 @@ function PreviewLead({
   onRetry,
 }: {
   run: PreviewRun | undefined
-  reading: string | null
+  reading: boolean
   refreshRef: RefObject<HTMLButtonElement | null>
   onRetry: () => void
 }) {
   const i18n = useI18n()
-  const text = run ? leadText(i18n, run) : i18n.t("rulePreview.page.lead")
   return (
-    <p className={reading ? "rule-preview-lead rule-preview-reading" : "rule-preview-lead"}>
-      {reading ? (
-        <>
-          <span className="rule-preview-reading-ghost"><GhostMark /></span>
-          {reading}
-        </>
-      ) : (
-        text
-      )}
+    <p className="rule-preview-lead">
+      {run ? leadText(i18n, run) : i18n.t("rulePreview.page.lead")}
       <Button
         ref={refreshRef}
         type="button"

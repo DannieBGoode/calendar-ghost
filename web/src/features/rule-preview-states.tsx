@@ -1,5 +1,5 @@
 import { CircleAlert, RefreshCw, ShieldAlert } from "lucide-react"
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 
 import { GhostMark } from "@/components/ghost-mark"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -10,6 +10,7 @@ import { accountSearch, appPathForRule, connectionsPath, isPlainLeftClick, type 
 import { providerWords } from "@/lib/providers"
 import type { PreviewFailure } from "@/lib/rule-preview-failure"
 import { withYear } from "@/lib/rule-preview-text"
+import { useNow } from "@/lib/use-now"
 
 function Panel({ variant, icon, title, body, action }: { variant: "stopped" | "attention" | "quiet"; icon: ReactNode; title: string; body: string; action: ReactNode }) {
   return (
@@ -107,6 +108,37 @@ export function PreviewEmpty({ source, from, now }: { source: string; from: Date
       <h2>{i18n.t("rulePreview.states.emptyTitle", { source, date: i18n.format.date(from, withYear(from, now)) })}</h2>
       <p>{i18n.t("rulePreview.states.emptyBody")}</p>
     </section>
+  )
+}
+
+/** After this many seconds the status counts them, so a long read is seen to move on. */
+const COUNT_AFTER = 3
+/** After this many, it also says that a large calendar takes longer. */
+const REASSURE_AFTER = 12
+
+/**
+ * What the preview is reading, above the rows it will replace, with a line that changes as the
+ * seconds pass, so the page never looks stopped, even without motion. It is not a live region:
+ * the page announces the read once, not each second.
+ */
+export function PreviewReading({ text }: { text: string }) {
+  const { t } = useI18n()
+  const [startedAt] = useState(() => Date.now())
+  const now = useNow(1_000)
+  const seconds = Math.max(0, Math.floor((now - startedAt) / 1_000))
+  return (
+    <div className="rule-preview-reading">
+      <span className="rule-preview-reading-ghost">
+        <GhostMark />
+      </span>
+      <div>
+        <p className="rule-preview-reading-title">{text}</p>
+        <p className="rule-preview-reading-detail">
+          {seconds < COUNT_AFTER ? t("rulePreview.reading.checking") : t("rulePreview.reading.elapsed", { count: seconds })}
+          {seconds >= REASSURE_AFTER && ` ${t("rulePreview.reading.large")}`}
+        </p>
+      </div>
+    </div>
   )
 }
 
