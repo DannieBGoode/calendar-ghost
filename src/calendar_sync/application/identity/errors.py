@@ -43,3 +43,11 @@ class EmailRequired(ApplicationError):
 
 class InvalidIntegrationTokenName(ValueError):
     """An Integration Token name must be 1 to 80 printable characters."""
+
+
+class PlanNotFound(ApplicationError):
+    """No Plan has this key."""
+
+
+class PlanKeyTaken(ApplicationError):
+    """Another Plan already has this key."""

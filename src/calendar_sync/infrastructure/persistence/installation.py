@@ -27,7 +27,7 @@ from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import SyncRuleState
 from calendar_sync.domain.watches import CalendarWatch, WatchRegistration
 from calendar_sync.infrastructure.persistence.activity_queries import operations_of
-from calendar_sync.infrastructure.persistence.connections import open_connection
+from calendar_sync.infrastructure.persistence.connections import USERS_PER_QUERY, open_connection
 from calendar_sync.infrastructure.persistence.sqlite import (
     optional_time,
     outcome_from_row,
@@ -167,8 +167,8 @@ class SqliteInstallationUnitOfWork:
         assert self._connection is not None
         use: dict[UserId, ResourceUse] = {}
         ordered = sorted({user.value for user in users})
-        for start in range(0, len(ordered), _USERS_PER_QUERY):
-            chunk = ordered[start : start + _USERS_PER_QUERY]
+        for start in range(0, len(ordered), USERS_PER_QUERY):
+            chunk = ordered[start : start + USERS_PER_QUERY]
             use |= _resource_use(self._connection, chunk, since)
         return use
 
@@ -212,8 +212,8 @@ class SqliteInstallationUnitOfWork:
         assert self._connection is not None
         records: dict[UserId, StatusRecords] = {}
         ordered = sorted({user.value for user in users})
-        for start in range(0, len(ordered), _USERS_PER_QUERY):
-            chunk = ordered[start : start + _USERS_PER_QUERY]
+        for start in range(0, len(ordered), USERS_PER_QUERY):
+            chunk = ordered[start : start + USERS_PER_QUERY]
             rules = _recorded_rules(self._connection, chunk)
             for user, operations in operations_of(self._connection, chunk).items():
                 records[UserId(user)] = StatusRecords(
@@ -280,10 +280,6 @@ class SqliteInstallationUnitOfWork:
             )
             for row in rows
         )
-
-
-_USERS_PER_QUERY = 500
-"""Users read together, well under SQLite's limit on bound values in one statement."""
 
 
 def _upkeep_due(connection: sqlite3.Connection) -> dict[str, datetime | None]:

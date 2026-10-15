@@ -51,8 +51,12 @@ class SqliteRegistrationSettings:
             connection.execute("BEGIN IMMEDIATE")
             users = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
             require_registration_change(RegistrationPolicy.ONLY_ME, int(users))
+            # Plans turn off and keep their definitions, so a new first User inherits no limit.
             connection.execute(
-                "UPDATE installation_settings SET registration_policy = ? WHERE singleton = 1",
+                """
+                UPDATE installation_settings SET registration_policy = ?, plans_enabled = 0
+                WHERE singleton = 1
+                """,
                 (RegistrationPolicy.ONLY_ME.value,),
             )
             connection.execute(

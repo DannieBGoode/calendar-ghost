@@ -9,7 +9,15 @@ from pathlib import Path
 import pytest
 
 from calendar_sync.application.identity.errors import EmailTaken
-from calendar_sync.application.identity.ports import IssuedLink, UserPage, UserQuery, UserSort
+from calendar_sync.application.identity.ports import (
+    IssuedLink,
+    PlansSetting,
+    RegistrationSettings,
+    UserDirectory,
+    UserPage,
+    UserQuery,
+    UserSort,
+)
 from calendar_sync.domain.access import (
     LastAdministrator,
     OnlyMeNeedsOneUser,
@@ -19,9 +27,10 @@ from calendar_sync.domain.access import (
     UserId,
     UserState,
 )
-from calendar_sync.domain.plans import PlanKey
+from calendar_sync.domain.plans import UNLIMITED, PlanKey
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
+from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.infrastructure.persistence.registration import (
     SqliteInvitations,
     SqlitePasswordResetLinks,
@@ -34,7 +43,8 @@ from tests.adapters.test_user_migration import (
     database_at_version,
     seed_single_administrator,
 )
-from tests.identity_fakes import MemoryUsers
+from tests.identity_fakes import MemoryPlans, MemoryRegistration, MemoryUsers
+from tests.plans import FAMILY, FREE, plans_on
 
 NOW = datetime(2026, 10, 9, 9, 0, tzinfo=UTC)
 FIRST = User(
@@ -518,6 +528,46 @@ def test_returning_to_setup_chooses_only_me_and_revokes_every_invitation_in_one_
     assert invitations.pending(later) == ()
     assert not invitations.usable(first.token, later)
     assert not invitations.usable(second.token, later)
+
+
+def _setup_with_plans(
+    kind: str, tmp_path: Path
+) -> tuple[UserDirectory, RegistrationSettings, SqlitePlans | MemoryPlans]:
+    if kind == "memory":
+        users = MemoryUsers()
+        plans = MemoryPlans(users)
+        return users, MemoryRegistration(users, plans=plans), plans
+    database = _database(tmp_path)
+    return (
+        SqliteUserDirectory(database),
+        SqliteRegistrationSettings(database),
+        SqlitePlans(database),
+    )
+
+
+@pytest.mark.parametrize("kind", ["sqlite", "memory"])
+def test_returning_to_setup_turns_plans_off_and_keeps_them_for_the_next_administrator(
+    kind: str, tmp_path: Path
+) -> None:
+    users, registration, plans = _setup_with_plans(kind, tmp_path)
+    users.add(FIRST, "hash-1")
+    plans_on(plans, FREE, FAMILY)
+    # The last User deletes their account, and the installation returns to setup.
+    users.delete(FIRST.id)
+
+    registration.return_to_setup(NOW)
+    new_first = replace(FIRST, id=UserId("new-first"), email="new-first@example.test")
+    assert users.add_first(new_first, "hash-2")
+    users.add(SECOND, "hash-3")
+
+    assert plans.settings() == PlansSetting(enabled=False, default=FREE.key)
+    assert [listing.plan for listing in plans.plans()] == [FAMILY, FREE]
+    # Nobody inherits a limit the earlier installation set: neither the new first User nor
+    # anyone who joins later, until an administrator turns Plans on again.
+    assert plans.of_users([new_first.id, SECOND.id]) == {
+        new_first.id: UNLIMITED,
+        SECOND.id: UNLIMITED,
+    }
 
 
 def test_a_reset_link_sets_the_password_once_and_a_newer_one_replaces_it(tmp_path: Path) -> None:

@@ -30,6 +30,8 @@ from calendar_sync.application.identity.ports import (
     Invitations,
     PasswordHasher,
     PasswordResetLinks,
+    PlanAssignments,
+    PlanCatalog,
     RegistrationSettings,
     Sessions,
     SignInThrottle,
@@ -95,6 +97,7 @@ from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizat
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
     AccountCalendars,
+    Allowances,
     CalendarProvider,
     ConnectedAccountRepository,
     IncidentNotifications,
@@ -167,6 +170,7 @@ from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
+from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.infrastructure.persistence.registration import (
     SqliteInvitations,
     SqlitePasswordResetLinks,
@@ -340,6 +344,11 @@ class Adapters:
     delivery_evidence: DeliveryEvidenceLog
     """Whether each provider's Watch Notices reach the installation's address."""
     watch_inbox: WatchNoticeInbox
+    allowances: Allowances
+    """What each User may use now, as their Plan allows (ADR 0038)."""
+    plan_catalog: PlanCatalog
+    plan_assignments: PlanAssignments
+    """The one way a User's own Plan changes: administrators now, billing later."""
     notifications: Callable[[UserId], IncidentNotifications | None] = lambda _owner: None
     """Each User's own Incident Notifications, by email when the installation sends it."""
     installation_notifications: InstallationNotifications | None = None
@@ -394,6 +403,7 @@ def build_adapters(settings: Settings) -> Adapters:
     history = HistoryCipher(settings.master_key) if settings.master_key else None
     tokens = SqliteIntegrationTokens(database, clock, ids)
     users = SqliteUserDirectory(database)
+    plans = SqlitePlans(database)
     mail = _mail_server(settings)
     adapters = Adapters(
         unit_of_work=SqliteUnitOfWorkFactory(database, clock, history).for_user,
@@ -419,6 +429,9 @@ def build_adapters(settings: Settings) -> Adapters:
         token_authentication=tokens,
         delivery_evidence=SqliteDeliveryEvidenceLog(database),
         watch_inbox=SqliteWatchNoticeInbox(database),
+        allowances=plans,
+        plan_catalog=plans,
+        plan_assignments=plans,
         notifications=lambda owner: (
             OwnerNotifier(users, owner, mail, public_address(settings)) if mail else None
         ),

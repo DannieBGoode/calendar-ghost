@@ -1,4 +1,4 @@
-"""Ports of identity and access: Users, sessions, links, and Integration Tokens."""
+"""Ports of identity and access: Users, sessions, links, Integration Tokens, and Plans."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId, UserState
+from calendar_sync.domain.plans import AssignmentSource, Plan, PlanKey
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,9 +141,10 @@ class RegistrationSettings(Protocol):
         ...
 
     def return_to_setup(self, at: datetime) -> None:
-        """Choose Only Me and revoke every Invitation still usable at `at`, in one step, so a
-        failure between them cannot leave an old Invitation for the next setup. Raises
-        OnlyMeNeedsOneUser, changing nothing, while another User exists."""
+        """Choose Only Me, revoke every Invitation still usable at `at`, and turn Plans off,
+        keeping their definitions, in one step, so a failure between them cannot leave an old
+        Invitation or a hidden limit for the next setup. Raises OnlyMeNeedsOneUser, changing
+        nothing, while another User exists."""
         ...
 
 
@@ -278,4 +280,74 @@ class IntegrationTokenAuthentication(Protocol):
     def authenticate(self, token: str) -> IntegrationTokenSummary | None:
         """The token's summary, naming its owner, when it is well formed, known, and not
         revoked."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class PlansSetting:
+    """Whether Plans limit anyone, and the Default Plan of everyone with no Plan of their own."""
+
+    enabled: bool
+    default: PlanKey | None
+
+
+@dataclass(frozen=True, slots=True)
+class PlanListing:
+    """A Plan as Administration lists it."""
+
+    plan: Plan
+    is_default: bool
+    people: int
+    """Everyone who has it: their own Plan, plus, for the default, everyone with none."""
+    limited_people: int
+    """Active Users who do not administer and have it, whom it limits while Plans are on."""
+
+
+class PlanCatalog(Protocol):
+    """The Plans an Installation Administrator defines, and whether they are on (ADR 0038)."""
+
+    def settings(self) -> PlansSetting: ...
+
+    def change_settings(self, enabled: bool, default: PlanKey | None) -> PlansSetting:
+        """One step: raises PlanNotFound when `default` names no Plan, PlansNeedDefault when
+        turning Plans on without a default."""
+        ...
+
+    def plans(self) -> Sequence[PlanListing]:
+        """Every Plan, by name then key."""
+        ...
+
+    def any_plans(self) -> bool: ...
+
+    def get(self, key: PlanKey) -> Plan | None: ...
+
+    def add(self, plan: Plan, at: datetime) -> None:
+        """Raises PlanKeyTaken."""
+        ...
+
+    def change(self, plan: Plan, at: datetime) -> None:
+        """The key never changes; raises PlanNotFound."""
+        ...
+
+    def remove(self, key: PlanKey) -> None:
+        """One step: raises PlanNotFound, PlanIsDefault, or PlanInUse(people)."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class AssignmentChange:
+    """How a User's own Plan was last set: by an administrator now, by billing later."""
+
+    source: AssignmentSource
+    actor: UserId | None
+    """The administrator who set it; None when billing set it."""
+    at: datetime
+
+
+class PlanAssignments(Protocol):
+    """The one way a User's own Plan changes; administrators now, billing later (ADR 0038)."""
+
+    def assign(self, user: UserId, plan: PlanKey | None, change: AssignmentChange) -> bool:
+        """Set the User's own Plan, None for the Default Plan, recording the change; False when
+        no such User. Raises PlanNotFound."""
         ...
