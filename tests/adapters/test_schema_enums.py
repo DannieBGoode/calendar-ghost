@@ -13,7 +13,9 @@ from calendar_sync.application.identity.ports import IntegrationTokenScope
 from calendar_sync.application.operations.installation_hints import HintKind
 from calendar_sync.application.operations.status import ProblemKind, StatusVerdict
 from calendar_sync.application.sync.locking import RuleWorkKind
+from calendar_sync.domain.audit import FoundBy, RunReason
 from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.changes import ComparisonKind
 from calendar_sync.domain.incidents import IncidentCategory, IncidentResolution, IncidentStep
 from calendar_sync.domain.model import (
     ProjectionContent,
@@ -27,6 +29,7 @@ from calendar_sync.interfaces.api import schemas
 MIRRORS: dict[str, type[StrEnum]] = {
     "CauseValue": Cause,
     "EffectiveCadenceValue": CadenceReason,
+    "FoundByValue": FoundBy,
     "HintKindValue": HintKind,
     "IncidentCategoryValue": IncidentCategory,
     "IncidentResolutionValue": IncidentResolution,
@@ -35,6 +38,8 @@ MIRRORS: dict[str, type[StrEnum]] = {
     "PrivacyPolicy": ProjectionContent,
     "ProblemKindValue": ProblemKind,
     "ProjectionChoice": ProjectionHandling,
+    "RunReasonValue": RunReason,
+    "SourceComparisonValue": ComparisonKind,
     "StatusVerdictValue": StatusVerdict,
     "TentativeChoice": TentativeEventPolicy,
     "TokenScope": IntegrationTokenScope,

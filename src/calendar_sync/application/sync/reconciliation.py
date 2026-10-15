@@ -26,7 +26,7 @@ from calendar_sync.application.sync.synchronization import (
     SyncRunResult,
     lapse_if_unauthorized,
 )
-from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, FoundBy
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventMapping,
@@ -43,7 +43,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
-from calendar_sync.domain.runs import RuleRunOutcome, RunKind
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind, RunOrigin
 from calendar_sync.domain.services import EventProjector, ReconciliationService
 
 logger = logging.getLogger(__name__)
@@ -179,6 +179,8 @@ class ReconcileSyncRule:
                     detail=conflict.detail,
                     reason=conflict.reason,
                     run_id=run_id,
+                    # Not a Sync Run decision: the reconciliation is its own provenance.
+                    found_by=FoundBy.RECONCILIATION,
                 )
                 for conflict in report.conflicts
             ],
@@ -388,7 +390,9 @@ class ReconcileNow:
         # Reported from start to finish, so a reload between the stages still sees it.
         with self.synchronize.locks.working(rule_id, work):
             floor = self._audit_floor()
-            result = self.synchronize.execute(rule_id, full=True, work=work)
+            result = self.synchronize.execute(
+                rule_id, full=True, work=work, origin=RunOrigin.RECONCILE_NOW
+            )
             # The full pass succeeded and counts as today's; reconciliation can still fail after.
             if floor is not None:
                 self._record_full_pass(rule_id, floor, result.run_id)

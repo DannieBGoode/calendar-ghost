@@ -1,5 +1,9 @@
 # Record what changed in a source event, and write only when the projection changes
 
+Amended by [ADR 0037](0037-record-a-decision-only-when-it-says-something-new.md), which compares a
+source event before the decision is recorded, saves the observation only for a recorded decision,
+and rejects digests of untracked fields again.
+
 ## Context
 
 Activity said "Changed in Personal → updated in Work" whenever Google reported a new revision of a

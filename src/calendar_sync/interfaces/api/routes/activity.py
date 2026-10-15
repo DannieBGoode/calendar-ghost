@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from enum import StrEnum
 from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, Query, status
@@ -22,6 +23,8 @@ from calendar_sync.application.operations.errors import (
 )
 from calendar_sync.application.operations.status import GetInstallationStatus
 from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.domain.audit import FoundBy, RunReason
+from calendar_sync.domain.changes import ComparisonKind
 from calendar_sync.domain.model import CalendarEvent, EventStatus, TimedInterval
 from calendar_sync.interfaces.api.dependencies import current_user, user_services
 from calendar_sync.interfaces.api.problems import ApiProblem, failure_params, problem
@@ -193,6 +196,9 @@ async def inspect_activity_event(entry_id: int, services: Services) -> ActivityE
 
 
 def _entry_response(entry: ActivityEntry) -> AuditEntryResponse:
+    run_reason = _known(RunReason, entry.run_reason)
+    found_by = _known(FoundBy, entry.found_by)
+    comparison = _known(ComparisonKind, entry.source_comparison)
     return AuditEntryResponse(
         id=entry.id,
         run_id=entry.run_id,
@@ -208,7 +214,19 @@ def _entry_response(entry: ActivityEntry) -> AuditEntryResponse:
         event=_recorded_event_response(entry.event) if entry.event is not None else None,
         repeated=entry.repeated,
         changed_fields=list(entry.changed_fields) if entry.changed_fields is not None else None,
+        run_reason=run_reason.value if run_reason else None,
+        found_by=found_by.value if found_by else None,
+        source_comparison=comparison.value if comparison else None,
     )
+
+
+def _known[E: StrEnum](kind: type[E], code: str | None) -> E | None:
+    """The member a stored code names, or None for a code this release does not know, such as
+    one a later release recorded before a rollback."""
+    try:
+        return kind(code) if code is not None else None
+    except ValueError:
+        return None
 
 
 def _recorded_event_response(event: ActivityEvent) -> RecordedEventResponse:

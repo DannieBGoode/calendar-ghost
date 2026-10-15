@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
@@ -10,8 +11,14 @@ from calendar_sync.application.sync.errors import RuleNotExecutable
 from calendar_sync.application.sync.locking import RuleWork
 from calendar_sync.application.sync.ports import CalendarReader, ProviderCallTally, UnitOfWork
 from calendar_sync.application.sync.run_log import call_summary, duration
-from calendar_sync.domain.audit import AuditEntry
-from calendar_sync.domain.changes import SourceChange, SourceObservation
+from calendar_sync.domain.audit import (
+    AuditAction,
+    AuditEntry,
+    FoundBy,
+    RunReason,
+    repeats_previous,
+)
+from calendar_sync.domain.changes import SourceComparison
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventRef,
@@ -108,12 +115,13 @@ class SyncRunLog:
             self.calls.calls,
         )
 
-    def finished(self, counts: Mapping[SyncAction, int]) -> None:
+    def finished(self, counts: Mapping[SyncAction, int], unrecorded: int) -> None:
         logger.info(
-            "run finished %s in %s %s %s",
+            "run finished %s in %s %s unrecorded=%d %s",
             self._names(),
             self._elapsed(),
             _decisions(counts),
+            unrecorded,
             call_summary(self.calls),
         )
 
@@ -190,9 +198,25 @@ class SyncRunContext:
 
     Occurrence writes verify the series' ownership with a fresh read of their own.
     """
+    unrecorded: int = 0
+    """Decisions this run counted but left out of Activity as repeats (ADR 0037)."""
     log: SyncRunLog | None = None
     work: RuleWork | None = None
     """What the rule reports while this run is in progress, including how much it handled."""
+    run_reason: RunReason | None = None
+    """Why this run read the calendars as it did."""
+    found_by: FoundBy | None = None
+    """The work that led to the decisions being made now; nested work inherits it."""
+
+    @contextmanager
+    def finding(self, found_by: FoundBy) -> Iterator[None]:
+        """Name the work that finds events until the block ends, then restore the earlier one."""
+        outer = self.found_by
+        self.found_by = found_by
+        try:
+            yield
+        finally:
+            self.found_by = outer
 
     def count(self, action: SyncAction, source: EventRef) -> None:
         """Count one decision about `source`, remembering it when it is a block.
@@ -271,31 +295,45 @@ def require_unchanged(run: SyncRunContext) -> None:
         raise RuleNotExecutable("sync rule changed during synchronization; run stopped")
 
 
-def record(run: SyncRunContext, entry: AuditEntry, observed: CalendarEvent | None = None) -> None:
+def record(
+    run: SyncRunContext,
+    entry: AuditEntry,
+    observed: CalendarEvent | None = None,
+    *,
+    own_identity: bool = True,
+) -> None:
     """Append an Audit Entry unless its decision is one Activity deliberately leaves out.
 
-    An entry about `observed` also records what changed in it since the rule last observed it.
-    Only recorded decisions observe, so no change is absorbed by a decision Activity never shows.
+    An entry about `observed` also records how it compared with the rule's Source Observation.
+    Outside the daily pass, a skip that repeats the event's previous entry with nothing new is
+    counted but not recorded (ADR 0037). Only recorded decisions observe, so no change is
+    absorbed by a decision Activity never shows. `own_identity` is false when the entry is filed
+    under another event's identifier, so its previous entry may be about something else.
     """
     reason = entry.reason
     if reason in UNRECORDED_REASONS or (run.daily_pass and reason in UNRECORDED_ON_DAILY_PASS):
         return
-    if observed is not None:
-        entry = replace(entry, change=_observe(run, observed, entry.occurred_at))
+    comparison = _compare(run, observed) if observed is not None else None
+    if comparison is not None and own_identity and _repeats(run, entry, comparison):
+        run.unrecorded += 1
+        return
+    entry = replace(entry, run_reason=run.run_reason, found_by=run.found_by)
+    if comparison is not None:
+        assert observed is not None
+        if comparison.observation is not None:
+            run.uow.observations.save(
+                run.rule.id, observed.reference, comparison.observation, entry.occurred_at
+            )
+        entry = replace(entry, change=comparison.change, source_comparison=comparison.kind)
     run.uow.audit.append(entry)
 
 
-def _observe(run: SyncRunContext, event: CalendarEvent, at: datetime) -> SourceChange | None:
-    """Remember the event's tracked details; how they changed, if the rule saw it before."""
-    current = SourceObservation.of(event)
-    if current is None:
-        # A cancellation keeps the last observation, so a restored event compares with it.
-        return None
-    observations = run.uow.observations
-    previous = observations.get(run.rule.id, event.reference)
-    if previous is not None and previous.revision == current.revision:
-        return None
-    if previous is not None:
-        current = current.completed_by(previous)
-    observations.save(run.rule.id, event.reference, current, at)
-    return SourceChange.between(previous, current) if previous is not None else None
+def _compare(run: SyncRunContext, event: CalendarEvent) -> SourceComparison:
+    return SourceComparison.of(run.uow.observations.get(run.rule.id, event.reference), event)
+
+
+def _repeats(run: SyncRunContext, entry: AuditEntry, comparison: SourceComparison) -> bool:
+    if run.daily_pass or entry.action is not AuditAction.IGNORE or entry.source_event_id is None:
+        return False
+    previous = run.uow.audit.latest_for(run.rule.id, entry.source_event_id)
+    return repeats_previous(previous, entry, comparison)

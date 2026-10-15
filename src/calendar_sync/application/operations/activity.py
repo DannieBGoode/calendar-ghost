@@ -92,6 +92,12 @@ class ActivityEntry:
     """A repair that redoes the same event's previous one, recorded by an earlier run."""
     changed_fields: tuple[str, ...] | None = None
     """The source fields this entry's Source Change touched; None when it recorded none."""
+    run_reason: str | None = None
+    """Why the Sync Run read the calendars as it did (ADR 0037); None for earlier entries."""
+    found_by: str | None = None
+    """Which work led to the decision (ADR 0037); None for earlier entries."""
+    source_comparison: str | None = None
+    """How the source event compared with the rule's Source Observation; None when not compared."""
 
 
 @dataclass(frozen=True, slots=True)

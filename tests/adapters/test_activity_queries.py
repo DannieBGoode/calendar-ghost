@@ -15,7 +15,15 @@ from calendar_sync.application.operations.activity import (
 from calendar_sync.application.operations.ports import AccountStanding, OpenBlock
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
-from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
+from calendar_sync.domain.audit import (
+    AuditAction,
+    AuditEntry,
+    AuditOutcome,
+    FoundBy,
+    RecordedEvent,
+    RunReason,
+)
+from calendar_sync.domain.changes import ComparisonKind
 from calendar_sync.domain.incidents import IncidentStep
 from calendar_sync.domain.model import SyncAction, SyncReason, SyncRuleId, TimedInterval
 from calendar_sync.infrastructure.persistence import activity_queries
@@ -223,6 +231,28 @@ def test_entries_never_name_the_event_by_another_users_title(database: Path) -> 
     assert (repaired.event, repaired.repeated) == (None, False)
     assert removed is not None
     assert removed.event is None
+
+
+def test_entries_say_why_their_run_checked_the_event(database: Path) -> None:
+    checked = replace(
+        _entry("ignore", "projection_current"),
+        run_reason=RunReason.CHANGES,
+        found_by=FoundBy.SOURCE_FEED,
+        source_comparison=ComparisonKind.UNTRACKED,
+    )
+    _append(database, checked, _entry("create", "source_created"))
+    queries = SqliteActivityQueries(database, add_user(database))
+
+    recorded, earlier = queries.entry(1), queries.entry(2)
+
+    assert recorded is not None
+    assert (recorded.run_reason, recorded.found_by, recorded.source_comparison) == (
+        "changes",
+        "source_feed",
+        "untracked",
+    )
+    assert earlier is not None
+    assert (earlier.run_reason, earlier.found_by, earlier.source_comparison) == (None, None, None)
 
 
 def test_entry_events_name_the_rule_and_events(database: Path) -> None:

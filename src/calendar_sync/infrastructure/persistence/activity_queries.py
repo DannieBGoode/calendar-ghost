@@ -185,7 +185,7 @@ _ENTRY_COLUMNS = (
     "id, run_id, occurred_at, rule_id, action, outcome, reason, detail,"
     " source_event_id, destination_event_id,"
     " event_title, event_starts, event_ends, event_all_day, event_recurring, event_cancelled,"
-    " change_fields"
+    " change_fields, run_reason, found_by, source_comparison"
 )
 # An entry observed its event's title unless its provider reported a cancellation without one.
 _TITLE_OBSERVED = "event_title IS NOT NULL AND (event_title <> '' OR NOT event_cancelled)"
@@ -649,6 +649,9 @@ def _entries(connection: sqlite3.Connection, rows: Sequence[sqlite3.Row]) -> lis
                 if row["change_fields"] is not None
                 else None
             ),
+            run_reason=row["run_reason"],
+            found_by=row["found_by"],
+            source_comparison=row["source_comparison"],
         )
         for row in rows
     ]

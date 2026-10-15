@@ -41,6 +41,7 @@ _FORWARD_MIGRATIONS = (
     (29, "0029_lone_occurrences.sql"),
     (30, "0030_birthday_policy.sql"),
     (31, "0031_instant_sync.sql"),
+    (32, "0032_audit_entry_provenance.sql"),
 )
 
 

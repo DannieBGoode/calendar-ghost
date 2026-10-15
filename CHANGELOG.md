@@ -28,6 +28,13 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Activity no longer lists a skip that repeats the event's previous entry when the provider sent a
+  new version of the event and Calendar Ghost detected no change in what it tracks. A bulk change
+  to responses or reminders used to add hundreds of identical entries. The run log counts these as
+  `unrecorded=N`. The daily check, writes, blocks, and every decision that differs from the
+  event's previous entry are still recorded. An entry's details now say why it was checked ("Why it
+  was checked") and how the event compared with the version Calendar Ghost last saw. Entries
+  recorded before this release show neither line.
 - The rule builder and the policy editor group a rule's policy the same way: how events look
   (event information, Maybe events, unanswered invitations) beside which events to include
   (all-day events, birthdays). Event information now says what the destination shows, and in

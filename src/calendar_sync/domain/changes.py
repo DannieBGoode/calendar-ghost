@@ -102,6 +102,65 @@ class SourceChange:
         return cls(before, after, fields) if fields else None
 
 
+class ComparisonKind(StrEnum):
+    """How a source event compared with the rule's Source Observation of it; stored values are a
+    compatibility surface."""
+
+    CHANGED = "changed"
+    UNTRACKED = "untracked"
+    SAME_REVISION = "same_revision"
+    CANCELLED = "cancelled"
+    NO_BASELINE = "no_baseline"
+
+
+@dataclass(frozen=True, slots=True)
+class SourceComparison:
+    """A source event compared with what the rule last observed, before anything is saved."""
+
+    kind: ComparisonKind
+    change: SourceChange | None = None
+    observation: SourceObservation | None = None
+    """The observation to save if the decision is recorded; None when there is nothing to save."""
+    completes_baseline: bool = False
+    """The new observation knows a guest list, conferencing, or response the stored one did not."""
+
+    @classmethod
+    def of(cls, previous: SourceObservation | None, event: CalendarEvent) -> SourceComparison:
+        current = SourceObservation.of(event)
+        if current is None:
+            # A cancellation keeps the last observation, so a restored event compares with it.
+            if event.status is EventStatus.CANCELLED:
+                return cls(ComparisonKind.CANCELLED)
+            return cls(ComparisonKind.NO_BASELINE)
+        if previous is None:
+            return cls(ComparisonKind.NO_BASELINE, observation=current)
+        if previous.revision == current.revision:
+            return cls(ComparisonKind.SAME_REVISION)
+        current = current.completed_by(previous)
+        change = SourceChange.between(previous, current)
+        return cls(
+            ComparisonKind.CHANGED if change else ComparisonKind.UNTRACKED,
+            change,
+            current,
+            completes_baseline=_learns(previous, current),
+        )
+
+
+def _learns(previous: SourceObservation, current: SourceObservation) -> bool:
+    return (
+        (previous.guests is None and current.guests is not None)
+        or (previous.conferencing is None and current.conferencing is not None)
+        or (previous.response is None and current.response is not None)
+    )
+
+
+def same_time(first: EventTime | None, second: EventTime | None) -> bool:
+    """Whether two recorded times name the same instants or days."""
+    if first is None or second is None:
+        return first is second
+    return _instants(first) == _instants(second)
+
+
 def _differs(field: SourceField, before: SourceObservation, after: SourceObservation) -> bool:
     if field is SourceField.TIME:
         return _instants(before.time) != _instants(after.time)

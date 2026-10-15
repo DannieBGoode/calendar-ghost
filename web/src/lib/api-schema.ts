@@ -1048,6 +1048,8 @@ export interface components {
             /** Detail */
             detail: string;
             event: components["schemas"]["RecordedEventResponse"] | null;
+            /** Found By */
+            found_by: ("source_feed" | "destination_feed" | "reprojection" | "pending_replay" | "reconciliation") | null;
             /** Id */
             id: number;
             /** Occurred At */
@@ -1065,6 +1067,10 @@ export interface components {
             rule_id: string;
             /** Run Id */
             run_id: string | null;
+            /** Run Reason */
+            run_reason: ("changes" | "first_run" | "daily_pass" | "reconcile_now" | "reprojection" | "relisted") | null;
+            /** Source Comparison */
+            source_comparison: ("changed" | "untracked" | "same_revision" | "cancelled" | "no_baseline") | null;
             /** Source Event Id */
             source_event_id: string | null;
         };

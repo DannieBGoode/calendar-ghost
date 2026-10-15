@@ -235,6 +235,12 @@ so Google and Microsoft receive `404` until their registrations expire, within a
 while rules keep syncing every five minutes. Upgrading again keeps registrations that are still
 live, and deletes and creates again those that expired.
 
+Migration 32 adds the nullable `audit_entries.run_reason`, `found_by`, and `source_comparison`
+columns: codes that say why a Sync Run read the calendars, which work found the event, and how the
+source compared with the rule's Source Observation ([ADR 0037](adr/0037-record-a-decision-only-when-it-says-something-new.md)).
+Earlier entries keep `NULL`. Rolling back works with the same database: earlier releases ignore the
+columns, and record the repeated skips the newer release leaves out.
+
 Sign-in failures are counted per email and per client address for 15 minutes: after five failures
 for one email, or twenty from one address, sign-in answers `429` with a `Retry-After` header until
 the oldest failure leaves the window. Behind a reverse proxy every request comes from the proxy's

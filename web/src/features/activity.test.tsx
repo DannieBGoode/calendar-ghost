@@ -93,6 +93,9 @@ function entry(id: number, overrides: Partial<AuditEntry>): AuditEntry {
     event: null,
     repeated: false,
     changed_fields: null,
+    run_reason: null,
+    found_by: null,
+    source_comparison: null,
     ...overrides,
   }
 }
@@ -531,6 +534,59 @@ describe("ActivityView", () => {
     const facts = [...(detail?.querySelectorAll(".activity-diagnostics dt") ?? [])]
     const recorded = facts.find((term) => term.textContent === "Recorded detail")
     expect(recorded?.nextElementSibling?.textContent).toBe("internal: raw")
+  })
+
+  it("says why an entry's run checked its event and how it compared with what the rule last saw", async () => {
+    const checked = entry(11, {
+      action: "ignore",
+      category: "unchanged",
+      reason: "projection_current",
+      run_reason: "changes",
+      found_by: "source_feed",
+      source_comparison: "untracked",
+      event: recorded("Seminar"),
+    })
+    await renderActivity(testI18n(), { entries: [checked, ...ENTRIES] }, "?entry=11")
+    const detail = container.querySelector(".activity-detail")
+    const terms = [...(detail?.querySelectorAll(".activity-detail-facts dt") ?? [])]
+    const why = terms.find((term) => term.textContent === "Why it was checked")
+    expect(why?.nextElementSibling?.textContent).toBe("Family reported a change to this event or its series.")
+    // Regression: ISSUE-002: the line claimed a version was new since the last comparison, but a
+    // run that left a revision out had already compared it; the baseline is the last recorded one.
+    // Found by /qa on 2026-10-15
+    // Report: .gstack/qa-reports/run-20261015T080853Z/qa-report-calendar-ghost-2026-10-15.md
+    expect(detail?.querySelector(".activity-comparison")?.textContent).toBe(
+      "Family has a different version than the one Calendar Ghost last recorded. No change was detected in what it tracks.",
+    )
+  })
+
+  it("says the event is the version Calendar Ghost last recorded", async () => {
+    const checked = entry(11, {
+      run_reason: "changes",
+      found_by: "destination_feed",
+      source_comparison: "same_revision",
+      event: recorded("Seminar"),
+    })
+    await renderActivity(testI18n(), { entries: [checked, ...ENTRIES] }, "?entry=11")
+    expect(container.querySelector(".activity-detail .activity-comparison")?.textContent).toBe(
+      "Same version of the event as the one Calendar Ghost last recorded.",
+    )
+  })
+
+  it("names the destination calendar when it reported the change that brought the event in", async () => {
+    const checked = entry(11, { run_reason: "changes", found_by: "destination_feed", event: recorded("Seminar") })
+    await renderActivity(testI18n(), { entries: [checked, ...ENTRIES] }, "?entry=11")
+    const terms = [...container.querySelectorAll(".activity-detail .activity-detail-facts dt")]
+    const why = terms.find((term) => term.textContent === "Why it was checked")
+    expect(why?.nextElementSibling?.textContent).toBe("Work reported a change to the event Calendar Ghost wrote there.")
+  })
+
+  it("says nothing about why an entry recorded before runs said so was checked", async () => {
+    await renderActivity(testI18n(), {}, "?entry=4")
+    const detail = container.querySelector(".activity-detail")
+    expect(detail?.querySelector("h2")?.textContent).toBe("Lunch")
+    expect(detail?.textContent).not.toContain("Why it was checked")
+    expect(detail?.querySelector(".activity-comparison")).toBeNull()
   })
 
   it("has no untranslated text in Incidents, the history table, and the rule picker", async () => {

@@ -20,8 +20,15 @@ from calendar_sync.application.sync.ports import (
 from calendar_sync.application.sync.rules import CreateSyncRule
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
-from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
+from calendar_sync.domain.audit import (
+    AuditAction,
+    AuditEntry,
+    AuditOutcome,
+    FoundBy,
+    RunReason,
+)
 from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.changes import ComparisonKind
 from calendar_sync.domain.incidents import IncidentCategory, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
     BirthdayPolicy,
@@ -55,6 +62,7 @@ from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
+from calendar_sync.infrastructure.persistence.sqlite import SqliteAuditRepository
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.adapters.test_user_migration import LATEST_VERSION, database_at_version
 from tests.helpers import NOW, endpoint, event, rule, week_start
@@ -142,6 +150,36 @@ def test_migration_30_leaves_birthdays_out_and_reprojects_existing_rules(
     assert restored is not None
     assert restored == replace(rule(), reprojection_required=True)
     assert restored.transformation.birthdays is BirthdayPolicy.EXCLUDE
+
+
+def test_migration_32_keeps_earlier_audit_entries_without_provenance(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    user = add_user(database)
+    with sqlite3.connect(database) as connection:
+        for column in ("run_reason", "found_by", "source_comparison"):
+            connection.execute(f"ALTER TABLE audit_entries DROP COLUMN {column}")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 32")
+        connection.execute(
+            """
+            INSERT INTO audit_entries (
+                occurred_at, rule_id, action, outcome, source_event_id, detail, user_id
+            ) VALUES (?, 'rule-1', 'ignore', 'skipped', 'weekly', 'kept', ?)
+            """,
+            (NOW.isoformat(), user.value),
+        )
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with sqlite3.connect(database) as connection:
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+        rows = connection.execute(
+            "SELECT detail, run_reason, found_by, source_comparison FROM audit_entries"
+        ).fetchall()
+    # An earlier release never recorded why a run read the calendars or what it compared.
+    assert versions.count(32) == 1
+    assert rows == [("kept", None, None, None)]
 
 
 def test_database_migration_is_idempotent(tmp_path: Path) -> None:
@@ -327,6 +365,101 @@ def test_audit_entries_persist_reason_and_run(tmp_path: Path) -> None:
             "SELECT reason, run_id, source_event_id, detail FROM audit_entries"
         ).fetchone()
     assert stored == ("recurring_unsupported", "run-1", "weekly", "")
+
+
+def _provenance_entry(event_id: str = "weekly") -> AuditEntry:
+    return AuditEntry(
+        occurred_at=NOW,
+        rule_id=rule().id,
+        action=AuditAction.IGNORE,
+        outcome=AuditOutcome.SKIPPED,
+        source_event_id=event_id,
+        reason=SyncReason.RECURRING_UNSUPPORTED,
+        run_reason=RunReason.RELISTED,
+        found_by=FoundBy.PENDING_REPLAY,
+        source_comparison=ComparisonKind.SAME_REVISION,
+    )
+
+
+def test_provenance_round_trips_through_the_columns(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+
+    with sqlite_units(database)() as uow:
+        uow.audit.append(_provenance_entry())
+        uow.commit()
+
+    with sqlite3.connect(database) as connection:
+        stored = connection.execute(
+            "SELECT run_reason, found_by, source_comparison FROM audit_entries"
+        ).fetchone()
+    assert stored == ("relisted", "pending_replay", "same_revision")
+
+
+def test_the_previous_decision_lookup_uses_the_event_index(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+
+    with sqlite3.connect(database) as connection:
+        plan = connection.execute(
+            "EXPLAIN QUERY PLAN " + SqliteAuditRepository.LATEST_FOR_SQL,
+            ("rule", "event", "user"),
+        ).fetchall()
+    assert any("audit_entries_source_event" in str(row) for row in plan)
+
+
+def test_an_unknown_stored_reason_reads_as_no_previous_decision(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    with sqlite_units(database)() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO audit_entries (
+                occurred_at, rule_id, action, outcome, source_event_id, detail, reason, user_id
+            ) VALUES (?, ?, 'ignore', 'skipped', 'weekly', '', 'retired_reason', ?)
+            """,
+            (NOW.isoformat(), rule().id.value, USER.value),
+        )
+
+    with sqlite_units(database)() as uow:
+        assert uow.audit.latest_for(rule().id, "weekly") is None
+
+
+def test_an_unreadable_stored_time_reads_as_no_previous_decision(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    with sqlite_units(database)() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO audit_entries (
+                occurred_at, rule_id, action, outcome, source_event_id, detail, reason,
+                event_title, event_starts, event_ends, user_id
+            ) VALUES (?, ?, 'ignore', 'skipped', 'weekly', '', 'recurring_unsupported',
+                'Weekly', 'not-a-time', 'not-a-time', ?)
+            """,
+            (NOW.isoformat(), rule().id.value, USER.value),
+        )
+
+    with sqlite_units(database)() as uow:
+        assert uow.audit.latest_for(rule().id, "weekly") is None
+
+
+def test_another_users_entry_is_never_the_previous_decision(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    with sqlite_units(database)() as uow:
+        uow.rules.add(rule())
+        uow.audit.append(_provenance_entry())
+        uow.commit()
+
+    with sqlite_units(database, user=OTHER_USER)() as theirs:
+        assert theirs.audit.latest_for(rule().id, "weekly") is None
 
 
 def _mapping(event_id: str = "source-event") -> EventMapping:

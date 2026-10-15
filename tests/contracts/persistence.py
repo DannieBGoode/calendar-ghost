@@ -40,9 +40,17 @@ from calendar_sync.application.sync.ports import (
 from calendar_sync.application.sync.watch_ports import PendingRequest, Receipt
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
-from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
+from calendar_sync.domain.audit import (
+    AuditAction,
+    AuditEntry,
+    AuditOutcome,
+    FoundBy,
+    RecordedDecision,
+    RecordedEvent,
+    RunReason,
+)
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.changes import SourceObservation
+from calendar_sync.domain.changes import ComparisonKind, SourceObservation
 from calendar_sync.domain.incidents import (
     AccountAuthorization,
     IncidentCategory,
@@ -50,6 +58,7 @@ from calendar_sync.domain.incidents import (
     IncidentResolution,
 )
 from calendar_sync.domain.model import (
+    AllDayRange,
     CalendarEndpoint,
     CalendarId,
     ConnectedAccountId,
@@ -204,6 +213,29 @@ def _block(
 ) -> AuditEntry:
     return AuditEntry(
         NOW, rule_id, AuditAction.CONFLICT, AuditOutcome.BLOCKED, event_id, reason=reason
+    )
+
+
+def _skip(
+    source_event_id: str,
+    reason: SyncReason,
+    time: TimedInterval | AllDayRange | None = None,
+) -> AuditEntry:
+    return AuditEntry(
+        occurred_at=NOW,
+        rule_id=RULE.id,
+        action=AuditAction.IGNORE,
+        outcome=AuditOutcome.SKIPPED,
+        source_event_id=source_event_id,
+        reason=reason,
+        event=RecordedEvent(
+            title="Seminar",
+            time=time or TimedInterval(NOW, NOW + timedelta(hours=1)),
+            recurring=True,
+        ),
+        run_reason=RunReason.CHANGES,
+        found_by=FoundBy.SOURCE_FEED,
+        source_comparison=ComparisonKind.UNTRACKED,
     )
 
 
@@ -1526,6 +1558,49 @@ class PersistenceContract:
         )
         assert (of_no_rule.rule_exists, of_no_rule.rule_accounts) == (False, ())
         assert [each.rule_id for each in records[OTHER_USER].incidents] == ["theirs"]
+
+    def test_the_latest_entry_for_an_event_is_its_previous_decision(
+        self, harness: PersistenceHarness
+    ) -> None:
+        first = _skip("seminar", SyncReason.SERIES_NOT_SYNCHRONIZED)
+        latest = _skip("seminar", SyncReason.SERIES_WITHOUT_OCCURRENCES)
+        other_event = _skip("other", SyncReason.DECLINED)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.rules.add(OTHER_RULE)
+            for entry in (first, latest, other_event):
+                uow.audit.append(entry)
+            uow.commit()
+
+        with harness.unit_of_work() as uow:
+            assert uow.audit.latest_for(RULE.id, "seminar") == RecordedDecision.of(latest)
+            assert uow.audit.latest_for(RULE.id, "missing") is None
+            assert uow.audit.latest_for(OTHER_RULE.id, "seminar") is None
+
+    def test_the_previous_decision_keeps_an_all_day_event_and_a_missing_one(
+        self, harness: PersistenceHarness
+    ) -> None:
+        holiday = _skip(
+            "holiday",
+            SyncReason.DECLINED,
+            AllDayRange(date(2026, 10, 15), date(2026, 10, 17)),
+        )
+        unseen = replace(_skip("unseen", SyncReason.DECLINED), event=None)
+        untimed = replace(
+            _skip("untimed", SyncReason.DECLINED),
+            event=RecordedEvent(title="Gone", cancelled=True),
+        )
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            for entry in (holiday, unseen, untimed):
+                uow.audit.append(entry)
+            uow.commit()
+
+        with harness.unit_of_work() as uow:
+            for entry in (holiday, unseen, untimed):
+                assert uow.audit.latest_for(RULE.id, entry.source_event_id or "") == (
+                    RecordedDecision.of(entry)
+                )
 
     def test_status_records_hold_each_users_open_blocks_newest_first(
         self, harness: PersistenceHarness

@@ -206,6 +206,26 @@ and removed rules. A run that lists both calendars in full also forgets that rul
 single events that ended more than 90 days ago or of calendars it no longer uses. Activity lists the changed fields, and
 `GET /api/v1/audit-entries/{id}/changes` shows one entry's values.
 
+Before a decision is recorded, the run compares the source event with that observation. The Source
+Comparison is `changed` (a Source Change exists), `untracked` (a new revision with no tracked
+field difference), `same_revision`, `cancelled`, or `no_baseline` (no observation, or one that
+cannot be unsealed). Outside the daily pass, an `ignore` decision is counted in `unrecorded=N` and
+not recorded when the event's previous entry has the same action, reason, destination, and recorded
+event (title, time as instants, recurrence, cancellation) and the comparison is `untracked` or
+`same_revision`, or `cancelled` after a cancelled entry. A comparison that completes the baseline
+(the new revision knows guests, conferencing, or a response the stored one did not) is always
+recorded. Writes, blocks, and a decision that differs from the previous entry are always recorded,
+and an unrecorded decision leaves the observation as it was. An occurrence without its own source
+reference is recorded under its series, so the rule does not apply to it. See
+[ADR 0037](adr/0037-record-a-decision-only-when-it-says-something-new.md).
+
+Every entry a Sync Run records also carries `run_reason`, why the run read the calendars as it did
+(`reprojection`, `reconcile_now`, `daily_pass`, `first_run`, `relisted`, or `changes`), and
+`found_by`, the work that led to the decision (`source_feed`, `destination_feed`, `reprojection`,
+or `pending_replay`). Full Reconciliation entries carry `found_by=reconciliation` and no
+`run_reason`. Rule removal and rule edits leave both empty, as do entries recorded before they
+existed. Activity uses them for "Why it was checked".
+
 That 90-day expiry only clears sealed Source Change values; the Audit Entries themselves are kept
 until an Installation Administrator clears them. **Settings → Administration → Storage** shows the
 database size and the number and age of Activity entries, and clears every User's entries older than

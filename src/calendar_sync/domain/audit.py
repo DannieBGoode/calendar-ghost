@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from calendar_sync.domain.changes import SourceChange
+from calendar_sync.domain.changes import (
+    ComparisonKind,
+    SourceChange,
+    SourceComparison,
+    same_time,
+)
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventStatus,
@@ -78,6 +83,27 @@ class AuditOutcome(StrEnum):
         return cls.COMPLETED
 
 
+class RunReason(StrEnum):
+    """Why a Sync Run looked at the event; stored values are a compatibility surface."""
+
+    CHANGES = "changes"
+    FIRST_RUN = "first_run"
+    DAILY_PASS = "daily_pass"  # noqa: S105
+    RECONCILE_NOW = "reconcile_now"
+    REPROJECTION = "reprojection"
+    RELISTED = "relisted"
+
+
+class FoundBy(StrEnum):
+    """Where a Sync Run found the event; stored values are a compatibility surface."""
+
+    SOURCE_FEED = "source_feed"
+    DESTINATION_FEED = "destination_feed"
+    REPROJECTION = "reprojection"
+    PENDING_REPLAY = "pending_replay"
+    RECONCILIATION = "reconciliation"
+
+
 @dataclass(frozen=True, slots=True)
 class AuditEntry:
     occurred_at: datetime
@@ -93,3 +119,62 @@ class AuditEntry:
     """The source event's title and time, as ADR 0014 records them."""
     change: SourceChange | None = None
     """What the source event's new revision changed since the rule last observed it (ADR 0017)."""
+    run_reason: RunReason | None = None
+    """Why the run looked at the event."""
+    found_by: FoundBy | None = None
+    """Where the run found the event."""
+    source_comparison: ComparisonKind | None = None
+    """How the source event compared with the rule's Source Observation of it."""
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedDecision:
+    """What an earlier Audit Entry decided about its source event, as a later one compares it."""
+
+    action: AuditAction
+    reason: SyncReason | None
+    destination_event_id: str | None
+    event: RecordedEvent | None
+
+    @classmethod
+    def of(cls, entry: AuditEntry) -> RecordedDecision:
+        return cls(entry.action, entry.reason, entry.destination_event_id, entry.event)
+
+
+def repeats_previous(
+    previous: RecordedDecision | None, entry: AuditEntry, comparison: SourceComparison
+) -> bool:
+    """Whether a skip says nothing the event's previous entry did not (ADR 0037).
+
+    The caller applies it only outside the daily pass and only to an entry recorded under the
+    event's own identity.
+    """
+    if previous is None or entry.action is not AuditAction.IGNORE:
+        return False
+    if not _nothing_new(comparison, previous):
+        return False
+    return (
+        previous.action is entry.action
+        and previous.reason == entry.reason
+        and previous.destination_event_id == entry.destination_event_id
+        and _same_event(previous.event, entry.event)
+    )
+
+
+def _nothing_new(comparison: SourceComparison, previous: RecordedDecision) -> bool:
+    if comparison.completes_baseline:
+        return False
+    if comparison.kind is ComparisonKind.CANCELLED:
+        return previous.event is not None and previous.event.cancelled
+    return comparison.kind in {ComparisonKind.UNTRACKED, ComparisonKind.SAME_REVISION}
+
+
+def _same_event(first: RecordedEvent | None, second: RecordedEvent | None) -> bool:
+    return (
+        first is not None
+        and second is not None
+        and first.title == second.title
+        and same_time(first.time, second.time)
+        and first.recurring == second.recurring
+        and first.cancelled == second.cancelled
+    )

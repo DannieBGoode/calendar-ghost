@@ -17,7 +17,7 @@ from calendar_sync.application.sync.watch_ports import (
 )
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
-from calendar_sync.domain.audit import AuditEntry
+from calendar_sync.domain.audit import AuditEntry, RecordedDecision
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
@@ -260,6 +260,10 @@ class SyncCursorRepository(Protocol):
 
 class AuditRepository(Protocol):
     def append(self, entry: AuditEntry) -> None: ...
+
+    def latest_for(self, rule_id: SyncRuleId, source_event_id: str) -> RecordedDecision | None:
+        """The decision of the latest entry, by id, for this rule and source event."""
+        ...
 
     def forget_change_values(self, before: datetime) -> None:
         """Discard the values of every Source Change recorded before `before`.

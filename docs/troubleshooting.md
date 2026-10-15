@@ -81,8 +81,12 @@ Each Sync Run, scheduled or started with **Sync now**, writes:
   written at most every 30 seconds while the run decides events. `handled` counts the events both
   calendars reported, plus the mappings a reprojection rewrites, that the run has finished;
   `decided` also counts each occurrence of a recurring event, so it can be larger.
-- `run finished … in 28m14s created=… provider_calls=… token_refreshes=… rate_limited=…
-  server_errors=… slowest_call=1.3s`: the run's counts and how its provider calls went.
+- `run finished … in 28m14s created=… conflicts=… unrecorded=… provider_calls=… token_refreshes=…
+  rate_limited=… server_errors=… slowest_call=1.3s`: the run's counts and how its provider calls
+  went. The decision counts (`created`, `updated`, `deleted`, `ignored`, `conflicts`) come first.
+  `unrecorded` follows them and counts the skips left out of Activity because they repeated the
+  event's previous entry. A large `ignored` with a large `unrecorded` means the provider sent many
+  events again with no change Calendar Ghost tracks.
 - `run failed … kind=rate_limit at=provider.update_projection>graph.request after 3m02s` (WARNING):
   the run stopped with this failure kind. `at=` names the last two of Calendar Ghost's own functions
   the failure passed through, which tells which check or request failed; it names code only, never

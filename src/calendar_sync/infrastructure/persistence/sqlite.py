@@ -40,7 +40,7 @@ from calendar_sync.application.sync.watch_ports import (
 )
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
-from calendar_sync.domain.audit import AuditEntry
+from calendar_sync.domain.audit import AuditAction, AuditEntry, RecordedDecision, RecordedEvent
 from calendar_sync.domain.causes import NO_CAUSE, WITHOUT_CAUSE, Cause
 from calendar_sync.domain.incidents import IncidentResolution
 from calendar_sync.domain.model import (
@@ -61,6 +61,7 @@ from calendar_sync.domain.model import (
     OccurrenceState,
     ProjectionContent,
     ProjectionFingerprint,
+    SyncReason,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
@@ -596,6 +597,14 @@ class SqliteSyncCursorRepository:
 
 
 class SqliteAuditRepository:
+    LATEST_FOR_SQL = """
+        SELECT action, reason, destination_event_id, event_title, event_starts, event_ends,
+               event_all_day, event_recurring, event_cancelled
+        FROM audit_entries INDEXED BY audit_entries_source_event
+        WHERE rule_id = ? AND source_event_id = ? AND user_id = ?
+        ORDER BY id DESC LIMIT 1
+    """
+
     def __init__(
         self, connection: sqlite3.Connection, user_id: UserId, history: HistoryCipher | None
     ) -> None:
@@ -618,8 +627,9 @@ class SqliteAuditRepository:
                 source_event_id, destination_event_id, detail, reason, run_id,
                 event_title, event_starts, event_ends,
                 event_all_day, event_recurring, event_cancelled,
-                change_fields, change_title_before, change_sealed, user_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                change_fields, change_title_before, change_sealed,
+                run_reason, found_by, source_comparison, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry.occurred_at.isoformat(),
@@ -638,9 +648,27 @@ class SqliteAuditRepository:
                 event is not None and event.recurring,
                 event is not None and event.cancelled,
                 *changed,
+                entry.run_reason,
+                entry.found_by,
+                entry.source_comparison,
                 self._user,
             ),
         )
+
+    def latest_for(self, rule_id: SyncRuleId, source_event_id: str) -> RecordedDecision | None:
+        row = self._connection.execute(
+            self.LATEST_FOR_SQL, (rule_id.value, source_event_id, self._user)
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            action = AuditAction(row["action"])
+            reason = SyncReason(row["reason"]) if row["reason"] is not None else None
+            event = _recorded_event(row)
+        except ValueError:
+            # A value this release cannot read proves nothing, so the decision is recorded.
+            return None
+        return RecordedDecision(action, reason, row["destination_event_id"], event)
 
     def forget_change_values(self, before: datetime) -> None:
         self._connection.execute(
@@ -650,6 +678,27 @@ class SqliteAuditRepository:
             """,
             (before.isoformat(), self._user),
         )
+
+
+def _recorded_event(row: sqlite3.Row) -> RecordedEvent | None:
+    """The event an entry recorded, as `append` wrote it."""
+    if row["event_title"] is None:
+        return None
+    time: TimedInterval | AllDayRange | None = None
+    if row["event_starts"] is not None and row["event_all_day"]:
+        time = AllDayRange(
+            date.fromisoformat(row["event_starts"]), date.fromisoformat(row["event_ends"])
+        )
+    elif row["event_starts"] is not None:
+        time = TimedInterval(
+            datetime.fromisoformat(row["event_starts"]), datetime.fromisoformat(row["event_ends"])
+        )
+    return RecordedEvent(
+        title=row["event_title"],
+        time=time,
+        recurring=bool(row["event_recurring"]),
+        cancelled=bool(row["event_cancelled"]),
+    )
 
 
 class SqliteRuleRunOutcomeRepository:
