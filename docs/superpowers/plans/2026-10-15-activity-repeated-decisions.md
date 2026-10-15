@@ -66,33 +66,44 @@ mismatch.
       CANCELLED = "cancelled"
       NO_BASELINE = "no_baseline"
 
+
   @dataclass(frozen=True, slots=True)
   class SourceComparison:
       kind: ComparisonKind
       change: SourceChange | None = None
-      observation: SourceObservation | None = None   # what to save if the decision is recorded
+      observation: SourceObservation | None = None  # what to save if the decision is recorded
       completes_baseline: bool = False
 
       @classmethod
       def of(cls, previous: SourceObservation | None, event: CalendarEvent) -> SourceComparison: ...
+
 
   def same_time(first: EventTime | None, second: EventTime | None) -> bool: ...
   ```
 - Produces (in `domain/audit.py`):
   ```python
   class RunReason(StrEnum):
-      CHANGES = "changes"; FIRST_RUN = "first_run"; DAILY_PASS = "daily_pass"
-      RECONCILE_NOW = "reconcile_now"; REPROJECTION = "reprojection"; RELISTED = "relisted"
+      CHANGES = "changes"
+      FIRST_RUN = "first_run"
+      DAILY_PASS = "daily_pass"
+      RECONCILE_NOW = "reconcile_now"
+      REPROJECTION = "reprojection"
+      RELISTED = "relisted"
+
 
   class FoundBy(StrEnum):
-      SOURCE_FEED = "source_feed"; DESTINATION_FEED = "destination_feed"
-      REPROJECTION = "reprojection"; PENDING_REPLAY = "pending_replay"
+      SOURCE_FEED = "source_feed"
+      DESTINATION_FEED = "destination_feed"
+      REPROJECTION = "reprojection"
+      PENDING_REPLAY = "pending_replay"
       RECONCILIATION = "reconciliation"
+
 
   # AuditEntry gains, after `change`:
   run_reason: RunReason | None = None
   found_by: FoundBy | None = None
   source_comparison: ComparisonKind | None = None
+
 
   @dataclass(frozen=True, slots=True)
   class RecordedDecision:
@@ -100,8 +111,10 @@ mismatch.
       reason: SyncReason | None
       destination_event_id: str | None
       event: RecordedEvent | None
+
       @classmethod
       def of(cls, entry: AuditEntry) -> RecordedDecision: ...
+
 
   def repeats_previous(
       previous: RecordedDecision | None, entry: AuditEntry, comparison: SourceComparison
@@ -336,27 +349,85 @@ def test_the_same_instant_in_another_offset_is_a_repeat() -> None:
 def test_a_cancelled_repeat_of_a_cancelled_previous_entry_is_a_repeat() -> None:
     cancelled = replace(SEMINAR, cancelled=True)
     previous = RecordedDecision.of(_entry(event=cancelled))
-    assert repeats_previous(previous, _entry(event=cancelled), SourceComparison(ComparisonKind.CANCELLED))
+    assert repeats_previous(
+        previous, _entry(event=cancelled), SourceComparison(ComparisonKind.CANCELLED)
+    )
 
 
 @pytest.mark.parametrize(
     ("previous", "entry", "comparison"),
     [
         pytest.param(None, _entry(), UNTRACKED, id="no previous entry"),
-        pytest.param(PREVIOUS, _entry(action=AuditAction.CONFLICT, outcome=AuditOutcome.BLOCKED), UNTRACKED, id="not an ignore"),
-        pytest.param(PREVIOUS, _entry(), SourceComparison(ComparisonKind.CHANGED), id="tracked change"),
-        pytest.param(PREVIOUS, _entry(), SourceComparison(ComparisonKind.NO_BASELINE), id="no baseline"),
-        pytest.param(PREVIOUS, _entry(event=replace(SEMINAR, cancelled=True)), SourceComparison(ComparisonKind.CANCELLED), id="cancelled after live"),
-        pytest.param(PREVIOUS, _entry(), SourceComparison(ComparisonKind.UNTRACKED, completes_baseline=True), id="completes the baseline"),
-        pytest.param(RecordedDecision.of(_entry(action=AuditAction.CONFLICT)), _entry(), UNTRACKED, id="previous was a block"),
-        pytest.param(RecordedDecision.of(_entry(reason=SyncReason.PROJECTION_CURRENT)), _entry(), UNTRACKED, id="different reason"),
-        pytest.param(RecordedDecision.of(_entry(destination_event_id="other")), _entry(), UNTRACKED, id="different destination"),
-        pytest.param(RecordedDecision.of(_entry(event=None)), _entry(), UNTRACKED, id="previous has no event"),
+        pytest.param(
+            PREVIOUS,
+            _entry(action=AuditAction.CONFLICT, outcome=AuditOutcome.BLOCKED),
+            UNTRACKED,
+            id="not an ignore",
+        ),
+        pytest.param(
+            PREVIOUS, _entry(), SourceComparison(ComparisonKind.CHANGED), id="tracked change"
+        ),
+        pytest.param(
+            PREVIOUS, _entry(), SourceComparison(ComparisonKind.NO_BASELINE), id="no baseline"
+        ),
+        pytest.param(
+            PREVIOUS,
+            _entry(event=replace(SEMINAR, cancelled=True)),
+            SourceComparison(ComparisonKind.CANCELLED),
+            id="cancelled after live",
+        ),
+        pytest.param(
+            PREVIOUS,
+            _entry(),
+            SourceComparison(ComparisonKind.UNTRACKED, completes_baseline=True),
+            id="completes the baseline",
+        ),
+        pytest.param(
+            RecordedDecision.of(_entry(action=AuditAction.CONFLICT)),
+            _entry(),
+            UNTRACKED,
+            id="previous was a block",
+        ),
+        pytest.param(
+            RecordedDecision.of(_entry(reason=SyncReason.PROJECTION_CURRENT)),
+            _entry(),
+            UNTRACKED,
+            id="different reason",
+        ),
+        pytest.param(
+            RecordedDecision.of(_entry(destination_event_id="other")),
+            _entry(),
+            UNTRACKED,
+            id="different destination",
+        ),
+        pytest.param(
+            RecordedDecision.of(_entry(event=None)), _entry(), UNTRACKED, id="previous has no event"
+        ),
         pytest.param(PREVIOUS, _entry(event=None), UNTRACKED, id="entry has no event"),
-        pytest.param(PREVIOUS, _entry(event=replace(SEMINAR, title="Renamed")), UNTRACKED, id="different title"),
-        pytest.param(PREVIOUS, _entry(event=replace(SEMINAR, time=TimedInterval(NOW, NOW + timedelta(hours=2)))), UNTRACKED, id="different time"),
-        pytest.param(PREVIOUS, _entry(event=replace(SEMINAR, recurring=False)), UNTRACKED, id="no longer recurring"),
-        pytest.param(RecordedDecision.of(_entry(event=replace(SEMINAR, cancelled=True))), _entry(), UNTRACKED, id="restored"),
+        pytest.param(
+            PREVIOUS,
+            _entry(event=replace(SEMINAR, title="Renamed")),
+            UNTRACKED,
+            id="different title",
+        ),
+        pytest.param(
+            PREVIOUS,
+            _entry(event=replace(SEMINAR, time=TimedInterval(NOW, NOW + timedelta(hours=2)))),
+            UNTRACKED,
+            id="different time",
+        ),
+        pytest.param(
+            PREVIOUS,
+            _entry(event=replace(SEMINAR, recurring=False)),
+            UNTRACKED,
+            id="no longer recurring",
+        ),
+        pytest.param(
+            RecordedDecision.of(_entry(event=replace(SEMINAR, cancelled=True))),
+            _entry(),
+            UNTRACKED,
+            id="restored",
+        ),
     ],
 )
 def test_anything_new_is_recorded(
@@ -564,27 +635,28 @@ ALTER TABLE audit_entries ADD COLUMN source_comparison TEXT;
   `entry.found_by`, `entry.source_comparison`), and:
 
 ```python
-    LATEST_FOR_SQL = """
-        SELECT action, reason, destination_event_id, event_title, event_starts, event_ends,
-               event_all_day, event_recurring, event_cancelled
-        FROM audit_entries INDEXED BY audit_entries_source_event
-        WHERE rule_id = ? AND source_event_id = ? AND user_id = ?
-        ORDER BY id DESC LIMIT 1
-    """
+LATEST_FOR_SQL = """
+    SELECT action, reason, destination_event_id, event_title, event_starts, event_ends,
+           event_all_day, event_recurring, event_cancelled
+    FROM audit_entries INDEXED BY audit_entries_source_event
+    WHERE rule_id = ? AND source_event_id = ? AND user_id = ?
+    ORDER BY id DESC LIMIT 1
+"""
 
-    def latest_for(self, rule_id: SyncRuleId, source_event_id: str) -> RecordedDecision | None:
-        row = self._connection.execute(
-            self.LATEST_FOR_SQL, (rule_id.value, source_event_id, self._user)
-        ).fetchone()
-        if row is None:
-            return None
-        try:
-            action = AuditAction(row["action"])
-            reason = SyncReason(row["reason"]) if row["reason"] is not None else None
-        except ValueError:
-            # A value this release no longer knows proves nothing, so the decision is recorded.
-            return None
-        return RecordedDecision(action, reason, row["destination_event_id"], _recorded_event(row))
+
+def latest_for(self, rule_id: SyncRuleId, source_event_id: str) -> RecordedDecision | None:
+    row = self._connection.execute(
+        self.LATEST_FOR_SQL, (rule_id.value, source_event_id, self._user)
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        action = AuditAction(row["action"])
+        reason = SyncReason(row["reason"]) if row["reason"] is not None else None
+    except ValueError:
+        # A value this release no longer knows proves nothing, so the decision is recorded.
+        return None
+    return RecordedDecision(action, reason, row["destination_event_id"], _recorded_event(row))
 ```
 
   `_recorded_event(row)` returns `None` when `event_title` is `NULL`; otherwise a
@@ -663,7 +735,9 @@ def _synced() -> tuple[FakeCalendars, InMemoryUserUnitOfWorkFactory]:
     return calendars, factory
 
 
-def _send(calendars: FakeCalendars, factory: InMemoryUserUnitOfWorkFactory, *events: CalendarEvent) -> int:
+def _send(
+    calendars: FakeCalendars, factory: InMemoryUserUnitOfWorkFactory, *events: CalendarEvent
+) -> int:
     recorded = len(factory.state.audit)
     calendars.report(*(calendars.put(item) for item in events))
     sync_use_case(factory, calendars).execute(rule().id)
@@ -856,17 +930,26 @@ def _feeds(source_listed: bool = False, destination_listed: bool = False) -> Cha
         (dict(reproject=True, origin=RunOrigin.RECONCILE_NOW, full=True), RunReason.REPROJECTION),
         (dict(origin=RunOrigin.RECONCILE_NOW, full=True), RunReason.RECONCILE_NOW),
         (dict(full=True), RunReason.DAILY_PASS),
-        (dict(saved_source=False, saved_destination=False, feeds=_feeds(True, True)), RunReason.FIRST_RUN),
+        (
+            dict(saved_source=False, saved_destination=False, feeds=_feeds(True, True)),
+            RunReason.FIRST_RUN,
+        ),
         (dict(feeds=_feeds(source_listed=True)), RunReason.RELISTED),
         (dict(feeds=_feeds(destination_listed=True)), RunReason.RELISTED),
         (dict(saved_destination=False, feeds=_feeds(destination_listed=True)), RunReason.RELISTED),
         ({}, RunReason.CHANGES),
     ],
 )
-def test_the_first_reason_that_applies_names_the_run(kwargs: dict[str, object], expected: RunReason) -> None:
+def test_the_first_reason_that_applies_names_the_run(
+    kwargs: dict[str, object], expected: RunReason
+) -> None:
     arguments: dict[str, object] = dict(
-        reproject=False, origin=RunOrigin.SCHEDULED, full=False,
-        saved_source=True, saved_destination=True, feeds=_feeds(),
+        reproject=False,
+        origin=RunOrigin.SCHEDULED,
+        full=False,
+        saved_source=True,
+        saved_destination=True,
+        feeds=_feeds(),
     )
     arguments.update(kwargs)
     assert run_reason(**arguments) is expected  # type: ignore[arg-type]
@@ -950,20 +1033,21 @@ def run_reason(
   `sync_run.py`: add to `SyncRunContext`:
 
 ```python
-    run_reason: RunReason | None = None
-    """Why this run read the calendars as it did."""
-    found_by: FoundBy | None = None
-    """The work that led to the decisions being made now; nested work inherits it."""
+run_reason: RunReason | None = None
+"""Why this run read the calendars as it did."""
+found_by: FoundBy | None = None
+"""The work that led to the decisions being made now; nested work inherits it."""
 
-    @contextmanager
-    def finding(self, found_by: FoundBy) -> Iterator[None]:
-        """Name the work that finds events until the block ends, then restore the earlier one."""
-        outer = self.found_by
-        self.found_by = found_by
-        try:
-            yield
-        finally:
-            self.found_by = outer
+
+@contextmanager
+def finding(self, found_by: FoundBy) -> Iterator[None]:
+    """Name the work that finds events until the block ends, then restore the earlier one."""
+    outer = self.found_by
+    self.found_by = found_by
+    try:
+        yield
+    finally:
+        self.found_by = outer
 ```
 
   and in `record`, set provenance on every appended entry (before the `comparison` branch):
