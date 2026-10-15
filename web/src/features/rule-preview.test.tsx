@@ -210,12 +210,12 @@ describe("RulePreviewView", () => {
     // Each choice is its own list item with an icon; those that leave events out read quieter.
     const facts = [...container.querySelectorAll(".rule-preview-fact")]
     expect(facts.map((fact) => [fact.textContent, fact.getAttribute("data-tone"), fact.querySelectorAll("svg[aria-hidden=true]").length])).toEqual([
-      ["From the past 30 days", "on", 1],
-      ["All-day events", "on", 1],
-      ["No birthdays", "off", 1],
       ["Maybe events as “Busy (tentative)”", "on", 1],
       ["Invitations sync once answered", "on", 1],
       ["No declined events", "off", 1],
+      ["All-day events", "on", 1],
+      ["No birthdays", "off", 1],
+      ["From the past 30 days", "on", 1],
     ])
     expect(container.querySelector(".rule-preview-settings > a")?.textContent).toBe("Change")
     expect(text).toContain("new or changed events sync on their own")

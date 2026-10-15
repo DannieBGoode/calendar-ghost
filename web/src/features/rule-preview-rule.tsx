@@ -1,16 +1,7 @@
-import {
-  ArrowRight,
-  Cake,
-  CalendarDays,
-  CircleQuestionMark,
-  CircleX,
-  MailClock,
-  MailQuestionMark,
-  RotateCcwClock,
-  type LucideIcon,
-} from "lucide-react"
+import { ArrowRight, type LucideIcon } from "lucide-react"
 
 import { AccountAvatar } from "@/components/account-avatar"
+import { RULE_SETTING_ICONS } from "@/components/rule-setting-icons"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
@@ -101,33 +92,37 @@ function invitationFacts(i18n: I18n, detail: RuleDetail): SettingFact[] {
       sync: t("rulePreview.rule.maybeSync"),
       skip: t("rulePreview.rule.maybeOff"),
     }[detail.tentative_events],
-    icon: CircleQuestionMark,
+    icon: RULE_SETTING_ICONS.tentative,
     off: skipMaybe,
   }
-  if (detail.unanswered_invitations === "wait") return [maybe, { text: t("rulePreview.rule.unansweredWait"), icon: MailClock, off: false }]
+  const icon = RULE_SETTING_ICONS.unanswered
+  if (detail.unanswered_invitations === "wait") return [maybe, { text: t("rulePreview.rule.unansweredWait"), icon, off: false }]
   return [
     maybe,
-    { text: skipMaybe ? t("rulePreview.rule.unansweredOff") : t("rulePreview.rule.unansweredAs"), icon: MailQuestionMark, off: skipMaybe },
+    { text: skipMaybe ? t("rulePreview.rule.unansweredOff") : t("rulePreview.rule.unansweredAs"), icon, off: skipMaybe },
   ]
 }
 
-/** The rule's choices in a few words each, in the order Rule Details lists them. */
+/**
+ * The rule's choices in a few words each, in the order Rule Details lists them: how events look,
+ * then which events it includes. The privacy line above already says what the destination sees.
+ */
 function settingsFacts(i18n: I18n, detail: RuleDetail): SettingFact[] {
   const { t } = i18n
   return [
-    { text: t("rulePreview.rule.since", { count: detail.initial_lookback_days }), icon: RotateCcwClock, off: false },
+    ...invitationFacts(i18n, detail),
+    { text: t("rulePreview.rule.declinedOff"), icon: RULE_SETTING_ICONS.declined, off: true },
     {
       text: detail.sync_all_day_events ? t("rulePreview.rule.allDayOn") : t("rulePreview.rule.allDayOff"),
-      icon: CalendarDays,
+      icon: RULE_SETTING_ICONS.allDay,
       off: !detail.sync_all_day_events,
     },
     {
       text: detail.sync_birthdays ? t("rulePreview.rule.birthdaysOn") : t("rulePreview.rule.birthdaysOff"),
-      icon: Cake,
+      icon: RULE_SETTING_ICONS.birthdays,
       off: !detail.sync_birthdays,
     },
-    ...invitationFacts(i18n, detail),
-    { text: t("rulePreview.rule.declinedOff"), icon: CircleX, off: true },
+    { text: t("rulePreview.rule.since", { count: detail.initial_lookback_days }), icon: RULE_SETTING_ICONS.startingPoint, off: false },
   ]
 }
 

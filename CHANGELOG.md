@@ -28,6 +28,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Rule Details labels each of the rule's choices with the icon its preview shows for it, and both
+  pages list the choices in the same order: how events look, then which events the rule includes.
+  Unanswered invitations keep one icon on the preview whatever the rule decides. How many
+  projections the rule keeps moved to **Latest runs**.
 - Activity no longer lists a skip that repeats the event's previous entry when the provider sent a
   new version of the event and Calendar Ghost detected no change in what it tracks. A bulk change
   to responses or reminders used to add hundreds of identical entries. The run log counts these as
