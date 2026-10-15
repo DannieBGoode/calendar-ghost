@@ -644,6 +644,24 @@ def test_has_live_occurrences_lists_instances_without_cancelled_ones() -> None:
     )
 
 
+def test_has_live_occurrences_since_an_instant_lists_only_instances_ending_after_it() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [_instance()]})
+    provider = provider_with_events_api(events_api)
+    since = NOW - timedelta(days=30)
+
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy(), since) is True
+    assert events_api.instances.call_args.kwargs["timeMin"] == since.isoformat()
+
+
+def test_a_series_google_lists_no_instance_after_an_instant_has_none_live_since_it() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": []})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy(), NOW) is False
+
+
 def test_has_live_occurrences_never_counts_a_cancelled_instance() -> None:
     events_api = MagicMock()
     events_api.instances.return_value = request_returning({"items": [_instance("cancelled")]})

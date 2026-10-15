@@ -26,6 +26,7 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUserUnitOfWorkFactory
+from tests.application.test_sync_window import OLD_STARTS, ended_series, moved_occurrence
 from tests.fake_calendar import FakeCalendars, FixedClock, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, event, occurrence, rule, series, week_start
 
@@ -96,6 +97,13 @@ def _lone_occurrence(calendars: FakeCalendars) -> None:
     calendars.put(occurrence(series("their-series"), 2, title="Planning"))
 
 
+def _series_that_ended_before_the_window(calendars: FakeCalendars) -> None:
+    master, starts = ended_series()
+    calendars.put(master, starts=starts)
+    reaching, starts = ended_series("reaching-series", (*OLD_STARTS, NOW + timedelta(days=7)))
+    calendars.put(reaching, starts=starts)
+
+
 def _single_events(calendars: FakeCalendars) -> None:
     calendars.put(event("kept"))
     calendars.put(_cancelled(event("deleted")))
@@ -110,6 +118,7 @@ def _single_events(calendars: FakeCalendars) -> None:
         _declined_series,
         _series_without_occurrences,
         _lone_occurrence,
+        _series_that_ended_before_the_window,
         _single_events,
     ],
 )
@@ -135,6 +144,32 @@ def test_a_preview_lists_nothing_for_a_series_deleted_before_the_rule_projected_
     assert preview.items == ()
     assert (preview.eligible_events, preview.excluded_events) == (0, 0)
     assert (preview.recurring_series, preview.occurrence_changes) == (0, 0)
+
+
+def test_a_preview_lists_nothing_for_a_series_that_ended_before_the_window() -> None:
+    # Regression: a new rule's preview planned to add series that ended years ago.
+    calendars = FakeCalendars()
+    master, starts = ended_series()
+    calendars.put(master, starts=starts)
+
+    preview = _preview(enabled_rule_factory(rule(state=SyncRuleState.DRAFT)), calendars)
+
+    assert preview.items == ()
+    assert (preview.eligible_events, preview.excluded_events) == (0, 0)
+    assert preview.recurring_series == 0
+
+
+def test_a_preview_lists_a_series_that_began_long_ago_while_it_reaches_the_window() -> None:
+    calendars = FakeCalendars()
+    master, starts = ended_series(starts=(*OLD_STARTS, NOW - timedelta(days=10)))
+    calendars.put(master, starts=starts)
+
+    preview = _preview(enabled_rule_factory(rule(state=SyncRuleState.DRAFT)), calendars)
+
+    assert _planned(preview) == {
+        (master.reference.event_id.value, "create", SyncReason.SOURCE_CREATED)
+    }
+    assert preview.recurring_series == 1
 
 
 def _pause(factory: InMemoryUserUnitOfWorkFactory) -> None:
@@ -219,6 +254,21 @@ def _preview_then_run(factory: InMemoryUserUnitOfWorkFactory, calendars: FakeCal
     _resume(factory)
     sync_use_case(factory, calendars).execute(rule().id)
     return _planned(preview)
+
+
+def test_a_preview_and_run_leave_out_a_changed_series_that_ended_before_the_window() -> None:
+    calendars = FakeCalendars()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    master, starts = ended_series()
+    calendars.report(
+        calendars.put(master, starts=starts), calendars.put(moved_occurrence(master, starts[1]))
+    )
+
+    planned = _preview_then_run(factory, calendars)
+
+    assert planned == _recorded(factory) == set()
+    assert calendars.writes == []
 
 
 def test_a_preview_shows_the_removal_of_a_lone_projection_whose_series_shows_as_deleted() -> None:

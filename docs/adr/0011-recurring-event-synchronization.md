@@ -205,6 +205,30 @@ only as a bare cancellation, without its recurrence, removes them as well. Entri
 recorded as `series_not_synchronized` for a cancelled occurrence are hidden from Activity; one whose
 occurrence still read as live under a deleted series cannot be told apart and stays listed.
 
+### A series that ended before the sync window
+
+Amended 2026-10-15. A series used to span its whole expansion, so the sync window never skipped
+one. Google's listing from `timeMin` still returns series whose last occurrence ended years ago,
+so a new rule's preview planned to add them and its first run created them. A series the rule never
+projected is now created only while an occurrence the rule projects ends at or after the window
+start, wherever it was moved to; otherwise it is `before_sync_window`, counted on the run and never
+recorded, like a single event that ended before the window.
+
+- `has_live_occurrences` takes an optional `not_ended_before`. Google lists the series' instances
+  with `timeMin`, which filters by where an instance ends now; Outlook lists them from shortly
+  before that instant and checks each one's end. Without it, the lookup means what it did, so
+  dormant series, `destination_occurrence_missing`, and Full Reconciliation are unchanged.
+- The planner asks the window's question first, and only for a series it would create without a
+  mapping. An occurrence found there is live, so one lookup answers; only a series with none there
+  is asked about again, to tell `before_sync_window` from `series_without_occurrences`.
+- A mapped series is decided as before, however old, so its projection stays current.
+- Before skipping, the planner looks up a projection created with the series' create Operation Key,
+  as for a single event, so a create the provider acknowledged before an interrupted run recorded
+  its mapping is adopted, not orphaned.
+- An occurrence of a series the rule never projected whose original slot and current time both
+  ended before the window is `before_sync_window` too, in the run and in Rule Preview, instead of
+  `series_not_synchronized`.
+
 ### Transformations and eligibility
 
 The rule's Transformation Policy applies to the series and to every occurrence it writes.

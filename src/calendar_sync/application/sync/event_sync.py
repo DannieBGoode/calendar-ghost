@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import UnsupportedProjection
@@ -116,7 +117,7 @@ class SynchronizeEvents:
             mapping,
             actual,
             window_start=run.window_start,
-            live=lambda series: has_live_occurrences(run, self.provider, series),
+            live=partial(has_live_occurrences, run, self.provider),
         )
 
     def _write(

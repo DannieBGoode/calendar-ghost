@@ -154,7 +154,10 @@ class SyncDecisionService:
         *,
         window_start: datetime | None = None,
         has_live_occurrences: bool = True,
+        live_in_window: bool = True,
     ) -> SyncDecision:
+        """`live_in_window` says whether a series has an occurrence the rule projects that does
+        not end before `window_start`; a single event's own time answers that."""
         # In order: loop prevention, identity conflicts, removals, the sync window, projection.
         if source_event.reference.calendar != rule.source:
             return SyncDecision(SyncAction.IGNORE, SyncReason.OUTSIDE_SOURCE_CALENDAR)
@@ -168,8 +171,13 @@ class SyncDecisionService:
         removal = _removal(rule, source_event, mapping, actual_destination, has_live_occurrences)
         if removal is not None:
             return removal
-        # Incremental feeds report changes to any event, however old; only mapped ones stay current.
-        if mapping is None and window_start is not None and source_event.ended_before(window_start):
+        # Incremental feeds report changes to any event, however old, and listings report series
+        # that ended long ago; only mapped ones stay current.
+        if (
+            mapping is None
+            and window_start is not None
+            and (source_event.ended_before(window_start) or not live_in_window)
+        ):
             return SyncDecision(SyncAction.IGNORE, SyncReason.BEFORE_SYNC_WINDOW)
         return self._projection_decision(rule, source_event, mapping, actual_destination)
 
@@ -208,7 +216,13 @@ class SyncDecisionService:
             reason = SyncReason.DESTINATION_DRIFT_REPAIRED
         return SyncDecision(SyncAction.UPDATE, reason, projection)
 
-    def decide_occurrence(self, rule: SyncRule, situation: OccurrenceSituation) -> SyncDecision:
+    def decide_occurrence(
+        self,
+        rule: SyncRule,
+        situation: OccurrenceSituation,
+        *,
+        window_start: datetime | None = None,
+    ) -> SyncDecision:
         """Decide one occurrence of a mapped series from the evidence in `situation`."""
         # In order: loop prevention, identity conflicts, removals, projection.
         series_mapping = situation.series_mapping
@@ -216,10 +230,7 @@ class SyncDecisionService:
         if ignored is not None:
             return ignored
         if series_mapping is None:
-            if _is_absent(situation.source_occurrence):
-                # Never projected and gone from the source: nothing of it is the rule's to decide.
-                return SyncDecision(SyncAction.IGNORE, SyncReason.CANCELLED_WITHOUT_PROJECTION)
-            return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_NOT_SYNCHRONIZED)
+            return _unmapped_series_occurrence(situation.source_occurrence, window_start)
         unproven = _occurrence_identity_decision(rule, situation, series_mapping)
         if unproven is not None:
             return unproven
@@ -416,6 +427,24 @@ def _unsynchronized_series(rule: SyncRule, source_series: CalendarEvent) -> Sync
         # its projection, so none of its occurrences is a decision of its own.
         return SyncDecision(SyncAction.IGNORE, SyncReason.CANCELLED_WITHOUT_PROJECTION)
     return None
+
+
+def _unmapped_series_occurrence(
+    source: CalendarEvent | None, window_start: datetime | None
+) -> SyncDecision:
+    """Ignore an occurrence of a series the rule never projected, saying why only when it is
+    a live occurrence a person could look for."""
+    if source is None or source.status is EventStatus.CANCELLED:
+        # Never projected and gone from the source: nothing of it is the rule's to decide.
+        return SyncDecision(SyncAction.IGNORE, SyncReason.CANCELLED_WITHOUT_PROJECTION)
+    if (
+        window_start is not None
+        and source.occurrence is not None
+        and not source.occurrence_reaches(window_start)
+    ):
+        # Past, as its series is when every occurrence ended before the window.
+        return SyncDecision(SyncAction.IGNORE, SyncReason.BEFORE_SYNC_WINDOW)
+    return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_NOT_SYNCHRONIZED)
 
 
 def _occurrence_identity_decision(

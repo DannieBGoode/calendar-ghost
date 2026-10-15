@@ -254,9 +254,14 @@ def test_acknowledged_create_of_a_series_that_lost_every_occurrence_is_removed()
 class _LiveLookupCalendars(FakeCalendars):
     live_lookups: list[EventRef] = field(default_factory=list)
 
-    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
+    def has_live_occurrences(
+        self,
+        series: EventRef,
+        policy: TransformationPolicy,
+        not_ended_before: datetime | None = None,
+    ) -> bool:
         self.live_lookups.append(series)
-        return super().has_live_occurrences(series, policy)
+        return super().has_live_occurrences(series, policy, not_ended_before)
 
 
 def _dormant(

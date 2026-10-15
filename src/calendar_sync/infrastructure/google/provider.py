@@ -390,7 +390,12 @@ class GoogleCalendarProvider:
             raise self._failure(error, series.calendar.connected_account_id) from error
         return found
 
-    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
+    def has_live_occurrences(
+        self,
+        series: EventRef,
+        policy: TransformationPolicy,
+        not_ended_before: datetime | None = None,
+    ) -> bool:
         parameters: dict[str, Any] = {
             "calendarId": series.calendar.calendar_id.value,
             "eventId": series.event_id.value,
@@ -398,6 +403,9 @@ class GoogleCalendarProvider:
             "maxResults": LIVE_OCCURRENCE_PAGE_SIZE,
             "fields": LIVE_OCCURRENCE_FIELDS,
         }
+        if not_ended_before is not None:
+            # timeMin filters by where an instance ends now, so one moved into the window counts.
+            parameters["timeMin"] = not_ended_before.isoformat()
         try:
             events_api = self._service(series.calendar.connected_account_id).events()
             for _ in range(OCCURRENCE_PAGE_LIMIT):

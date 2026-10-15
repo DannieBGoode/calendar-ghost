@@ -269,7 +269,7 @@ class _Planner:
     events: EventPlanner
     projector: EventProjector
     _decided: dict[EventRef, SyncDecision] = field(default_factory=dict, init=False)
-    _live: dict[EventRef, bool] = field(default_factory=dict, init=False)
+    _live: dict[tuple[EventRef, datetime | None], bool] = field(default_factory=dict, init=False)
 
     def plan(self, event: CalendarEvent, series: CalendarEvent | None) -> tuple[PreviewItem, bool]:
         """The event's item, and whether the destination will hold it or, for an occurrence,
@@ -358,13 +358,17 @@ class _Planner:
             if destination_series is not None
             else None,
         )
-        decision = self.events.decisions.decide_occurrence(self.rule, situation)
+        decision = self.events.decisions.decide_occurrence(
+            self.rule, situation, window_start=self.window_start
+        )
         if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING and not (
             self._has_live_occurrences(series.reference)
         ):
             # As in a Sync Run, a dormant series has no projection to repair.
             decision = self.events.decisions.decide_occurrence(
-                self.rule, replace(situation, has_live_occurrences=False)
+                self.rule,
+                replace(situation, has_live_occurrences=False),
+                window_start=self.window_start,
             )
         return decision
 
@@ -424,12 +428,15 @@ class _Planner:
             return SyncDecision(SyncAction.CONFLICT, conflict), occurrence
         return SyncDecision(SyncAction.DELETE, reason), occurrence
 
-    def _has_live_occurrences(self, series: EventRef) -> bool:
-        if series not in self._live:
-            self._live[series] = self.events.provider.has_live_occurrences(
-                series, self.rule.transformation
+    def _has_live_occurrences(
+        self, series: EventRef, *, not_ended_before: datetime | None = None
+    ) -> bool:
+        key = (series, not_ended_before)
+        if key not in self._live:
+            self._live[key] = self.events.provider.has_live_occurrences(
+                series, self.rule.transformation, not_ended_before
             )
-        return self._live[series]
+        return self._live[key]
 
     def _projection(self, event: CalendarEvent, decision: SyncDecision) -> PreviewProjection | None:
         """What the destination would hold once the rule runs; nothing for a removal or a

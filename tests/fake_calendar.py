@@ -175,15 +175,23 @@ class FakeCalendars:
         found = {start: self.get_occurrence(series, start) for start in original_starts}
         return {start: event for start, event in found.items() if event is not None}
 
-    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
+    def has_live_occurrences(
+        self,
+        series: EventRef,
+        policy: TransformationPolicy,
+        not_ended_before: datetime | None = None,
+    ) -> bool:
         self.reads.append(series)
         master = self.events.get(series)
         if master is None:
             raise ProviderFailure(ProviderFailureKind.TEMPORARY, "series could not be read")
         if master.status is not EventStatus.CONFIRMED:
             return False
+        instances = (self._instance(master, start) for start in self.live_starts(series))
         return any(
-            policy.projects(self._instance(master, start)) for start in self.live_starts(series)
+            policy.projects(instance)
+            and (not_ended_before is None or not instance.ended_before(not_ended_before))
+            for instance in instances
         )
 
     def occurrence_exceptions(
@@ -540,8 +548,13 @@ class ReaderOnlyCalendar:
     ) -> Mapping[OccurrenceStart, CalendarEvent]:
         return self._calendar.list_occurrences(series, original_starts)
 
-    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
-        return self._calendar.has_live_occurrences(series, policy)
+    def has_live_occurrences(
+        self,
+        series: EventRef,
+        policy: TransformationPolicy,
+        not_ended_before: datetime | None = None,
+    ) -> bool:
+        return self._calendar.has_live_occurrences(series, policy, not_ended_before)
 
     def occurrence_exceptions(
         self, series: EventRef, not_ended_before: datetime
