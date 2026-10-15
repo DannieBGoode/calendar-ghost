@@ -44,7 +44,8 @@ function navigationLink(href: string, label: string, onFollow: () => void) {
 
 function retryButton(i18n: I18n, busy: boolean, onRetry: () => void) {
   return (
-    <Button variant="outline" aria-disabled={busy ? true : undefined} onClick={() => !busy && onRetry()}>
+    // While busy, a press only moves focus to the page's Refresh, which stays once this panel goes.
+    <Button variant="outline" aria-disabled={busy ? true : undefined} onClick={onRetry}>
       <RefreshCw aria-hidden="true" /> {i18n.t("rulePreview.page.previewAgain")}
     </Button>
   )

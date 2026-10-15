@@ -146,9 +146,11 @@ function RulePreviewPage({
   // A failed refresh keeps the last data in the query; its numbers no longer stand, nor do an
   // outdated preview's.
   const run = preview.isFetching || preview.error || outdated ? undefined : preview.data
-  // A failure stays on screen while Refresh retries it, so its own button keeps focus meaningful.
-  const failure = preview.error
-    ? previewFailure(i18n, preview.error, {
+  // A failure stays on screen while Refresh retries it.
+  const [retrying, setRetrying] = useState<Error | null>(null)
+  const error = shownError(preview, retrying)
+  const failure = error
+    ? previewFailure(i18n, error, {
         ruleState: detail.state,
         ruleAccounts: [detail.source.connected_account_id, detail.destination.connected_account_id],
         accounts,
@@ -169,8 +171,11 @@ function RulePreviewPage({
   // footer, which then leave, never drops it to the page; the announcements say what happened.
   const retry = () => {
     refresh.current?.focus()
+    if (preview.isFetching) return
+    setRetrying(preview.error)
     setAnnouncement(readingText(i18n, detail, names))
     void preview.refetch().then((result) => {
+      setRetrying(null)
       // The failure panel may be the same one as before, which a screen reader would not read again.
       if (result.error) setAnnouncement(i18n.t("rulePreview.states.failedTitle"))
       else if (result.data) setAnnouncement(leadText(i18n, result.data))
@@ -218,6 +223,14 @@ function RulePreviewPage({
       />
     </div>
   )
+}
+
+/**
+ * The read's error, or while Refresh retries it the one it retries: the query forgets the error of
+ * a read that never answered once it reads again.
+ */
+function shownError(preview: ReturnType<typeof useRulePreview>, retrying: Error | null): Error | null {
+  return preview.error ?? (preview.isFetching ? retrying : null)
 }
 
 /** The rule and its accounts, what this page is, what it shares, and what it follows. */

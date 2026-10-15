@@ -392,6 +392,30 @@ describe("RulePreviewView", () => {
     vi.useRealTimers()
   })
 
+  // Regression: a retry of a failed first read hid its panel behind the placeholder rows, and a
+  // press of the panel's waiting Refresh left focus on a button that then went away.
+  // Found by /qa on 2026-10-15
+  it("keeps a failed first read's panel while Refresh retries it", async () => {
+    mockFetch({ status: 503, body: { detail: "down", code: "provider_failed", params: { kind: "unavailable", provider: "google" } } })
+    await renderPreview(testI18n())
+    const answer = vi.mocked(fetch).getMockImplementation()
+    vi.mocked(fetch).mockImplementation((input, init) =>
+      (input instanceof Request ? input.url : input.toString()).endsWith("/preview") ? new Promise<Response>(() => undefined) : (answer?.(input, init) ?? Promise.reject(new Error("no answer"))),
+    )
+    const panelRefresh = () => container.querySelector<HTMLButtonElement>("[role=alert] button")
+
+    act(() => panelRefresh()?.click())
+    await settle()
+
+    expect(container.querySelector(".rule-preview-reading")?.textContent).toContain("Reading Family…")
+    expect(panelRefresh()?.getAttribute("aria-disabled")).toBe("true")
+    expect(container.querySelector(".rule-preview-skeleton")).toBeNull()
+
+    act(() => panelRefresh()?.focus())
+    act(() => panelRefresh()?.click())
+    expect(document.activeElement).toBe(button("Refresh"))
+  })
+
   it("says it is reading above the last results while Refresh reads", async () => {
     mockFetch({ status: 200, body: preview })
     await renderPreview(testI18n())
