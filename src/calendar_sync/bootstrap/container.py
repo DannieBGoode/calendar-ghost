@@ -24,6 +24,14 @@ from calendar_sync.application.identity.administration import (
     ShowOwnAccountDeletion,
     ShowRegistration,
 )
+from calendar_sync.application.identity.plans import (
+    AssignPlan,
+    ChangePlan,
+    DefinePlan,
+    RemovePlan,
+    SetPlansSetting,
+    ShowPlans,
+)
 from calendar_sync.application.identity.ports import (
     IntegrationTokenAuthentication,
     IntegrationTokens,
@@ -270,6 +278,19 @@ class AdministrationServices:
     delete_user: DeleteUser
     delete_own_account: DeleteOwnAccount
     show_own_account_deletion: ShowOwnAccountDeletion
+    assign_plan: AssignPlan
+    """Gives a User their own Plan, or returns them to the Default Plan (ADR 0038)."""
+
+
+@dataclass(frozen=True, slots=True)
+class PlanServices:
+    """What Installation Administrators do with Plans and the Plans setting (ADR 0038)."""
+
+    show_plans: ShowPlans
+    define_plan: DefinePlan
+    change_plan: ChangePlan
+    remove_plan: RemovePlan
+    set_plans_setting: SetPlansSetting
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,6 +302,7 @@ class Container:
     """Every calendar provider this release knows, and how Users connect the configured ones."""
     identity: IdentityServices
     administration: AdministrationServices
+    plans: PlanServices
     token_authentication: IntegrationTokenAuthentication
     storage: StorageAdministration
     account_calendars: AccountCalendars | None
@@ -538,6 +560,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         administration=_administration(
             adapters, lambda owner: _owned_rules(owner, adapters, user_services(owner))
         ),
+        plans=_plan_services(adapters),
         token_authentication=adapters.token_authentication,
         storage=StorageAdministration(
             adapters.database_storage, adapters.locks, adapters.clock, adapters.log_files
@@ -751,6 +774,19 @@ def _administration(
         delete_user=DeleteUser(users, sessions, owned),
         delete_own_account=DeleteOwnAccount(users, passwords, sessions, owned, settings, clock),
         show_own_account_deletion=ShowOwnAccountDeletion(users),
+        assign_plan=AssignPlan(users, adapters.plan_assignments, adapters.allowances, clock),
+    )
+
+
+def _plan_services(adapters: Adapters) -> PlanServices:
+    """Every Plan use case reads and writes the installation's one Plans store."""
+    users, catalog, clock = adapters.users, adapters.plan_catalog, adapters.clock
+    return PlanServices(
+        show_plans=ShowPlans(users, catalog),
+        define_plan=DefinePlan(users, catalog, clock),
+        change_plan=ChangePlan(users, catalog, clock),
+        remove_plan=RemovePlan(users, catalog),
+        set_plans_setting=SetPlansSetting(users, catalog),
     )
 
 
