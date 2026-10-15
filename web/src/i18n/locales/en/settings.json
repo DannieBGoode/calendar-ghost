@@ -78,6 +78,13 @@
     }
   },
   "ownPlan": {
+    "title": "Your plan",
+    "administrator": "You administer this installation, so no plan limits you.",
+    "loadError": "Your plan could not load.",
+    "overRules": {
+      "one": "More rules count than your plan's {count}. Nothing stops, but no rule can start until fewer count.",
+      "other": "More rules count than your plan's {count}. Nothing stops, but no rule can start until fewer count."
+    },
     "name": "{name}",
     "nameDefault": "{name} (default)",
     "summary": "{plan}: {rules}, {accounts}, {tokens}, {cadence}",

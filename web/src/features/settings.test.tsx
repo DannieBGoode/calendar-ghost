@@ -15,6 +15,7 @@ import {
   type ConnectedAccount,
   type IntegrationToken,
   type IssuedIntegrationToken,
+  type OwnPlan,
 } from "@/lib/api"
 import { integrationExamples } from "@/lib/integrations"
 import type { OpenSettingsTab, SettingsTab } from "@/lib/navigation"
@@ -86,6 +87,36 @@ const issued: IssuedIntegrationToken = {
   token: "cgs_synthetic-token-shown-once",
 }
 
+/** Plans are off: Your plan stays hidden and nothing is limited. */
+const plansOff: OwnPlan = {
+  basis: "plans_off",
+  plan: null,
+  limits: null,
+  rules_counted: 2,
+  connected_accounts: 2,
+  integration_tokens: 2,
+  instant: true,
+  poll_every_minutes: 5,
+  may_connect_account: true,
+  may_issue_token: true,
+  over_rule_limit: false,
+}
+
+/** Someone on their own Family plan, with room left everywhere. */
+const familyPlan: OwnPlan = {
+  basis: "plan",
+  plan: { key: "family", name: "Family", on_default: false },
+  limits: { rules: 5, connected_accounts: 3, integration_tokens: 2, sync_interval: "instant" },
+  rules_counted: 3,
+  connected_accounts: 2,
+  integration_tokens: 0,
+  instant: true,
+  poll_every_minutes: 5,
+  may_connect_account: true,
+  may_issue_token: true,
+  over_rule_limit: false,
+}
+
 // A few seconds before "now", so `format.relative` resolves to the catalog's "just now" rather
 // than Intl wording such as "3 days ago", which bypasses the pseudo locale.
 const justNow = new Date(Date.now() - 10_000).toISOString()
@@ -134,6 +165,10 @@ type Scenario = {
   clearable?: Response
   cleared?: Response
   tokens?: IntegrationToken[]
+  /** GET /api/v1/account/plan; Plans are off unless a test says otherwise. */
+  ownPlan?: Response
+  /** GET /api/v1/registration; Only Me unless a test says otherwise. */
+  registration?: Response
 }
 
 /** Google as GET /api/v1/providers describes it once configured. */
@@ -151,6 +186,14 @@ function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
 }
 
+/** What the Plans and Registration routes answer: Plans off and Only Me unless a test says otherwise. */
+function planRoutes({
+  ownPlan = jsonResponse(plansOff),
+  registration = jsonResponse({ policy: "only_me", only_me_available: true }),
+}: Scenario): Record<string, Response> {
+  return { "/api/v1/registration": registration, "/api/v1/account/plan": ownPlan }
+}
+
 function mockFetch({
   providers,
   configured = true,
@@ -160,6 +203,7 @@ function mockFetch({
   clearable,
   cleared,
   tokens = [kuma, homepage],
+  ...rest
 }: Scenario) {
   const responses: Record<string, Response> = {
     "/api/v1/providers": jsonResponse(providers ?? (configured ? [googleProvider(redirectUri)] : [])),
@@ -169,7 +213,7 @@ function mockFetch({
     "/api/v1/storage/activity/clear": cleared ?? jsonResponse({ removed: 41880, database: usage.database }),
     "/api/v1/integration-tokens": jsonResponse(tokens),
     "/api/v1/session": jsonResponse(adminSession),
-    "/api/v1/registration": jsonResponse({ policy: "only_me", only_me_available: true }),
+    ...planRoutes(rest),
   }
   vi.stubGlobal(
     "fetch",
@@ -666,6 +710,24 @@ describe("Settings tabs", () => {
   ] as const)("shows the %s tab's sections", async (tab, shown) => {
     await renderSettings(testI18n(), { tab })
     expect(sections()).toEqual(shown)
+  })
+
+  it("shows Your plan between the account section and Appearance once a plan limits you", async () => {
+    await renderSettings(testI18n(), { tab: "account", ownPlan: jsonResponse(familyPlan) })
+    expect(sections()).toEqual(["own-account-title", "your-plan-title", "appearance-title"])
+    expect(container.querySelector("#your-plan")?.textContent).toContain("Family: 3 of 5 rules counted")
+  })
+
+  it("keeps the rest of Your account working when Your plan cannot load", async () => {
+    await renderSettings(testI18n(), {
+      tab: "account",
+      ownPlan: jsonResponse({ detail: "database is locked" }, 500),
+      registration: jsonResponse({ policy: "invitation_only", only_me_available: false }),
+    })
+    expect(sections()).toEqual(["own-account-title", "your-plan-title", "appearance-title"])
+    expect(container.querySelector("#your-plan [role='alert']")?.textContent).toContain("Your plan could not load.")
+    expect(container.querySelector("#own-account-title")?.textContent).toBe("Sign-in, email, and sync")
+    expect(container.querySelector("#appearance-title")).not.toBeNull()
   })
 
   it("links each tab to its own address and marks the one shown", async () => {

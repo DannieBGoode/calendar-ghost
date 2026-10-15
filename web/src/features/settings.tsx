@@ -32,6 +32,7 @@ import { AccountsSection } from "@/features/settings-accounts"
 import { AppearanceSection } from "@/features/settings-appearance"
 import { IntegrationsSection } from "@/features/settings-integrations"
 import { OwnAccountSection } from "@/features/settings-own-account"
+import { OwnPlanSection } from "@/features/settings-own-plan"
 import { PlansSection } from "@/features/settings-plans"
 import { RegistrationSection } from "@/features/settings-registration"
 import { StorageSection } from "@/features/settings-storage"
@@ -128,13 +129,30 @@ function SettingsView({ session, tab, onOpenTab, onOpenPeople, ...connections }:
         <p className="page-intro">{t(administrator ? "settings.page.introAdministrator" : "settings.page.intro")}</p>
       </div>
       <SettingsTabs current={shown} administrator={administrator} onOpen={onOpenTab} />
-      {shown === "account" && user && (
-        <OwnAccountSection user={user} sendsEmail={session.installation_sends_email} onOpenPeople={onOpenPeople} />
-      )}
-      {shown === "account" && <AppearanceSection />}
+      {shown === "account" && <AccountTab session={session} administrator={administrator} onOpenPeople={onOpenPeople} />}
       {shown === "connections" && <ConnectionsTab providers={connections.providers} administrator={administrator} />}
       {shown === "administration" && <AdministrationTab />}
     </div>
+  )
+}
+
+/** The signed-in User's own sign-in and sync, Your plan once a Plan applies, and how the app looks. */
+function AccountTab({
+  session,
+  administrator,
+  onOpenPeople,
+}: {
+  session: SessionStatus
+  administrator: boolean
+  onOpenPeople: () => void
+}) {
+  const { user } = session
+  return (
+    <>
+      {user && <OwnAccountSection user={user} sendsEmail={session.installation_sends_email} onOpenPeople={onOpenPeople} />}
+      <OwnPlanSection administrator={administrator} />
+      <AppearanceSection />
+    </>
   )
 }
 
