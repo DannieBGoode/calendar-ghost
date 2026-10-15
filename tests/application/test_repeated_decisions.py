@@ -22,6 +22,7 @@ from calendar_sync.domain.model import (
 from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
 from calendar_sync.infrastructure.persistence.memory import InMemoryUserUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
+from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import event, occurrence, rule, series, week_start
 from tests.users import USER, sqlite_units
@@ -187,7 +188,8 @@ def test_a_blocked_event_decided_again_without_a_change_is_recorded_and_unblocks
 ) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = sqlite_units(database)
+    # Production sync always has a History Cipher; without one nothing is ever compared.
+    factory = sqlite_units(database, history=HistoryCipher(CredentialCipher.generate_key()))
     with factory() as uow:
         uow.rules.add(rule())
         uow.commit()
@@ -217,9 +219,17 @@ def test_a_blocked_event_decided_again_without_a_change_is_recorded_and_unblocks
     with sqlite3.connect(database) as connection:
         assert open_blocks(connection, USER.value) == []
         latest = connection.execute(
-            "SELECT action, reason FROM audit_entries ORDER BY id DESC LIMIT 1"
+            "SELECT action, reason, source_comparison FROM audit_entries ORDER BY id DESC LIMIT 1"
         ).fetchone()
-    assert tuple(latest) == (AuditAction.IGNORE.value, SyncReason.PROJECTION_CURRENT.value)
+    # Regression: ISSUE-001 — without a History Cipher every comparison was no_baseline, so this
+    # test could not reach the repeat check it guards.
+    # Found by /qa on 2026-10-15
+    # Report: .gstack/qa-reports/run-20261015T080853Z/qa-report-calendar-ghost-2026-10-15.md
+    assert tuple(latest) == (
+        AuditAction.IGNORE.value,
+        SyncReason.PROJECTION_CURRENT.value,
+        ComparisonKind.UNTRACKED.value,
+    )
 
 
 def test_a_cancelled_series_sent_again_is_not_recorded_and_a_restored_one_is() -> None:
