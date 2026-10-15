@@ -333,6 +333,20 @@ Each rule row shows its direction, policy, last run, status badge, and at most o
 
 Pages carry no label above their title; the active navigation item already says where you are. Rule Details titles the page with the rule itself ("Family → Work").
 
+### Rule Setting Icons
+
+Each thing a rule decides has one icon, whatever it decides, and Rule Preview and Rule Details both
+show it: a page for event information, a question mark for Maybe, an envelope for unanswered
+invitations, a crossed circle for declined events, a calendar for all-day events, a cake for
+birthdays, and a clock turning back for the starting point. On the preview each icon leads its
+choice and reads quieter when the choice leaves events out; on Rule Details it leads the label in
+the label's color, and the value says what the rule decides.
+
+Both pages list the choices in this order, grouped as the policy form groups them: how events look,
+then which events the rule includes. Rule Details puts each group in its own column; the preview
+leaves out event information, which its privacy line already states. How many projections the rule
+keeps is not a choice, so Rule Details shows it under Latest runs.
+
 ### Settings Groups
 
 Settings sections run from what the installation depends on to what only this browser keeps: Connected accounts, Storage, Integrations, Appearance. Each section's heading and one sentence sit above a single group of rows with the same border, Quiet Surface fill, panel radius, and panel padding as the app's other cards; a row pairs a title and its current state with at most its own controls, and a section with nothing to show or change does not exist. Connect is one action, never a button per provider: "Connect Google account" when one provider is configured, otherwise a "Connect an account" menu whose items name each provider's account beside its mark and say that it opens that provider's sign-in. While no account exists it is primary and sits in the empty state, as it does in Getting started; after that it is an outline button in the section heading. Connected accounts collapse to one summary row naming how many there are and how many need reauthorization ("2 accounts, 1 needs reauthorization"), with their addresses grouped by provider ("Google: a, b · Microsoft: c"), and open by themselves when one does. Their avatars overlap only slightly, earlier ones on top, so initials stay whole. An account row names its provider beside its address, and shows its state chip, its one fix, and Check access; the fix that leaves for the provider's consent says so ("Reauthorize with Microsoft"); a lapsed account says so once, in its chip and its stopped rules, and Disconnect account waits in the row's "More actions" menu. Integrations, which most administrators never use, collapse the same way to one row naming how many tokens are in use and when one was last used. A newly issued token appears once, on Quiet Surface inside the group, in a read-only field with Copy beside it; revoked tokens gather under one disclosure at the end of the group. Plain HTTP on this machine or a home network is the homelab norm and says nothing; only an address that would carry a token across the internet unencrypted gets a quiet note in the group's footer. Conditions that need no action, such as Google and Microsoft returning to a different address, close the group they affect as a quiet disclosure on Quiet Surface, and become an Attention Ochre step only while the administrator can act on them. Providers that return elsewhere share one such note: it names the address when they agree and lists each provider's when they do not, has one field that finishes any of them because the returned address names its provider, and gives the fix once.

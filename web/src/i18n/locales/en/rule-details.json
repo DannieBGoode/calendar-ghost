@@ -34,11 +34,6 @@
     "startingPointValue": {
       "one": "Includes events from the past {count} day onward",
       "other": "Includes events from the past {count} days onward"
-    },
-    "projections": "Projections",
-    "projectionsValue": {
-      "one": "{count} projection this rule manages in {destination}",
-      "other": "{count} projections this rule manages in {destination}"
     }
   },
   "runs": {
@@ -50,7 +45,11 @@
     "reconciliationExplanation": {
       "one": "Compares the events this rule wrote to {destination} from the past {count} day onward with their sources and reports any that differ, without changing them. Runs when you choose Reconcile now.",
       "other": "Compares the events this rule wrote to {destination} from the past {count} days onward with their sources and reports any that differ, without changing them. Runs when you choose Reconcile now."
-    }
+    },
+    "projections": "Projections",
+    "projectionsValue": "{count} in {destination}",
+    "projectionsNone": "None in {destination}",
+    "projectionsExplanation": "The events this rule wrote to {destination}, each kept matching its source in {source}."
   },
   "cadence": {
     "label": "When it syncs",
