@@ -11,11 +11,12 @@ import { DisabledBadge } from "@/components/verdict-badge"
 import { PersonDetails, PersonMenu } from "@/features/person-actions"
 import { UserOverviewDetails, type OwnPage } from "@/features/user-overview"
 import { useI18n } from "@/i18n/provider"
-import { api, ApiError, type Person, type RuleSummary, type UserOverview } from "@/lib/api"
+import { api, ApiError, type Person, type PersonPlan, type RuleSummary, type UserOverview } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
 import { appPathForView, isPlainLeftClick } from "@/lib/navigation"
 import { AS_ADMINISTRATOR } from "@/lib/operator-overview"
 import { isAdministrator, personName } from "@/lib/people"
+import { personPlanFact } from "@/lib/plans"
 import { useNow } from "@/lib/use-now"
 import { peopleReturnSearch, usePersonCommands } from "@/lib/use-people"
 
@@ -92,11 +93,11 @@ function PersonContent({
             {you !== null && <Badge variant="outline">{t("people.you")}</Badge>}
             {person.state === "disabled" && <DisabledBadge />}
           </h1>
-          <PersonFacts person={person} now={now} />
+          <PersonFacts person={person} plan={overview.plan} now={now} />
         </div>
-        {you === null && <PersonMenu person={person} name={name} commands={commands} />}
+        {you === null && <PersonMenu person={person} name={name} commands={commands} plan={overview.plan} />}
       </div>
-      {you === null && <PersonDetails person={person} name={name} commands={commands} />}
+      {you === null && <PersonDetails person={person} name={name} commands={commands} plan={overview.plan} />}
       <p className="sr-only" role="status">
         {commands.message}
       </p>
@@ -162,12 +163,16 @@ function BackToPeople({ href, onBack }: { href: string; onBack: () => void }) {
   )
 }
 
-/** Their role, and when they joined and last signed in. */
-function PersonFacts({ person, now }: { person: Person; now: number }) {
+/**
+ * Their role, the Plan that limits them once any Plan exists (`plan` is null before then), and
+ * when they joined and last signed in.
+ */
+function PersonFacts({ person, plan, now }: { person: Person; plan: PersonPlan | null; now: number }) {
   const i18n = useI18n()
   const { t } = i18n
   const facts = [
     t(`people.roles.${person.role}`),
+    ...(plan ? [personPlanFact(i18n, plan)] : []),
     t("people.person.joined", { relative: i18n.format.relative(person.created_at, now) }),
     person.last_sign_in_at
       ? t("people.person.lastSignIn", { relative: i18n.format.relative(person.last_sign_in_at, now) })

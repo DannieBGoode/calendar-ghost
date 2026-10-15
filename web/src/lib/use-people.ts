@@ -7,8 +7,12 @@ import { api, type IssuedLink, type PeopleQuery, type Person, type UserDeletion 
 import { deletionMessage, personName } from "@/lib/people"
 
 /** What an Installation Administrator can do to another User. */
-type PersonAction = "promote" | "demote" | "disable" | "enable" | "reset" | "delete"
-export type PersonCommand = { person: Person; action: PersonAction }
+type PersonAction = "promote" | "demote" | "disable" | "enable" | "reset" | "delete" | "plan"
+/**
+ * A command on someone. `plan` is the Plan a "plan" command gives them, null for the Default
+ * Plan; starting "plan" without it opens the choice instead, as "delete" opens its confirmation.
+ */
+export type PersonCommand = { person: Person; action: PersonAction; plan?: string | null }
 
 /** What a command returned that the administrator needs next: a link to pass on, or a deletion's counts. */
 type Outcome = { link?: IssuedLink; deletion?: UserDeletion }
@@ -18,13 +22,14 @@ const CHANGED: Partial<Record<PersonAction, MessageKey>> = {
   demote: "people.status.notAdministrator",
   disable: "people.status.disabled",
   enable: "people.status.enabled",
+  plan: "people.status.planChanged",
 }
 
 // Every person command shares this key, so the query client, which outlives the People page,
 // knows one is running even after the page that sent it is gone.
 const PERSON_COMMAND = ["person-command"]
 
-async function run({ person, action }: PersonCommand): Promise<Outcome> {
+async function run({ person, action, plan }: PersonCommand): Promise<Outcome> {
   switch (action) {
     case "promote":
       await api.setPersonRole(person.id, "installation_administrator")
@@ -42,6 +47,9 @@ async function run({ person, action }: PersonCommand): Promise<Outcome> {
       return { link: await api.issuePasswordResetLink(person.id) }
     case "delete":
       return { deletion: await api.deletePerson(person.id) }
+    case "plan":
+      await api.setPersonPlan(person.id, plan ?? null)
+      return {}
   }
 }
 
@@ -66,6 +74,8 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
   const queryClient = useQueryClient()
   const [message, setMessage] = useState("")
   const [deleting, setDeleting] = useState<string | null>(null)
+  // The person whose Plan is being chosen, inline beside them.
+  const [choosingPlan, setChoosingPlan] = useState<string | null>(null)
   const [resetLink, setResetLink] = useState<{ personId: string; link: IssuedLink } | null>(null)
   // What the last command on someone still listed did, shown beside them.
   const [result, setResult] = useState<{ personId: string; text: string } | null>(null)
@@ -88,6 +98,7 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     const name = personName(i18n, person)
     const changed = CHANGED[action]
     if (link) setResetLink({ personId: person.id, link })
+    if (action === "plan") setChoosingPlan(null)
     if (deletion) {
       const deleted = deletionMessage(i18n, name, deletion)
       setDeleting(null)
@@ -126,6 +137,7 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     setResult(null)
     setDeletedMessage("")
     if (next.action === "delete") setDeleting(next.person.id)
+    else if (next.action === "plan" && next.plan === undefined) setChoosingPlan(next.person.id)
     else send(next)
   }
 
@@ -144,6 +156,7 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     return (
       errorFor(person) !== null ||
       deleting === person.id ||
+      choosingPlan === person.id ||
       resetLink?.personId === person.id ||
       resultFor(person) !== null
     )
@@ -156,6 +169,8 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     deletedMessage,
     deleting,
     setDeleting,
+    choosingPlan,
+    setChoosingPlan,
     resetLink,
     setResetLink,
     start,

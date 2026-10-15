@@ -614,6 +614,15 @@ describe("People page", () => {
     )
   })
 
+  it("keeps Change plan to a person's own page, out of the table's rows", async () => {
+    await renderPeople(testI18n())
+    await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
+    const labels = [...personRow("robin@example.test").querySelectorAll("[role='menuitem'] .overflow-menu-label")].map(
+      (label) => label.textContent,
+    )
+    expect(labels).toEqual(["Make administrator", "Disable", "Create password reset link", "Delete"])
+  })
+
   it("disables and enables a person", async () => {
     await renderPeople(testI18n(), {
       answers: {

@@ -63,6 +63,8 @@
   },
   "actions": {
     "label": "Actions for {email}",
+    "changePlan": "Change plan",
+    "changePlanHint": "Choose which plan limits this person.",
     "makeAdministrator": "Make administrator",
     "makeAdministratorHint": "They can manage people, storage, and who can join. They still never see anyone else's calendars.",
     "removeAdministrator": "Remove administrator",
@@ -78,6 +80,7 @@
   },
   "status": {
     "administrator": "{email} is now an administrator.",
+    "planChanged": "{email} has a new plan.",
     "notAdministrator": "{email} is no longer an administrator.",
     "disabled": "{email} can no longer sign in. Their rules wait until you enable them again.",
     "enabled": "{email} can sign in again.",
@@ -309,6 +312,10 @@
     "documentTitle": "{name} – People"
   },
   "plan": {
+    "label": "Plan for {email}",
+    "default": "The default plan",
+    "save": "Save plan",
+    "cancel": "Cancel",
     "fact": {
       "own": "{name}",
       "default": "{name} (default)",

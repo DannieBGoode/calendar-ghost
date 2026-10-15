@@ -9,7 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { SessionStatus, UserOverview } from "@/lib/api"
+import type { PersonPlan, PlansOverview, SessionStatus, UserOverview } from "@/lib/api"
 
 import { PersonView } from "./person-page"
 
@@ -76,6 +76,45 @@ const session: SessionStatus = {
   authenticated: true,
   installation_sends_email: false,
   user: { id: "user-dana", email: "dana@example.test", role: "installation_administrator", notify_by_email: true, instant_sync: true, instant_sync_availability: "on", instant_sync_help: null, language: null },
+}
+
+/** Robin's own Plan, which limits them while Plans are on. */
+const onFamily: PersonPlan = {
+  basis: "plan",
+  plan: { key: "family", name: "Family", on_default: false },
+  assigned: { key: "family", name: "Family" },
+}
+
+/** What assigning Robin the Default Plan answers. */
+const onFree: PersonPlan = {
+  basis: "plan",
+  plan: { key: "free", name: "Free", on_default: true },
+  assigned: null,
+}
+
+/** The Plans an administrator chooses from, by name then key, as the server lists them. */
+const plans: PlansOverview = {
+  enabled: true,
+  default_plan: "free",
+  sync_intervals: ["instant", "5_minutes"],
+  plans: [
+    {
+      key: "family",
+      name: "Family",
+      limits: { rules: 5, connected_accounts: 3, integration_tokens: 2, sync_interval: "instant" },
+      is_default: false,
+      people: 1,
+      limited_people: 1,
+    },
+    {
+      key: "free",
+      name: "Free",
+      limits: { rules: 1, connected_accounts: 1, integration_tokens: 0, sync_interval: "5_minutes" },
+      is_default: true,
+      people: 3,
+      limited_people: 2,
+    },
+  ],
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -176,6 +215,26 @@ async function choose(action: string) {
   )
   if (!item) throw new Error(`No action ${action}`)
   await click(item)
+}
+
+/** The facts under the person's name, in order. */
+function facts() {
+  return [...container.querySelectorAll(".person-facts li")].map((item) => item.textContent)
+}
+
+/** The labels of the open actions menu, in order. */
+function menuLabels() {
+  return [...container.querySelectorAll("[role='menuitem'] .overflow-menu-label")].map((label) => label.textContent)
+}
+
+/** Chooses a value in the open Plan choice. */
+async function pick(value: string) {
+  const select = container.querySelector<HTMLSelectElement>("#person-plan-user-robin")!
+  act(() => {
+    select.value = value
+    select.dispatchEvent(new Event("change", { bubbles: true }))
+  })
+  await settle()
 }
 
 describe("A person's page", () => {
@@ -476,5 +535,127 @@ describe("A person's page", () => {
     expect(container.querySelector(".empty-panel h1")?.textContent).toBe("Nobody here has this address")
     await click(button("Back to People"))
     expect(back).toHaveBeenCalledOnce()
+  })
+
+  describe("their plan", () => {
+    const withPlan = (plan: PersonPlan, extra: Record<string, Response> = {}) => ({
+      "GET /api/v1/users/user-robin/overview": jsonResponse({ ...robin, plan }),
+      "GET /api/v1/plans": jsonResponse(plans),
+      ...extra,
+    })
+
+    it("shows no plan fact and offers no Change plan while no plan exists", async () => {
+      await renderPerson(testI18n())
+      expect(facts()).toEqual(["User", "Joined just now", "Never signed in"])
+      await click(container.querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
+      expect(menuLabels()).toEqual(["Make administrator", "Disable", "Create password reset link", "Delete"])
+    })
+
+    const CASES: [string, PersonPlan, string][] = [
+      ["their own plan", onFamily, "Family"],
+      ["the default plan, which they have without one of their own", onFree, "Free (default)"],
+      [
+        "their own plan while plans are off",
+        { basis: "plans_off", plan: null, assigned: { key: "family", name: "Family" } },
+        "Family, once plans are on",
+      ],
+      [
+        "the default plan while plans are off",
+        { basis: "plans_off", plan: null, assigned: null },
+        "The default plan, once plans are on",
+      ],
+      ["that no plan limits an administrator", { basis: "administrator", plan: null, assigned: null }, "No plan limits administrators"],
+      [
+        "a plan kept for an administrator, which limits nothing",
+        { basis: "administrator", plan: null, assigned: { key: "family", name: "Family" } },
+        "No plan limits administrators (assigned: Family)",
+      ],
+    ]
+
+    it.each(CASES)("states %s as a fact beside their role", async (_case, plan, fact) => {
+      await renderPerson(testI18n(), "user-robin", withPlan(plan))
+      expect(facts()).toEqual(["User", fact, "Joined just now", "Never signed in"])
+    })
+
+    it("offers Change plan beside their other actions once a plan exists", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily))
+      await click(container.querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
+      expect(menuLabels()).toEqual(["Make administrator", "Disable", "Change plan", "Create password reset link", "Delete"])
+      const item = [...container.querySelectorAll("[role='menuitem']")].find(
+        (candidate) => candidate.querySelector(".overflow-menu-label")?.textContent === "Change plan",
+      )
+      expect(item?.querySelector(".overflow-menu-description")?.textContent).toBe("Choose which plan limits this person.")
+    })
+
+    it("chooses inline among the plans and the default plan, and returns them to the default", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily, { "PUT /api/v1/users/user-robin/plan": jsonResponse(onFree) }))
+      await choose("Change plan")
+
+      const select = container.querySelector<HTMLSelectElement>("#person-plan-user-robin")!
+      expect(container.querySelector("label[for='person-plan-user-robin']")?.textContent).toBe("Plan for robin@example.test")
+      expect([...select.options].map((option) => [option.value, option.textContent])).toEqual([
+        ["", "The default plan"],
+        ["family", "Family"],
+        ["free", "Free"],
+      ])
+      // It opens on their own Plan, with focus on the choice.
+      expect(select.value).toBe("family")
+      expect(document.activeElement).toBe(select)
+
+      await pick("")
+      await click(button("Save plan"))
+      expect(calls.filter((call) => call.method === "PUT")).toEqual([
+        { method: "PUT", path: "/api/v1/users/user-robin/plan", body: { plan: null } },
+      ])
+      expect(container.querySelector("[role='status']")?.textContent).toBe("robin@example.test has a new plan.")
+      expect(container.querySelector(".command-result")?.textContent).toBe("robin@example.test has a new plan.")
+      expect(container.querySelector("#person-plan-user-robin")).toBeNull()
+    })
+
+    it("gives them a plan of their own by its key", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFree, { "PUT /api/v1/users/user-robin/plan": jsonResponse(onFamily) }))
+      await choose("Change plan")
+      expect(container.querySelector<HTMLSelectElement>("#person-plan-user-robin")?.value).toBe("")
+
+      await pick("family")
+      await click(button("Save plan"))
+      expect(calls.find((call) => call.method === "PUT")?.body).toEqual({ plan: "family" })
+    })
+
+    it("shows the server's refusal beside them and keeps the choice open", async () => {
+      const refusal = { detail: "plan free does not exist", code: "plan_not_found", params: {} }
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily, { "PUT /api/v1/users/user-robin/plan": jsonResponse(refusal, 404) }))
+      await choose("Change plan")
+      await pick("free")
+      await click(button("Save plan"))
+
+      expect(container.querySelector(".field-error[role='alert']")?.textContent).toBe(
+        "This plan no longer exists. Reload to see the current plans.",
+      )
+      expect(container.querySelector("#person-plan-user-robin")).not.toBeNull()
+      expect(container.querySelector("[role='status']")?.textContent).toBe("")
+    })
+
+    it("closes the choice on Cancel without saving", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily))
+      await choose("Change plan")
+      await click(button("Cancel"))
+
+      expect(container.querySelector("#person-plan-user-robin")).toBeNull()
+      expect(calls.some((call) => call.method === "PUT")).toBe(false)
+    })
+
+    it("has no untranslated text with the plan fact and the plan choice open", async () => {
+      await renderPerson(pseudoI18n(), "user-robin", withPlan(onFamily))
+      await click(container.querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
+      // The item's description id ends with its action, "plan"; its label is pseudo-translated.
+      const change = [...container.querySelectorAll<HTMLButtonElement>("[role='menuitem']")].find((item) =>
+        item.getAttribute("aria-describedby")?.endsWith("-plan"),
+      )!
+      await click(change)
+
+      expect(container.querySelector("#person-plan-user-robin")).not.toBeNull()
+      expect(untranslatedText(container, ["robin@example.test", RULE_NAME, "Family", "Free", ...dateWords()])).toEqual([])
+    })
   })
 })
