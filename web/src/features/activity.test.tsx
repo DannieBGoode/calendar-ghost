@@ -549,8 +549,25 @@ describe("ActivityView", () => {
     const terms = [...(detail?.querySelectorAll(".activity-detail-facts dt") ?? [])]
     const why = terms.find((term) => term.textContent === "Why it was checked")
     expect(why?.nextElementSibling?.textContent).toBe("Family reported a change to this event or its series.")
+    // Regression: ISSUE-002 — the line claimed a version was new since the last comparison, but a
+    // run that left a revision out had already compared it; the baseline is the last recorded one.
+    // Found by /qa on 2026-10-15
+    // Report: .gstack/qa-reports/run-20261015T080853Z/qa-report-calendar-ghost-2026-10-15.md
     expect(detail?.querySelector(".activity-comparison")?.textContent).toBe(
-      "Family has a new version since Calendar Ghost last compared it. No change was detected in what it tracks.",
+      "Family has a different version than the one Calendar Ghost last recorded. No change was detected in what it tracks.",
+    )
+  })
+
+  it("says the event is the version Calendar Ghost last recorded", async () => {
+    const checked = entry(11, {
+      run_reason: "changes",
+      found_by: "destination_feed",
+      source_comparison: "same_revision",
+      event: recorded("Seminar"),
+    })
+    await renderActivity(testI18n(), { entries: [checked, ...ENTRIES] }, "?entry=11")
+    expect(container.querySelector(".activity-detail .activity-comparison")?.textContent).toBe(
+      "Same version of the event as the one Calendar Ghost last recorded.",
     )
   })
 

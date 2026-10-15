@@ -262,8 +262,8 @@ The comparison line, shown only when it adds something to the existing Source Ch
 
 | Kind | Line |
 |---|---|
-| `untracked` | "{source} has a new version since Calendar Ghost last compared it. No change was detected in what it tracks." |
-| `same_revision` | "Same version of the event as the one Calendar Ghost last compared with." |
+| `untracked` | "{source} has a different version than the one Calendar Ghost last recorded. No change was detected in what it tracks." |
+| `same_revision` | "Same version of the event as the one Calendar Ghost last recorded." |
 | `cancelled` | Nothing new. The row already says the event is cancelled. |
 | `no_baseline` | "No earlier version to compare with." |
 | `changed` | Nothing new. The Source Change section already lists the fields. |
