@@ -152,6 +152,36 @@ def test_migration_30_leaves_birthdays_out_and_reprojects_existing_rules(
     assert restored.transformation.birthdays is BirthdayPolicy.EXCLUDE
 
 
+def test_migration_31_keeps_earlier_audit_entries_without_provenance(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    user = add_user(database)
+    with sqlite3.connect(database) as connection:
+        for column in ("run_reason", "found_by", "source_comparison"):
+            connection.execute(f"ALTER TABLE audit_entries DROP COLUMN {column}")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 31")
+        connection.execute(
+            """
+            INSERT INTO audit_entries (
+                occurred_at, rule_id, action, outcome, source_event_id, detail, user_id
+            ) VALUES (?, 'rule-1', 'ignore', 'skipped', 'weekly', 'kept', ?)
+            """,
+            (NOW.isoformat(), user.value),
+        )
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with sqlite3.connect(database) as connection:
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+        rows = connection.execute(
+            "SELECT detail, run_reason, found_by, source_comparison FROM audit_entries"
+        ).fetchall()
+    # An earlier release never recorded why a run read the calendars or what it compared.
+    assert versions.count(31) == 1
+    assert rows == [("kept", None, None, None)]
+
+
 def test_database_migration_is_idempotent(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
 
@@ -390,6 +420,28 @@ def test_an_unknown_stored_reason_reads_as_no_previous_decision(tmp_path: Path) 
             INSERT INTO audit_entries (
                 occurred_at, rule_id, action, outcome, source_event_id, detail, reason, user_id
             ) VALUES (?, ?, 'ignore', 'skipped', 'weekly', '', 'retired_reason', ?)
+            """,
+            (NOW.isoformat(), rule().id.value, USER.value),
+        )
+
+    with sqlite_units(database)() as uow:
+        assert uow.audit.latest_for(rule().id, "weekly") is None
+
+
+def test_an_unreadable_stored_time_reads_as_no_previous_decision(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    with sqlite_units(database)() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO audit_entries (
+                occurred_at, rule_id, action, outcome, source_event_id, detail, reason,
+                event_title, event_starts, event_ends, user_id
+            ) VALUES (?, ?, 'ignore', 'skipped', 'weekly', '', 'recurring_unsupported',
+                'Weekly', 'not-a-time', 'not-a-time', ?)
             """,
             (NOW.isoformat(), rule().id.value, USER.value),
         )

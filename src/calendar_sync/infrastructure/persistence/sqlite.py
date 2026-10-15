@@ -656,10 +656,11 @@ class SqliteAuditRepository:
         try:
             action = AuditAction(row["action"])
             reason = SyncReason(row["reason"]) if row["reason"] is not None else None
+            event = _recorded_event(row)
         except ValueError:
-            # A value this release no longer knows proves nothing, so the decision is recorded.
+            # A value this release cannot read proves nothing, so the decision is recorded.
             return None
-        return RecordedDecision(action, reason, row["destination_event_id"], _recorded_event(row))
+        return RecordedDecision(action, reason, row["destination_event_id"], event)
 
     def forget_change_values(self, before: datetime) -> None:
         self._connection.execute(
