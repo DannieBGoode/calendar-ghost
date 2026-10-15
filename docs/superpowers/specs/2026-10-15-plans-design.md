@@ -3,7 +3,7 @@
 Terms are in `CONTEXT.md`. [ADR 0028](../../adr/0028-plans-apart-from-commercial-mode.md) settles
 Plans in principle, and the [multi-user design](2026-10-09-multi-user-design.md) makes them phase 3.
 This design adds Default Plan and Allowance to the glossary, and refines Plan and Plan Hold. ADR
-0037 (Plans) and ADR 0038 (Plan Hold) will record it. A panel of three independent designs, three
+0038 (Plans) and ADR 0039 (Plan Hold) will record it. A panel of three independent designs, three
 judges, and several rounds of adversarial review against the code at `4efda9b6` shaped it.
 
 ## Goal
@@ -55,7 +55,7 @@ default, and with Plans off nothing in this design limits or changes anything.
 |---|---|
 | The one decision | `allowance_for(...)` in `domain/plans.py` returns an `Allowance`: what one User may use now. Its basis is `plans_off`, `administrator`, or `plan`. It drives every limit, the sync cadence, the manual-run limit, and "Your plan". |
 | Port | `Allowances.of(user)` and `of_users(users)`, declared in `application/sync/ports.py`, implemented by `SqlitePlans` |
-| Storage | One `plans` table, and columns on `installation_settings`, `users`, and `sync_rules`. Migration 32 (slice 1) and 33 (slice 4). No new owned table. |
+| Storage | One `plans` table, and columns on `installation_settings`, `users`, and `sync_rules`. Migration 33 (slice 1) and 34 (slice 4). No new owned table. |
 | Start | Write, count, and refuse with `plan_limit_reached` when the count is over the limit |
 | Rule Replacement | The new draft is created, holding the old rule's place, in the transaction that begins the old rule's removal |
 | Plan Hold | A Degraded Rule with stop code 2. Every reader of enabled rules already skips it. |
@@ -257,7 +257,7 @@ separate `plans` context can be split out later if billing grows large.
 
 ## 3. Persistence, migrations, and rollback
 
-### 3.1 Migration 32 (slice 1)
+### 3.1 Migration 33 (slice 1)
 
 ```sql
 CREATE TABLE plans (
@@ -288,7 +288,7 @@ ALTER TABLE sync_rules ADD COLUMN keeps_place INTEGER NOT NULL DEFAULT 0;
   a new first User never inherits hidden limits.
 - Phase 4 rebuilds `installation_settings` to allow Open registration, and must carry these columns.
 
-### 3.2 Migration 33 (slice 4)
+### 3.2 Migration 34 (slice 4)
 
 ```sql
 ALTER TABLE sync_rules ADD COLUMN plan_kept INTEGER NOT NULL DEFAULT 0;
@@ -383,10 +383,10 @@ run then reports a failure that needs intervention, the hold ends (section 1.2).
 
 This text goes into the SQL headers, `docs/deployment.md`, and the CHANGELOG.
 
-- **Migration 32.** Rolling back works with the same database. Earlier releases ignore the table
+- **Migration 33.** Rolling back works with the same database. Earlier releases ignore the table
   and the columns, and limit nobody. After upgrading again, Plans are as the administrator left
   them.
-- **Migration 33.** Rolling back works with the same database. An earlier release reads a held
+- **Migration 34.** Rolling back works with the same database. An earlier release reads a held
   rule as stopped by Lapsed Authorization, so its monitor reads `stopped`. It resumes that rule
   when an account is reauthorized or its access check passes, and it can preview and start it.
   Each save it makes writes 0 or 1, so no hold outlives a change it made. On a release with Plans
@@ -696,14 +696,14 @@ Indicator rule.
 
 ## 11. Documentation and ADRs
 
-- **New ADR 0037, Plans** (slice 1, with addenda in slices 2 and 3): Plans in `identity` with
+- **New ADR 0038, Plans** (slice 1, with addenda in slices 2 and 3): Plans in `identity` with
   `Allowances` in `sync`; the Allowance order and fail-open; the Default Plan; administrators
   never limited; what each limit counts; only Rule Replacement keeps a place, moved atomically;
   enforcement and race safety; lowering keeps accounts and tokens; the changed-address recovery;
   the interval list; the assignment port and its source; return to setup turns Plans off. Slice 2
   adds the due rule and its phases. Slice 3 adds the manual-run limit and why its floor is the
   shortest interval.
-- **New ADR 0038, Plan Hold** (slice 4): stop code 2 and its rollback analysis; the per-User grace;
+- **New ADR 0039, Plan Hold** (slice 4): stop code 2 and its rollback analysis; the per-User grace;
   the keep choice and swaps; that a preview keeps a hold; the settle step; status without a new
   verdict; the two emails; and the accepted limits of section 13.
 - **Amendments:** ADR 0028 (decisions 1, 5, 7, and 9; the manual-run limit replaces "a fixed rate
@@ -711,14 +711,14 @@ Indicator rule.
   preview"); ADR 0036 (Scheduled Sync every five minutes "while Plans are off"; `PlanCadence`
   replaces `EveryUserInstant`); ADR 0030 (the Operator Overview shows the Plan; no effect under Only
   Me; return to setup turns Plans off); ADR 0024 (`stalled` covers held rules); ADR 0023 (a note
-  pointing to 0028 and 0037).
+  pointing to 0028 and 0038).
 - **CONTEXT.md:** refine Plan and Plan Hold; add Default Plan and Allowance (avoid "entitlement");
   update Sync Cadence, Scheduled Sync, Sync Now, Reconcile Now, Rule Preview, Operator Overview,
   Degraded Rule, Lapsed Authorization, Installation Status, Incident Notification, and the
   Interface Wording rows. Always write "held by ... plan", so it never reads like a Disabled User's
   held rules.
 - **AGENTS.md:** the resume invariant adds "and a rule held by its User's Plan resumes on its own
-  once the Plan's rule limit allows it (ADR 0038)". The Plans paragraph adds that administrators
+  once the Plan's rule limit allows it (ADR 0039)". The Plans paragraph adds that administrators
   are never limited.
 - **Contradictions to fix:** README and `docs/licensing.md` replace "charges for operating, not for
   features" with: the Hosted Service runs this same code with Plans on; its Plans may differ in how
@@ -739,13 +739,13 @@ Indicator rule.
 
 Every slice depends only on slice 1, and each can ship alone.
 
-### Slice 1: Plans core (migration 32)
+### Slice 1: Plans core (migration 33)
 
 Domain `plans.py`; `User.plan`; `SyncRule.keeps_place`; `Allowances`, `SqlitePlans`, and
 `PlanCadence` with `instant` and `5_minutes` offered; the identity Plan use cases;
 `IssueIntegrationToken`; `ShowOwnPlan`; the Operator Overview Plan; the Start check, the atomic
 place move, the account limit with its OAuth outcome, and the token limit; routes, schemas, and
-codes; the Administration, People, and Your plan UI with every limit hint; ADR 0037 and the slice-1
+codes; the Administration, People, and Your plan UI with every limit hint; ADR 0038 and the slice-1
 doc changes.
 
 Releases: administrators define Plans, choose a default, turn Plans on, and assign Plans. New
@@ -757,7 +757,7 @@ every transition's `keeps_place`; the decision-4 consequences; Rule Replacement 
 before the old rule's removal begins; a failed check leaves the old rule as it was and creates no
 draft; a duplicate relationship is refused before anything changes; the draft keeps the place from
 the commit that begins the removal; an interrupted removal keeps it); the Plans store contract on
-SQLite and memory; migration 31 to 32; real-thread races (two Starts for one place, a Start against
+SQLite and memory; migration 32 to 33; real-thread races (two Starts for one place, a Start against
 a Plan lowering, two account connects, two token issues); Reauthorization at the limit;
 administrators exempt; limit checks failing closed and every other read failing open; the API
 catalogues; and Vitest for each UI section.
@@ -766,7 +766,7 @@ catalogues; and Vitest for each UI section.
 
 All six intervals; `scheduled_run_due` and the phases; the new `ScheduledRule` fields in the
 scheduled and instant readers; the due filter in `ScheduledPass`; fail-open; the interval in the
-Dashboard and Your plan; the "five minutes" copy; the ADR 0036 amendment and the ADR 0037 addendum.
+Dashboard and Your plan; the "five minutes" copy; the ADR 0036 amendment and the ADR 0038 addendum.
 
 Tests: a decision table for `scheduled_run_due`; a 60-minute rule skipped until due; a started,
 failing, or reprojection rule listed at once; Sync now every minute never keeps a rule from its
@@ -781,14 +781,14 @@ live-checks script, and the docs. Tests: the sliding window, per-User counts, no
 off or for administrators, the 13th run refused with `Retry-After`, concurrent requests never
 admitting more than 12, one budget for all three actions, and no budget used by a 503.
 
-### Slice 4: Plan Hold (migration 33)
+### Slice 4: Plan Hold (migration 34)
 
 Two fixes to today's code, which can also ship first: `health._degrade` acts on a rule with a
 self-resuming stop, and `ChangeFeedCursors.advance` takes the rule write lock before its first
 write. Then `held_by_plan` and its transitions; `plan_hold.py`; stop code 2; `plan_kept`, the
 admission counter, and the grace columns; `PlanHolds`, `ChooseKeptRules`, and the settle step;
 status, Dashboard, and MCP changes; the emails and the setting's new name; the held-rule UI and the
-keep form; ADR 0038, the ADR 0027 and 0024 amendments, the AGENTS.md invariant, and the slice-4
+keep form; ADR 0039, the ADR 0027 and 0024 amendments, the AGENTS.md invariant, and the slice-4
 docs.
 
 Tests: a decision table for `settle` with one row per step and branch (including a further lowering
@@ -821,7 +821,7 @@ These are known and accepted, to keep the design simple:
 3. **A kept rule can stay held** while a not-kept rule runs, after a Start that beat the pass's
    release. Saving the choice again swaps them.
 4. **Naming debt.** `awaiting_reauthorization` stores a stop code with three values, until rollback
-   past migration 33 is no longer supported. It can then be renamed `stop_cause`.
+   past migration 34 is no longer supported. It can then be renamed `stop_cause`.
 5. **Monitors that read `state`.** A held rule reads `degraded`. The CHANGELOG announces it.
 6. **The account refusal comes after OAuth consent,** and leaves an unused grant at the provider.
    The disabled Connect button makes this rare. A renamed account at the limit, with every place in

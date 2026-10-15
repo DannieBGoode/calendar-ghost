@@ -518,7 +518,7 @@ and `Interrupted: 1 error during collection`.
 Create `src/calendar_sync/domain/plans.py` with exactly this content. It imports only the standard library, `domain/cadence.py`, and `domain/errors.py`. It must never import `domain/access.py` or `domain/model.py` at runtime: `access.py` imports `PlanKey` from here (Step 7), and Task 2 adds a type-only import of `SyncRule`.
 
 ```python
-"""Plans: named limits an Installation Administrator defines and assigns (ADR 0028, ADR 0037).
+"""Plans: named limits an Installation Administrator defines and assigns (ADR 0028, ADR 0038).
 
 An Allowance is what one User may use now. Plans are off by default, and then nothing limits
 anyone; Installation Administrators are never limited. Everything here is a value or a pure
@@ -767,7 +767,7 @@ class PlanInUse(DomainError):
 
 
 class PlanLimitReached(DomainError):
-    """One more of a resource would pass the limit of the User's Plan (ADR 0037).
+    """One more of a resource would pass the limit of the User's Plan (ADR 0038).
 
     Not a validation error, so no route answers 422 for it by accident: each route that can meet
     it catches it by name.
@@ -914,7 +914,7 @@ class User:
     """Whether their rules run soon after a change is reported, where their Plan and the
     installation allow it."""
     plan: PlanKey | None = None
-    """Their own Plan; None means the Default Plan (ADR 0037)."""
+    """Their own Plan; None means the Default Plan (ADR 0038)."""
 
     @property
     def needs_email(self) -> bool:
@@ -945,7 +945,7 @@ Run each command:
 .venv/bin/pytest
 ```
 
-Expected, in order: `134 passed`; `430 passed`; `... files already formatted`; `All checks passed!`; `Success: no issues found in ... source files`; `Contracts: 10 kept, 0 broken.`; the whole suite passes (nothing reads Plans yet, so no existing test changes).
+Expected, in order: `134 passed`; `456 passed`; `... files already formatted`; `All checks passed!`; `Success: no issues found in ... source files`; `Contracts: 10 kept, 0 broken.`; the whole suite passes (nothing reads Plans yet, so no existing test changes).
 
 If `ruff format --check .` reports a file, run `.venv/bin/ruff format <file>` on it and rerun; never hand-format around Ruff.
 
@@ -993,7 +993,7 @@ Create `tests/domain/test_rule_places.py` with exactly this content:
 
 ```python
 """Which rules take a place under their User's rule limit, and how each transition keeps a Rule
-Replacement draft's place or gives it up (ADR 0037)."""
+Replacement draft's place or gives it up (ADR 0038)."""
 
 from collections.abc import Callable
 from dataclasses import replace
@@ -1286,7 +1286,7 @@ In `src/calendar_sync/domain/model.py`, add `_KEEPS_PLACE` right after `_DEGRADE
 ```python
 # States that could still write, or be enabled, without a disconnected account's authorization.
 _DEGRADED_ON_DISCONNECT = frozenset({SyncRuleState.PREVIEWED, SyncRuleState.ENABLED})
-# A Rule Replacement draft keeps its place under the rule limit until it starts (ADR 0037).
+# A Rule Replacement draft keeps its place under the rule limit until it starts (ADR 0038).
 _KEEPS_PLACE = frozenset({SyncRuleState.DRAFT, SyncRuleState.PREVIEWED})
 ```
 
@@ -1307,7 +1307,7 @@ class SyncRule:
     again instead of needing a recovery preview (ADR 0027)."""
     keeps_place: bool = False
     """A Rule Replacement draft that holds the place of the rule it replaced under its User's rule
-    limit, until it starts or is removed (ADR 0037). Not part of material_signature."""
+    limit, until it starts or is removed (ADR 0038). Not part of material_signature."""
 
     def __post_init__(self) -> None:
         if self.source == self.destination:
@@ -1334,7 +1334,7 @@ Add both properties right after `stopped_by_lapsed_authorization` (shown unchang
     @property
     def holdable(self) -> bool:
         """Enabled, or stopped only by Lapsed Authorization: a rule that runs, or resumes on its
-        own, and so takes a place under its User's rule limit (ADR 0037)."""
+        own, and so takes a place under its User's rule limit (ADR 0038)."""
         return self.synchronizes or self.stopped_by_lapsed_authorization
 
     @property
@@ -1441,7 +1441,7 @@ Replace the transitions from `mark_previewed` through `begin_removal` with the b
 
     def take_place_of(self, old: SyncRule) -> Self:
         """This new Rule Replacement draft, keeping the place `old` took under its User's rule
-        limit; a rule that did not count leaves no place to keep (ADR 0037)."""
+        limit; a rule that did not count leaves no place to keep (ADR 0038)."""
         if self.state not in _KEEPS_PLACE:
             raise InvalidStateTransition("only a new draft takes the place of the rule it replaces")
         return replace(self, keeps_place=old.counts_toward_plan)
@@ -1500,7 +1500,7 @@ Run each command:
 .venv/bin/pytest
 ```
 
-Expected, in order: `72 passed`; `169 passed`; `502 passed`; `... files already formatted`; `All checks passed!`; `Success: no issues found in ... source files`; `Contracts: 10 kept, 0 broken.`; the whole suite passes. Every `SyncRule` the adapters read or the tests build has `keeps_place=False`, so no existing test changes. The SQLite adapter does not store the field until Task 3.
+Expected, in order: `72 passed`; `169 passed`; `528 passed`; `... files already formatted`; `All checks passed!`; `Success: no issues found in ... source files`; `Contracts: 10 kept, 0 broken.`; the whole suite passes. Every `SyncRule` the adapters read or the tests build has `keeps_place=False`, so no existing test changes. The SQLite adapter does not store the field until Task 3.
 
 - [ ] **Step 8: Commit**
 
@@ -1538,7 +1538,7 @@ EOF
 
 ## Part 2: Persistence (Tasks 3 and 4)
 
-These two tasks store what tasks 1 and 2 decide: migration 32, a rule's `keeps_place`, the order a
+These two tasks store what tasks 1 and 2 decide: migration 33, a rule's `keeps_place`, the order a
 Rule Replacement inherits, each User's own Plan, and the Plans store behind the three Plans ports.
 Plans stay off by default, so no existing behavior changes. Task numbers follow
 `.context/plans-slice1-contract.md` section 5.
@@ -1554,17 +1554,17 @@ search, and replace only that text.
 
 ---
 
-### Task 3: Migration 32 and rule and User persistence
+### Task 3: Migration 33 and rule and User persistence
 
 **Files:**
-- Create: `src/calendar_sync/infrastructure/persistence/0032_plans.sql`
+- Create: `src/calendar_sync/infrastructure/persistence/0033_plans.sql`
 - Modify: `src/calendar_sync/infrastructure/persistence/migrations.py` (`_FORWARD_MIGRATIONS`)
 - Modify: `src/calendar_sync/application/sync/ports.py` (`SyncRuleRepository` gains `inherit_place`)
 - Modify: `src/calendar_sync/infrastructure/persistence/sqlite.py` (`SqliteSyncRuleRepository.add`, `._update`, new `.inherit_place`; `_rule_values`; new `_KEEPS_PLACE`; `rule_from_row`)
 - Modify: `src/calendar_sync/infrastructure/persistence/memory.py` (`MemoryState.rule_order`; `InMemorySyncRuleRepository.add`, `.remove`, new `.inherit_place`)
 - Modify: `src/calendar_sync/infrastructure/persistence/memory_installation.py` (`_status_records`, the `rules=` argument)
 - Modify: `src/calendar_sync/infrastructure/persistence/users.py` (imports, `logger`, `_COLUMNS`, `_user`, new `_own_plan`)
-- Modify: `docs/deployment.md` (new "Migration 32" paragraph after the "Migration 31" paragraph)
+- Modify: `docs/deployment.md` (new "Migration 33" paragraph after the "Migration 32" paragraph)
 - Create: `tests/adapters/test_plans_schema.py`
 - Modify: `tests/contracts/persistence.py` (import; one test after `test_rules_round_trip_and_list_by_identifier`; two tests after `test_status_records_hold_each_users_rules_in_the_order_they_were_created`)
 - Modify: `tests/adapters/test_user_isolation_schema.py` (`INSTALLATION_TABLES` and its comment)
@@ -1577,7 +1577,7 @@ search, and replace only that text.
   - Task 1, `calendar_sync.domain.access`: `User.plan: PlanKey | None = None` (trailing field).
   - Task 2, `calendar_sync.domain.model.SyncRule`: `keeps_place: bool = False` (`__post_init__` raises `DomainValidationError` when it is true outside DRAFT and PREVIEWED); `take_place_of(old: SyncRule) -> Self` (sets `keeps_place=old.counts_toward_plan`); `mark_previewed()` keeps `keeps_place`; `enable()` and `begin_removal()` clear it.
 - Produces:
-  - Migration 32: table `plans(key, name, rule_limit, account_limit, token_limit, sync_interval, created_at, updated_at)`; `installation_settings.plans_enabled INTEGER NOT NULL DEFAULT 0`, `installation_settings.default_plan_key REFERENCES plans(key)`; `users.plan_key REFERENCES plans(key)`, `users.plan_assigned_by`, `users.plan_assigner_id REFERENCES users(id) ON DELETE SET NULL`, `users.plan_assigned_at`; `sync_rules.keeps_place INTEGER NOT NULL DEFAULT 0`.
+  - Migration 33: table `plans(key, name, rule_limit, account_limit, token_limit, sync_interval, created_at, updated_at)`; `installation_settings.plans_enabled INTEGER NOT NULL DEFAULT 0`, `installation_settings.default_plan_key REFERENCES plans(key)`; `users.plan_key REFERENCES plans(key)`, `users.plan_assigned_by`, `users.plan_assigner_id REFERENCES users(id) ON DELETE SET NULL`, `users.plan_assigned_at`; `sync_rules.keeps_place INTEGER NOT NULL DEFAULT 0`.
   - `SyncRuleRepository.inherit_place(self, rule: SyncRuleId, of: SyncRuleId) -> None` in `calendar_sync.application.sync.ports`, implemented by `SqliteSyncRuleRepository` and `InMemorySyncRuleRepository`.
   - `MemoryState.rule_order: dict[SyncRuleId, int]`; the in-memory `status_records` lists each User's rules by `(rule_order.get(rule.id, 0), rule.id.value)`, as SQLite lists them by `creation_order, id`.
   - SQLite rules write and read `keeps_place`; `rule_from_row` reads it only on DRAFT and PREVIEWED rows.
@@ -1588,9 +1588,9 @@ search, and replace only that text.
 Create `tests/adapters/test_plans_schema.py`:
 
 ```python
-"""Migration 32 keeps Plans: the limits an administrator defines, whether Plans are on and which
+"""Migration 33 keeps Plans: the limits an administrator defines, whether Plans are on and which
 one is the default, each User's own Plan, and the place a Rule Replacement draft keeps
-(ADR 0037)."""
+(ADR 0038)."""
 
 import sqlite3
 from dataclasses import replace
@@ -1609,8 +1609,8 @@ from tests.helpers import NOW, endpoint, rule
 from tests.users import OTHER_USER, USER, add_account, add_user, sqlite_units
 
 
-def _release_31_records(database: Path) -> None:
-    """An administrator with two accounts and an enabled rule, and a second User, as release 31
+def _release_32_records(database: Path) -> None:
+    """An administrator with two accounts and an enabled rule, and a second User, as release 32
     kept them: its rules have no `keeps_place` column yet, so the rule is written directly."""
     add_user(database, USER)
     add_user(database, OTHER_USER, role="user")
@@ -1650,10 +1650,10 @@ def _family_assigned(database: Path) -> None:
         )
 
 
-def test_migration_32_adds_plans_turned_off_and_limits_nobody(tmp_path: Path) -> None:
+def test_migration_33_adds_plans_turned_off_and_limits_nobody(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
-    database_at_version(database, 31)
-    _release_31_records(database)
+    database_at_version(database, 32)
+    _release_32_records(database)
 
     initialize_database(database)
     initialize_database(database)
@@ -1990,7 +1990,7 @@ with:
 # Tables that hold no User's records: the migration ledger, the Users themselves, the
 # installation's settings, Invitations, which belong to nobody until they are used, Delivery
 # Evidence, which says whether providers reach the installation's own address, and the Plans an
-# Installation Administrator defines, which a User names through their own row (ADR 0037).
+# Installation Administrator defines, which a User names through their own row (ADR 0038).
 INSTALLATION_TABLES = {
     "schema_migrations",
     "users",
@@ -2001,7 +2001,7 @@ INSTALLATION_TABLES = {
 }
 ```
 
-(`plans` carries no `user_id`, so once migration 32 creates it,
+(`plans` carries no `user_id`, so once migration 33 creates it,
 `test_every_owned_table_carries_its_user_and_a_reference_through_it` fails unless it is listed
 here.)
 
@@ -2011,12 +2011,12 @@ Run: `.venv/bin/pytest tests/adapters/test_plans_schema.py tests/adapters/test_u
 
 Expected: 10 failed. The four schema tests fail with `sqlite3.OperationalError` (`no such column: plans_enabled`, `no such table: plans`, `no such column: keeps_place`); the users store test with `sqlite3.OperationalError: no such table: plans`; `test_a_replacement_ranks_where_the_rule_it_replaced_ranked` and `test_a_place_passes_only_between_rules_of_one_user` on both `TestInMemoryUnitOfWork` and `TestSqliteUnitOfWork` with `AttributeError: ... object has no attribute 'inherit_place'`; and `TestSqliteUnitOfWork::test_a_draft_keeps_its_place_through_its_preview_until_it_starts` with an `AssertionError` (SQLite does not keep `keeps_place` yet). The in-memory draft test already passes, because memory keeps the rule object itself.
 
-- [ ] **Step 5: Implement migration 32**
+- [ ] **Step 5: Implement migration 33**
 
-Create `src/calendar_sync/infrastructure/persistence/0032_plans.sql`:
+Create `src/calendar_sync/infrastructure/persistence/0033_plans.sql`:
 
 ```sql
--- Plans (ADR 0028, ADR 0037): named limits an Installation Administrator defines and assigns.
+-- Plans (ADR 0028, ADR 0038): named limits an Installation Administrator defines and assigns.
 -- Installation data, no User's records: a User names their own Plan through users.plan_key, and
 -- NULL there means the Default Plan. Nothing is backfilled: Plans start off and limit nobody. A
 -- Rule Replacement draft may keep the place of the rule it replaced under its User's rule limit.
@@ -2052,17 +2052,17 @@ In `src/calendar_sync/infrastructure/persistence/migrations.py`, replace the end
 `_FORWARD_MIGRATIONS`:
 
 ```python
-    (30, "0030_birthday_policy.sql"),
     (31, "0031_instant_sync.sql"),
+    (32, "0032_audit_entry_provenance.sql"),
 )
 ```
 
 with:
 
 ```python
-    (30, "0030_birthday_policy.sql"),
     (31, "0031_instant_sync.sql"),
-    (32, "0032_plans.sql"),
+    (32, "0032_audit_entry_provenance.sql"),
+    (33, "0033_plans.sql"),
 )
 ```
 
@@ -2476,21 +2476,21 @@ Expected: `ruff format` reports every file already formatted; `ruff check` says
 `All checks passed!`; mypy says `Success: no issues found`; lint-imports reports
 `Contracts: 10 kept, 0 broken.`; pytest passes with coverage at or above 80%.
 
-- [ ] **Step 10: Document migration 32 for operators**
+- [ ] **Step 10: Document migration 33 for operators**
 
-In `docs/deployment.md`, find the end of the "Migration 31" paragraph:
+In `docs/deployment.md`, find the end of the "Migration 32" paragraph:
 
 ```markdown
-while rules keep syncing every five minutes. Upgrading again keeps registrations that are still
-live, and deletes and creates again those that expired.
+Earlier entries keep `NULL`. Rolling back works with the same database: earlier releases ignore the
+columns, and record the repeated skips the newer release leaves out.
 ```
 
 and add this paragraph after it, separated by one blank line (the next paragraph, "Sign-in
 failures are counted...", stays after it):
 
 ```markdown
-Migration 32 adds Plans ([ADR 0028](adr/0028-plans-apart-from-commercial-mode.md),
-[ADR 0037](adr/0037-plans-allowances-and-limits.md)): the installation table `plans`; the columns
+Migration 33 adds Plans ([ADR 0028](adr/0028-plans-apart-from-commercial-mode.md),
+[ADR 0038](adr/0038-plans-allowances-and-limits.md)): the installation table `plans`; the columns
 `installation_settings.plans_enabled` (default `0`, off) and
 `installation_settings.default_plan_key`; each User's own Plan in `users.plan_key`, with who
 assigned it and when (`plan_assigned_by`, `plan_assigner_id`, `plan_assigned_at`); and
@@ -2503,7 +2503,7 @@ database: earlier releases ignore the table and the columns, and limit nobody. A
 again, Plans are as the administrator left them.
 ```
 
-ADR 0037 is written in task 19; until then the link points at the file that task creates.
+ADR 0038 is written in task 19; until then the link points at the file that task creates.
 
 Run: `.venv/bin/pytest tests/test_no_em_dashes.py tests/test_ubiquitous_language.py`
 
@@ -2512,7 +2512,7 @@ Expected: all pass.
 - [ ] **Step 11: Commit**
 
 ```sh
-git add src/calendar_sync/infrastructure/persistence/0032_plans.sql \
+git add src/calendar_sync/infrastructure/persistence/0033_plans.sql \
   src/calendar_sync/infrastructure/persistence/migrations.py \
   src/calendar_sync/application/sync/ports.py \
   src/calendar_sync/infrastructure/persistence/sqlite.py \
@@ -2527,7 +2527,7 @@ git add src/calendar_sync/infrastructure/persistence/0032_plans.sql \
 git commit -m "$(cat <<'EOF'
 Keep Plans and each User's own Plan in the database, and let a replacement draft keep its place
 
-Migration 32 adds the plans table, the Plans setting, each User's own
+Migration 33 adds the plans table, the Plans setting, each User's own
 Plan with who set it and when, and sync_rules.keeps_place. Plans start
 off and limit nobody, and rolling back works with the same database.
 Rules keep keeps_place through each save, a Rule Replacement draft can
@@ -2563,7 +2563,7 @@ EOF
 - Consumes:
   - Task 1, `calendar_sync.domain.plans`: `Allowance(basis, plan=None, on_default=False, assigned=None)`, `AllowanceBasis` (`PLANS_OFF`, `ADMINISTRATOR`, `PLAN`), `UNLIMITED = Allowance(AllowanceBasis.PLANS_OFF)`, `allowance_for(*, plans_on: bool, administers: bool, own: Plan | None, default: Plan | None) -> Allowance`, `Plan(key, name, limits)`, `PlanKey(value)`, `PlanLimits(rules, connected_accounts, integration_tokens, sync_interval)`, `SyncInterval` (`INSTANT`, `EVERY_5_MINUTES`, ...), `AssignmentSource` (`ADMINISTRATOR`, `BILLING`), `InvalidPlan`, `PlansNeedDefault`, `PlanIsDefault`, `PlanInUse(people: int)` (attribute `people`), `require_plans_setting(enabled: bool, default: PlanKey | None) -> None`, `require_removable(key: PlanKey, default: PlanKey | None, people: int) -> None`.
   - Task 1, `User.plan: PlanKey | None`; `User.administers` (role only, state ignored).
-  - Task 3: migration 32's table and columns; `SqliteUserDirectory` reads `User.plan`.
+  - Task 3: migration 33's table and columns; `SqliteUserDirectory` reads `User.plan`.
 - Produces:
   - `calendar_sync.application.sync.ports.Allowances` (Protocol): `of(self, user: UserId) -> Allowance`; `of_users(self, users: Collection[UserId]) -> Mapping[UserId, Allowance]`. A User not found reads as `UNLIMITED`; a read that cannot be made raises.
   - `calendar_sync.application.identity.ports`: `PlansSetting(enabled: bool, default: PlanKey | None)`; `PlanListing(plan: Plan, is_default: bool, people: int, limited_people: int)`; `PlanCatalog` (Protocol: `settings() -> PlansSetting`, `change_settings(enabled: bool, default: PlanKey | None) -> PlansSetting`, `plans() -> Sequence[PlanListing]`, `any_plans() -> bool`, `get(key: PlanKey) -> Plan | None`, `add(plan: Plan, at: datetime) -> None`, `change(plan: Plan, at: datetime) -> None`, `remove(key: PlanKey) -> None`); `AssignmentChange(source: AssignmentSource, actor: UserId | None, at: datetime)`; `PlanAssignments` (Protocol: `assign(user: UserId, plan: PlanKey | None, change: AssignmentChange) -> bool`).
@@ -2583,7 +2583,7 @@ EOF
 Create `tests/plans.py`:
 
 ```python
-"""Plans for tests: a small free Plan and a larger family Plan (ADR 0037)."""
+"""Plans for tests: a small free Plan and a larger family Plan (ADR 0038)."""
 
 from calendar_sync.application.identity.ports import PlanCatalog
 from calendar_sync.domain.plans import Plan, PlanKey, PlanLimits, SyncInterval
@@ -2607,7 +2607,7 @@ Create `tests/adapters/test_plans_store.py`. The fixture runs every shared test 
 the tests after `_sqlite` are SQLite only.
 
 ```python
-"""Plans as the installation stores them (ADR 0037). SQLite and the in-memory stand-in that
+"""Plans as the installation stores them (ADR 0038). SQLite and the in-memory stand-in that
 application tests use pass the same tests, so a use case tested in memory meets SQLite's refusals
 and counts."""
 
@@ -3110,7 +3110,7 @@ class PlanListing:
 
 
 class PlanCatalog(Protocol):
-    """The Plans an Installation Administrator defines, and whether they are on (ADR 0037)."""
+    """The Plans an Installation Administrator defines, and whether they are on (ADR 0038)."""
 
     def settings(self) -> PlansSetting: ...
 
@@ -3151,7 +3151,7 @@ class AssignmentChange:
 
 
 class PlanAssignments(Protocol):
-    """The one way a User's own Plan changes; administrators now, billing later (ADR 0037)."""
+    """The one way a User's own Plan changes; administrators now, billing later (ADR 0038)."""
 
     def assign(self, user: UserId, plan: PlanKey | None, change: AssignmentChange) -> bool:
         """Set the User's own Plan, None for the Default Plan, recording the change; False when
@@ -3193,7 +3193,7 @@ with:
 
 
 class Allowances(Protocol):
-    """What each User may use now, as their Plan allows (ADR 0037). Declared here so sync
+    """What each User may use now, as their Plan allows (ADR 0038). Declared here so sync
     enforces limits without importing identity; SqlitePlans implements it."""
 
     def of(self, user: UserId) -> Allowance:
@@ -3262,7 +3262,7 @@ and rename the four remaining uses of `_USERS_PER_QUERY` to `USERS_PER_QUERY` (t
 Create `src/calendar_sync/infrastructure/persistence/plans.py`:
 
 ```python
-"""Plans, the Plans setting, and each User's own Plan (ADR 0037)."""
+"""Plans, the Plans setting, and each User's own Plan (ADR 0038)."""
 
 from __future__ import annotations
 
@@ -3294,7 +3294,7 @@ logger = logging.getLogger(__name__)
 
 
 class SqlitePlans:
-    """Plans, the Plans setting, and each User's own Plan (ADR 0037). Implements Allowances,
+    """Plans, the Plans setting, and each User's own Plan (ADR 0038). Implements Allowances,
     PlanCatalog, and PlanAssignments; each client depends only on the port it uses.
 
     Reads never catch a database error: a limit check fails closed on it, and every other caller
@@ -3851,7 +3851,7 @@ with:
 ```python
     watch_inbox: WatchNoticeInbox
     allowances: Allowances
-    """What each User may use now, as their Plan allows (ADR 0037)."""
+    """What each User may use now, as their Plan allows (ADR 0038)."""
     plan_catalog: PlanCatalog
     plan_assignments: PlanAssignments
     """The one way a User's own Plan changes: administrators now, billing later."""
@@ -4183,7 +4183,7 @@ Create `tests/application/test_plan_cadence.py`:
 
 ```python
 """Each User's Sync Cadence as their Allowance says, and the batch read that falls back to one
-User at a time when Plans cannot be read (ADR 0037)."""
+User at a time when Plans cannot be read (ADR 0038)."""
 
 from __future__ import annotations
 
@@ -4417,7 +4417,7 @@ with:
 
 ```python
 class SyncCadencePolicy(Protocol):
-    """Each User's Sync Cadence, as their Plan allows (ADR 0028, ADR 0037).
+    """Each User's Sync Cadence, as their Plan allows (ADR 0028, ADR 0038).
 
     Both reads raise when the cadence cannot be read; readers that must not fail read through
     `cadences_of`, or fall back to `DEFAULT_CADENCE` themselves.
@@ -4447,7 +4447,7 @@ class EveryUserInstant:
 
 @dataclass(frozen=True, slots=True)
 class PlanCadence:
-    """Each User's Sync Cadence, as their Allowance says (ADR 0037).
+    """Each User's Sync Cadence, as their Allowance says (ADR 0038).
 
     A failed read raises here: each reader decides how to fail open.
     """
@@ -4474,7 +4474,7 @@ def cadences_of(
     for a User whose own read raises too, or whom the batch left out. Logs only the error's class.
 
     Readers count None as instant, so a Plans fault never drops an Instant Sync Request,
-    retires a watch, or hides Instant Sync from Installation Hints (ADR 0037).
+    retires a watch, or hides Instant Sync from Installation Hints (ADR 0038).
     """
     try:
         batch = policy.cadences(users)
@@ -4850,7 +4850,7 @@ class WatchUpkeep:
     Each cycle visits Users with nothing planned yet first, then the others in order of their
     earliest due work, so what waited longest goes first. Disabled Users are visited too: nothing
     is wanted for them, so their watches stop. A User whose Sync Cadence cannot be read counts
-    as instant, so a Plans fault never retires their watches (ADR 0037).
+    as instant, so a Plans fault never retires their watches (ADR 0038).
     """
 
     installation: InstallationUnitOfWorkFactory
@@ -4954,7 +4954,7 @@ Add this module function directly above `def _eligible(`:
 ```python
 def _may_sync_instantly(cadence: SyncCadence | None) -> bool:
     """Whether a User's cadence allows Instant Sync; one that could not be read does, so a Plans
-    fault never drops a request or retires a watch (ADR 0037)."""
+    fault never drops a request or retires a watch (ADR 0038)."""
     return cadence is None or cadence.instant
 ```
 
@@ -4980,7 +4980,7 @@ class InstantSyncStatus:
 
     def _cadence(self, user: UserId) -> SyncCadence:
         """The User's cadence, or the default one when it cannot be read, so a Plans fault never
-        breaks sign-in or the rules API (ADR 0037)."""
+        breaks sign-in or the rules API (ADR 0038)."""
         try:
             return self.cadence.cadence(user)
         except Exception as error:
@@ -5100,7 +5100,7 @@ In `class Adapters`, replace the `sync_cadence` field and its docstring with:
 ```python
     sync_cadence: SyncCadencePolicy = field(default_factory=EveryUserInstant)
     """Each User's Sync Cadence. `build_adapters` reads it from each User's Plan (`PlanCadence`,
-    ADR 0037); this default gives every User Instant Sync, as Plans off does (ADR 0028)."""
+    ADR 0038); this default gives every User Instant Sync, as Plans off does (ADR 0028)."""
 ```
 
 In `build_adapters`, add `sync_cadence=PlanCadence(plans),` as the last keyword argument of the
@@ -5407,7 +5407,7 @@ with:
 
 ```python
     UserDeletionInterrupted: "user_deletion_interrupted",
-    # Plans (ADR 0037).
+    # Plans (ADR 0038).
     PlanLimitReached: "plan_limit_reached",
     PlansNeedDefault: "plans_need_default",
     PlanNotFound: "plan_not_found",
@@ -5634,7 +5634,7 @@ Users with their own Plan keep it; the default never removed nor cleared while P
 lines with ids only.
 
 ```python
-"""What Installation Administrators do with Plans (ADR 0037), over the in-memory Plans store."""
+"""What Installation Administrators do with Plans (ADR 0038), over the in-memory Plans store."""
 
 import logging
 from collections.abc import Callable
@@ -6136,7 +6136,7 @@ Create `src/calendar_sync/application/identity/plans.py`. `identity` may import 
 use case 2 or 3, under the 7-field bound of `tests/test_architecture.py`.
 
 ```python
-"""What Installation Administrators do with Plans (ADR 0037): define, change, and remove them,
+"""What Installation Administrators do with Plans (ADR 0038): define, change, and remove them,
 choose the Default Plan, turn Plans on or off, and give a User their own Plan.
 
 Each use case checks first that the actor is an active Installation Administrator. Each change
@@ -6426,12 +6426,12 @@ class AdministrationServices:
     delete_own_account: DeleteOwnAccount
     show_own_account_deletion: ShowOwnAccountDeletion
     assign_plan: AssignPlan
-    """Gives a User their own Plan, or returns them to the Default Plan (ADR 0037)."""
+    """Gives a User their own Plan, or returns them to the Default Plan (ADR 0038)."""
 
 
 @dataclass(frozen=True, slots=True)
 class PlanServices:
-    """What Installation Administrators do with Plans and the Plans setting (ADR 0037)."""
+    """What Installation Administrators do with Plans and the Plans setting (ADR 0038)."""
 
     show_plans: ShowPlans
     define_plan: DefinePlan
@@ -6530,7 +6530,7 @@ git add src/calendar_sync/application/identity/plans.py src/calendar_sync/bootst
 git commit -F - <<'EOF'
 Let administrators define Plans, choose the default, and give each person their own
 
-Adds the identity use cases behind Plans administration (ADR 0037): show,
+Adds the identity use cases behind Plans administration (ADR 0038): show,
 define, change, and remove Plans, turn Plans on or off with a Default
 Plan, and assign a User's own Plan, also while Plans are off. Each checks
 first that the actor is an active Installation Administrator, and each
@@ -6593,7 +6593,7 @@ from tests.users import OTHER_USER, USER, add_user
 Append at the end of the file:
 
 ```python
-# The token limit (ADR 0037): `within` reads it once the store holds SQLite's write lock.
+# The token limit (ADR 0038): `within` reads it once the store holds SQLite's write lock.
 
 
 @pytest.mark.parametrize(("limit", "allowed"), [(None, 3), (2, 2), (1, 1), (0, 0)])
@@ -6775,7 +6775,7 @@ class SqliteUserIntegrationTokens:
         )
         with transaction(self._database_path) as connection:
             # Held from reading the limit to the insert, so two issues cannot both take the last
-            # place, and a lower limit cannot commit between the read and the insert (ADR 0037).
+            # place, and a lower limit cannot commit between the read and the insert (ADR 0038).
             connection.execute("BEGIN IMMEDIATE")
             if within is not None:
                 self._require_room(connection, within())
@@ -6920,7 +6920,7 @@ def test_names_must_be_short_printable_text(name: str) -> None:
         token_name(name)
 
 
-# Issuing a token within the User's Plan (ADR 0037)
+# Issuing a token within the User's Plan (ADR 0038)
 
 
 @dataclass
@@ -7128,7 +7128,7 @@ holds a check at its Allowance read, after its write lock is taken; a second req
 wait is given `WAIT` seconds to show that it does not go ahead.
 
 ```python
-"""Plan limits hold when requests race on one SQLite database (ADR 0037).
+"""Plan limits hold when requests race on one SQLite database (ADR 0038).
 
 Each limit check reads the User's Allowance once its own write holds SQLite's writer lock, so two
 requests cannot both take the last place, and a lower limit cannot commit between a check and
@@ -7316,7 +7316,7 @@ Replace `src/calendar_sync/application/identity/integration_tokens.py` with this
 
 ```python
 """What an Integration Token and its name may look like, checked before any lookup, and issuing
-one within the User's Plan (ADR 0037)."""
+one within the User's Plan (ADR 0038)."""
 
 from __future__ import annotations
 
@@ -7358,7 +7358,7 @@ def token_name(raw: str) -> str:
 
 @dataclass(slots=True)
 class IssueIntegrationToken:
-    """Issue one of the User's Integration Tokens, within their Plan's token limit (ADR 0037)."""
+    """Issue one of the User's Integration Tokens, within their Plan's token limit (ADR 0038)."""
 
     user: UserId
     users: UserDirectory
@@ -7666,7 +7666,7 @@ def issue_integration_token(
     response.headers["Cache-Control"] = "no-store"
     scopes = frozenset(IntegrationTokenScope(scope) for scope in payload.scopes)
     # The use case refuses installation:read to a User who does not administer before it reads
-    # the User's Plan, and refuses a token past the Plan's limit (ADR 0030, ADR 0037).
+    # the User's Plan, and refuses a token past the Plan's limit (ADR 0030, ADR 0038).
     try:
         issued = services.issue_integration_token.execute(payload.name, scopes)
     except AdministratorRequired as error:
@@ -7963,7 +7963,7 @@ Plans off, fail closed at Start and fail open on the rule page, lowering, and Re
 (an administrator demoted while over the limit):
 
 ```python
-"""The rule limit: Start checks it, and the rule page says whether Start would pass (ADR 0037)."""
+"""The rule limit: Start checks it, and the rule page says whether Start would pass (ADR 0038)."""
 
 from __future__ import annotations
 
@@ -8533,7 +8533,7 @@ def test_a_start_that_waits_for_plans_to_turn_on_reads_the_limit(tmp_path: Path)
 Create the file (the route tests for the enable and details routes):
 
 ```python
-"""The rule limit through the Web API: a refused Start, and what the rule page reads (ADR 0037)."""
+"""The rule limit through the Web API: a refused Start, and what the rule page reads (ADR 0038)."""
 
 from __future__ import annotations
 
@@ -8680,7 +8680,7 @@ helper after it. `PauseSyncRule` keeps using `_transition`:
 ```python
 @dataclass(slots=True)
 class EnableSyncRule:
-    """Enables a previewed rule within its User's rule limit (ADR 0037); its next run reconciles
+    """Enables a previewed rule within its User's rule limit (ADR 0038); its next run reconciles
     before scheduled synchronization."""
 
     unit_of_work: UnitOfWorkFactory
@@ -8695,7 +8695,7 @@ class EnableSyncRule:
                 raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
             enabled = rule.enable()
             # Saved first: the save takes SQLite's writer lock, so no Start and no change of Plan
-            # can commit between the limit read next and this unit's commit (ADR 0037). A read
+            # can commit between the limit read next and this unit's commit (ADR 0038). A read
             # that raises fails the Start, so a fault never admits a rule past the limit.
             uow.rules.save(enabled)
             limit = self.allowances.of(self.owner).limits.rules
@@ -8706,7 +8706,7 @@ class EnableSyncRule:
 
 
 def _counted(rules: Iterable[SyncRule]) -> int:
-    """How many of a User's rules count toward their Plan's rule limit (ADR 0037)."""
+    """How many of a User's rules count toward their Plan's rule limit (ADR 0038)."""
     return sum(rule.counts_toward_plan for rule in rules)
 ```
 
@@ -8758,7 +8758,7 @@ class GetSyncRuleDetails:
         """Whether Start would admit the rule now, and the rule limit it would apply.
 
         Fails open: when the User's Allowance cannot be read, Start shows as allowed with no
-        limit, because Start reads it again and refuses then (ADR 0037).
+        limit, because Start reads it again and refuses then (ADR 0038).
         """
         try:
             limit = self.allowances.of(self.owner).limits.rules
@@ -9483,7 +9483,7 @@ def test_a_replacement_in_flight_keeps_its_place_when_plans_turn_on_during_the_r
 
 
 def _creation_orders(database: Path) -> dict[str, int]:
-    """Each rule's creation order, which ranks the User's rules (ADR 0037)."""
+    """Each rule's creation order, which ranks the User's rules (ADR 0038)."""
     with transaction(database) as connection:
         rows = connection.execute("SELECT id, creation_order FROM sync_rules").fetchall()
     return {str(row["id"]): int(row["creation_order"]) for row in rows}
@@ -9662,7 +9662,7 @@ stays in `WIDE_DATACLASSES` unchanged):
         """Remove the rule. A Rule Replacement passes its new draft as `successor`: it is
         inserted, holding the rule's place under its User's rule limit when the rule counted,
         in the transaction that begins the removal, so both happen or neither does (ADR 0010,
-        ADR 0037). Once that commits, nothing removes the draft."""
+        ADR 0038). Once that commits, nothing removes the draft."""
         work = RuleWork(RuleWorkKind.REMOVAL, self.clock.now(), handling=handling)
         with (
             self.locks.for_rule(rule_id),
@@ -9823,7 +9823,7 @@ class RuleReplacement:
 @dataclass(slots=True)
 class ReplaceSyncRuleCalendars:
     """Rule Replacement: remove the old rule, inserting a new Draft with the same policy in the
-    step that begins the removal (ADR 0010, ADR 0037)."""
+    step that begins the removal (ADR 0010, ADR 0038)."""
 
     unit_of_work: UnitOfWorkFactory
     remove_rule: RemoveSyncRule
@@ -9985,7 +9985,7 @@ Create `tests/adapters/test_account_limit.py`:
 
 ```python
 """A new calendar account is refused at its User's Plan's account limit, after the provider's
-consent; Reauthorization of an account the User has is never refused (ADR 0037)."""
+consent; Reauthorization of an account the User has is never refused (ADR 0038)."""
 
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -10396,7 +10396,7 @@ class CalendarPermissionRequired(AuthorizationFailed):
 
 
 class AccountLimitReached(AuthorizationFailed):
-    """Connecting a new calendar account would pass the User's Plan's account limit (ADR 0037).
+    """Connecting a new calendar account would pass the User's Plan's account limit (ADR 0038).
 
     The provider's consent is already given, because only then is the account's address known;
     nothing is stored, and the User's existing accounts and rules are unchanged.
@@ -10447,7 +10447,7 @@ class SqliteConnectedAccountStore:
     Provider adapters read and renew credentials by account; everything else about accounts goes
     through `for_user`, which sees only one User's (ADR 0029). Account identifiers are generated,
     so a provider adapter reached with one reads only that account's credentials. With
-    `allowances`, connecting a new account stays within its User's Plan (ADR 0037); without, as
+    `allowances`, connecting a new account stays within its User's Plan (ADR 0038); without, as
     in tests and the development preview, nobody is limited.
     """
 
@@ -10520,7 +10520,7 @@ Replace `save` in full, and add `_require_room_for` right after it (before `disc
 
         Reauthorizing clears Lapsed Authorization; resuming the rules it stopped is the
         application's to do (ADR 0027). A new account beyond the User's Plan's account limit
-        raises PlanLimitReached and stores nothing; Reauthorization is never refused (ADR 0037).
+        raises PlanLimitReached and stores nothing; Reauthorization is never refused (ADR 0038).
         """
         # In UTC, so recording a lapse can compare it with a request's start as text.
         now = self._clock.now().astimezone(UTC).isoformat()
@@ -10628,7 +10628,7 @@ def connect_account(
     avatar_url: str | None = None,
 ) -> AuthorizedAccount:
     """Connect, or reauthorize, `owner`'s account; nothing when they were disabled meanwhile, or
-    when a new account would pass their Plan's account limit (ADR 0037)."""
+    when a new account would pass their Plan's account limit (ADR 0038)."""
     try:
         account = accounts.for_user(owner).save(
             display_name, email, credentials, provider=provider, avatar_url=avatar_url
@@ -10729,7 +10729,7 @@ In `src/calendar_sync/bootstrap/container.py` `build_adapters`, replace the `acc
 (`plans` is the `SqlitePlans(database)` local task 4 made):
 
 ```python
-    # Connecting a new account stays within its User's Plan (ADR 0037).
+    # Connecting a new account stays within its User's Plan (ADR 0038).
     accounts = (
         SqliteConnectedAccountStore(
             database, CredentialCipher(settings.master_key), clock, ids, allowances=plans
@@ -11607,7 +11607,7 @@ Expected: collection fails with
 Create `src/calendar_sync/application/operations/own_plan.py`:
 
 ```python
-"""Your plan: what the signed-in User's Plan allows them, and how much of it they have (ADR 0037).
+"""Your plan: what the signed-in User's Plan allows them, and how much of it they have (ADR 0038).
 
 A read model across sync, which counts rules and accounts, and identity, which counts tokens. The
 limits themselves are checked where each resource is added, inside its own transaction; this only
@@ -11670,7 +11670,7 @@ class ShowOwnPlan:
 
     def execute(self) -> OwnPlan:
         """Raises when the Allowance cannot be read: an Allowance made up here would show a
-        Plan that is not theirs, and the Web UI reads a failure as no hints (ADR 0037)."""
+        Plan that is not theirs, and the Web UI reads a failure as no hints (ADR 0038)."""
         allowance = self.allowances.of(self.owner)
         with self.unit_of_work() as uow:
             rules = sum(1 for rule in uow.rules.list() if rule.counts_toward_plan)
@@ -11936,7 +11936,7 @@ class UserOverview:
     """The first UTC day the provider calls in `resources` count."""
     allowance: Allowance | None = None
     """What their Plan allows them now, and their own Plan; None while no Plan exists, or when
-    Plans cannot be read (ADR 0037)."""
+    Plans cannot be read (ADR 0038)."""
 ```
 
 add the two fields to `OperatorOverview` (its `page`, `of`, and `_overview` are unchanged):
@@ -12200,13 +12200,16 @@ from calendar_sync.domain.model import (
 from calendar_sync.domain.plans import AllowanceBasis, SyncInterval
 ```
 
-and replace `MIRRORS` with:
+and add the two Plans mirrors to `MIRRORS`, keeping every entry that is already there
+(`FoundByValue`, `RunReasonValue`, and `SourceComparisonValue` came with Activity's provenance).
+The keys stay in alphabetical order, so `MIRRORS` reads:
 
 ```python
 MIRRORS: dict[str, type[StrEnum]] = {
     "AllowanceBasisValue": AllowanceBasis,
     "CauseValue": Cause,
     "EffectiveCadenceValue": CadenceReason,
+    "FoundByValue": FoundBy,
     "HintKindValue": HintKind,
     "IncidentCategoryValue": IncidentCategory,
     "IncidentResolutionValue": IncidentResolution,
@@ -12215,6 +12218,8 @@ MIRRORS: dict[str, type[StrEnum]] = {
     "PrivacyPolicy": ProjectionContent,
     "ProblemKindValue": ProblemKind,
     "ProjectionChoice": ProjectionHandling,
+    "RunReasonValue": RunReason,
+    "SourceComparisonValue": ComparisonKind,
     "StatusVerdictValue": StatusVerdict,
     "SyncIntervalValue": SyncInterval,
     "TentativeChoice": TentativeEventPolicy,
@@ -12227,7 +12232,7 @@ MIRRORS: dict[str, type[StrEnum]] = {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `.venv/bin/pytest tests/adapters/test_schema_enums.py -q`
-Expected: FAIL, 3 failed, 15 passed: the two new mirror cases raise `AttributeError: module
+Expected: FAIL, 3 failed, 18 passed: the two new mirror cases raise `AttributeError: module
 'calendar_sync.interfaces.api.schemas' has no attribute 'AllowanceBasisValue'` (and
 `'SyncIntervalValue'`), and `test_every_schema_literal_alias_mirrors_an_enum_or_says_why_not`
 finds two `MIRRORS` keys with no alias.
@@ -12235,7 +12240,7 @@ finds two `MIRRORS` keys with no alias.
 - [ ] **Step 3: Add the Literal aliases and the Plan models**
 
 In `src/calendar_sync/interfaces/api/schemas.py`, add the two aliases right after the
-`EffectiveCadenceValue` alias and its docstring, so that block reads:
+`EffectiveCadenceValue` alias and its docstring, and before `RunReasonValue`, so that block reads:
 
 ```python
 EffectiveCadenceValue = Literal[
@@ -12251,10 +12256,12 @@ EffectiveCadenceValue = Literal[
 SyncIntervalValue = Literal[
     "instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"
 ]
-"""How soon a Plan's rules sync (ADR 0037); only the offered ones may be saved."""
+"""How soon a Plan's rules sync (ADR 0038); only the offered ones may be saved."""
 AllowanceBasisValue = Literal["plans_off", "administrator", "plan"]
 """Why a User has the limits they have: Plans are off, they administer, or a Plan limits them."""
 ```
+
+`RunReasonValue`, `FoundByValue`, and `SourceComparisonValue` follow them unchanged.
 
 Then insert the Plan models between `ResourceUseResponse` (unchanged, ending with its `since`
 field) and `class PersonResponse(UserResponse):`. They must come before
@@ -12314,7 +12321,7 @@ class PlansResponse(ApiResponse):
 
 
 class PersonPlanResponse(ApiResponse):
-    """A person's Plan, as the Operator Overview shows it (ADR 0037)."""
+    """A person's Plan, as the Operator Overview shows it (ADR 0038)."""
 
     basis: AllowanceBasisValue
     plan: AppliedPlanResponse | None
@@ -12386,7 +12393,7 @@ so adding it before `user_overview_response` fills it would break the person pag
 - [ ] **Step 4: Run it to verify it passes**
 
 Run: `.venv/bin/pytest tests/adapters/test_schema_enums.py -q`
-Expected: PASS, 18 passed.
+Expected: PASS, 21 passed.
 
 - [ ] **Step 5: Write the failing route tests**
 
@@ -12397,7 +12404,7 @@ and the member is a `limited_user`.
 
 ```python
 """The Plans routes over the Web API: an Installation Administrator defines, changes, removes,
-and assigns Plans and turns them on, and every User reads their own Plan (ADR 0037)."""
+and assigns Plans and turns them on, and every User reads their own Plan (ADR 0038)."""
 
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
@@ -13041,7 +13048,7 @@ In `tests/adapters/test_api_authorization.py`, replace the `ADMINISTRATOR_ROUTES
 with:
 
 ```python
-# Only an Installation Administrator may use these (ADR 0030), Plans among them (ADR 0037).
+# Only an Installation Administrator may use these (ADR 0030), Plans among them (ADR 0038).
 ADMINISTRATOR_ROUTES = {
     ("GET", "/api/v1/registration"),
     ("PUT", "/api/v1/registration"),
@@ -13198,7 +13205,7 @@ Expected: FAIL.
 Create `src/calendar_sync/interfaces/api/plan_payload.py`:
 
 ```python
-"""Plans as the Web API reads and answers them (ADR 0037): keys, limits, and Allowances."""
+"""Plans as the Web API reads and answers them (ADR 0038): keys, limits, and Allowances."""
 
 from __future__ import annotations
 
@@ -13332,7 +13339,7 @@ release refuses answers 404 `plan_not_found`, never 422 or 500 (Review Focus 4).
 Create `src/calendar_sync/interfaces/api/routes/plans.py`:
 
 ```python
-"""Plans (ADR 0037): the limits an Installation Administrator defines, the Default Plan, the
+"""Plans (ADR 0038): the limits an Installation Administrator defines, the Default Plan, the
 setting that turns Plans on, and what the signed-in User's own Plan allows.
 
 Every route here is an Installation Administrator's, except Your plan, which every User reads.
@@ -13609,7 +13616,7 @@ class UserOverviewResponse(ApiResponse):
     status: StatusResponse
     resources: ResourceUseResponse
     plan: PersonPlanResponse | None
-    """Their Plan, and their own if it differs; null while no Plan exists (ADR 0037)."""
+    """Their Plan, and their own if it differs; null while no Plan exists (ADR 0038)."""
 ```
 
 In `src/calendar_sync/interfaces/api/routes/users.py`, change the module docstring's first
@@ -14210,7 +14217,7 @@ export type PlansOverview = Schemas["PlansResponse"]
 export type PlanSummary = Schemas["PlanResponse"]
 /** What a Plan allows; null means unlimited. */
 export type PlanLimits = Schemas["PlanLimitsResponse"]
-/** How soon a Plan's rules sync (ADR 0037). */
+/** How soon a Plan's rules sync (ADR 0038). */
 export type SyncInterval = PlanLimits["sync_interval"]
 /** A new Plan: its key, chosen once, its name, and its limits. */
 export type PlanPayload = Schemas["DefinePlanRequest"]
@@ -14280,7 +14287,7 @@ export function ownPlanShown(plan: OwnPlan | undefined, policy: RegistrationPoli
 /**
  * Whether a privacy edit, a Pause, or a Disconnect may keep a rule from starting again: only Rule
  * Replacement keeps a rule's place under the rule limit, and the User has more rules counted than
- * their Plan allows (ADR 0037).
+ * their Plan allows (ADR 0038).
  */
 export function planWarning(plan: OwnPlan | undefined): boolean {
   return plan?.over_rule_limit === true
@@ -19961,7 +19968,7 @@ or under 100 characters, as the surrounding text does.
 **Files:**
 - Modify: `tests/test_ubiquitous_language.py` (`AVOIDED`, `test_avoided_terms_are_found_in_any_spelling`, `test_words_that_merely_contain_an_avoided_term_are_allowed`)
 - Modify: `docs/superpowers/specs/2026-10-15-plans-design.md` (lines 734 to 736 only: the `tests/test_ubiquitous_language.py` bullet of section 11)
-- Create: `docs/adr/0037-plans-allowances-and-limits.md`
+- Create: `docs/adr/0038-plans-allowances-and-limits.md`
 - Modify: `docs/adr/0010-rule-removal-and-calendar-replacement.md` (top line; new amendment section at the end)
 - Modify: `docs/adr/0023-hosted-service-runs-the-open-codebase.md` (top paragraph; new amendment section at the end)
 - Modify: `docs/adr/0028-plans-apart-from-commercial-mode.md` (top line; new amendment section at the end)
@@ -19993,12 +20000,12 @@ or under 100 characters, as the surrounding text does.
   - `application/identity/plans.py`: `ShowPlans`, `DefinePlan`, `ChangePlan`, `RemovePlan`, `SetPlansSetting`, `AssignPlan`.
   - `application/identity/integration_tokens.py`: `IssueIntegrationToken`.
   - `application/operations/own_plan.py`: `ShowOwnPlan`; `application/operations/operator_overview.py`: `OperatorOverview.page`, `OperatorOverview.of`.
-  - `infrastructure/persistence/plans.py`: `SqlitePlans`; `infrastructure/persistence/0032_plans.sql` (migration 32).
+  - `infrastructure/persistence/plans.py`: `SqlitePlans`; `infrastructure/persistence/0033_plans.sql` (migration 33).
   - Routes `GET /api/v1/plans`, `PUT /api/v1/plan-settings`, `POST /api/v1/plans`, `PUT`/`DELETE /api/v1/plans/{plan_key}`, `PUT /api/v1/users/{user_id}/plan`, `GET /api/v1/account/plan`; codes `plan_limit_reached`, `plans_need_default`, `plan_not_found`, `plan_key_taken`, `plan_in_use`, `plan_is_default`, `invalid_plan`; OAuth outcome `account_limit_reached`; `RuleDetailResponse.can_start`, `RuleDetailResponse.rule_limit`.
   - Web UI labels: `settings.plans.title` "Plans", `settings.plans.enabled.label` "Limit people with plans", `settings.plans.default.label` "Default plan", `settings.plans.add` "Add a plan", `settings.ownPlan.title` "Your plan", `people.actions.changePlan` "Change plan", `common.plan.seeYourPlan` "See your plan", `common.plan.mayNotRestart` "Your plan may not let this rule start again.", `settings.integrations.issue.submit` "Issue token", `rule-details` `replacement.open` "Replace calendars…".
   - Task 11's section `## Connect is unavailable: your plan's calendar accounts` in `docs/troubleshooting.md`.
 - Produces:
-  - `docs/adr/0037-plans-allowances-and-limits.md` (ADR 0037, "Plans: Allowances and limits"), which later slices extend with addenda.
+  - `docs/adr/0038-plans-allowances-and-limits.md` (ADR 0038, "Plans: Allowances and limits"), which later slices extend with addenda.
   - `AVOIDED` gains `"downgrade deletion"`, `"plan pause"`, `"suspension"`, `"tier"`; from here on every searched file must be free of them.
   - `docs/troubleshooting.md` sections `## Start syncing is unavailable: your plan's rule limit` (anchor `start-syncing-is-unavailable-your-plans-rule-limit`) and `## Issue token is unavailable: your plan's token limit` (anchor `issue-token-is-unavailable-your-plans-token-limit`).
 
@@ -20189,7 +20196,7 @@ grep -nE "^class (ShowPlans|DefinePlan|ChangePlan|RemovePlan|SetPlansSetting|Ass
 grep -nE "^class IssueIntegrationToken" src/calendar_sync/application/identity/integration_tokens.py
 grep -nE "^class ShowOwnPlan" src/calendar_sync/application/operations/own_plan.py
 grep -nE "^class SqlitePlans" src/calendar_sync/infrastructure/persistence/plans.py
-grep -nE "plans_enabled|default_plan_key|plan_assigned_by|keeps_place" src/calendar_sync/infrastructure/persistence/0032_plans.sql
+grep -nE "plans_enabled|default_plan_key|plan_assigned_by|keeps_place" src/calendar_sync/infrastructure/persistence/0033_plans.sql
 grep -nE "PlanCadence\(" src/calendar_sync/bootstrap/container.py
 grep -nE '"/api/v1/(plans|plan-settings|account/plan)' src/calendar_sync/interfaces/api/routes/plans.py
 grep -nE '"/api/v1/users/\{user_id\}/plan"' src/calendar_sync/interfaces/api/routes/users.py
@@ -20204,9 +20211,9 @@ Expected: every command prints at least one line. If a command prints nothing, a
 shipped a different name or label (it reported the deviation in its own task): use the shipped
 name, path, or label everywhere the texts below cite it, and nothing else changes.
 
-- [ ] **Step 9: Write ADR 0037**
+- [ ] **Step 9: Write ADR 0038**
 
-Create `docs/adr/0037-plans-allowances-and-limits.md`:
+Create `docs/adr/0038-plans-allowances-and-limits.md`:
 
 ```markdown
 # Plans: Allowances and limits
@@ -20346,7 +20353,7 @@ limits, and Instant Sync or a five-minute sync per Plan. Later slices add their 
 - **Returning to setup turns Plans off,** keeping their definitions and the default, so a new
   first User never inherits limits nobody can see. Invitations carry no Plan: an invited User
   starts on the Default Plan.
-- **Migration 32** adds the `plans` table, `plans_enabled` and `default_plan_key` on
+- **Migration 33** adds the `plans` table, `plans_enabled` and `default_plan_key` on
   `installation_settings`, `plan_key`, `plan_assigned_by`, `plan_assigner_id`, and
   `plan_assigned_at` on `users`, and `keeps_place` on `sync_rules`. Nothing is backfilled: Plans
   start off and limit nobody. The foreign keys keep NO ACTION, so the database refuses to delete a
@@ -20409,7 +20416,7 @@ with:
 ```markdown
 # Remove rules explicitly and replace calendars instead of editing them
 
-Amended by [ADR 0037](0037-plans-allowances-and-limits.md): a Rule Replacement's new draft is
+Amended by [ADR 0038](0038-plans-allowances-and-limits.md): a Rule Replacement's new draft is
 created in the transaction that begins the previous rule's removal.
 
 ```
@@ -20444,7 +20451,7 @@ removal begins, and no cleanup path deletes it. The uniqueness constraint still 
 relationship before anything destructive happens, and an interrupted removal still leaves the new
 draft and a retryable previous rule. When the previous rule counted toward its User's Plan, the
 draft also keeps its place under the rule limit
-([ADR 0037](0037-plans-allowances-and-limits.md)).
+([ADR 0038](0038-plans-allowances-and-limits.md)).
 ```
 
 - [ ] **Step 11: Amend ADR 0023**
@@ -20464,7 +20471,7 @@ with:
 Supersedes [ADR 0020](0020-single-installation-community-edition.md) and amends the hosted-service
 decision in [ADR 0021](0021-community-edition-agpl.md). Amended by
 [ADR 0028](0028-plans-apart-from-commercial-mode.md): Plans are their own setting, and Commercial
-Mode now means billing only. [ADR 0037](0037-plans-allowances-and-limits.md) records how Plans
+Mode now means billing only. [ADR 0038](0038-plans-allowances-and-limits.md) records how Plans
 limit Users.
 ```
 
@@ -20486,7 +20493,7 @@ with:
 Two bullets of the decision read differently now. Plan limits no longer depend on Commercial Mode
 ([ADR 0028](0028-plans-apart-from-commercial-mode.md)): they apply only while an installation's
 own administrator turns Plans on, and never to its Installation Administrators
-([ADR 0037](0037-plans-allowances-and-limits.md)). The Hosted Service runs this same code with
+([ADR 0038](0038-plans-allowances-and-limits.md)). The Hosted Service runs this same code with
 Plans on. Its Plans may differ in how many rules, Connected Accounts, and Integration Tokens a
 User has and how soon their calendars sync, including Instant Sync, but never in how a rule
 protects privacy or in the tools to see and recover from a problem. A self-hosted installation has
@@ -20506,7 +20513,7 @@ with:
 
 ```markdown
 Amends [ADR 0023](0023-hosted-service-runs-the-open-codebase.md). Amended by
-[ADR 0037](0037-plans-allowances-and-limits.md), which records how Plans work.
+[ADR 0038](0038-plans-allowances-and-limits.md), which records how Plans work.
 ```
 
 Then replace the last bullet of the file:
@@ -20524,7 +20531,7 @@ with:
 
 ## Amendment: what the design of Plans settled (2026-10-15)
 
-The design of Plans ([ADR 0037](0037-plans-allowances-and-limits.md)) settled what this record left
+The design of Plans ([ADR 0038](0038-plans-allowances-and-limits.md)) settled what this record left
 open:
 
 - **The Hosted Service drives Plans.** On the Hosted Service, Instant Sync may be only for Plans
@@ -20559,7 +20566,7 @@ with:
 ```markdown
 Builds on [ADR 0023](0023-hosted-service-runs-the-open-codebase.md) and
 [ADR 0029](0029-isolate-users-in-one-sqlite-database.md). Amended by
-[ADR 0037](0037-plans-allowances-and-limits.md): the Operator Overview shows each User's Plan, and
+[ADR 0038](0038-plans-allowances-and-limits.md): the Operator Overview shows each User's Plan, and
 returning to setup turns Plans off.
 ```
 
@@ -20574,7 +20581,7 @@ with:
 ```markdown
 ## Amendment: Plans (2026-10-15)
 
-Plans arrived ([ADR 0037](0037-plans-allowances-and-limits.md)), and three decisions above gained
+Plans arrived ([ADR 0038](0038-plans-allowances-and-limits.md)), and three decisions above gained
 their detail:
 
 - **The Operator Overview shows each User's Plan** once any Plan exists, whether Plans are on or
@@ -20606,7 +20613,7 @@ with:
 ```markdown
 [ADR 0033](0033-decide-an-incidents-next-step-in-the-domain.md). Amends
 [ADR 0029](0029-isolate-users-in-one-sqlite-database.md). Amended by
-[ADR 0037](0037-plans-allowances-and-limits.md): each User's Plan decides their Sync Cadence.
+[ADR 0038](0038-plans-allowances-and-limits.md): each User's Plan decides their Sync Cadence.
 ```
 
 Then replace the last bullet of the file:
@@ -20626,7 +20633,7 @@ with:
 
 `PlanCadence` (`application/sync/watch_ports.py`) replaces `EveryUserInstant` as the installation's
 `SyncCadencePolicy`. Each User's Sync Cadence follows their Allowance
-([ADR 0037](0037-plans-allowances-and-limits.md)), so their Plan decides whether Instant Sync is
+([ADR 0038](0038-plans-allowances-and-limits.md)), so their Plan decides whether Instant Sync is
 allowed. With Plans off, and for every Installation Administrator, it is allowed, with a
 five-minute Scheduled Sync, as before. `EveryUserInstant` remains the default of `Adapters`, which
 `build_adapters` replaces, and a policy for tests.
@@ -20648,7 +20655,7 @@ five-minute Scheduled Sync, as before. `EveryUserInstant` remains the default of
 Run:
 
 ```sh
-git add -N docs/adr/0037-plans-allowances-and-limits.md
+git add -N docs/adr/0038-plans-allowances-and-limits.md
 .venv/bin/pytest tests/test_ubiquitous_language.py tests/test_no_em_dashes.py -q
 .venv/bin/ruff format --check .
 .venv/bin/python - <<'EOF'
@@ -20656,7 +20663,7 @@ import re
 from pathlib import Path
 
 for name in (
-    "docs/adr/0037-plans-allowances-and-limits.md",
+    "docs/adr/0038-plans-allowances-and-limits.md",
     "docs/adr/0010-rule-removal-and-calendar-replacement.md",
     "docs/adr/0023-hosted-service-runs-the-open-codebase.md",
     "docs/adr/0028-plans-apart-from-commercial-mode.md",
@@ -20676,7 +20683,7 @@ Expected: every test passes (`git add -N` makes `test_no_em_dashes.py` read the 
 Commit:
 
 ```sh
-git add docs/adr/0037-plans-allowances-and-limits.md \
+git add docs/adr/0038-plans-allowances-and-limits.md \
   docs/adr/0010-rule-removal-and-calendar-replacement.md \
   docs/adr/0023-hosted-service-runs-the-open-codebase.md \
   docs/adr/0028-plans-apart-from-commercial-mode.md \
@@ -20685,7 +20692,7 @@ git add docs/adr/0037-plans-allowances-and-limits.md \
 git commit -F - <<'EOF'
 Record how Plans limit people, and amend the decisions they change
 
-ADR 0037 records Plans: Allowances read in the transaction each limit
+ADR 0038 records Plans: Allowances read in the transaction each limit
 check guards, limit checks that fail closed while every other read fails
 open, the Default Plan, administrators never limited, what each limit
 counts, the place a Rule Replacement keeps, the interval list, and the
@@ -20728,7 +20735,7 @@ A Plan limits only how much a User uses, never how a rule projects events or how
 recovers from a problem. Plans are an installation setting that is off by default; when off, every
 User has every feature with no limits (ADR 0028). An Installation Administrator is never limited.
 A User's own Plan is set by an Installation Administrator, and later also by billing under
-Commercial Mode, through one assignment that records who set it and when (ADR 0037).
+Commercial Mode, through one assignment that records who set it and when (ADR 0038).
 _Avoid_: Tier, subscription, quota
 
 **Default Plan**:
@@ -20743,7 +20750,7 @@ What one User may use now, decided in this order: no limits while Plans are off,
 Installation Administrator, otherwise their own Plan, or the Default Plan when they have none. It
 decides every limit check and the User's Sync Cadence. A limit check that cannot read it refuses,
 as for any database error; every other reader falls back to no limits, so a fault in Plans never
-stops synchronization or sign-in (ADR 0037).
+stops synchronization or sign-in (ADR 0038).
 _Avoid_: Entitlement
 ```
 
@@ -20816,7 +20823,7 @@ Plan limits apply only when an administrator turns Plans on, and billing only wh
 is also on; both are off by default, and with Plans off every user has every feature (ADR 0028).
 Installation Administrators are never limited. A limit check reads the User's Allowance inside the
 transaction it guards and fails closed; every other read of Plans fails open, so a fault in Plans
-never stops synchronization, sign-in, or the rules API (ADR 0037).
+never stops synchronization, sign-in, or the rules API (ADR 0038).
 Preserve the self-hosting promise that there is no mandatory Calendar Ghost account, telemetry, or
 hosted coordinator.
 ```
@@ -20882,7 +20889,7 @@ a payment provider ([ADR 0028](adr/0028-plans-apart-from-commercial-mode.md)). T
 runs this same code with Plans on. Its Plans may differ in how many rules, calendar accounts, and
 Integration Tokens you have and how soon your calendars sync, including Instant Sync. They never
 limit how a rule protects your privacy, or the tools to see and recover from a problem, and no Plan
-limits an installation's administrators ([ADR 0037](adr/0037-plans-allowances-and-limits.md)).
+limits an installation's administrators ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 See [ADR 0023](adr/0023-hosted-service-runs-the-open-codebase.md).
 ```
 
@@ -20903,7 +20910,7 @@ with:
 before. The future hosted service runs this same codebase (ADR 0023). The Operator Overview shows
 administrators every User's health without their calendars. Plans, behind their own setting and
 off by default, let an administrator limit how much each User who does not administer uses
-(ADR 0028, [ADR 0037](adr/0037-plans-allowances-and-limits.md)). Billing behind Commercial Mode,
+(ADR 0028, [ADR 0038](adr/0038-plans-allowances-and-limits.md)). Billing behind Commercial Mode,
 also off by default, follows in the phases of
 `docs/superpowers/specs/2026-10-09-multi-user-design.md`.
 ```
@@ -20962,7 +20969,7 @@ Read-only views follow the same direction. Activity and the dashboard ask the qu
 with:
 
 ```markdown
-Plans follow the same direction ([ADR 0037](adr/0037-plans-allowances-and-limits.md)).
+Plans follow the same direction ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 `domain/plans.py` holds the Plan values and `allowance_for`, which decides a User's `Allowance`
 from whether Plans are on, whether the User administers, their own Plan, and the Default Plan.
 Identity and Access owns the administrator's use cases in `application/identity/plans.py`, over
@@ -21020,7 +21027,7 @@ with:
 
 ```markdown
 Instant Sync asks one question of the installation: does this person's Sync Cadence allow it?
-Their Allowance answers ([ADR 0037](adr/0037-plans-allowances-and-limits.md)). With Plans off, the
+Their Allowance answers ([ADR 0038](adr/0038-plans-allowances-and-limits.md)). With Plans off, the
 default, and for every administrator, it does, and Scheduled Sync runs every five minutes. With
 Plans on, the person's own Plan, or the default plan when they have none, decides through its sync
 interval. This release offers two: **Instant sync, and a check every 5 minutes**, and **Every 5
@@ -21049,7 +21056,7 @@ with:
   each User given a Plan of their own: that Plan, whether an administrator or billing set it, which
   administrator, and when. A User without one has the default, and nothing more is stored for
   them. Each rule also records whether it keeps the place of the rule it replaced under its User's
-  Plan ([ADR 0037](adr/0037-plans-allowances-and-limits.md)).
+  Plan ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 ```
 
 2. In "What an Installation Administrator can see", replace:
@@ -21132,7 +21139,7 @@ while Plans are off, which is the default, nobody is. A lower limit stops nothin
 keep syncing, and accounts and tokens keep working, but nobody can start a rule, connect a new
 calendar account, or issue a token past it. Each person sees what their Plan allows under
 **Settings → Your account → Your plan**
-([ADR 0037](adr/0037-plans-allowances-and-limits.md)).
+([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 ```
 
 - [ ] **Step 23: Update the domain model (`docs/domain-model.md`, "State machines")**
@@ -21150,7 +21157,7 @@ with:
 
 ```markdown
 A rule counts toward its User's Plan (`counts_toward_plan`) when it is Enabled, when it is Degraded
-only by Lapsed Authorization (`holdable`), or when it keeps a place (`keeps_place`, ADR 0037).
+only by Lapsed Authorization (`holdable`), or when it keeps a place (`keeps_place`, ADR 0038).
 Only a Rule Replacement's new draft keeps a place: `take_place_of` gives it one when the previous
 rule counted, in the transaction that begins the previous rule's removal, and only a Draft or
 Previewed rule may keep one. Previewing it again and a Material Rule Change keep the place;
@@ -21239,7 +21246,7 @@ with:
    a five-minute sync per Plan, through `PlanCadence`, which implements the `SyncCadencePolicy`
    port (`application/sync/watch_ports.py`) from each User's Allowance
    ([ADR 0036](../../adr/0036-instant-sync-through-provider-notices.md),
-   [ADR 0037](../../adr/0037-plans-allowances-and-limits.md)); (2) sync intervals of 10 to 60
+   [ADR 0038](../../adr/0038-plans-allowances-and-limits.md)); (2) sync intervals of 10 to 60
    minutes in the scheduler; (3) the manual-run limit; (4) Plan Hold.
 ```
 
@@ -21259,7 +21266,7 @@ with:
 ### Added
 
 - Plans let an administrator limit how much each person uses
-  ([ADR 0037](docs/adr/0037-plans-allowances-and-limits.md)). Under **Settings → Administration →
+  ([ADR 0038](docs/adr/0038-plans-allowances-and-limits.md)). Under **Settings → Administration →
   Plans**, an administrator adds Plans, each with how many rules may sync, how many calendar
   accounts and Integration Tokens a person may have, and whether their calendars sync instantly or
   every 5 minutes; chooses a default plan; and turns Plans on with **Limit people with plans**.
@@ -21271,18 +21278,19 @@ with:
   in use. Reauthorization is never refused. A lowered rule limit refuses new Starts and stops
   nothing: rules beyond it keep syncing, and existing calendar accounts and tokens keep working.
   Returning to setup turns Plans off and keeps their definitions. Rule details in the API gain
-  `can_start` and `rule_limit`. Migration 32 adds the `plans` table and the Plan columns; rolling
+  `can_start` and `rule_limit`. Migration 33 adds the `plans` table and the Plan columns; rolling
   back to an earlier release works with the same database, which ignores them and limits nobody,
   and after upgrading again, Plans are as the administrator left them.
 - Instant Sync: with a public HTTPS address in `CALENDAR_SYNC_PUBLIC_URL` that Google and Microsoft
 ```
 
-Replace the first two lines of the `### Changed` list:
+Replace the heading of the `### Changed` list and the first line of its first bullet, which
+describes how Activity leaves out a repeated skip:
 
 ```markdown
 ### Changed
 
-- The rule builder and the policy editor group a rule's policy the same way: how events look
+- Activity no longer lists a skip that repeats the event's previous entry when the provider sent a
 ```
 
 with:
@@ -21296,7 +21304,7 @@ with:
   creates no draft, and a removal that fails after it began keeps the new draft. With Plans on,
   the new draft keeps the previous rule's place when that rule counted, so it can start whatever
   the limit.
-- The rule builder and the policy editor group a rule's policy the same way: how events look
+- Activity no longer lists a skip that repeats the event's previous entry when the provider sent a
 ```
 
 - [ ] **Step 27: Run every documentation check**
@@ -21403,7 +21411,7 @@ ls src/calendar_sync/domain/plans.py \
   src/calendar_sync/application/sync/rule_insertion.py \
   src/calendar_sync/application/identity/plans.py \
   src/calendar_sync/application/operations/own_plan.py \
-  src/calendar_sync/infrastructure/persistence/0032_plans.sql \
+  src/calendar_sync/infrastructure/persistence/0033_plans.sql \
   src/calendar_sync/infrastructure/persistence/plans.py \
   src/calendar_sync/interfaces/api/plan_payload.py \
   src/calendar_sync/interfaces/api/routes/plans.py \
@@ -21419,11 +21427,12 @@ ls src/calendar_sync/domain/plans.py \
   web/src/features/settings-plans.tsx web/src/features/plan-editor.tsx \
   web/src/features/settings-own-plan.tsx web/src/features/person-plan.tsx \
   web/src/features/settings-plans.test.tsx web/src/features/settings-own-plan.test.tsx \
-  docs/adr/0037-plans-allowances-and-limits.md
+  docs/adr/0038-plans-allowances-and-limits.md
 ```
 
 Expected: `git status --porcelain` prints nothing; the log lists the commits of tasks 1 to 19
-after the two spec commits (`Design Plans: ...` and `Count keep-choice releases ...`); `ls` lists
+after the four planning commits (`Design Plans: ...`, `Count keep-choice releases ...`,
+`Plan the first part of Plans: ...`, and `Number Plans after main: ...`); `ls` lists
 every path and prints no `No such file or directory`. A missing path means its task is not done:
 finish that task first. If the local `origin/main` is stale, run `git fetch origin main` first.
 
@@ -21592,7 +21601,7 @@ Find the owner from the failing file:
 | --- | --- |
 | `domain/plans.py`, `domain/access.py`, `tests/domain/test_plans.py` | 1 |
 | `domain/model.py`, `tests/domain/test_rule_places.py` | 2 |
-| `0032_plans.sql`, `migrations.py`, `persistence/sqlite.py`, `memory.py`, `memory_installation.py`, `users.py`, `tests/contracts/persistence.py`, `docs/deployment.md` | 3 |
+| `0033_plans.sql`, `migrations.py`, `persistence/sqlite.py`, `memory.py`, `memory_installation.py`, `users.py`, `tests/contracts/persistence.py`, `docs/deployment.md` | 3 |
 | `persistence/plans.py`, `connections.py`, `installation.py`, `registration.py`, `tests/identity_fakes.py`, `tests/users.py`, `tests/plans.py`, `test_plans_store.py` | 4 |
 | `watch_ports.py`, `instant_sync.py`, `installation_hints.py`, the cadence tests | 5 |
 | `problems.py`, `common.json` `apiError.*`, `test_api_problems.py` | 6 |
@@ -21671,7 +21680,7 @@ git status --porcelain
 Expected: the build exits 0, and `git status --porcelain` prints nothing.
 
 If Docker is available, also build the image as AGENTS.md asks for release-facing changes
-(migration 32 is one):
+(migration 33 is one):
 
 ```sh
 docker compose build
