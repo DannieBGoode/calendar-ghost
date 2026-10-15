@@ -567,7 +567,12 @@ def build_preview_container(
             HintSources(_failure_causes(adapters), (GOOGLE, MICROSOFT)),
         ),
         operator_overview=OperatorOverview(
-            adapters.users, statuses, adapters.installation_units, preview_clock
+            adapters.users,
+            statuses,
+            adapters.installation_units,
+            preview_clock,
+            adapters.allowances,
+            adapters.plan_catalog,
         ),
     )
     SetUpInstallation(

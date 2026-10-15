@@ -7,6 +7,7 @@ account name, so neither can reach what an Installation Administrator sees.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
@@ -16,7 +17,7 @@ from calendar_sync.application.identity.administration import (
     UserNotFound,
     require_administrator,
 )
-from calendar_sync.application.identity.ports import UserDirectory, UserQuery
+from calendar_sync.application.identity.ports import PlanCatalog, UserDirectory, UserQuery
 from calendar_sync.application.operations.ports import (
     InstallationUnitOfWorkFactory,
     ResourceUse,
@@ -31,10 +32,14 @@ from calendar_sync.application.operations.status import (
 )
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import Allowances
 from calendar_sync.application.sync.resource_use import first_counted_day
 from calendar_sync.application.sync.rules import SyncRuleSummary
 from calendar_sync.domain.access import User, UserId
 from calendar_sync.domain.model import CalendarEndpoint, SyncRule
+from calendar_sync.domain.plans import Allowance
+
+logger = logging.getLogger(__name__)
 
 CALENDAR_LABEL = "Calendar {number}"
 
@@ -107,6 +112,9 @@ class UserOverview:
     resources: ResourceUse
     calls_since: date
     """The first UTC day the provider calls in `resources` count."""
+    allowance: Allowance | None = None
+    """What their Plan allows them now, and their own Plan; None while no Plan exists, or when
+    Plans cannot be read (ADR 0038)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +146,8 @@ class OperatorOverview:
     statuses: UserStatuses
     installation: InstallationUnitOfWorkFactory
     clock: Clock
+    allowances: Allowances
+    plans: PlanCatalog
 
     def page(self, actor: UserId, query: OverviewQuery) -> OverviewPage:
         require_administrator(self.users, actor)
@@ -186,6 +196,23 @@ class OperatorOverview:
         statuses = statuses if statuses is not None else self.statuses.of(ids)
         with self.installation() as installation:
             resources = installation.resource_use(ids, since)
+        allowances = self._allowances(ids)
         return tuple(
-            UserOverview(user, statuses[user.id], resources[user.id], since) for user in users
+            UserOverview(
+                user, statuses[user.id], resources[user.id], since, allowances.get(user.id)
+            )
+            for user in users
         )
+
+    def _allowances(self, users: Collection[UserId]) -> Mapping[UserId, Allowance]:
+        """Each User's Allowance in one read, once any Plan exists. None while no Plan exists,
+        and none when Plans cannot be read: a Plans fault never fails People or a person's page."""
+        try:
+            return self.allowances.of_users(users) if self.plans.any_plans() else {}
+        except Exception as error:
+            # Only the class: the error's text could name more than the Users shown.
+            logger.warning(
+                "The Operator Overview could not read Plans, so it shows none (%s)",
+                error.__class__.__name__,
+            )
+            return {}

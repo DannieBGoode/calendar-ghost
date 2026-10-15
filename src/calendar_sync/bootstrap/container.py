@@ -76,6 +76,7 @@ from calendar_sync.application.operations.instant_sync import (
     WatchUpkeep,
 )
 from calendar_sync.application.operations.operator_overview import OperatorOverview, UserStatuses
+from calendar_sync.application.operations.own_plan import ShowOwnPlan
 from calendar_sync.application.operations.ports import (
     CauseSighting,
     DatabaseStorage,
@@ -220,6 +221,8 @@ class UserServices:
     integration_tokens: IntegrationTokens
     issue_integration_token: IssueIntegrationToken
     """Issues a token within the User's Plan; installation:read only for administrators."""
+    show_own_plan: ShowOwnPlan
+    """What the User's Plan allows them and how much of it they have, for Your plan."""
     inspect_activity_event: InspectActivityEvent
     list_sync_rules: ListSyncRules
     create_draft_rule: CreateDraftSyncRule
@@ -596,7 +599,12 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             adapters.providers.client_secrets,
         ),
         operator_overview=OperatorOverview(
-            adapters.users, statuses, adapters.installation_units, adapters.clock
+            adapters.users,
+            statuses,
+            adapters.installation_units,
+            adapters.clock,
+            adapters.allowances,
+            adapters.plan_catalog,
         ),
         sends_email=adapters.sends_email,
         instant_dispatcher=instant.dispatcher,
@@ -877,6 +885,7 @@ def _compose_user(
         issue_integration_token=IssueIntegrationToken(
             user_id, adapters.users, tokens, adapters.allowances
         ),
+        show_own_plan=ShowOwnPlan(adapters.allowances, unit_of_work, accounts, tokens, user_id),
         inspect_activity_event=InspectActivityEvent(
             adapters.activity(user_id), unit_of_work, provider
         ),

@@ -1,5 +1,6 @@
 """The Operator Overview shows each User's Installation Status with calendars by neutral labels."""
 
+import logging
 from collections.abc import Collection, Mapping
 from dataclasses import replace
 from datetime import date, datetime, timedelta
@@ -7,7 +8,7 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from calendar_sync.application.identity.administration import AdministratorRequired, UserNotFound
-from calendar_sync.application.identity.ports import UserQuery
+from calendar_sync.application.identity.ports import AssignmentChange, UserQuery
 from calendar_sync.application.operations.operator_overview import (
     OperatorOverview,
     OverviewQuery,
@@ -23,6 +24,7 @@ from calendar_sync.application.operations.ports import (
 from calendar_sync.application.operations.status import StatusVerdict
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
+    Allowances,
     CalendarAccess,
     DiscoveredCalendar,
     ProviderCallCounts,
@@ -30,10 +32,13 @@ from calendar_sync.application.sync.ports import (
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
+from calendar_sync.domain.plans import Allowance, AllowanceBasis, AssignmentSource
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.helpers import NOW, RecentSchedulerHeartbeat, endpoint, rule
-from tests.identity_fakes import MemoryUsers
+from tests.identity_fakes import BrokenAllowances, MemoryPlans, MemoryUsers
+from tests.plans import FAMILY as FAMILY_PLAN
+from tests.plans import FREE, plans_on
 from tests.users import OTHER_USER, USER, memory_units, rule_accounts
 
 DAY = timedelta(days=1)
@@ -140,11 +145,14 @@ def _installation() -> OperatorOverview:
         uow.provider_calls.add(NOW.date(), ProviderKind.GOOGLE, ProviderCallCounts(12, 1, 2))
         uow.commit()
     clock = FixedClock()
+    plans = MemoryPlans(users=users)
     return OperatorOverview(
         users,
         UserStatuses(units.installation(), RuleLocks(), clock, RecentSchedulerHeartbeat(clock)),
         units.installation(),
         clock,
+        plans,
+        plans,
     )
 
 
@@ -260,3 +268,115 @@ def test_filtering_by_verdict_reads_everyone_who_matches_whatever_the_count_said
 
     assert page.total == 3
     assert [entry.user.id for entry in page.users] == [ALICE.id, ADMIN.id, BOB.id]
+
+
+def _plans(overview: OperatorOverview) -> MemoryPlans:
+    """The installation's Plans, which `_installation` keeps in memory."""
+    assert isinstance(overview.plans, MemoryPlans)
+    return overview.plans
+
+
+def _allowances(overview: OperatorOverview) -> dict[UserId, Allowance | None]:
+    page = overview.page(ADMIN.id, OverviewQuery())
+    return {entry.user.id: entry.allowance for entry in page.users}
+
+
+def _bob_on_family(overview: OperatorOverview) -> None:
+    """Free is the default, and Bob has Family as his own Plan."""
+    plans = _plans(overview)
+    plans_on(plans, FREE, FAMILY_PLAN)
+    plans.assign(
+        BOB.id, FAMILY_PLAN.key, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
+    )
+
+
+def test_no_plan_shows_while_no_plan_exists() -> None:
+    overview = _installation()
+    # Nothing reads Allowances while no Plan exists, so not even a failing read is noticed.
+    overview.allowances = BrokenAllowances()
+
+    assert _allowances(overview) == {ADMIN.id: None, ALICE.id: None, BOB.id: None}
+    assert overview.of(ADMIN.id, ALICE.id).allowance is None
+
+
+def test_every_person_shows_what_their_plan_allows_once_plans_are_on() -> None:
+    overview = _installation()
+    _bob_on_family(overview)
+
+    assert _allowances(overview) == {
+        ADMIN.id: Allowance(AllowanceBasis.ADMINISTRATOR),
+        ALICE.id: Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True),
+        BOB.id: Allowance(AllowanceBasis.PLAN, plan=FAMILY_PLAN, assigned=FAMILY_PLAN),
+    }
+    assert overview.of(ADMIN.id, BOB.id).allowance == Allowance(
+        AllowanceBasis.PLAN, plan=FAMILY_PLAN, assigned=FAMILY_PLAN
+    )
+
+
+def test_every_person_shows_their_own_plan_while_plans_are_off() -> None:
+    """An administrator can prepare Plans before turning them on."""
+    overview = _installation()
+    _bob_on_family(overview)
+    _plans(overview).change_settings(False, FREE.key)
+
+    assert _allowances(overview) == {
+        ADMIN.id: Allowance(AllowanceBasis.PLANS_OFF),
+        ALICE.id: Allowance(AllowanceBasis.PLANS_OFF),
+        BOB.id: Allowance(AllowanceBasis.PLANS_OFF, assigned=FAMILY_PLAN),
+    }
+
+
+class CountedAllowances:
+    """The installation's Allowances, recording each read."""
+
+    def __init__(self, inner: Allowances) -> None:
+        self.inner = inner
+        self.read: list[list[UserId]] = []
+
+    def of(self, user: UserId) -> Allowance:
+        raise AssertionError("the overview reads a page of Users at once")
+
+    def of_users(self, users: Collection[UserId]) -> Mapping[UserId, Allowance]:
+        self.read.append(list(users))
+        return self.inner.of_users(users)
+
+
+def test_a_page_reads_its_peoples_allowances_at_once() -> None:
+    overview = _installation()
+    _bob_on_family(overview)
+    counted = CountedAllowances(overview.allowances)
+    overview.allowances = counted
+
+    overview.page(ADMIN.id, OverviewQuery(UserQuery(limit=2)))
+
+    assert counted.read == [[ADMIN.id, ALICE.id]]
+
+
+class UnreadablePlans(MemoryPlans):
+    """Plans whose catalog cannot be read, as a locked or failing database would."""
+
+    def any_plans(self) -> bool:
+        raise RuntimeError("database is locked")
+
+
+@pytest.mark.parametrize("fault", ["allowances", "catalog"])
+def test_a_plans_fault_shows_no_plan_and_never_fails_people(
+    fault: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    overview = _installation()
+    _bob_on_family(overview)
+    if fault == "allowances":
+        overview.allowances = BrokenAllowances()
+    else:
+        overview.plans = UnreadablePlans(users=_plans(overview).users)
+
+    with caplog.at_level(logging.WARNING):
+        shown = _allowances(overview)
+        person = overview.of(ADMIN.id, BOB.id)
+
+    assert shown == {ADMIN.id: None, ALICE.id: None, BOB.id: None}
+    assert (person.user.id, person.allowance) == (BOB.id, None)
+    assert "could not read Plans" in caplog.text
+    # Only the error's class: its text could say more than the overview may log.
+    assert "RuntimeError" in caplog.text
+    assert "database is locked" not in caplog.text
