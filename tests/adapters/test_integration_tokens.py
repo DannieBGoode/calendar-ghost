@@ -10,11 +10,12 @@ import pytest
 
 from calendar_sync.application.identity.errors import InvalidIntegrationTokenName
 from calendar_sync.application.identity.ports import IntegrationTokenScope, IntegrationTokenSummary
+from calendar_sync.domain.plans import LimitedResource, PlanLimitReached
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import token_hash
-from tests.users import USER, add_user
+from tests.users import OTHER_USER, USER, add_user
 
 ISSUED = datetime(2026, 10, 3, 9, 0, tzinfo=UTC)
 
@@ -201,3 +202,88 @@ def test_a_disabled_users_tokens_read_nothing_until_they_are_enabled(tmp_path: P
 
     assert refused is None
     assert tokens.authenticate(issued.token) is not None
+
+
+# The token limit (ADR 0038): `within` reads it once the store holds SQLite's write lock.
+
+
+@pytest.mark.parametrize(("limit", "allowed"), [(None, 3), (2, 2), (1, 1), (0, 0)])
+def test_the_limit_bounds_how_many_unrevoked_tokens_the_user_holds(
+    tmp_path: Path, limit: int | None, allowed: int
+) -> None:
+    tokens, _, _ = _tokens(tmp_path)
+    store = tokens.for_user(USER)
+    for name in ("First", "Second", "Third")[:allowed]:
+        store.issue(name, within=lambda: limit)
+
+    if limit is not None:
+        with pytest.raises(PlanLimitReached) as refused:
+            store.issue("One more", within=lambda: limit)
+        assert (refused.value.resource, refused.value.limit) == (
+            LimitedResource.INTEGRATION_TOKENS,
+            limit,
+        )
+    assert len(store.list()) == allowed
+
+
+def test_only_the_users_own_unrevoked_tokens_count(tmp_path: Path) -> None:
+    tokens, _, database = _tokens(tmp_path)
+    add_user(database, OTHER_USER)
+    tokens.for_user(OTHER_USER).issue("Theirs")
+    old = tokens.for_user(USER).issue("Old monitor")
+    tokens.for_user(USER).revoke(old.summary.id)
+
+    tokens.for_user(USER).issue("Uptime Kuma", within=lambda: 1)
+    with pytest.raises(PlanLimitReached):
+        tokens.for_user(USER).issue("Homepage", within=lambda: 1)
+
+    assert [token.name for token in tokens.for_user(USER).list()] == ["Uptime Kuma", "Old monitor"]
+
+
+def test_the_limit_is_read_once_while_the_store_holds_the_write_lock(tmp_path: Path) -> None:
+    tokens, _, database = _tokens(tmp_path)
+    locked: list[bool] = []
+
+    def limit() -> int | None:
+        # Another writer gives up at once while this issue holds SQLite's write lock.
+        other = sqlite3.connect(database, timeout=0, isolation_level=None)
+        try:
+            other.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError:
+            locked.append(True)
+        else:
+            other.execute("ROLLBACK")
+            locked.append(False)
+        finally:
+            other.close()
+        return 5
+
+    tokens.for_user(USER).issue("Uptime Kuma", within=limit)
+
+    assert locked == [True]
+
+
+def test_a_limit_that_cannot_be_read_issues_nothing(tmp_path: Path) -> None:
+    tokens, _, _ = _tokens(tmp_path)
+
+    def unreadable() -> int | None:
+        raise RuntimeError("database is locked")
+
+    with pytest.raises(RuntimeError, match="database is locked"):
+        tokens.for_user(USER).issue("Uptime Kuma", within=unreadable)
+
+    assert tokens.for_user(USER).list() == []
+
+
+def test_an_invalid_name_is_refused_before_the_limit_is_read(tmp_path: Path) -> None:
+    tokens, _, _ = _tokens(tmp_path)
+    reads: list[str] = []
+
+    def limit() -> int | None:
+        reads.append("read")
+        return 5
+
+    with pytest.raises(InvalidIntegrationTokenName):
+        tokens.for_user(USER).issue("Kuma\nadmin", within=limit)
+
+    assert reads == []

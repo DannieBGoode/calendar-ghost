@@ -4,7 +4,9 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, Response, status
 
+from calendar_sync.application.identity.administration import AdministratorRequired
 from calendar_sync.application.identity.errors import InvalidIntegrationTokenName
+from calendar_sync.application.identity.integration_tokens import IssueIntegrationToken
 from calendar_sync.application.identity.ports import (
     IntegrationTokens,
     IntegrationTokenScope,
@@ -13,8 +15,8 @@ from calendar_sync.application.identity.ports import (
 from calendar_sync.application.operations.installation_health import GetInstallationHealth
 from calendar_sync.application.operations.status import GetInstallationStatus
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.plans import PlanLimitReached
 from calendar_sync.interfaces.api.dependencies import (
-    Identity,
     app_services,
     current_user,
     installation_reader,
@@ -41,6 +43,8 @@ class IntegrationServices(Protocol):
     @property
     def integration_tokens(self) -> IntegrationTokens: ...
     @property
+    def issue_integration_token(self) -> IssueIntegrationToken: ...
+    @property
     def get_installation_status(self) -> GetInstallationStatus: ...
 
 
@@ -48,15 +52,12 @@ class StatusServices(Protocol):
     def for_user(self, user_id: UserId) -> IntegrationServices: ...
     @property
     def installation_health(self) -> GetInstallationHealth: ...
-    @property
-    def identity(self) -> Identity: ...
 
 
 Services = Annotated[IntegrationServices, Depends(user_services)]
 Installation = Annotated[StatusServices, Depends(app_services)]
 Reader = Annotated[UserId, Depends(status_reader)]
 HealthReader = Annotated[UserId, Depends(installation_reader)]
-SignedIn = Annotated[UserId, Depends(current_user)]
 ADMIN = [Depends(current_user)]
 router = APIRouter()
 
@@ -96,27 +97,20 @@ def list_integration_tokens(services: Services) -> list[IntegrationTokenResponse
     dependencies=ADMIN,
 )
 def issue_integration_token(
-    payload: IssueIntegrationTokenRequest,
-    services: Services,
-    installation: Installation,
-    user: SignedIn,
-    response: Response,
+    payload: IssueIntegrationTokenRequest, services: Services, response: Response
 ) -> IssuedIntegrationTokenResponse:
     response.headers["Cache-Control"] = "no-store"
     scopes = frozenset(IntegrationTokenScope(scope) for scope in payload.scopes)
-    issuer = installation.identity.users.get(user)
-    if IntegrationTokenScope.INSTALLATION_READ in scopes and (
-        issuer is None or not issuer.administers
-    ):
-        raise problem(
-            status.HTTP_403_FORBIDDEN,
-            "administrator_required",
-            "only an Installation Administrator may read Installation Health",
-        )
+    # The use case refuses installation:read to a User who does not administer before it reads
+    # the User's Plan, and refuses a token past the Plan's limit (ADR 0030, ADR 0038).
     try:
-        issued = services.integration_tokens.issue(payload.name, scopes)
+        issued = services.issue_integration_token.execute(payload.name, scopes)
+    except AdministratorRequired as error:
+        raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
     except InvalidIntegrationTokenName as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
+    except PlanLimitReached as error:
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
     return IssuedIntegrationTokenResponse(**_token(issued.summary).model_dump(), token=issued.token)
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -265,7 +265,16 @@ class IntegrationTokens(Protocol):
         self,
         name: str,
         scopes: frozenset[IntegrationTokenScope] = frozenset({IntegrationTokenScope.STATUS_READ}),
-    ) -> IssuedIntegrationToken: ...
+        *,
+        within: Callable[[], int | None] | None = None,
+    ) -> IssuedIntegrationToken:
+        """Issue a token; raises InvalidIntegrationTokenName before anything is stored.
+
+        `within`, when given, reads the token limit once this store holds the write lock;
+        raises PlanLimitReached(INTEGRATION_TOKENS, limit), issuing nothing, when the User's
+        unrevoked tokens already reach it. A `within` that raises fails the issue.
+        """
+        ...
 
     def list(self) -> Sequence[IntegrationTokenSummary]:
         """Every token, newest first, revoked ones last."""

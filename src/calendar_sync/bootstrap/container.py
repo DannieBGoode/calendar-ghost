@@ -24,6 +24,7 @@ from calendar_sync.application.identity.administration import (
     ShowOwnAccountDeletion,
     ShowRegistration,
 )
+from calendar_sync.application.identity.integration_tokens import IssueIntegrationToken
 from calendar_sync.application.identity.plans import (
     AssignPlan,
     ChangePlan,
@@ -217,6 +218,8 @@ class UserServices:
     operations: OperationsQueries
     get_installation_status: GetInstallationStatus
     integration_tokens: IntegrationTokens
+    issue_integration_token: IssueIntegrationToken
+    """Issues a token within the User's Plan; installation:read only for administrators."""
     inspect_activity_event: InspectActivityEvent
     list_sync_rules: ListSyncRules
     create_draft_rule: CreateDraftSyncRule
@@ -810,6 +813,7 @@ def _compose_user(
     provider = adapters.calendar_provider
     accounts = adapters.accounts(user_id) if adapters.accounts is not None else None
     operations = adapters.operations(user_id)
+    tokens = adapters.integration_tokens(user_id)
     create_sync_rule = CreateSyncRule(unit_of_work)
     list_sync_rules = ListSyncRules(unit_of_work, locks)
     rule_health = RuleHealth(
@@ -866,7 +870,10 @@ def _compose_user(
         get_installation_status=GetInstallationStatus(
             list_sync_rules, operations, clock, heartbeat
         ),
-        integration_tokens=adapters.integration_tokens(user_id),
+        integration_tokens=tokens,
+        issue_integration_token=IssueIntegrationToken(
+            user_id, adapters.users, tokens, adapters.allowances
+        ),
         inspect_activity_event=InspectActivityEvent(
             adapters.activity(user_id), unit_of_work, provider
         ),

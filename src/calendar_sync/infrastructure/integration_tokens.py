@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import secrets
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -20,6 +20,7 @@ from calendar_sync.application.identity.ports import (
 )
 from calendar_sync.application.shared.ports import Clock, IdGenerator
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.plans import LimitedResource, require_room
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import token_hash
 
@@ -81,6 +82,8 @@ class SqliteUserIntegrationTokens:
         self,
         name: str,
         scopes: frozenset[IntegrationTokenScope] = frozenset({IntegrationTokenScope.STATUS_READ}),
+        *,
+        within: Callable[[], int | None] | None = None,
     ) -> IssuedIntegrationToken:
         cleaned = token_name(name)
         token = TOKEN_PREFIX + secrets.token_urlsafe(32)
@@ -94,6 +97,11 @@ class SqliteUserIntegrationTokens:
             owner=self._user,
         )
         with transaction(self._database_path) as connection:
+            # Held from reading the limit to the insert, so two issues cannot both take the last
+            # place, and a lower limit cannot commit between the read and the insert (ADR 0038).
+            connection.execute("BEGIN IMMEDIATE")
+            if within is not None:
+                self._require_room(connection, within())
             connection.execute(
                 """
                 INSERT INTO integration_tokens (id, user_id, name, token_hash, scopes, created_at)
@@ -109,6 +117,15 @@ class SqliteUserIntegrationTokens:
                 ),
             )
         return IssuedIntegrationToken(summary, token)
+
+    def _require_room(self, connection: sqlite3.Connection, limit: int | None) -> None:
+        """Refuse when the User's unrevoked tokens already reach `limit`; revoked ones never
+        count, and neither do another User's."""
+        unrevoked = connection.execute(
+            "SELECT COUNT(*) FROM integration_tokens WHERE user_id = ? AND revoked_at IS NULL",
+            (self._user.value,),
+        ).fetchone()[0]
+        require_room(LimitedResource.INTEGRATION_TOKENS, int(unrevoked), limit)
 
     def list(self) -> Sequence[IntegrationTokenSummary]:
         with transaction(self._database_path) as connection:
