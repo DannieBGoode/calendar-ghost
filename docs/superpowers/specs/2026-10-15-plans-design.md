@@ -167,7 +167,7 @@ GRACE = timedelta(days=7)
 class PlanGrace:
     holds_at: datetime  # when rules beyond the limit are held
     rule_limit: int  # the rule limit when the grace was last settled
-    starts: int  # the User's Start counter when the grace was last settled
+    admissions: int  # the User's admission counter when the grace was last settled
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,7 +187,7 @@ def settle(
     standings: Sequence[RuleStanding],
     limit: int | None,
     grace: PlanGrace | None,
-    starts: int,
+    admissions: int,
     now: datetime,
     *,
     active: bool,
@@ -203,12 +203,12 @@ and `H` is the held rules. `settle` decides in five steps:
 3. **Count.** `over = |C| - L`.
 4. **Over the limit.**
    - No grace: start one, `holds_at = now + GRACE`, with the grace email.
-   - A grace, and `L` is below its `rule_limit` (the limit went down again), or the User's Start
-     counter is above its `starts` (the User started a rule since the last settle, which is only
-     possible while within a limit, so the limit went up and down again between two passes):
-     restart it with a new `holds_at`, with the grace email.
+   - A grace, and `L` is below its `rule_limit` (the limit went down again), or the User's
+     admission counter is above its `admissions` (the User added a rule to the count since the
+     last settle, which is only possible while within a limit, so the limit went up and down again
+     between two passes): restart it with a new `holds_at`, with the grace email.
    - Otherwise keep `holds_at`.
-   - Store `rule_limit = L` and `starts` in every case.
+   - Store `rule_limit = L` and `admissions` in every case.
    - Before `holds_at`: nothing else.
    - From `holds_at`: take the `over` worst-ranked rules of `C`. Hold each counted one, and make
      each reserved one give up its place. Send the "rules held" email. Keep the grace while the
@@ -221,14 +221,15 @@ and `H` is the held rules. `settle` decides in five steps:
 limit, and only a change of limit puts them there. Start is checked against the limit read inside
 its own transaction; a lapse resume, a Rule Replacement, and a keep-choice swap do not change the
 count; a release is checked; pause, removal, preview, a Material Rule Change, and disconnect never
-raise it. So no act of the User grows the count above the limit. `users.plan_starts` counts every
-Start of a rule that did not count before, in the Start's own transaction. A removal never lowers
-it, so a Start stays visible even when the User removes another rule in the same interval.
+raise it. So no act of the User grows the count above the limit. `users.plan_admissions` counts
+every rule the User adds to the count, in the same transaction: a Start of a rule that did not
+count before, and a release that a keep choice makes into a free place. A removal never lowers it,
+so an admission stays visible even when the User removes another rule in the same interval.
 
 **What a grace never does.** The pass holds only after a grace that started after the change of
 limit that put the User over it. A rule the User starts is never held without a grace: a Start is
-refused while the User is over the limit, and a Start made during a raise that is gone by the next
-pass moves the Start counter, which restarts the grace.
+refused while the User is over the limit, and a Start or a keep-choice release made during a raise
+that is gone by the next pass moves the admission counter, which restarts the grace.
 
 ## 2. Contexts and ports
 
@@ -293,8 +294,8 @@ ALTER TABLE sync_rules ADD COLUMN keeps_place INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE sync_rules ADD COLUMN plan_kept INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN plan_holds_at TEXT;      -- NULL: no grace
 ALTER TABLE users ADD COLUMN plan_grace_limit INTEGER;
-ALTER TABLE users ADD COLUMN plan_grace_starts INTEGER;
-ALTER TABLE users ADD COLUMN plan_starts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN plan_grace_admissions INTEGER;
+ALTER TABLE users ADD COLUMN plan_admissions INTEGER NOT NULL DEFAULT 0;
 ```
 
 `sync_rules.awaiting_reauthorization` gains the value 2. Only the User unit of work writes these
@@ -359,10 +360,10 @@ reads the allowance at that point, so its decision and the limit it used cannot 
 
 | Check | Mechanism |
 |---|---|
-| Start | Save `enable()`, then read the allowance, count, and raise `PlanLimitReached` before the commit when `may_start` fails. Two Starts cannot both take the last place, and a lowering cannot slip in between. From slice 4, a Start of a rule that did not count also adds one to `users.plan_starts` in the same transaction. |
+| Start | Save `enable()`, then read the allowance, count, and raise `PlanLimitReached` before the commit when `may_start` fails. Two Starts cannot both take the last place, and a lowering cannot slip in between. From slice 4, a Start of a rule that did not count also adds one to `users.plan_admissions` in the same transaction. |
 | Place move | Section 4: the replacement draft is inserted, and the old rule's removal begins, in one transaction |
-| Settle | **One transaction per User.** Take the User's `SettleLocks` lock, then the write locks of the User's counted, reserved, and held rules in id order, then open a unit of work that takes the writer lock first. Inside it, read the allowance, the grace, the standings, and the authorization of every account the rules use; decide with `settle`; write every hold, give-up, release, and the grace; commit. A rule that starts meanwhile is outside the locked set, and is left for the next pass. A release derives ENABLED or lapse-stopped from the account records read in that transaction, so a lapse that commits first is seen, and one that commits after sees the released rule as enabled and stops it. |
-| Keep choice | `ChooseKeptRules` uses the same single transaction, under the same locks |
+| Settle | **One transaction per User.** Take the User's `SettleLocks` lock, then the write locks of the User's counted, reserved, and held rules in id order, then open a unit of work that takes the writer lock first. Inside it, read the allowance, the grace, the standings, and the authorization of every account the rules use; decide with `settle`; write every hold, give-up, release, and the grace; commit. A settle changes only rules whose write locks it holds. A rule that appears or starts meanwhile (a new Rule Replacement draft, or a Start) is outside the locked set: the decision counts it, but it stays as it is until the next pass, so no rule is ever changed without its lock. A release derives ENABLED or lapse-stopped from the account records read in that transaction, so a lapse that commits first is seen, and one that commits after sees the released rule as enabled and stops it. |
+| Keep choice | `ChooseKeptRules` uses the same single transaction, under the same locks. Each release it makes into a free place adds one to `users.plan_admissions`. |
 | Connected Account | Inside the existing `BEGIN IMMEDIATE` of `SqliteUserConnectedAccounts.save`, and only when no row has the same provider and email. Reauthorization never reaches the count. |
 | Integration Token | `issue(..., within=limit)` runs under `BEGIN IMMEDIATE`, reads the limit, counts unrevoked tokens, then inserts |
 
@@ -784,10 +785,11 @@ admitting more than 12, one budget for all three actions, and no budget used by 
 
 Two fixes to today's code, which can also ship first: `health._degrade` acts on a rule with a
 self-resuming stop, and `ChangeFeedCursors.advance` takes the rule write lock before its first
-write. Then `held_by_plan` and its transitions; `plan_hold.py`; stop code 2; `plan_kept`, the Start
-counter, and the grace columns; `PlanHolds`, `ChooseKeptRules`, and the settle step; status,
-Dashboard, and MCP changes; the emails and the setting's new name; the held-rule UI and the keep
-form; ADR 0038, the ADR 0027 and 0024 amendments, the AGENTS.md invariant, and the slice-4 docs.
+write. Then `held_by_plan` and its transitions; `plan_hold.py`; stop code 2; `plan_kept`, the
+admission counter, and the grace columns; `PlanHolds`, `ChooseKeptRules`, and the settle step;
+status, Dashboard, and MCP changes; the emails and the setting's new name; the held-rule UI and the
+keep form; ADR 0038, the ADR 0027 and 0024 amendments, the AGENTS.md invariant, and the slice-4
+docs.
 
 Tests: a decision table for `settle` with one row per step and branch (including a further lowering
 during a grace, a raise during a grace, a raise and lowering back between two passes with rules
@@ -796,7 +798,9 @@ preview keeps a hold", "a lapse never touches a held rule", and "a failure that 
 ends a hold or a lapse"; a run in flight across a hold, a release as lapse-stopped, and a permanent
 failure, after which Reauthorization does not resume the rule; `advance` and a settle racing on one
 rule finish without a busy timeout; a Start, a removal, and a lowering between two passes restart
-the grace; `PlanHolds` on real SQLite with threads (a Plan lowering that commits during a settle, a
+the grace; a keep-choice release during a raise that is gone by the next pass restarts the grace;
+a Rule Replacement during a settle leaves its new draft unchanged until the next pass; `PlanHolds`
+on real SQLite with threads (a Plan lowering that commits during a settle, a
 lapse that commits during a release, a Start racing a release, a rule started during a settle left
 for the next pass, a run in flight that stops at its next write after a hold); `ChooseKeptRules`
 swaps; rollback readings of codes 0, 1, and 2; status with a held rule that has an open incident or
