@@ -536,6 +536,43 @@ describe("SettingsPage", () => {
     )
   })
 
+  it("says a new account met the plan's limit, and links to Your plan in place of Try again", async () => {
+    window.history.replaceState(null, "", "/settings?oauth=account_limit_reached&provider=google&limit=1")
+    await renderSettings(testI18n())
+
+    const notice = container.querySelector(".oauth-feedback")!
+    expect(notice.getAttribute("role")).toBe("alert")
+    expect(notice.querySelector("h2")?.textContent).toBe("Your plan's calendar accounts are all in use")
+    expect(notice.querySelector("p")?.textContent).toBe(
+      "No account was connected. Your plan allows 1 calendar account, and disconnected accounts count too. Delete one you no longer use, or ask your administrator for a larger plan.",
+    )
+    const links = [...notice.querySelectorAll("a")].map((link) => [link.textContent, link.getAttribute("href")])
+    expect(links).toEqual([["See your plan", "/settings/account#your-plan"]])
+    // A reload does not announce the refusal again: every arrival parameter, `limit` too, is gone.
+    expect(window.location.search).toBe("")
+  })
+
+  it("names a plan's limit of several calendar accounts", async () => {
+    window.history.replaceState(null, "", "/settings?oauth=account_limit_reached&provider=google&limit=3")
+    await renderSettings(testI18n())
+    expect(container.querySelector(".oauth-feedback p")?.textContent).toContain("Your plan allows 3 calendar accounts,")
+  })
+
+  it("has no untranslated text when a new account met the plan's limit", async () => {
+    window.history.replaceState(null, "", "/settings?oauth=account_limit_reached&provider=google&limit=2")
+    await renderSettings(pseudoI18n())
+    expect(container.querySelector(".oauth-feedback")).not.toBeNull()
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+  })
+
+  it("still offers to try again when authorization failed", async () => {
+    window.history.replaceState(null, "", "/settings?oauth=authorization_failed&provider=google")
+    await renderSettings(testI18n())
+    const notice = container.querySelector(".oauth-feedback")!
+    expect(notice.getAttribute("role")).toBe("alert")
+    expect([...notice.querySelectorAll("a")].map((link) => link.textContent)).toEqual(["Try again"])
+  })
+
   it("keeps the English copy", async () => {
     window.history.replaceState(null, "", "/settings?oauth=connected&provider=google")
     await renderSettings(testI18n())

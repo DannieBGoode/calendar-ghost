@@ -19,6 +19,7 @@ import {
   isKnownAppPath,
   isPlainLeftClick,
   isViewingRule,
+  yourPlanPath,
 } from "./navigation"
 
 describe("application section URLs", () => {
@@ -119,7 +120,14 @@ describe("Settings tab URLs", () => {
     expect(defaultSettingsTab("?unrelated=1")).toBe("account")
   })
 
-  it.each(["?oauth=connected&provider=google&account=acct-a&resumed=0", "?oauth=authorization_failed", "?account=acct-a", "?resumed=2"])(
+  it.each([
+    "?oauth=connected&provider=google&account=acct-a&resumed=0",
+    "?oauth=authorization_failed",
+    "?oauth=account_limit_reached&provider=google&limit=1",
+    "?account=acct-a",
+    "?resumed=2",
+    "?limit=1",
+  ])(
     "shows Connections when a provider returns or an account is named (%s)",
     (search) => {
       expect(defaultSettingsTab(search)).toBe("connections")
@@ -140,6 +148,11 @@ describe("Settings tab URLs", () => {
   it("links calendar accounts to Connections", () => {
     expect(connectionsPath()).toBe("/settings/connections")
     expect(connectionsPath(accountSearch("acct a"))).toBe("/settings/connections?account=acct%20a")
+  })
+
+  it("links to Your plan on the Your account tab", () => {
+    expect(yourPlanPath()).toBe("/settings/account#your-plan")
+    expect(appLocationFromUrl("/settings/account", "")).toEqual({ view: "settings", ruleId: null, settingsTab: "account" })
   })
 
   it.each(["/settings/unknown", "/settings/installation", "/settings/account/more", "/settingsx/account"])("falls back safely for %s", (path) => {

@@ -542,6 +542,47 @@ access: for Google, both calendar-list and event access; for Microsoft, **Have f
 calendars**. Calendar Ghost verifies those permissions before it stores the Connected Account.
 Declining consent does not create an account or retain any credentials.
 
+## Connect is unavailable: your plan's calendar accounts
+
+When an administrator has turned Plans on, your Plan may limit how many calendar accounts you
+have. Every account under **Settings → Connections → Connected accounts** counts, Disconnected
+Accounts too: connecting one of them again is Reauthorization, which a Plan never refuses. At the
+limit, **Connect an account** is unavailable and says why, while **Reauthorize account** stays
+available on every account you have. **Settings → Your account → Your plan** shows how many
+calendar accounts your Plan allows. Installation Administrators are never limited.
+
+Calendar Ghost learns an account's address only after the provider's consent. So when you choose
+an address you have not connected, and your Plan has no room for it, you return to Connections
+with "Your plan's calendar accounts are all in use". No account was saved, and your existing
+accounts and rules are unchanged. The provider may keep the consent you gave; you can remove
+Calendar Ghost from your Google or Microsoft account's security settings.
+
+To make room, delete an account you no longer use ([A calendar account was
+disconnected](#a-calendar-account-was-disconnected) explains what deleting removes), or ask your
+administrator for a larger Plan.
+
+If connecting a new account ends on an error page instead of Connections while Plans are on,
+Calendar Ghost could not read your Plan, for example because its database was busy. No account was
+saved; connect again. Reauthorizing an account you already have never reads your Plan.
+
+### An account's address changed
+
+Calendar Ghost knows each account by its provider and email address. When the address of a
+Microsoft or Google Workspace account changes, for example after a rename, the provider reports
+the new address, so reauthorizing connects a new account and the old one stays. At the limit, the
+new address is refused. To move every rule to the new address without losing one:
+
+1. Free one account place: delete an account you no longer use, or ask your administrator to raise
+   your Plan's account limit, or give you a larger Plan, for the move.
+2. Connect the new address.
+3. On each rule that uses the old account, choose **Replace calendars…** and choose the same
+   calendar under the new address. Where the old account holds the rule's destination, keep its
+   events as ordinary events: the old account may no longer be able to delete them.
+4. Disconnect the old account, then delete it.
+
+Delete the old account only after every rule has moved: deleting an account deletes the rules that
+use it.
+
 ## Microsoft sign-in stops with an error
 
 Microsoft shows its own page, with a code beginning `AADSTS`, instead of returning to Calendar

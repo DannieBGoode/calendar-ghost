@@ -147,6 +147,13 @@
       "title": "{provider} authorization could not be completed",
       "body": "The account was not connected. Try again, then use Check access to confirm permissions."
     },
+    "accountLimitReached": {
+      "title": "Your plan's calendar accounts are all in use",
+      "body": {
+        "one": "No account was connected. Your plan allows {count} calendar account, and disconnected accounts count too. Delete one you no longer use, or ask your administrator for a larger plan.",
+        "other": "No account was connected. Your plan allows {count} calendar accounts, and disconnected accounts count too. Delete one you no longer use, or ask your administrator for a larger plan."
+      }
+    },
     "tryAgain": "Try again"
   },
   "connectionGuide": {

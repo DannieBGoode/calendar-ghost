@@ -132,8 +132,15 @@ export function authorizationAwaitingReturn(
   return started.provider
 }
 
-/** What the OAuth callback reports when it sends the browser back to Settings (`?oauth=`). */
-export type OAuthOutcome = "connected" | "calendar_permission_required" | "authorization_failed"
+/**
+ * What the OAuth callback reports when it sends the browser back to Settings (`?oauth=`). The server
+ * names the same values (`tests/adapters/test_oauth_outcomes.py` reads this union).
+ */
+export type OAuthOutcome =
+  | "connected"
+  | "calendar_permission_required"
+  | "authorization_failed"
+  | "account_limit_reached"
 
 export const OAUTH_OUTCOME_MESSAGES: Record<OAuthOutcome, { title: MessageKey; body: MessageKey }> = {
   connected: { title: "settings.oauthOutcome.connected.title", body: "settings.oauthOutcome.connected.body" },
@@ -144,6 +151,10 @@ export const OAUTH_OUTCOME_MESSAGES: Record<OAuthOutcome, { title: MessageKey; b
   authorization_failed: {
     title: "settings.oauthOutcome.authorizationFailed.title",
     body: "settings.oauthOutcome.authorizationFailed.body",
+  },
+  account_limit_reached: {
+    title: "settings.oauthOutcome.accountLimitReached.title",
+    body: "settings.oauthOutcome.accountLimitReached.body",
   },
 }
 

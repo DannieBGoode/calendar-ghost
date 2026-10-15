@@ -189,5 +189,8 @@
     "authorizationLapsed": "A {account} needs reauthorization"
   },
   "learnWhy": "Learn why",
-  "opensInNewTab": " (opens in a new tab)"
+  "opensInNewTab": " (opens in a new tab)",
+  "plan": {
+    "seeYourPlan": "See your plan"
+  }
 }

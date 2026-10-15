@@ -4,8 +4,11 @@ export const SETTINGS_TABS = ["account", "connections", "administration"] as con
 export type SettingsTab = (typeof SETTINGS_TABS)[number]
 /** The tab Settings opens at unless Google's return or an account link calls for Connections. */
 export const DEFAULT_SETTINGS_TAB: SettingsTab = "account"
-/** What Google's return, or a link to one Connected Account, carries in the address. */
-export const SETTINGS_ARRIVAL_PARAMS = ["oauth", "provider", "account", "resumed"] as const
+/**
+ * What a provider's return, or a link to one Connected Account, carries in the address; `limit` is
+ * the plan's account limit a new account met.
+ */
+export const SETTINGS_ARRIVAL_PARAMS = ["oauth", "provider", "account", "resumed", "limit"] as const
 
 /**
  * The tab Settings without one shows: Connections when a provider returned or an account is named,
@@ -179,6 +182,11 @@ export function appPathForPerson(personId: string): string {
 
 export function appPathForSettingsTab(tab: SettingsTab): string {
   return `${APP_VIEW_PATHS.settings}/${tab}`
+}
+
+/** Settings → Your account, at Your plan: what the person's plan allows, and how much of it they have. */
+export function yourPlanPath(): string {
+  return `${appPathForSettingsTab("account")}#your-plan`
 }
 
 /** Activity's address: one Incident, the Incidents tab, or History. */

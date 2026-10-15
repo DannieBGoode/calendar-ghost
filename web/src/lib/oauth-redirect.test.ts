@@ -77,6 +77,7 @@ describe("oauthOutcome", () => {
     expect(oauthOutcome("?oauth=connected&provider=google")).toBe("connected")
     expect(oauthOutcome("?oauth=calendar_permission_required")).toBe("calendar_permission_required")
     expect(oauthOutcome("?tab=x&oauth=authorization_failed")).toBe("authorization_failed")
+    expect(oauthOutcome("?oauth=account_limit_reached&provider=google&limit=1")).toBe("account_limit_reached")
     expect(oauthProvider("?oauth=connected&provider=google")).toBe("google")
   })
 
@@ -92,6 +93,18 @@ describe("oauthOutcome", () => {
     expect(t(OAUTH_OUTCOME_MESSAGES.connected.title, names)).toBe("Example account connected")
     expect(t(OAUTH_OUTCOME_MESSAGES.calendar_permission_required.title, names)).toBe("Calendar access wasn’t granted")
     expect(t(OAUTH_OUTCOME_MESSAGES.authorization_failed.title, names)).toBe("Example authorization could not be completed")
+    expect(t(OAUTH_OUTCOME_MESSAGES.account_limit_reached.title, names)).toBe("Your plan's calendar accounts are all in use")
+  })
+
+  it("names the plan's account limit, in the plural it needs", () => {
+    const { t } = testI18n()
+    const body = OAUTH_OUTCOME_MESSAGES.account_limit_reached.body
+    expect(t(body, { count: 1 })).toBe(
+      "No account was connected. Your plan allows 1 calendar account, and disconnected accounts count too. Delete one you no longer use, or ask your administrator for a larger plan.",
+    )
+    expect(t(body, { count: 3 })).toBe(
+      "No account was connected. Your plan allows 3 calendar accounts, and disconnected accounts count too. Delete one you no longer use, or ask your administrator for a larger plan.",
+    )
   })
 })
 
