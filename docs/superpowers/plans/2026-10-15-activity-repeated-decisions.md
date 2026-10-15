@@ -1178,7 +1178,7 @@ export function comparisonKey(entry: AuditEntry): string | null {
   "reconciliation": "Full Reconciliation compared the two calendars."
 },
 "comparison": {
-  "untracked": "{source} sent a new version. No change was detected in what Calendar Ghost tracks.",
+  "untracked": "{source} has a new version since Calendar Ghost last compared it. No change was detected in what it tracks.",
   "sameRevision": "Same version of the event as the one Calendar Ghost last compared with.",
   "noBaseline": "No earlier version to compare with."
 }

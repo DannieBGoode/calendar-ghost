@@ -550,7 +550,7 @@ describe("ActivityView", () => {
     const why = terms.find((term) => term.textContent === "Why it was checked")
     expect(why?.nextElementSibling?.textContent).toBe("Family reported a change to this event or its series.")
     expect(detail?.querySelector(".activity-comparison")?.textContent).toBe(
-      "Family sent a new version. No change was detected in what Calendar Ghost tracks.",
+      "Family has a new version since Calendar Ghost last compared it. No change was detected in what it tracks.",
     )
   })
 
