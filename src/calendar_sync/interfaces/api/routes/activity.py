@@ -22,6 +22,8 @@ from calendar_sync.application.operations.errors import (
 )
 from calendar_sync.application.operations.status import GetInstallationStatus
 from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.domain.audit import FoundBy, RunReason
+from calendar_sync.domain.changes import ComparisonKind
 from calendar_sync.domain.model import CalendarEvent, EventStatus, TimedInterval
 from calendar_sync.interfaces.api.dependencies import current_user, user_services
 from calendar_sync.interfaces.api.problems import ApiProblem, failure_params, problem
@@ -208,6 +210,11 @@ def _entry_response(entry: ActivityEntry) -> AuditEntryResponse:
         event=_recorded_event_response(entry.event) if entry.event is not None else None,
         repeated=entry.repeated,
         changed_fields=list(entry.changed_fields) if entry.changed_fields is not None else None,
+        run_reason=RunReason(entry.run_reason).value if entry.run_reason else None,
+        found_by=FoundBy(entry.found_by).value if entry.found_by else None,
+        source_comparison=(
+            ComparisonKind(entry.source_comparison).value if entry.source_comparison else None
+        ),
     )
 
 

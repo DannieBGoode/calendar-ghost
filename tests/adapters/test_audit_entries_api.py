@@ -57,6 +57,33 @@ def test_skips_no_longer_recorded_are_hidden_from_earlier_history(tmp_path: Path
     assert [entry["reason"] for entry in skipped] == ["all_day_excluded"]
 
 
+def test_entries_say_why_their_run_checked_the_event(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    app = create_app(build_container(Settings(database)))
+
+    with TestClient(app) as client:
+        client.post(
+            "/api/v1/setup/admin", json={"email": "admin@example.test", "password": PASSWORD}
+        )
+        with sqlite3.connect(database) as connection:
+            connection.executemany(
+                """
+                INSERT INTO audit_entries (
+                    occurred_at, rule_id, action, outcome, detail, reason, run_reason, found_by,
+                    source_comparison, user_id
+                )
+                VALUES ('2026-09-01T10:00:00+00:00', 'rule-1', 'update', 'completed', '',
+                    'source_changed', ?, ?, ?, (SELECT id FROM users ORDER BY rowid LIMIT 1))
+                """,
+                [("daily_pass", "source_feed", "untracked"), (None, None, None)],
+            )
+        listed = client.get("/api/v1/audit-entries").json()
+
+    assert [
+        (entry["run_reason"], entry["found_by"], entry["source_comparison"]) for entry in listed
+    ] == [(None, None, None), ("daily_pass", "source_feed", "untracked")]
+
+
 def test_skips_of_cancelled_occurrences_recorded_by_earlier_releases_are_hidden(
     tmp_path: Path,
 ) -> None:

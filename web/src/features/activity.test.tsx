@@ -91,6 +91,9 @@ function entry(id: number, overrides: Partial<AuditEntry>): AuditEntry {
     event: null,
     repeated: false,
     changed_fields: null,
+    run_reason: null,
+    found_by: null,
+    source_comparison: null,
     ...overrides,
   }
 }
@@ -529,6 +532,34 @@ describe("ActivityView", () => {
     const facts = [...(detail?.querySelectorAll(".activity-diagnostics dt") ?? [])]
     const recorded = facts.find((term) => term.textContent === "Recorded detail")
     expect(recorded?.nextElementSibling?.textContent).toBe("internal: raw")
+  })
+
+  it("says why an entry's run checked its event and how it compared with what the rule last saw", async () => {
+    const checked = entry(11, {
+      action: "ignore",
+      category: "unchanged",
+      reason: "projection_current",
+      run_reason: "changes",
+      found_by: "source_feed",
+      source_comparison: "untracked",
+      event: recorded("Seminar"),
+    })
+    await renderActivity(testI18n(), { entries: [checked, ...ENTRIES] }, "?entry=11")
+    const detail = container.querySelector(".activity-detail")
+    const terms = [...(detail?.querySelectorAll(".activity-detail-facts dt") ?? [])]
+    const why = terms.find((term) => term.textContent === "Why it was checked")
+    expect(why?.nextElementSibling?.textContent).toBe("Family reported a change to this event or its series.")
+    expect(detail?.querySelector(".activity-comparison")?.textContent).toBe(
+      "Family sent a new version. No change was detected in what Calendar Ghost tracks.",
+    )
+  })
+
+  it("says nothing about why an entry recorded before runs said so was checked", async () => {
+    await renderActivity(testI18n(), {}, "?entry=4")
+    const detail = container.querySelector(".activity-detail")
+    expect(detail?.querySelector("h2")?.textContent).toBe("Lunch")
+    expect(detail?.textContent).not.toContain("Why it was checked")
+    expect(detail?.querySelector(".activity-comparison")).toBeNull()
   })
 
   it("has no untranslated text in Incidents, the history table, and the rule picker", async () => {

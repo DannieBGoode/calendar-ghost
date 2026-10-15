@@ -51,6 +51,13 @@ IncidentStepValue = Literal[
 ]
 """An Incident's one next step (ADR 0033), as the domain decides it for the Web UI and email."""
 HintKindValue = Literal["shared_cause", "testing_mode", "unrecognized"]
+RunReasonValue = Literal[
+    "changes", "first_run", "daily_pass", "reconcile_now", "reprojection", "relisted"
+]
+FoundByValue = Literal[
+    "source_feed", "destination_feed", "reprojection", "pending_replay", "reconciliation"
+]
+SourceComparisonValue = Literal["changed", "untracked", "same_revision", "cancelled", "no_baseline"]
 
 
 class ApiResponse(BaseModel):
@@ -438,6 +445,12 @@ class AuditEntryResponse(ApiResponse):
     """A repair that redoes the same event's previous one, recorded by an earlier run."""
     changed_fields: list[str] | None = None
     """The source fields this entry's Source Change touched (ADR 0017); None when none."""
+    run_reason: RunReasonValue | None = None
+    """Why the Sync Run read the calendars as it did (ADR 0036); None for earlier entries."""
+    found_by: FoundByValue | None = None
+    """Which work led to the decision (ADR 0036); None for earlier entries."""
+    source_comparison: SourceComparisonValue | None = None
+    """How the source event compared with the rule's Source Observation; None when not compared."""
 
 
 class FieldChangeResponse(ApiResponse):

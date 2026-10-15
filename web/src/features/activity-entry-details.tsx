@@ -19,6 +19,8 @@ import {
   REMOVED_RULE_LOOKUP,
   type RuleNames,
 } from "@/lib/activity"
+import { named } from "@/lib/activity-names"
+import { checkedBecauseKey, comparisonKey } from "@/lib/activity-provenance"
 import { ruleNames, type RuleContext } from "@/lib/activity-rule-context"
 import { api, type AuditEntry, type EventSnapshot } from "@/lib/api"
 import type { OpenRule } from "@/lib/navigation"
@@ -96,6 +98,8 @@ function EntryDetails({
   const copy = describeEntry(i18n, entry, names)
   const exists = names !== null
   const inspection = entryInspection(entry, exists)
+  const why = checkedBecauseKey(entry)
+  const comparison = comparisonKey(entry)
   return (
     <>
       <EntryHeading entry={entry} names={names} copy={copy} headingRef={headingRef} onOpenRule={onOpenRule} />
@@ -108,7 +112,14 @@ function EntryDetails({
           <dt>{t("activity.detail.rule")}</dt>
           <dd><RuleDirection ruleId={entry.rule_id} context={context} /></dd>
         </div>
+        {why && (
+          <div>
+            <dt>{t("activity.detail.checkedBecause")}</dt>
+            <dd>{named(i18n, why, names)}</dd>
+          </div>
+        )}
       </dl>
+      {comparison && <p className="activity-comparison">{named(i18n, comparison, names)}</p>}
       {entry.changed_fields?.length ? <SourceChangeDetails entry={entry} names={names} /> : null}
       {inspection === "event" ? (
         <ActivityEventDetails entry={entry} />

@@ -41,6 +41,9 @@ function entry(overrides: Partial<AuditEntry>): AuditEntry {
     event: null,
     repeated: false,
     changed_fields: null,
+    run_reason: null,
+    found_by: null,
+    source_comparison: null,
     ...overrides,
   }
 }

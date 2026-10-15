@@ -450,6 +450,23 @@
     "openRule": "Open rule",
     "recorded": "Recorded",
     "rule": "Rule",
+    "checkedBecause": "Why it was checked",
+    "why": {
+      "sourceReported": "{source} reported a change to this event or its series.",
+      "destinationReported": "{destination} reported a change to the event Calendar Ghost wrote there.",
+      "pendingReplay": "A change to its series that an earlier run left unfinished was completed.",
+      "dailyPass": "Daily check of every event.",
+      "firstRun": "First sync of this rule.",
+      "reconcileNow": "Reconcile Now.",
+      "reprojection": "The rule's settings changed.",
+      "relisted": "A calendar's saved sync position was missing or rejected, so it was read in full.",
+      "reconciliation": "Full Reconciliation compared the two calendars."
+    },
+    "comparison": {
+      "untracked": "{source} sent a new version. No change was detected in what Calendar Ghost tracks.",
+      "sameRevision": "Same version of the event as the one Calendar Ghost last compared with.",
+      "noBaseline": "No earlier version to compare with."
+    },
     "diagnostics": {
       "summary": "Technical details",
       "entry": "Entry",

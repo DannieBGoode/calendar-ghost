@@ -5023,6 +5023,7 @@ thead + .incident-group th {
 }
 
 .activity-explanation,
+.activity-comparison,
 .activity-next {
   max-width: 68ch;
   color: var(--muted-foreground);
