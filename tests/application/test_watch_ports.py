@@ -28,6 +28,11 @@ def test_with_plans_off_every_user_may_sync_instantly() -> None:
 
     assert policy.cadence(USER) == DEFAULT_CADENCE
     assert policy.cadence(OTHER_USER) == DEFAULT_CADENCE
+    assert policy.cadences([USER, OTHER_USER]) == {
+        USER: DEFAULT_CADENCE,
+        OTHER_USER: DEFAULT_CADENCE,
+    }
+    assert policy.cadences([]) == {}
 
 
 def test_a_watch_failure_reads_as_its_detail_and_carries_the_refusal() -> None:

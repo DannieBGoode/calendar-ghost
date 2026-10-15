@@ -38,6 +38,7 @@ from calendar_sync.application.sync.provider_descriptors import (
 from calendar_sync.application.sync.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncRunResult
+from calendar_sync.application.sync.watch_ports import PlanCadence
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import (
     Adapters,
@@ -50,6 +51,7 @@ from calendar_sync.bootstrap.container import (
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
+from calendar_sync.domain.cadence import SCHEDULED_EVERY, SyncCadence
 from calendar_sync.domain.incidents import IncidentCategory, IncidentReport
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -101,6 +103,8 @@ from tests.helpers import (
     series,
     week_start,
 )
+from tests.identity_fakes import BrokenAllowances
+from tests.plans import plans_on
 from tests.users import (
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
@@ -110,6 +114,7 @@ from tests.users import (
     add_user,
     administrator,
     first_user,
+    limited_user,
     session_for,
     sign_in,
 )
@@ -3398,3 +3403,41 @@ def test_calendars_of_a_provider_this_installation_has_not_configured_are_unavai
     assert (listed.status_code, verified.status_code) == (503, 503)
     assert listed.json()["detail"] == "Google Calendar is not configured on this installation"
     assert listed.json()["code"] == "authorization_not_configured"
+
+
+def test_a_plans_fault_never_breaks_sign_in_or_the_rules_api(tmp_path: Path) -> None:
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db"), sync_cadence=PlanCadence(BrokenAllowances())
+    )
+    with _units(adapters)() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+
+    with TestClient(create_app(container)) as client:
+        sign_in(client)
+        session = client.get("/api/v1/session")
+        listed = client.get("/api/v1/rules")
+        detail = client.get(f"/api/v1/rules/{rule().id.value}")
+
+    # Each answer reads the default cadence; without a master key there is no public address.
+    assert (session.status_code, listed.status_code, detail.status_code) == (200, 200, 200)
+    assert session.json()["user"]["instant_sync_availability"] == "no_public_address"
+    assert [item["poll_every_minutes"] for item in listed.json()] == [5]
+    assert (detail.json()["effective_cadence"], detail.json()["poll_every_minutes"]) == (
+        "no_public_address",
+        5,
+    )
+
+
+def test_the_installation_reads_each_users_cadence_from_their_plan(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    adapters = build_adapters(Settings(database))
+    member = limited_user(database)
+    plans_on(adapters.plan_catalog)
+
+    cadence = adapters.sync_cadence
+
+    assert isinstance(cadence, PlanCadence)
+    assert cadence.allowances is adapters.allowances
+    # FREE, the Default Plan, syncs every 5 minutes without Instant Sync.
+    assert cadence.cadence(member) == SyncCadence(instant=False, poll_every=SCHEDULED_EVERY)

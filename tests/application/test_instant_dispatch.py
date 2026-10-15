@@ -3,7 +3,7 @@ acknowledges its request (ADR 0036)."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Self, cast
@@ -165,11 +165,23 @@ class Runs:
 
 
 class Cadences:
+    """Each User's Sync Cadence. The batch read fails when told to or once any User is
+    unreadable, and reading an unreadable User alone fails too, as a locked database would."""
+
     def __init__(self) -> None:
         self.scheduled_only: set[UserId] = set()
+        self.unreadable: set[UserId] = set()
+        self.batch_fails = False
 
     def cadence(self, user: UserId) -> SyncCadence:
+        if user in self.unreadable:
+            raise RuntimeError("database is locked")
         return SyncCadence(instant=user not in self.scheduled_only, poll_every=SCHEDULED_EVERY)
+
+    def cadences(self, users: Collection[UserId]) -> Mapping[UserId, SyncCadence]:
+        if self.batch_fails or self.unreadable:
+            raise RuntimeError("database is locked")
+        return {user: self.cadence(user) for user in users}
 
 
 class World:
@@ -343,6 +355,39 @@ def test_a_drop_storage_refuses_logs_only_the_class_of_its_error(
     assert "RuntimeError" in caplog.text
     assert "database is locked" not in caplog.text
     assert all(record.exc_info is None for record in caplog.records)
+
+
+def test_a_user_whose_cadence_cannot_be_read_keeps_their_requests_and_runs_them(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    world = World((USER, rule()))
+    world.requests.notice(USER, rule().id, NOW - QUIET)
+    world.cadences.unreadable.add(USER)
+
+    with caplog.at_level("WARNING", logger="calendar_sync.application.sync.watch_ports"):
+        (item,), _ = world.dispatch.due(frozenset())
+        world.dispatch.run(item)
+
+    # A Plans fault never drops an Instant Sync Request: the rule runs as for an instant User.
+    assert world.runs.ran == [("rule-1", False)]
+    assert not world.requests.waiting(USER, rule().id)
+    assert "RuntimeError" in caplog.text
+    assert "database is locked" not in caplog.text
+
+
+def test_when_the_batch_read_fails_each_user_is_read_alone() -> None:
+    world = World((USER, rule()), (OTHER_USER, _rule("rule-4")))
+    world.requests.notice(USER, rule().id, NOW - QUIET)
+    world.requests.notice(OTHER_USER, SyncRuleId("rule-4"), NOW - QUIET)
+    world.cadences.batch_fails = True
+    world.cadences.scheduled_only.add(OTHER_USER)
+
+    runs, _ = world.dispatch.due(frozenset())
+
+    # OTHER_USER's Plan, read alone, has no Instant Sync, so only their request is dropped.
+    assert _ids(runs) == ["rule-1"]
+    assert world.requests.waiting(USER, rule().id)
+    assert not world.requests.waiting(OTHER_USER, SyncRuleId("rule-4"))
 
 
 @pytest.mark.parametrize(("stop", "resume"), list(INACTIVE.values()), ids=list(INACTIVE))

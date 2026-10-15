@@ -127,6 +127,7 @@ from calendar_sync.application.sync.watch_ports import (
     DeliveryEvidenceLog,
     EveryUserInstant,
     NoticeReader,
+    PlanCadence,
     SyncCadencePolicy,
 )
 from calendar_sync.bootstrap.config import Settings
@@ -363,7 +364,8 @@ class Adapters:
     watchers: RoutingCalendarWatcher | None = None
     """Each account's provider's Calendar Watcher, where accounts can be stored."""
     sync_cadence: SyncCadencePolicy = field(default_factory=EveryUserInstant)
-    """Each User's Sync Cadence; every User may sync instantly while Plans are off (ADR 0028)."""
+    """Each User's Sync Cadence. `build_adapters` reads it from each User's Plan (`PlanCadence`,
+    ADR 0038); this default gives every User Instant Sync, as Plans off does (ADR 0028)."""
     watch_backoff: AccountBackoff = field(default_factory=AccountBackoff)
     """One per process: how long each account waits before upkeep asks its provider again,
     shared by every User's upkeep."""
@@ -437,6 +439,7 @@ def build_adapters(settings: Settings) -> Adapters:
         ),
         installation_notifications=_installation_notifier(settings, mail),
         sends_email=mail is not None,
+        sync_cadence=PlanCadence(plans),
     )
     accounts = (
         SqliteConnectedAccountStore(database, CredentialCipher(settings.master_key), clock, ids)

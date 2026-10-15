@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 from calendar_sync.application.operations.ports import CauseSighting, InstantSyncOwner
 from calendar_sync.application.sync.provider_descriptors import GrantLifetime, ProviderGuide
-from calendar_sync.application.sync.watch_ports import SyncCadencePolicy
+from calendar_sync.application.sync.watch_ports import SyncCadencePolicy, cadences_of
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import ADMINISTRATOR_CAUSES, Cause
@@ -108,7 +108,7 @@ def instant_sync_signals(
     Plain http on this machine or a home network is the homelab norm and signals nothing: each
     User's switch already says Instant Sync needs a public address.
     """
-    wanting = sum(1 for owner in owners if _wants_instant_sync(owner, cadence))
+    wanting = _wanting_instant_sync(owners, cadence)
     if not wanting or address is None:
         return InstantSyncSignals(wanting)
     if urlsplit(address).scheme == "http":
@@ -139,8 +139,12 @@ def instant_sync_hints(
     )
 
 
-def _wants_instant_sync(owner: InstantSyncOwner, cadence: SyncCadencePolicy) -> bool:
-    return owner.wanted and not owner.disabled and cadence.cadence(owner.user).instant
+def _wanting_instant_sync(owners: Iterable[InstantSyncOwner], cadence: SyncCadencePolicy) -> int:
+    """How many Users may sign in, want Instant Sync, and whose cadence allows it, read in one
+    batch. A User whose cadence cannot be read counts, as dispatch and upkeep treat them."""
+    users = [owner.user for owner in owners if owner.wanted and not owner.disabled]
+    cadences = cadences_of(cadence, users)
+    return sum(1 for user in users if (found := cadences.get(user)) is None or found.instant)
 
 
 def _internet_host(address: str) -> bool:
