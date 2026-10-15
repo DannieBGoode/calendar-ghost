@@ -533,7 +533,12 @@ class OutlookCalendarProvider:
                 if event.occurrence is not None and event.occurrence.original_start in wanted
             }
 
-    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
+    def has_live_occurrences(
+        self,
+        series: EventRef,
+        policy: TransformationPolicy,
+        not_ended_before: datetime | None = None,
+    ) -> bool:
         with self._refusals(series.calendar.connected_account_id):
             item = self._read(series.calendar, series.event_id.value)
             if item is None:
@@ -541,27 +546,48 @@ class OutlookCalendarProvider:
                 return True
             shape = series_of(item)
             last = _last_end(shape) if shape is not None else None
-            if last is not None:
-                # A first or last occurrence may have moved anywhere Outlook keeps dates; the
-                # others stay between their neighbours, so this lists them all.
-                after, before = OUTLOOK_EARLIEST, OUTLOOK_LATEST
-            else:
-                after = (
-                    shape.first
-                    if shape is not None
-                    else _event_start(_translate(item, series.calendar))
-                )
-                before = self._clock.now() + EXCEPTION_HORIZON
+            after, before = self._live_span(item, series, shape, last, not_ended_before)
             try:
                 found, complete = self._instances(series, item, after, before)
             except GraphRefusal as error:
                 if error.status in UNLISTABLE:
                     return True
                 raise
-            if any(policy.projects(event) for event in found):
+            if any(
+                policy.projects(event)
+                and (not_ended_before is None or not event.ended_before(not_ended_before))
+                for event in found
+            ):
                 return True
             # Only an answered lookup of the whole series may report that none remain.
             return not (complete and last is not None)
+
+    def _live_span(
+        self,
+        item: Mapping[str, Any],
+        series: EventRef,
+        shape: Series | None,
+        last: datetime | None,
+        not_ended_before: datetime | None,
+    ) -> tuple[datetime, datetime]:
+        """Where a series' live occurrences are listed, from `not_ended_before` when given."""
+        if last is not None:
+            # A first or last occurrence may have moved anywhere Outlook keeps dates; the others
+            # stay between their neighbours, so this lists them all.
+            after, before = OUTLOOK_EARLIEST, OUTLOOK_LATEST
+        else:
+            after = (
+                shape.first
+                if shape is not None
+                else _event_start(_translate(item, series.calendar))
+            )
+            before = self._clock.now() + EXCEPTION_HORIZON
+        if not_ended_before is None:
+            return after, before
+        # An occurrence that began earlier may still end in the window, moved no further than
+        # its neighbours let it; each one found is checked against the window.
+        margin = shape.period + shape.duration if shape is not None else timedelta(days=367)
+        return max(after, not_ended_before - margin), before
 
     def occurrence_exceptions(
         self, series: EventRef, not_ended_before: datetime

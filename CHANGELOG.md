@@ -53,9 +53,20 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   offers "Review and start", and Refresh reads the calendars again.
 - A preview reads the destination through one listing of the rule's projections instead of one
   request per mapped event, and returns every event instead of a sample of 10.
+- While a preview reads the calendars, the page says so where the results appear: the ghost
+  moves, the placeholder rows shimmer, and a line counts the seconds and, after a while, says that
+  large calendars can take up to a minute. With reduced motion, only the words change. The rule's
+  settings under the privacy line are a row of short items, each with its own icon, and the ones
+  that leave events out are quieter.
 
 ### Fixed
 
+- A new rule no longer copies recurring series that ended before its starting point. A rule
+  "from the past 30 days" previewed, and its first sync added, series whose last occurrence was
+  years ago, because Google still lists them. A series now syncs only while one of its occurrences
+  ends at the starting point or later, including an upcoming one; one that started long ago
+  but still repeats syncs as before. Series a rule already synced stay current, and past
+  occurrences of a series the rule leaves out are no longer listed in Activity or the preview.
 - A new rule no longer lists, in Activity and its preview, the occurrences of a series deleted
   from the source before the rule existed. A deleted series stays readable for some weeks, so its
   cancelled occurrences read "Its series isn't synced, so skipped". Deleting a series the rule
@@ -67,11 +78,14 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   The single projection of an occurrence whose series the calendar did not show is removed once
   that series shows as deleted. Before, these stayed in the destination.
 - Preview plans every event exactly as the next run decides it. An occurrence of a series the
-  rule will write shows the update or removal the run makes in the new series, an occurrence of a
-  series the rule leaves out reads "Its series isn't synced", and the preview leaves out and does
-  not count what Activity would not record, such as an event deleted before the rule projected
+  rule will write reads as part of adding it, an occurrence of a series the rule leaves out reads
+  "Its series isn't synced", and the preview leaves out and does not count what Activity would not record, such as an event deleted before the rule projected
   it. An occurrence whose series the rule projected but the source no longer shows is blocked, as
   in a run.
+- A new rule's preview counts every date of a series it adds as added, or as not synced when that
+  date is cancelled ("Not synced: cancelled"). Before, a date the run corrects after it writes the
+  series read as an update, a removal, or already up to date, though nothing was written yet.
+  Activity still records each correction the run makes.
 
 ## [0.2.0] - 2026-10-12
 

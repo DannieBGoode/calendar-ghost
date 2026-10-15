@@ -366,6 +366,7 @@ class SynchronizeOccurrences:
                 destination_reported=occurrence.destination_reported,
                 has_live_occurrences=has_live_occurrences,
             ),
+            window_start=run.window_start,
         )
         return decision, destination
 

@@ -644,6 +644,40 @@ def test_has_live_occurrences_lists_instances_without_cancelled_ones() -> None:
     )
 
 
+def test_has_live_occurrences_since_an_instant_lists_only_instances_ending_after_it() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [_instance()]})
+    provider = provider_with_events_api(events_api)
+    since = NOW - timedelta(days=30)
+
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy(), since) is True
+    assert events_api.instances.call_args.kwargs["timeMin"] < since.isoformat()
+
+
+# Regression: Google's timeMin is exclusive and dates all-day instances in the calendar's zone,
+# so the lookup asks from earlier and keeps the instances the sync window keeps.
+# Found by /qa on 2026-10-15
+def test_an_instance_ending_at_the_instant_is_live_and_one_ending_before_it_is_not() -> None:
+    ends = datetime(2026, 9, 8, 9, 0, tzinfo=UTC)
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [_instance()]})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy(), ends) is True
+    assert (
+        provider.has_live_occurrences(SERIES, TransformationPolicy(), ends + timedelta(minutes=1))
+        is False
+    )
+
+
+def test_a_series_google_lists_no_instance_after_an_instant_has_none_live_since_it() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": []})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy(), NOW) is False
+
+
 def test_has_live_occurrences_never_counts_a_cancelled_instance() -> None:
     events_api = MagicMock()
     events_api.instances.return_value = request_returning({"items": [_instance("cancelled")]})

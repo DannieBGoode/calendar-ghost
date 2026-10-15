@@ -209,11 +209,11 @@ _Avoid_: Destination edit, synchronization difference
 ## Synchronization Progress
 
 **Initial Sync Window**:
-The source-event range inspected when a rule is first enabled: events ending within the previous 30 days or later, with no future cutoff.
+The source-event range inspected when a rule is first enabled: events ending within the previous 30 days or later, with no future cutoff. A series is in it while one of its occurrences the rule projects is.
 _Avoid_: History limit, retention period
 
 **Incremental Sync**:
-Synchronization of provider-reported changes after the initial sync window has completed successfully. Provider feeds report changes to events of any age; an unmapped single event that ended before the rolling window start is skipped, while mapped events stay current.
+Synchronization of provider-reported changes after the initial sync window has completed successfully. Provider feeds report changes to events of any age; an unmapped single event, or an unmapped series whose every occurrence the rule projects ended before the rolling window start, is skipped, while mapped events and series stay current.
 _Avoid_: Delta import, partial sync
 
 **Scheduled Sync**:

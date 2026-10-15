@@ -11,9 +11,16 @@ is not bounded by the initial `timeMin`, so it also reports changes to events th
 the Outlook adapter's feed, a Graph delta round plus a listing of everything modified since the
 previous run, reports them too ([ADR 0034](adr/0034-outlook-through-microsoft-graph.md)).
 An unmapped single event that ended before the rolling window start (30 days before the run) is
-ignored with reason `before_sync_window`; mapped events and recurring series are decided normally.
-Before skipping, the run looks up a projection created with the event's create Operation Key, so a
-create the provider acknowledged before an interrupted run recorded its mapping is adopted, not orphaned.
+ignored with reason `before_sync_window`. So is an unmapped recurring series whose every occurrence
+the rule projects ended before the window start: Google's listing from `timeMin` still returns
+series that ended years ago. Before creating a series the rule never projected, the run asks the
+provider whether an occurrence the rule projects ends at or after the window start, wherever it was
+moved to; a series that began long ago is created while one still does, including an upcoming one.
+An occurrence of a series the rule never projected that ended before the window, by its original
+slot and its current time, is `before_sync_window` too, so neither Activity nor Rule Preview lists
+it. Mapped events and series are decided normally, however old. Before skipping, the run looks up a
+projection created with the event's create Operation Key, so a create the provider acknowledged
+before an interrupted run recorded its mapping is adopted, not orphaned.
 
 ## Cost of a run
 
@@ -44,7 +51,7 @@ For each changed source event, the decision service chooses one action:
 - **Create** when an eligible source has no managed projection or the mapped projection is missing.
 - **Update** whenever actual destination content differs from the projection derived from source authority. A new source revision whose projection matches the destination, such as another guest's reply to an invitation or a title change under a Busy-Only rule, is ignored as `projection_current`, and the mapping records the revision without a provider write. An update is `source_changed` only when the projection the source calls for differs from the one last written. During reprojection, an update of a projection still as the rule last wrote it is `policy_applied`; otherwise it repairs drift.
 - **Delete** when a mapped source is cancelled or becomes excluded by rule policy: an all-day event under an all-day exclusion, a birthday under a rule that leaves birthdays out ([ADR 0035](adr/0035-leave-out-birthdays-unless-a-rule-syncs-them.md)), a declined event, an event answered Maybe under a rule that skips them, or an unanswered invitation under a rule that waits for an answer ([ADR 0018](adr/0018-project-by-invitation-response.md)).
-- **Ignore** when content is current, the source is itself managed, an excluded/cancelled source has no mapping, or an unmapped single event ended before the window.
+- **Ignore** when content is current, the source is itself managed, an excluded/cancelled source has no mapping, or an unmapped single event, or every occurrence of an unmapped series, ended before the window.
 - **Conflict** only when identity or ownership is ambiguous.
 
 ## Instant Sync
@@ -156,7 +163,10 @@ whether the source series has any occurrence that is not cancelled and that the 
 Occurrences the rule excludes do not count, such as one the Source Calendar declined, one awaiting
 an answer or answered Maybe when the rule skips those, or an all-day one when the rule excludes
 all-day events, since those are cancelled in the destination too. If none remains, the series is ignored (`series_without_occurrences`) instead of being
-recreated on every run. A mapped series stays dormant: its Series Mapping and `cancelled`
+recreated on every run. For a series the rule never projected, the run first asks only about
+occurrences that end at or after the window start: one found there is live, so that one lookup
+answers both questions, and only a series with none there is asked about again, to tell
+`before_sync_window` from `series_without_occurrences`. A mapped series stays dormant: its Series Mapping and `cancelled`
 Occurrence Mappings are kept, and its occurrences are ignored rather than reported as a missing
 destination occurrence. Full Reconciliation accepts a dormant series once it confirms the
 projection is really gone, and Rule Preview excludes it. For a series that was never mapped, a

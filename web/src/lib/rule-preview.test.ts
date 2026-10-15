@@ -2,11 +2,22 @@ import { describe, expect, it } from "vitest"
 
 import { testI18n } from "@/i18n/testing"
 
-import { facetCounts, layOut, matchesFilters, offeredKinds, outcomeCounts, previewKinds, previewOutcome, type PreviewItem } from "./rule-preview"
+import {
+  facetCounts,
+  layOut,
+  matchesFilters,
+  newSeries,
+  offeredKinds,
+  outcomeCounts,
+  previewKinds,
+  previewOutcome,
+  type PreviewItem,
+} from "./rule-preview"
 import { outcomeText, sourceNotes, whenText } from "./rule-preview-text"
 
 const i18n = testI18n()
 const now = new Date(2025, 9, 13, 10, 0)
+const none = new Set<string>()
 
 function item(overrides: Partial<PreviewItem> = {}): PreviewItem {
   return {
@@ -46,16 +57,50 @@ const birthday = item({
 
 describe("previewOutcome", () => {
   it("reads what the destination will hold", () => {
-    expect(previewOutcome(item())).toBe("add")
-    expect(previewOutcome(item({ planned_action: "ignore", reason: "projection_current" }))).toBe("current")
-    expect(previewOutcome(birthday)).toBe("skipped")
-    expect(previewOutcome(item({ planned_action: "delete", reason: "declined_removed", projection: null }))).toBe("remove")
+    expect(previewOutcome(item(), none)).toBe("add")
+    expect(previewOutcome(item({ planned_action: "ignore", reason: "projection_current" }), none)).toBe("current")
+    expect(previewOutcome(birthday, none)).toBe("skipped")
+    expect(previewOutcome(item({ planned_action: "delete", reason: "declined_removed", projection: null }), none)).toBe("remove")
   })
 
   it("names a reason worth naming", () => {
-    expect(outcomeText(i18n, item())).toBe("Add")
-    expect(outcomeText(i18n, birthday)).toBe("Not synced: birthday")
-    expect(outcomeText(i18n, item({ planned_action: "delete", reason: "declined_removed", projection: null }))).toBe("Remove: you declined")
+    expect(outcomeText(i18n, item(), none)).toBe("Add")
+    expect(outcomeText(i18n, birthday, none)).toBe("Not synced: birthday")
+    expect(outcomeText(i18n, item({ planned_action: "delete", reason: "declined_removed", projection: null }), none)).toBe("Remove: you declined")
+  })
+})
+
+describe("occurrences of a series", () => {
+  const swim = (planned_action: PreviewItem["planned_action"], reason: string) =>
+    item({ source_event_id: "swim", kind: "series", recurrence: ["RRULE:FREQ=WEEKLY"], planned_action, reason })
+  const occurrence = (overrides: Partial<PreviewItem>) =>
+    item({ source_event_id: "swim", kind: "occurrence", series_event_id: "swim", original_start: now.toISOString(), ...overrides })
+  const moved = occurrence({ planned_action: "update", reason: "occurrence_changed" })
+  const cancelled = occurrence({ cancelled: true, starts_at: null, ends_at: null, planned_action: "delete", reason: "occurrence_cancelled", projection: null })
+  const current = occurrence({ planned_action: "ignore", reason: "occurrence_current" })
+
+  it("read as part of adding a series the rule adds", () => {
+    // A new rule writes the series, then fixes its changed and cancelled dates: all of it is new.
+    const items = [swim("create", "source_created"), moved, cancelled, current]
+    const added = newSeries(items)
+
+    expect([...added]).toEqual(["swim"])
+    expect(items.map((each) => previewOutcome(each, added))).toEqual(["add", "add", "skipped", "add"])
+    expect([...outcomeCounts(items, added)]).toEqual([
+      ["add", 3],
+      ["skipped", 1],
+    ])
+    expect(outcomeText(i18n, moved, added)).toBe("Add")
+    expect(outcomeText(i18n, cancelled, added)).toBe("Not synced: cancelled")
+  })
+
+  it("keep the run's own action for a series the destination already has", () => {
+    const items = [swim("ignore", "projection_current"), moved, cancelled, current]
+    const added = newSeries(items)
+
+    expect(added.size).toBe(0)
+    expect(items.map((each) => previewOutcome(each, added))).toEqual(["current", "update", "remove", "current"])
+    expect(outcomeText(i18n, cancelled, added)).toBe("Remove: cancelled")
   })
 })
 
@@ -66,7 +111,7 @@ describe("filters", () => {
     expect(matchesFilters(birthday, { show: "sync", kinds: [] })).toBe(false)
     expect(matchesFilters(birthday, { show: "out", kinds: ["declined", "birthday"] })).toBe(true)
     expect(matchesFilters(declined, { show: "all", kinds: ["allDay"] })).toBe(false)
-    expect([...outcomeCounts([item(), birthday, declined])]).toEqual([
+    expect([...outcomeCounts([item(), birthday, declined], none)]).toEqual([
       ["add", 1],
       ["skipped", 2],
     ])
