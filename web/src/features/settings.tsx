@@ -25,12 +25,14 @@ import {
 import { isAdministrator } from "@/lib/people"
 import { accountNoun, providerDisplayName, providerOf } from "@/lib/providers"
 import { useOAuthReturn } from "@/lib/use-oauth-return"
+import { usePlans } from "@/lib/use-plans"
 import { useRegistration } from "@/lib/use-registration"
 import { cn } from "@/lib/utils"
 import { AccountsSection } from "@/features/settings-accounts"
 import { AppearanceSection } from "@/features/settings-appearance"
 import { IntegrationsSection } from "@/features/settings-integrations"
 import { OwnAccountSection } from "@/features/settings-own-account"
+import { PlansSection } from "@/features/settings-plans"
 import { RegistrationSection } from "@/features/settings-registration"
 import { StorageSection } from "@/features/settings-storage"
 import { SettingsTabs } from "@/features/settings-tabs"
@@ -157,14 +159,17 @@ function ConnectionsTab({ providers, administrator }: { providers: CalendarProvi
 }
 
 /**
- * Who can join, and storage. Only an Installation Administrator sees them; the server refuses
- * everyone else. The people here and their invitations have their own page.
+ * Who can join, Plans, and storage. Only an Installation Administrator sees them; the server
+ * refuses everyone else. The people here and their invitations have their own page. Plans show
+ * only under Invitation only: under Only me the only person administers, and no Plan limits them.
  */
 function AdministrationTab() {
   const registration = useRegistration()
+  const plans = usePlans()
   return (
     <>
       <RegistrationSection commands={registration} />
+      {registration.registration.data?.policy === "invitation_only" && <PlansSection commands={plans} />}
       <StorageSection />
     </>
   )
