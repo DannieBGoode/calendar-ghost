@@ -1,5 +1,6 @@
 """Installation Hints: likely causes from patterns across Users, never one User's content."""
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -8,16 +9,24 @@ from calendar_sync.application.operations.installation_hints import (
     ADMINISTRATOR_CAUSE_USERS,
     HINT_WINDOW,
     HINTED_USERS,
+    NOT_ARRIVING_ANCHOR,
+    PLAIN_HTTP_ANCHOR,
     UNRECOGNIZED_ANCHOR,
     HintKind,
     InstallationHint,
+    InstantSyncSignals,
     installation_hints,
+    instant_sync_hints,
+    instant_sync_signals,
 )
-from calendar_sync.application.operations.ports import CauseSighting
+from calendar_sync.application.operations.ports import CauseSighting, InstantSyncOwner
 from calendar_sync.application.sync.provider_descriptors import GrantLifetime, ProviderGuide
+from calendar_sync.application.sync.watch_ports import EveryUserInstant
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.cadence import SCHEDULED_EVERY, SyncCadence
 from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.watches import DeliveryEvidence
 
 NOW = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
 ROBIN, SAM, ALEX = UserId("robin"), UserId("sam"), UserId("alex")
@@ -258,3 +267,134 @@ def test_each_provider_hints_its_own_causes_with_its_own_sections() -> None:
         (PROVIDER, 1, "the-client-is-refused"),
         (ProviderKind.OUTLOOK, 2, "the-other-client-is-refused"),
     ]
+
+
+HTTPS = "https://calendar.example.test"
+KIM = UserId("kim")
+
+
+@dataclass(frozen=True)
+class Cadences:
+    """A Sync Cadence Policy that gives Instant Sync to everyone but some Users."""
+
+    without_instant: frozenset[UserId] = frozenset()
+
+    def cadence(self, user: UserId) -> SyncCadence:
+        return SyncCadence(instant=user not in self.without_instant, poll_every=SCHEDULED_EVERY)
+
+
+def owner(user: UserId, *, wanted: bool = True, disabled: bool = False) -> InstantSyncOwner:
+    return InstantSyncOwner(user, wanted, disabled, None)
+
+
+EVERYONE = (owner(ROBIN), owner(SAM))
+
+
+def evidence(provider: ProviderKind, *, failing: bool) -> DeliveryEvidence:
+    earlier, later = NOW - timedelta(hours=2), NOW - timedelta(hours=1)
+    return DeliveryEvidence(
+        provider,
+        HTTPS,
+        last_success_at=earlier if failing else later,
+        last_failure_at=later if failing else earlier,
+    )
+
+
+def test_only_users_who_may_sign_in_want_it_and_may_use_it_count() -> None:
+    owners = [owner(ROBIN), owner(SAM, disabled=True), owner(ALEX, wanted=False), owner(KIM)]
+
+    signals = instant_sync_signals(owners, Cadences(frozenset({KIM})), HTTPS, {})
+
+    assert signals == InstantSyncSignals(wanting=1)
+
+
+@pytest.mark.parametrize(
+    "address", ["http://calendar.example.test", "http://calendar.example.test:8000"]
+)
+def test_a_plain_http_address_the_internet_reaches_is_a_hint(address: str) -> None:
+    signals = instant_sync_signals(EVERYONE, EveryUserInstant(), address, {})
+
+    assert signals == InstantSyncSignals(wanting=2, plain_http=True)
+    assert instant_sync_hints(signals, GUIDES) == (
+        InstallationHint(HintKind.PLAIN_HTTP_ADDRESS, None, 2, PLAIN_HTTP_ANCHOR),
+    )
+    assert PLAIN_HTTP_ANCHOR == "instant-sync-needs-an-https-public-address"
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "http://localhost:8000",
+        "http://192.168.1.50:8000",
+        "http://10.0.0.2",
+        "http://100.100.1.1",
+        "http://calendar.local",
+        "http://pi.home.arpa",
+        "http://raspberrypi:8000",
+        "http://[::1]:8000",
+        "http://[fd00::1]",
+    ],
+)
+def test_plain_http_on_this_machine_or_a_home_network_says_nothing(address: str) -> None:
+    # The homelab norm; each person's switch already says Instant Sync needs a public address.
+    signals = instant_sync_signals(EVERYONE, EveryUserInstant(), address, {})
+
+    assert instant_sync_hints(signals, GUIDES) == ()
+
+
+def test_each_provider_whose_delivery_is_failing_is_a_hint_in_the_guides_order() -> None:
+    other = ProviderGuide(ProviderKind.OUTLOOK, "other", "Other", "Other Calendar", {})
+    seen = {
+        ProviderKind.OUTLOOK: evidence(ProviderKind.OUTLOOK, failing=True),
+        PROVIDER: evidence(PROVIDER, failing=True),
+    }
+
+    signals = instant_sync_signals(EVERYONE, EveryUserInstant(), HTTPS, seen)
+
+    assert instant_sync_hints(signals, (GUIDE, other)) == (
+        InstallationHint(
+            HintKind.NOTICES_NOT_ARRIVING, None, 2, NOT_ARRIVING_ANCHOR, provider=PROVIDER
+        ),
+        InstallationHint(
+            HintKind.NOTICES_NOT_ARRIVING,
+            None,
+            2,
+            NOT_ARRIVING_ANCHOR,
+            provider=ProviderKind.OUTLOOK,
+        ),
+    )
+    assert NOT_ARRIVING_ANCHOR == "calendar-providers-cannot-reach-the-installation"
+
+
+def test_working_or_unknown_delivery_is_no_hint() -> None:
+    seen = {
+        PROVIDER: evidence(PROVIDER, failing=False),
+        ProviderKind.OUTLOOK: DeliveryEvidence(ProviderKind.OUTLOOK, HTTPS),
+    }
+
+    signals = instant_sync_signals(EVERYONE, EveryUserInstant(), HTTPS, seen)
+
+    assert signals == InstantSyncSignals(wanting=2)
+    assert instant_sync_hints(signals, GUIDES) == ()
+
+
+def test_nobody_wanting_instant_sync_is_no_hint_whatever_the_address_or_evidence() -> None:
+    nobody = [owner(ROBIN, wanted=False), owner(SAM, disabled=True)]
+    seen = {PROVIDER: evidence(PROVIDER, failing=True)}
+
+    for address in ("http://calendar.example.test", HTTPS):
+        signals = instant_sync_signals(nobody, EveryUserInstant(), address, seen)
+        assert instant_sync_hints(signals, GUIDES) == ()
+
+
+def test_without_a_public_address_there_is_no_hint() -> None:
+    signals = instant_sync_signals(EVERYONE, EveryUserInstant(), None, {})
+
+    assert signals == InstantSyncSignals(wanting=2)
+    assert instant_sync_hints(signals, GUIDES) == ()
+
+
+def test_a_failing_provider_without_a_guide_is_no_hint() -> None:
+    signals = InstantSyncSignals(wanting=2, failing=frozenset({ProviderKind.OUTLOOK}))
+
+    assert instant_sync_hints(signals, GUIDES) == ()

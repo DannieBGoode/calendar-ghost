@@ -1,7 +1,8 @@
 """The service's own log lines: one per record, on standard error, timestamped in UTC.
 
-Only the `calendar_sync` logger is configured. Uvicorn keeps its own access and error logging,
-and other libraries keep Python's defaults.
+Only the `calendar_sync` logger is configured, apart from one filter that keeps Watch Notice paths
+out of Uvicorn's access log. Uvicorn keeps its own access and error logging, and other libraries
+keep Python's defaults.
 """
 
 from __future__ import annotations
@@ -10,12 +11,14 @@ import logging
 import sys
 from datetime import UTC, datetime
 
+from calendar_sync.application.sync.watch_ports import NOTICE_PATH
 from calendar_sync.infrastructure.log_files import RotatingLogFiles
 
 LOGGER = "calendar_sync"
 HANDLER = "calendar_sync.stderr"
 FILE_HANDLER = "calendar_sync.file"
 FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
+ACCESS_LOGGER = "uvicorn.access"
 
 
 class _UtcFormatter(logging.Formatter):
@@ -24,6 +27,21 @@ class _UtcFormatter(logging.Formatter):
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:  # noqa: ARG002
         return datetime.fromtimestamp(record.created, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class NoticePathFilter(logging.Filter):
+    """Keeps registrations out of Uvicorn's access log. A Watch Notice's path names its
+    registration, which no log line may (ADR 0036), so the line keeps only the provider's slug:
+    `/api/v1/watch-notices/<slug>/…`, without the registration or a query."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) > 2:
+            path = str(args[2])
+            if path.startswith(NOTICE_PATH + "/"):
+                slug = path[len(NOTICE_PATH) + 1 :].split("/", 1)[0].split("?", 1)[0]
+                record.args = (*args[:2], f"{NOTICE_PATH}/{slug}/…", *args[3:])
+        return True
 
 
 def configure_logging(level: str, files: RotatingLogFiles | None = None) -> bool:
@@ -41,10 +59,18 @@ def configure_logging(level: str, files: RotatingLogFiles | None = None) -> bool
         handler.set_name(HANDLER)
         handler.setFormatter(_UtcFormatter())
         logger.addHandler(handler)
+    _hide_notice_paths()
     attached = _write_to(logger, files)
     # Written here only, even when something else configures the root logger.
     logger.propagate = False
     return attached
+
+
+def _hide_notice_paths() -> None:
+    """Filter Uvicorn's access log once, however often logging is configured."""
+    access = logging.getLogger(ACCESS_LOGGER)
+    if not any(isinstance(each, NoticePathFilter) for each in access.filters):
+        access.addFilter(NoticePathFilter())
 
 
 def _write_to(logger: logging.Logger, files: RotatingLogFiles | None) -> bool:

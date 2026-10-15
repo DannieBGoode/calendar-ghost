@@ -48,7 +48,8 @@ def database_at_version(path: Path, version: int) -> None:
     )
     with sqlite3.connect(path) as connection:
         for name in names:
-            connection.executescript(migrations.joinpath(name).read_text())
+            # Inside a transaction, as the runner applies them: migration 21 rebuilds tables.
+            connection.executescript(f"BEGIN;\n{migrations.joinpath(name).read_text()}")
             connection.execute(
                 "INSERT INTO schema_migrations(version, applied_at) VALUES (?, '2026-09-01')",
                 (int(name[:4]),),

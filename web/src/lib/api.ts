@@ -276,6 +276,9 @@ export const api = {
     }),
   setIncidentEmails: (notifyByEmail: boolean) =>
     call("/api/v1/account/notifications", "put", { body: { notify_by_email: notifyByEmail } }),
+  /** Whether the signed-in User's rules run soon after their provider reports a change. */
+  setInstantSync: (instantSync: boolean) =>
+    call("/api/v1/account/instant-sync", "put", { body: { instant_sync: instantSync } }),
   /** What the Operator Overview shows administrators about the signed-in User. */
   /** Whether the signed-in User may delete themself now, and whether nobody would remain. */
   ownAccountDeletion: () => call("/api/v1/account/deletion", "get"),

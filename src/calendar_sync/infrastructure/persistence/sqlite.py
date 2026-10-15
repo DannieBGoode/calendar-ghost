@@ -34,6 +34,10 @@ from calendar_sync.application.sync.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.sync.watch_ports import (
+    CalendarWatchRepository,
+    InstantSyncRequestRepository,
+)
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, RecordedDecision, RecordedEvent
@@ -74,6 +78,10 @@ from calendar_sync.infrastructure.persistence.refusals import refusals
 from calendar_sync.infrastructure.persistence.source_changes import (
     SqliteSourceObservationRepository,
     change_columns,
+)
+from calendar_sync.infrastructure.persistence.watches import (
+    SqliteCalendarWatchRepository,
+    SqliteInstantSyncRequestRepository,
 )
 from calendar_sync.infrastructure.security import HistoryCipher
 
@@ -948,6 +956,8 @@ class SqliteUnitOfWork:
     previews: RulePreviewRepository
     calendar_names: CalendarNameRepository
     provider_calls: ProviderCallRepository
+    watches: CalendarWatchRepository
+    instant_requests: InstantSyncRequestRepository
 
     def __init__(
         self,
@@ -981,6 +991,8 @@ class SqliteUnitOfWork:
         self.previews = SqliteRulePreviewRepository(connection, user)
         self.calendar_names = SqliteCalendarNameRepository(connection, user, self._clock)
         self.provider_calls = SqliteProviderCallRepository(connection, user)
+        self.watches = SqliteCalendarWatchRepository(connection, user)
+        self.instant_requests = SqliteInstantSyncRequestRepository(connection, user)
         return self
 
     def __exit__(

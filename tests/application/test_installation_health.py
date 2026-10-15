@@ -6,13 +6,18 @@ from datetime import UTC, date, datetime, timedelta
 
 from calendar_sync.application.operations.installation_health import (
     GetInstallationHealth,
+    HintSources,
     InstallationHealth,
     InstallationIncident,
     InstallationIncidentKind,
     InstallationIncidentWatch,
     installation_incidents,
 )
-from calendar_sync.application.operations.installation_hints import HINT_WINDOW
+from calendar_sync.application.operations.installation_hints import (
+    HINT_WINDOW,
+    HintKind,
+    InstantSyncSignals,
+)
 from calendar_sync.application.operations.ports import CauseSighting, SchedulerProgress
 from calendar_sync.application.operations.status import StatusVerdict
 from calendar_sync.application.sync.provider_descriptors import ClientSecretExpiry, ProviderGuide
@@ -177,8 +182,7 @@ def test_hints_come_from_failures_of_users_who_may_sign_in() -> None:
         lambda ids: dict.fromkeys(ids, StatusVerdict.STOPPED),
         Heartbeat(TICKING),
         Clock(),
-        sightings,
-        GUIDES,
+        HintSources(sightings, GUIDES),
     ).execute()
     users.add(User(UserId("user-3"), "u3@example.test", Role.USER, UserState.ACTIVE, NOW), "hash")
 
@@ -190,8 +194,7 @@ def test_hints_come_from_failures_of_users_who_may_sign_in() -> None:
         lambda ids: dict.fromkeys(ids, StatusVerdict.STOPPED),
         Heartbeat(TICKING),
         Clock(),
-        shared,
-        GUIDES,
+        HintSources(shared, GUIDES),
     ).execute()
 
     # A disabled User's rules do not run, so only the active User's failure counts.
@@ -219,8 +222,7 @@ def test_a_hint_needs_attention_whatever_the_verdicts() -> None:
         lambda ids: dict.fromkeys(ids, StatusVerdict.WAITING),
         Heartbeat(TICKING),
         Clock(),
-        quota,
-        GUIDES,
+        HintSources(quota, GUIDES),
     ).execute()
 
     assert health.status is StatusVerdict.WAITING
@@ -299,3 +301,40 @@ def test_the_watch_reports_each_installation_incident_once_while_it_stays_open()
     assert again == ()
     # A stalled scheduler opens apart from the secret, which stays open and is not repeated.
     assert [incident.kind for incident in stalled] == [InstallationIncidentKind.SCHEDULER_STALLED]
+
+
+def test_instant_sync_hints_follow_the_cause_hints_and_need_attention() -> None:
+    users = _users(("a", UserState.ACTIVE))
+
+    def api_off(_since: datetime) -> list[CauseSighting]:
+        return [failure("user-0", Cause.API_DISABLED)]
+
+    health = GetInstallationHealth(
+        users,
+        lambda ids: dict.fromkeys(ids, StatusVerdict.HEALTHY),
+        Heartbeat(TICKING),
+        Clock(),
+        HintSources(api_off, GUIDES, lambda: InstantSyncSignals(wanting=1, plain_http=True)),
+    ).execute()
+
+    assert [hint.kind for hint in health.hints] == [
+        HintKind.SHARED_CAUSE,
+        HintKind.PLAIN_HTTP_ADDRESS,
+    ]
+    assert health.status is StatusVerdict.HEALTHY
+    assert health.needs_attention
+
+
+def test_nobody_wanting_instant_sync_adds_no_hint() -> None:
+    users = _users(("a", UserState.ACTIVE))
+
+    health = GetInstallationHealth(
+        users,
+        lambda ids: dict.fromkeys(ids, StatusVerdict.HEALTHY),
+        Heartbeat(TICKING),
+        Clock(),
+        HintSources(instant_sync=lambda: InstantSyncSignals(plain_http=True)),
+    ).execute()
+
+    assert health.hints == ()
+    assert not health.needs_attention

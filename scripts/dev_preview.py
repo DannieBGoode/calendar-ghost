@@ -32,7 +32,10 @@ from typing import Any, NoReturn, cast
 
 from calendar_sync.application.identity.sign_in import SetUpInstallation
 from calendar_sync.application.operations.activity import InspectActivityEvent
-from calendar_sync.application.operations.installation_health import GetInstallationHealth
+from calendar_sync.application.operations.installation_health import (
+    GetInstallationHealth,
+    HintSources,
+)
 from calendar_sync.application.operations.operator_overview import OperatorOverview, UserStatuses
 from calendar_sync.application.operations.ports import CauseSighting, SchedulerProgress
 from calendar_sync.application.operations.status import GetInstallationStatus
@@ -561,8 +564,7 @@ def build_preview_container(
             lambda users: {user: status.health for user, status in statuses.of(users).items()},
             None,
             preview_clock,
-            _failure_causes(adapters),
-            (GOOGLE, MICROSOFT),
+            HintSources(_failure_causes(adapters), (GOOGLE, MICROSOFT)),
         ),
         operator_overview=OperatorOverview(
             adapters.users, statuses, adapters.installation_units, preview_clock

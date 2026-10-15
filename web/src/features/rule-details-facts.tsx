@@ -1,7 +1,9 @@
 import { ArrowRight } from "lucide-react"
 
+import { LearnWhyLink } from "@/components/learn-why-link"
 import { useI18n } from "@/i18n/provider"
 import type { RuleDetail, RunOutcome } from "@/lib/api"
+import { ruleCadence } from "@/lib/instant-sync"
 import { tentativeFact, unansweredFact } from "@/lib/invitation-responses"
 import { activitySearch, appPathForView, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
 import { runOutcomeSummary } from "@/lib/rule-change"
@@ -83,6 +85,7 @@ export function RuleRuns({
         </a>
       </div>
       <dl className="rule-facts">
+        <CadenceFact detail={detail} sourceName={sourceName} />
         <OutcomeFact
           label={t("ruleDetails.runs.lastSync")}
           explanation={t("ruleDetails.runs.syncExplanation", { source: sourceName })}
@@ -102,6 +105,35 @@ export function RuleRuns({
         />
       </dl>
     </section>
+  )
+}
+
+/**
+ * How soon an enabled rule syncs: soon after its provider reports a change in its source, or on its
+ * schedule with the reason and, where the guide explains it, "Learn why".
+ */
+function CadenceFact({ detail, sourceName }: { detail: RuleDetail; sourceName: string }) {
+  const { t } = useI18n()
+  if (detail.state !== "enabled") return null
+  const cadence = ruleCadence(detail)
+  const words = { source: sourceName, count: cadence.minutes }
+  return (
+    <div>
+      <dt>{t("ruleDetails.cadence.label")}</dt>
+      <dd>
+        {cadence.instant ? t("ruleDetails.cadence.instant") : t("ruleDetails.cadence.every", { count: cadence.minutes })}
+        <span className="rule-fact-explanation">
+          {cadence.instant && t("ruleDetails.cadence.instantExplanation", words)}
+          {cadence.reason && t(`ruleDetails.cadence.reason.${cadence.reason}`, words)}
+          {cadence.helpUrl && (
+            <>
+              {" "}
+              <LearnWhyLink href={cadence.helpUrl} />
+            </>
+          )}
+        </span>
+      </dd>
+    </div>
   )
 }
 

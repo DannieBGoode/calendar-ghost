@@ -22,6 +22,8 @@ AVOIDED = (
     "master mapping",
     "origin calendar",
     "parent mapping",
+    "push sync",
+    "real-time sync",
     "recurring master",
     "sync job",
     "sync pair",

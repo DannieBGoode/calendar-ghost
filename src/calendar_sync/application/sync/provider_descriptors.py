@@ -2,9 +2,10 @@
 
 A provider's package describes itself to bootstrap with one ProviderDescriptor: its Provider Kind,
 the names messages use, where the troubleshooting guide explains each Cause it can raise, any
-Installation Hint only it explains, and the adapters it offers. Routing, Installation Hints, and
+Installation Hint only it explains, and the adapters it offers, including how Instant Sync
+watches its calendars and reads its notices. Routing, Installation Hints, the notice route, and
 the Web API read the descriptors, so no code outside a provider's package asks which provider it
-is talking to (ADR 0022).
+is talking to (ADR 0022, ADR 0036).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from calendar_sync.application.sync.ports import (
     AccountCalendars,
     CalendarProvider,
 )
+from calendar_sync.application.sync.watch_ports import CalendarWatcher, NoticeReader
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
 
@@ -42,8 +44,9 @@ class ProviderGuide:
 
     kind: ProviderKind
     slug: str
-    """Where its connection flow lives, under `/api/v1/oauth/{slug}/`; it never changes, because
-    every installation registers the callback there with the provider."""
+    """Where its connection flow lives, under `/api/v1/oauth/{slug}/`, and where its watch notices
+    arrive, under `/api/v1/watch-notices/{slug}/`; it never changes, because every installation
+    registers the callback there with the provider, and live watches point there."""
     display_name: str
     """The provider's own name, which accounts are named after, such as "Example account"."""
     calendar_name: str
@@ -96,6 +99,10 @@ class ProviderDescriptor:
     secret_expires: date | None = None
     """When the installation's OAuth client secret expires, where the administrator recorded it,
     so Installation Health warns before every account of the provider stops at once."""
+    watcher: CalendarWatcher | None = None
+    """How Instant Sync watches the provider's calendars, when the provider can (ADR 0036)."""
+    notice_reader: NoticeReader | None = None
+    """How the provider's watch notices are read, at `/api/v1/watch-notices/{slug}/`."""
 
     @property
     def kind(self) -> ProviderKind:
@@ -137,3 +144,16 @@ class ProviderDirectory:
     def at(self, slug: str) -> ProviderDescriptor | None:
         """The provider whose connection flow lives under `slug`, configured or not."""
         return next((d for d in self.descriptors if d.guide.slug == slug), None)
+
+    def watching(self, slug: str) -> ProviderDescriptor | None:
+        """The provider whose watch notices arrive under `slug`, when it reads them."""
+        found = self.at(slug)
+        return found if found is not None and found.notice_reader is not None else None
+
+    def slug_of(self, kind: ProviderKind) -> str:
+        """Where `kind`'s connection flow and watch notices live. Every provider this release
+        knows has a descriptor, so a missing one is a composition error."""
+        found = self.of(kind)
+        if found is None:
+            raise LookupError(f"no descriptor for provider {kind.value}")
+        return found.guide.slug

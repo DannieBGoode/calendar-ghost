@@ -64,6 +64,9 @@ class User:
     language: str | None = None
     notify_by_email: bool = True
     """Whether their Incident Notifications are also emailed when the installation sends email."""
+    instant_sync: bool = True
+    """Whether their rules run soon after a change is reported, where their Plan and the
+    installation allow it."""
 
     @property
     def needs_email(self) -> bool:

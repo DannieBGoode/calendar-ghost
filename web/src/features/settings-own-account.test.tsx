@@ -20,6 +20,9 @@ const user: SignedInUser = {
   role: "user",
   notify_by_email: true,
   language: null,
+  instant_sync: true,
+  instant_sync_availability: "on",
+  instant_sync_help: null,
 }
 
 const administrator: SignedInUser = { ...user, role: "installation_administrator" }
@@ -38,6 +41,7 @@ function serve(answers: Record<string, Response> = {}) {
     "PUT /api/v1/account/email": jsonResponse({ ...user, email: "robin@home.example.test" }),
     "PUT /api/v1/account/password": NO_CONTENT,
     "PUT /api/v1/account/notifications": jsonResponse({ ...user, notify_by_email: false }),
+    "PUT /api/v1/account/instant-sync": jsonResponse({ ...user, instant_sync: false, instant_sync_availability: "off_by_user" }),
     "DELETE /api/v1/account": jsonResponse({ rules: 1, deleted: 3, detached: 0, left: 0 }),
     "GET /api/v1/account/deletion": jsonResponse({ needs_another_administrator: false, last_user: false }),
     ...answers,
@@ -134,6 +138,20 @@ function type(input: HTMLInputElement, value: string) {
   })
 }
 
+function syncChoice(): HTMLSelectElement {
+  const found = container.querySelector<HTMLSelectElement>("select#own-instant-sync")
+  if (!found) throw new Error("No instant sync choice")
+  return found
+}
+
+async function choose(select: HTMLSelectElement, value: string) {
+  act(() => {
+    select.value = value
+    select.dispatchEvent(new Event("change", { bubbles: true }))
+  })
+  await settle()
+}
+
 async function click(target: HTMLElement) {
   act(() => target.click())
   await settle()
@@ -164,6 +182,12 @@ function deletionItem(): HTMLElement {
 function incidentEmails(): HTMLElement {
   const heading = [...container.querySelectorAll("h3")].find((item) => item.textContent === "Incident emails")
   if (!heading) throw new Error("No incident emails item")
+  return heading.closest<HTMLElement>(".setting-item")!
+}
+
+function instantSync(): HTMLElement {
+  const heading = [...container.querySelectorAll("h3")].find((item) => item.textContent === "Instant sync")
+  if (!heading) throw new Error("No instant sync item")
   return heading.closest<HTMLElement>(".setting-item")!
 }
 
@@ -278,6 +302,154 @@ describe("OwnAccountSection", () => {
     )
     expect(help?.getAttribute("target")).toBe("_blank")
     expect(help?.getAttribute("rel")).toBe("noreferrer")
+  })
+
+  it("turns instant sync off", async () => {
+    await renderSection(testI18n())
+    const choice = syncChoice()
+    expect(choice.value).toBe("instant")
+    expect(choice.disabled).toBe(false)
+    expect([...choice.options].map((option) => option.textContent)).toEqual(["Instantly", "On schedule"])
+    expect(document.getElementById(choice.getAttribute("aria-labelledby") ?? "")?.textContent).toBe("Instant sync")
+    expect(container.querySelector("#own-instant-sync-reason")).toBeNull()
+    await choose(choice, "scheduled")
+    expect(sent("PUT", "/api/v1/account/instant-sync")).toEqual({ instant_sync: false })
+    expect(status()).toBe("Your rules now sync on their schedule only.")
+  })
+
+  it("lets a User who turned instant sync off turn it on again", async () => {
+    await renderSection(testI18n(), {
+      signedIn: { ...user, instant_sync: false, instant_sync_availability: "off_by_user" },
+      answers: { "PUT /api/v1/account/instant-sync": jsonResponse({ ...user, instant_sync: true }) },
+    })
+    const choice = syncChoice()
+    expect(choice.value).toBe("scheduled")
+    await choose(choice, "instant")
+    expect(sent("PUT", "/api/v1/account/instant-sync")).toEqual({ instant_sync: true })
+    expect(status()).toBe("Your rules now sync soon after each change in their source calendars.")
+  })
+
+  it("shows the session's latest instant sync choice once a change is done, not the change's answer", async () => {
+    const i18n = testI18n()
+    await renderSection(i18n)
+    await choose(syncChoice(), "scheduled")
+    expect(sent("PUT", "/api/v1/account/instant-sync")).toEqual({ instant_sync: false })
+    // The session's refetch after the change, then a later one after another tab turned it on.
+    for (const instant_sync of [false, true]) {
+      act(() => {
+        root?.render(
+          <StaticI18nProvider i18n={i18n}>
+            <QueryClientProvider client={queryClient}>
+              <OwnAccountSection user={{ ...user, instant_sync }} sendsEmail onOpenPeople={openPeople} />
+            </QueryClientProvider>
+          </StaticI18nProvider>,
+        )
+      })
+      await settle()
+      expect(syncChoice().value).toBe(instant_sync ? "instant" : "scheduled")
+    }
+  })
+
+  it("puts the change's answer in the cached session only while it names the same User", async () => {
+    const signedInAs = (who: SignedInUser) => ({ authenticated: true, installation_sends_email: true, user: who })
+    const ash: SignedInUser = { ...user, id: "user-ash", email: "ash@example.test" }
+    for (const [cached, kept] of [
+      [signedInAs(user), signedInAs({ ...user, instant_sync: false, instant_sync_availability: "off_by_user" })],
+      // Another tab signed in as someone else before the answer came.
+      [signedInAs(ash), signedInAs(ash)],
+      [{ authenticated: false, installation_sends_email: true, user: null }, null],
+    ] as const) {
+      await renderSection(testI18n(), { cached: { session: cached } })
+      await choose(syncChoice(), "scheduled")
+      expect(queryClient.getQueryData(["session"])).toEqual(kept ?? cached)
+      act(() => root?.unmount())
+      root = null
+    }
+  })
+
+  it("explains where instant sync cannot run, and offers no switch that cannot work", async () => {
+    await renderSection(testI18n(), {
+      signedIn: { ...user, instant_sync_availability: "no_public_address", instant_sync_help: "no-public-https-address" },
+    })
+    expect(container.querySelector("#own-instant-sync")).toBeNull()
+    expect(instantSync().textContent).toContain(
+      "Your rules sync soon after a change in their source calendar, not only on their schedule.",
+    )
+    expect(container.querySelector("#own-instant-sync-reason")?.textContent).toBe(
+      "This Calendar Ghost needs a public HTTPS address first.",
+    )
+    const help = instantSync().querySelector("a")
+    expect(help?.textContent).toBe("Learn why (opens in a new tab)")
+    expect(help?.getAttribute("href")).toBe("https://calendarghost.com/docs/instant-sync#no-public-https-address")
+    expect(help?.getAttribute("target")).toBe("_blank")
+    expect(help?.getAttribute("rel")).toBe("noreferrer")
+    expect(help?.getAttribute("aria-describedby")).toBe("own-instant-sync-reason")
+  })
+
+  it("keeps the choice beside the reason while providers cannot reach this installation, so retries can stop", async () => {
+    await renderSection(testI18n(), {
+      signedIn: {
+        ...user,
+        instant_sync_availability: "not_reaching",
+        instant_sync_help: "providers-cannot-reach-the-installation",
+      },
+    })
+    expect(container.querySelector("#own-instant-sync-reason")?.textContent).toBe(
+      "Your calendar providers cannot reach this Calendar Ghost.",
+    )
+    const help = instantSync().querySelector("a")
+    expect(help?.textContent).toBe("Learn why (opens in a new tab)")
+    expect(help?.getAttribute("href")).toBe(
+      "https://calendarghost.com/docs/instant-sync#providers-cannot-reach-the-installation",
+    )
+    expect(help?.getAttribute("aria-describedby")).toBe("own-instant-sync-reason")
+    const choice = syncChoice()
+    expect(choice.value).toBe("instant")
+    expect(choice.disabled).toBe(false)
+    expect(choice.getAttribute("aria-describedby")).toBe("own-instant-sync-reason")
+    await choose(choice, "scheduled")
+    expect(sent("PUT", "/api/v1/account/instant-sync")).toEqual({ instant_sync: false })
+    expect(status()).toBe("Your rules now sync on their schedule only.")
+  })
+
+  it("offers no choice where nothing runs that it could stop", async () => {
+    for (const availability of ["not_in_plan", "no_public_address"] as const) {
+      await renderSection(testI18n(), { signedIn: { ...user, instant_sync_availability: availability } })
+      expect(container.querySelector("#own-instant-sync")).toBeNull()
+      expect(container.querySelector("#own-instant-sync-reason")).not.toBeNull()
+      act(() => root?.unmount())
+      root = null
+    }
+  })
+
+  it("says instant sync is unavailable for a reason this version does not know, without a link it cannot name", async () => {
+    await renderSection(testI18n(), {
+      signedIn: {
+        ...user,
+        instant_sync_availability: "a_reason_from_a_later_server" as SignedInUser["instant_sync_availability"],
+        instant_sync_help: null,
+      },
+    })
+    expect(container.querySelector("#own-instant-sync")).toBeNull()
+    expect(container.querySelector("#own-instant-sync-reason")?.textContent).toBe(
+      "It is not available here right now.",
+    )
+    expect(instantSync().querySelector("a")).toBeNull()
+  })
+
+  it("has no untranslated text for each reason instant sync cannot run", async () => {
+    for (const [availability, help] of [
+      ["not_in_plan", "not-in-your-plan"],
+      ["no_public_address", "no-public-https-address"],
+      ["not_reaching", "providers-cannot-reach-the-installation"],
+    ] as const) {
+      await renderSection(pseudoI18n(), {
+        signedIn: { ...user, instant_sync_availability: availability, instant_sync_help: help },
+      })
+      expect(untranslatedText(container, [user.email!])).toEqual([])
+      act(() => root?.unmount())
+      root = null
+    }
   })
 
   it("asks the only administrator to make someone else an administrator before deleting their account", async () => {

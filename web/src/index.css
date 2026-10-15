@@ -1828,6 +1828,20 @@ p {
   gap: 1rem;
 }
 
+/* A preference's explanation keeps a readable line length beside its control. */
+.setting-copy {
+  max-width: 40rem;
+}
+
+.setting-row > .inline-link {
+  flex: none;
+}
+
+/* The row's current state, under what the preference does: read before the explanation. */
+.setting-row .setting-state {
+  color: var(--foreground);
+}
+
 /* What the Operator Overview shows about one User: in People's person page, and in Settings for
    the User themself. Health leads in its own card; rules and resource use follow, each a card like
    Activity's, with its heading inside. Calendars appear only as numbers, so a rule's name is its

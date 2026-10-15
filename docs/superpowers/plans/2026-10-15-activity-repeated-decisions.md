@@ -394,7 +394,7 @@ class RecordedDecision:
 def repeats_previous(
     previous: RecordedDecision | None, entry: AuditEntry, comparison: SourceComparison
 ) -> bool:
-    """Whether a skip says nothing the event's previous entry did not (ADR 0036).
+    """Whether a skip says nothing the event's previous entry did not (ADR 0037).
 
     The caller applies it only outside the daily pass and only to an entry recorded under the
     event's own identity.
@@ -450,8 +450,8 @@ git commit -m "Compare a source event with its observation, and tell a repeated 
 ### Task 2: Persistence: provenance columns and the previous-entry lookup
 
 **Files:**
-- Create: `src/calendar_sync/infrastructure/persistence/0031_audit_entry_provenance.sql`
-- Modify: `src/calendar_sync/infrastructure/persistence/migrations.py` (register `(31, "0031_audit_entry_provenance.sql")`)
+- Create: `src/calendar_sync/infrastructure/persistence/0032_audit_entry_provenance.sql`
+- Modify: `src/calendar_sync/infrastructure/persistence/migrations.py` (register `(32, "0032_audit_entry_provenance.sql")`)
 - Modify: `src/calendar_sync/application/sync/ports.py` (`AuditRepository`)
 - Modify: `src/calendar_sync/infrastructure/persistence/sqlite.py` (`SqliteAuditRepository`)
 - Modify: `src/calendar_sync/infrastructure/persistence/memory.py` (`InMemoryAuditRepository`)
@@ -542,11 +542,11 @@ Expected: FAIL (`latest_for` missing).
 
 - [ ] **Step 4: Implement.**
 
-  Migration `0031_audit_entry_provenance.sql`:
+  Migration `0032_audit_entry_provenance.sql`:
 
 ```sql
 -- What brought each event into the run, and how it compared with its Source Observation
--- (ADR 0036). Codes only, never event content; earlier entries keep NULL.
+-- (ADR 0037). Codes only, never event content; earlier entries keep NULL.
 ALTER TABLE audit_entries ADD COLUMN run_reason TEXT;
 ALTER TABLE audit_entries ADD COLUMN found_by TEXT;
 ALTER TABLE audit_entries ADD COLUMN source_comparison TEXT;
@@ -718,7 +718,7 @@ Run: `.venv/bin/pytest tests/application/test_repeated_decisions.py -q`
 Expected: the "not recorded" tests FAIL (entries are still appended); the others may pass already.
 
 - [ ] **Step 3: Implement in `sync_run.py`.** Add `unrecorded: int = 0` to `SyncRunContext`
-  with the docstring `"""Decisions this run counted but left out of Activity as repeats (ADR 0036)."""`.
+  with the docstring `"""Decisions this run counted but left out of Activity as repeats (ADR 0037)."""`.
   Replace `record` and `_observe` with:
 
 ```python
@@ -733,7 +733,7 @@ def record(
 
     An entry about `observed` also records how it compared with the rule's Source Observation.
     Outside the daily pass, a skip that repeats the event's previous entry with nothing new is
-    counted but not recorded (ADR 0036). Only recorded decisions observe, so no change is
+    counted but not recorded (ADR 0037). Only recorded decisions observe, so no change is
     absorbed by a decision Activity never shows. `own_identity` is false when the entry is filed
     under another event's identifier, so its previous entry may be about something else.
     """
@@ -927,7 +927,7 @@ def run_reason(
     saved_destination: bool,
     feeds: ChangeFeeds,
 ) -> RunReason:
-    """Why the run read the calendars as it did: the first reason that applies (ADR 0036)."""
+    """Why the run read the calendars as it did: the first reason that applies (ADR 0037)."""
     if reproject:
         return RunReason.REPROJECTION
     if origin is RunOrigin.RECONCILE_NOW:
@@ -1061,9 +1061,9 @@ FoundByValue = Literal["source_feed", "destination_feed", "reprojection", "pendi
 SourceComparisonValue = Literal["changed", "untracked", "same_revision", "cancelled", "no_baseline"]
 
     run_reason: RunReasonValue | None = None
-    """Why the Sync Run read the calendars as it did (ADR 0036); None for earlier entries."""
+    """Why the Sync Run read the calendars as it did (ADR 0037); None for earlier entries."""
     found_by: FoundByValue | None = None
-    """Which work led to the decision (ADR 0036); None for earlier entries."""
+    """Which work led to the decision (ADR 0037); None for earlier entries."""
     source_comparison: SourceComparisonValue | None = None
     """How the source event compared with the rule's Source Observation; None when not compared."""
 ```
@@ -1208,12 +1208,12 @@ git commit -m "Show in Activity why an event was checked and how it compared wit
 ### Task 6: Documentation
 
 **Files:**
-- Create: `docs/adr/0036-record-a-decision-only-when-it-says-something-new.md`
-- Modify: `docs/adr/0013-record-decisions-worth-explaining.md`, `docs/adr/0017-record-source-changes.md` (an "Amended by ADR 0036" line at the top, as ADR 0013 does for 0019)
-- Modify: `docs/sync-model.md` (Activity section), `CONTEXT.md` (Source Comparison), `docs/deployment.md` (migration 31 note), `CHANGELOG.md` (Unreleased)
+- Create: `docs/adr/0037-record-a-decision-only-when-it-says-something-new.md`
+- Modify: `docs/adr/0013-record-decisions-worth-explaining.md`, `docs/adr/0017-record-source-changes.md` (an "Amended by ADR 0037" line at the top, as ADR 0013 does for 0019)
+- Modify: `docs/sync-model.md` (Activity section), `CONTEXT.md` (Source Comparison), `docs/deployment.md` (migration 32 note), `CHANGELOG.md` (Unreleased)
 - Test: `tests/test_ubiquitous_language.py`, `tests/test_no_em_dashes.py`, `tests/test_troubleshooting_anchors.py`
 
-- [ ] **Step 1: Write ADR 0036** with the repository's ADR sections (Context, Decision,
+- [ ] **Step 1: Write ADR 0037** with the repository's ADR sections (Context, Decision,
   Alternatives considered, Consequences). Take the content from the spec: the 2026-10-14
   incident, Parts 1-3, "Rejected: field digests", "Rejected: a run summary entry". State in
   Decision that the daily pass is unchanged, that `unrecorded=N` is logged, and that earlier
@@ -1222,11 +1222,11 @@ git commit -m "Show in Activity why an event was checked and how it compared wit
 - [ ] **Step 2: Update the other documents.**
   - `sync-model.md`: near the paragraph about recorded decisions and Source Changes (around
     line 162-180), add the repeated-decision rule, the comparison kinds, `run_reason`, and
-    `found_by`, each in one or two sentences, linking ADR 0036.
+    `found_by`, each in one or two sentences, linking ADR 0037.
   - `CONTEXT.md`: add **Source Comparison** beside Source Observation and Source Change, in the
     glossary's format: how a source event compared with the rule's Source Observation of it:
     changed, untracked, same revision, cancelled, or no baseline.
-  - `docs/deployment.md`: where migrations are listed or described, note migration 31 adds three
+  - `docs/deployment.md`: where migrations are listed or described, note migration 32 adds three
     nullable columns and that an earlier release ignores them.
   - `CHANGELOG.md` under Unreleased: one entry for the noise reduction and the "Why it was
     checked" line.

@@ -144,7 +144,7 @@ class RecordedDecision:
 def repeats_previous(
     previous: RecordedDecision | None, entry: AuditEntry, comparison: SourceComparison
 ) -> bool:
-    """Whether a skip says nothing the event's previous entry did not (ADR 0036).
+    """Whether a skip says nothing the event's previous entry did not (ADR 0037).
 
     The caller applies it only outside the daily pass and only to an entry recorded under the
     event's own identity.

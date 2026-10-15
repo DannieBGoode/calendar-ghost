@@ -152,14 +152,14 @@ def test_migration_30_leaves_birthdays_out_and_reprojects_existing_rules(
     assert restored.transformation.birthdays is BirthdayPolicy.EXCLUDE
 
 
-def test_migration_31_keeps_earlier_audit_entries_without_provenance(tmp_path: Path) -> None:
+def test_migration_32_keeps_earlier_audit_entries_without_provenance(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     user = add_user(database)
     with sqlite3.connect(database) as connection:
         for column in ("run_reason", "found_by", "source_comparison"):
             connection.execute(f"ALTER TABLE audit_entries DROP COLUMN {column}")
-        connection.execute("DELETE FROM schema_migrations WHERE version = 31")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 32")
         connection.execute(
             """
             INSERT INTO audit_entries (
@@ -178,7 +178,7 @@ def test_migration_31_keeps_earlier_audit_entries_without_provenance(tmp_path: P
             "SELECT detail, run_reason, found_by, source_comparison FROM audit_entries"
         ).fetchall()
     # An earlier release never recorded why a run read the calendars or what it compared.
-    assert versions.count(31) == 1
+    assert versions.count(32) == 1
     assert rows == [("kept", None, None, None)]
 
 

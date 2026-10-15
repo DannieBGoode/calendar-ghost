@@ -1184,25 +1184,34 @@
             "type": "string"
           },
           "cause": {
-            "enum": [
-              "api_disabled",
-              "quota_exceeded",
-              "oauth_client_invalid",
-              "access_revoked",
-              "calendar_forbidden",
-              "calendar_not_found",
-              "rate_limited",
-              "temporary",
-              "unknown"
+            "anyOf": [
+              {
+                "enum": [
+                  "api_disabled",
+                  "quota_exceeded",
+                  "oauth_client_invalid",
+                  "access_revoked",
+                  "calendar_forbidden",
+                  "calendar_not_found",
+                  "rate_limited",
+                  "temporary",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Cause",
-            "type": "string"
+            "title": "Cause"
           },
           "kind": {
             "enum": [
               "shared_cause",
               "testing_mode",
-              "unrecognized"
+              "unrecognized",
+              "plain_http_address",
+              "notices_not_arriving"
             ],
             "title": "Kind",
             "type": "string"
@@ -1277,6 +1286,19 @@
           "expires_on"
         ],
         "title": "InstallationIncidentResponse",
+        "type": "object"
+      },
+      "InstantSyncPreferenceRequest": {
+        "properties": {
+          "instant_sync": {
+            "title": "Instant Sync",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "instant_sync"
+        ],
+        "title": "InstantSyncPreferenceRequest",
         "type": "object"
       },
       "IntegrationTokenResponse": {
@@ -2547,6 +2569,19 @@
           "destination": {
             "$ref": "#/components/schemas/NamedCalendarEndpointResponse"
           },
+          "effective_cadence": {
+            "enum": [
+              "instant",
+              "not_watchable",
+              "waiting_for_provider",
+              "off_by_user",
+              "not_in_plan",
+              "no_public_address",
+              "not_reaching"
+            ],
+            "title": "Effective Cadence",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -2587,6 +2622,10 @@
           },
           "mapping_count": {
             "title": "Mapping Count",
+            "type": "integer"
+          },
+          "poll_every_minutes": {
+            "title": "Poll Every Minutes",
             "type": "integer"
           },
           "privacy_policy": {
@@ -2655,6 +2694,8 @@
           "sync_birthdays",
           "state",
           "reprojection_required",
+          "effective_cadence",
+          "poll_every_minutes",
           "initial_lookback_days",
           "mapping_count",
           "last_sync",
@@ -2807,6 +2848,19 @@
           "destination": {
             "$ref": "#/components/schemas/NamedCalendarEndpointResponse"
           },
+          "effective_cadence": {
+            "enum": [
+              "instant",
+              "not_watchable",
+              "waiting_for_provider",
+              "off_by_user",
+              "not_in_plan",
+              "no_public_address",
+              "not_reaching"
+            ],
+            "title": "Effective Cadence",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -2830,6 +2884,10 @@
                 "type": "null"
               }
             ]
+          },
+          "poll_every_minutes": {
+            "title": "Poll Every Minutes",
+            "type": "integer"
           },
           "privacy_policy": {
             "enum": [
@@ -2897,6 +2955,8 @@
           "sync_birthdays",
           "state",
           "reprojection_required",
+          "effective_cadence",
+          "poll_every_minutes",
           "last_sync",
           "latest_preview",
           "running"
@@ -3256,6 +3316,32 @@
             "title": "Id",
             "type": "string"
           },
+          "instant_sync": {
+            "title": "Instant Sync",
+            "type": "boolean"
+          },
+          "instant_sync_availability": {
+            "enum": [
+              "on",
+              "off_by_user",
+              "not_in_plan",
+              "no_public_address",
+              "not_reaching"
+            ],
+            "title": "Instant Sync Availability",
+            "type": "string"
+          },
+          "instant_sync_help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instant Sync Help"
+          },
           "language": {
             "anyOf": [
               {
@@ -3285,7 +3371,10 @@
           "email",
           "role",
           "notify_by_email",
-          "language"
+          "language",
+          "instant_sync",
+          "instant_sync_availability",
+          "instant_sync_help"
         ],
         "title": "SignedInUserResponse",
         "type": "object"
@@ -4114,6 +4203,63 @@
           }
         },
         "summary": "Set Email"
+      }
+    },
+    "/api/v1/account/instant-sync": {
+      "put": {
+        "description": "Whether the User wants Instant Sync; it is on while their Plan and the installation allow\nit, and the answer says why not otherwise.",
+        "operationId": "set_instant_sync_api_v1_account_instant_sync_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstantSyncPreferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedInUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Instant Sync"
       }
     },
     "/api/v1/account/notifications": {

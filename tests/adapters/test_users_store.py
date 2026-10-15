@@ -227,6 +227,33 @@ def test_the_last_administrator_is_deleted_only_as_the_last_user(
     assert directory.count() == 0
 
 
+def test_a_users_instant_sync_choice_is_kept_without_touching_role_or_state(
+    directory: SqliteUserDirectory | MemoryUsers,
+) -> None:
+    directory.add(FIRST, "hash-1")
+    directory.add(replace(SECOND, instant_sync=False), "hash-2")
+    # An Installation Administrator disables the User after the Web UI read them.
+    directory.set_state(SECOND.id, UserState.DISABLED)
+
+    directory.set_instant_sync(SECOND.id, True)
+    directory.set_instant_sync(FIRST.id, False)
+    directory.set_instant_sync(UserId("missing"), False)
+
+    assert directory.get(FIRST.id) == replace(FIRST, instant_sync=False)
+    assert directory.get(SECOND.id) == replace(SECOND, state=UserState.DISABLED)
+    assert directory.count() == 2
+
+
+def test_a_new_user_wants_instant_sync(tmp_path: Path) -> None:
+    users = _users(tmp_path)
+    users.add(FIRST, "hash-1")
+
+    stored = users.get(FIRST.id)
+
+    assert stored is not None
+    assert stored.instant_sync
+
+
 def test_one_email_signs_in_one_user_whatever_its_case(tmp_path: Path) -> None:
     users = _users(tmp_path)
     users.add(FIRST, "hash-1")

@@ -224,9 +224,20 @@ the projections of the contacts' birthdays Google keeps in a primary calendar. A
 these as `birthday_removed`. Rolling back works with the same database: earlier releases ignore the
 column and project birthdays again on their next full pass.
 
-Migration 31 adds the nullable `audit_entries.run_reason`, `found_by`, and `source_comparison`
+Migration 31 adds the owned tables `calendar_watches`, `watch_coverage`, `watch_registrations`,
+and `instant_sync_requests`, each with `user_id` and references that are removed with their
+account, rule, and User; the column `users.instant_sync` (default `1`, on); and the installation
+table `delivery_evidence` ([ADR 0036](adr/0036-instant-sync-through-provider-notices.md)). Nothing
+is rewritten: watches appear at the first upkeep after start, within five minutes, and only when
+`CALENDAR_SYNC_PUBLIC_URL` is an `https` address. Rolling back works with the same database:
+earlier releases ignore the tables and column and no longer answer at `/api/v1/watch-notices/`,
+so Google and Microsoft receive `404` until their registrations expire, within about 7 days,
+while rules keep syncing every five minutes. Upgrading again keeps registrations that are still
+live, and deletes and creates again those that expired.
+
+Migration 32 adds the nullable `audit_entries.run_reason`, `found_by`, and `source_comparison`
 columns: codes that say why a Sync Run read the calendars, which work found the event, and how the
-source compared with the rule's Source Observation ([ADR 0036](adr/0036-record-a-decision-only-when-it-says-something-new.md)).
+source compared with the rule's Source Observation ([ADR 0037](adr/0037-record-a-decision-only-when-it-says-something-new.md)).
 Earlier entries keep `NULL`. Rolling back works with the same database: earlier releases ignore the
 columns, and record the repeated skips the newer release leaves out.
 
@@ -239,6 +250,10 @@ so a restart forgets them.
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. A scheduler pass
 runs up to four different rules at once, so one rule waiting on its provider does not hold up the rest.
+Instant Sync runs up to two more at once, apart from the scheduler's, so scheduled and instant
+runs together reach at most six; a manual run, such as **Sync now**, comes on top. Each of these
+loops has worker threads of its own, apart from those the Web UI's requests use, so neither holds
+up the other.
 Multi-process workers are not supported with the SQLite deployment.
 
 The database uses SQLite's write-ahead log, so Web UI reads and scheduler writes do not wait for
@@ -267,11 +282,16 @@ Settings shows file logging as off. **Settings → Administration → Storage** 
 and date range and offers Download and Purge logs, so an administrator can retrieve or clear them
 without SSH access to the host.
 
-For access beyond localhost or a trusted LAN, place the service behind HTTPS and set `CALENDAR_SYNC_SECURE_COOKIES=true`. Do not expose the service directly to the public internet.
+For access beyond localhost or a trusted LAN, place the service behind HTTPS and set `CALENDAR_SYNC_SECURE_COOKIES=true`. Do not expose the service directly to the public internet. [Instant Sync](instant-sync.md) needs
+Google and Microsoft to reach only `/api/v1/watch-notices/`: forward that path through HTTPS and
+keep the rest on your network.
 
 ## Raspberry Pi
 
-The image targets `linux/arm64` as well as `linux/amd64`. Use a 64-bit Raspberry Pi OS, durable storage for the Docker volume, and a time-synchronized host. Five-minute polling avoids a public Google webhook.
+The image targets `linux/arm64` as well as `linux/amd64`. Use a 64-bit Raspberry Pi OS, durable storage for the Docker volume, and a time-synchronized host. Scheduled Sync every five minutes needs no public address, so a Pi on a home network works as
+it is. [Instant Sync](instant-sync.md) is optional: Google and Microsoft must reach the Pi at a
+public HTTPS address, which a home network usually gets through Cloudflare Tunnel rather than an
+open router port.
 
 ## Google OAuth redirect URI on a LAN host
 
@@ -362,6 +382,7 @@ reauthorize, the rule to review or choose another calendar, the rule's blocked e
 Overview when there is nothing for them to do. The link names a page and at most a rule's internal identifier, never a calendar,
 account, or event. Only an `http` or `https` address at the root of its host, with no path or query, is used, because
 the Web UI is served at the root of its address; otherwise email is sent without a link, as before.
+An `https` address also makes [Instant Sync](instant-sync.md) possible.
 
 The installation's own channels hear only of incidents about the installation itself, which affect
 every User; the first is a scheduler that stopped completing passes. Set

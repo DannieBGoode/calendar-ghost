@@ -95,6 +95,8 @@ const enabledRule: RuleDetail = {
   last_reconciliation: succeeded,
   latest_preview: null,
   running: null,
+  effective_cadence: "instant",
+  poll_every_minutes: 5,
 }
 
 /**
@@ -247,6 +249,45 @@ describe("RuleDetailsView", () => {
       "Checked 3 projections: 2 differences found; none were changed. 1 conflict blocked",
     )
     expect(container.querySelector('[aria-label="More actions for Family to Work"]')).not.toBeNull()
+  })
+
+  it("says how soon the rule syncs, and why it waits for its schedule", async () => {
+    await renderDetails(testI18n(), enabledRule)
+    const runs = () => container.querySelector<HTMLElement>("[aria-labelledby='rule-runs-title']")!
+    expect(runs().textContent).toContain(
+      "When it syncsSyncs instantlyRuns soon after a change in Family, and checks every 5 minutes as well.",
+    )
+    expect(runs().querySelector("a[href*='instant-sync']")).toBeNull()
+
+    act(() => root?.unmount())
+    root = null
+    await renderDetails(testI18n(), { ...enabledRule, effective_cadence: "waiting_for_provider" })
+    expect(runs().textContent).toContain(
+      "When it syncsSyncs every 5 minutesInstant sync starts once the calendar provider confirms it will report changes in Family.",
+    )
+    const help = runs().querySelector("a[href*='instant-sync']")
+    expect(help?.textContent).toBe("Learn why (opens in a new tab)")
+    expect(help?.getAttribute("href")).toBe("https://calendarghost.com/docs/instant-sync#waiting-for-the-provider")
+
+    act(() => root?.unmount())
+    root = null
+    await renderDetails(testI18n(), { ...enabledRule, effective_cadence: "off_by_user" })
+    expect(runs().textContent).toContain("Syncs every 5 minutesYou turned instant sync off in Settings.")
+    expect(runs().querySelector("a[href*='instant-sync']")).toBeNull()
+  })
+
+  it("says nothing about how soon a rule syncs until it is enabled", async () => {
+    await renderDetails(testI18n(), { ...enabledRule, state: "paused" })
+    expect(container.textContent).not.toContain("When it syncs")
+  })
+
+  it("has no untranslated text for each reason a rule waits for its schedule", async () => {
+    for (const reason of ["not_watchable", "waiting_for_provider", "off_by_user", "not_in_plan", "no_public_address", "not_reaching"]) {
+      await renderDetails(pseudoI18n(), { ...enabledRule, effective_cadence: reason as RuleDetail["effective_cadence"] })
+      expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+      act(() => root?.unmount())
+      root = null
+    }
   })
 
   it("has no untranslated text with every form open", async () => {

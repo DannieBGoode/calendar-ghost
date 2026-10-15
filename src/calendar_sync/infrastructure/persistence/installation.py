@@ -13,16 +13,19 @@ from typing import Self
 from calendar_sync.application.operations.ports import (
     CauseSighting,
     InstallationUnitOfWork,
+    InstantSyncOwner,
+    PendingInstantRun,
     ProviderCallUse,
     RecordedRule,
     ResourceUse,
     StatusRecords,
 )
 from calendar_sync.application.sync.ports import ScheduledRule
-from calendar_sync.domain.access import UserId
+from calendar_sync.domain.access import UserId, UserState
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import SyncRuleState
+from calendar_sync.domain.watches import CalendarWatch, WatchRegistration
 from calendar_sync.infrastructure.persistence.activity_queries import operations_of
 from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.sqlite import (
@@ -30,6 +33,12 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     outcome_from_row,
     preview_from_row,
     rule_from_row,
+)
+from calendar_sync.infrastructure.persistence.watches import (
+    registration_from_row,
+    request_from_row,
+    upkeep_due,
+    watch_from_row,
 )
 
 
@@ -214,9 +223,78 @@ class SqliteInstallationUnitOfWork:
                 )
         return records
 
+    def instant_sync_owners(self) -> Sequence[InstantSyncOwner]:
+        assert self._connection is not None
+        due = _upkeep_due(self._connection)
+        rows = self._connection.execute(
+            """
+            SELECT id, state, instant_sync FROM users
+            WHERE EXISTS (
+                SELECT 1 FROM sync_rules
+                WHERE sync_rules.user_id = users.id AND sync_rules.state = ?
+            ) OR EXISTS (
+                SELECT 1 FROM calendar_watches WHERE calendar_watches.user_id = users.id
+            )
+            ORDER BY id
+            """,
+            (SyncRuleState.ENABLED.value,),
+        ).fetchall()
+        return tuple(
+            InstantSyncOwner(
+                UserId(str(row["id"])),
+                wanted=bool(row["instant_sync"]),
+                disabled=row["state"] == UserState.DISABLED.value,
+                next_due=due.get(str(row["id"])),
+            )
+            for row in rows
+        )
+
+    def pending_instant_runs(self) -> Sequence[PendingInstantRun]:
+        assert self._connection is not None
+        rows = self._connection.execute(
+            """
+            SELECT sync_rules.*, outcome.last_full_succeeded_at,
+                outcome.succeeded AS last_succeeded, request.rule_id, request.requested_seq,
+                request.handled_seq, request.first_requested_at, request.last_requested_at,
+                request.last_run_at
+            FROM instant_sync_requests request
+            JOIN sync_rules
+                ON sync_rules.id = request.rule_id AND sync_rules.user_id = request.user_id
+            JOIN users ON users.id = sync_rules.user_id AND users.state = 'active'
+            LEFT JOIN rule_run_outcomes outcome
+                ON outcome.rule_id = sync_rules.id AND outcome.kind = 'sync'
+            WHERE sync_rules.state = ? AND request.requested_seq > request.handled_seq
+            ORDER BY sync_rules.user_id, sync_rules.id
+            """,
+            (SyncRuleState.ENABLED.value,),
+        ).fetchall()
+        return tuple(
+            PendingInstantRun(
+                ScheduledRule(
+                    UserId(str(row["user_id"])),
+                    rule_from_row(row),
+                    optional_time(row["last_full_succeeded_at"]),
+                ),
+                request_from_row(row),
+                last_run_failed=row["last_succeeded"] == 0,
+            )
+            for row in rows
+        )
+
 
 _USERS_PER_QUERY = 500
 """Users read together, well under SQLite's limit on bound values in one statement."""
+
+
+def _upkeep_due(connection: sqlite3.Connection) -> dict[str, datetime | None]:
+    """When upkeep next has work for each User with a watch."""
+    watches: dict[str, list[CalendarWatch]] = {}
+    for row in connection.execute("SELECT * FROM calendar_watches"):
+        watches.setdefault(str(row["user_id"]), []).append(watch_from_row(row))
+    registrations: dict[str, list[WatchRegistration]] = {}
+    for row in connection.execute("SELECT * FROM watch_registrations"):
+        registrations.setdefault(str(row["user_id"]), []).append(registration_from_row(row))
+    return {user: upkeep_due(kept, registrations.get(user, ())) for user, kept in watches.items()}
 
 
 def _resource_use(

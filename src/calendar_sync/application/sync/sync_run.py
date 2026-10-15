@@ -199,7 +199,7 @@ class SyncRunContext:
     Occurrence writes verify the series' ownership with a fresh read of their own.
     """
     unrecorded: int = 0
-    """Decisions this run counted but left out of Activity as repeats (ADR 0036)."""
+    """Decisions this run counted but left out of Activity as repeats (ADR 0037)."""
     log: SyncRunLog | None = None
     work: RuleWork | None = None
     """What the rule reports while this run is in progress, including how much it handled."""
@@ -306,7 +306,7 @@ def record(
 
     An entry about `observed` also records how it compared with the rule's Source Observation.
     Outside the daily pass, a skip that repeats the event's previous entry with nothing new is
-    counted but not recorded (ADR 0036). Only recorded decisions observe, so no change is
+    counted but not recorded (ADR 0037). Only recorded decisions observe, so no change is
     absorbed by a decision Activity never shows. `own_identity` is false when the entry is filed
     under another event's identifier, so its previous entry may be about something else.
     """

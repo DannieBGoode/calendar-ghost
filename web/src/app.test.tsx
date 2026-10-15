@@ -233,7 +233,7 @@ describe("App", () => {
     const address = window.location.href
     page.happyDOM.setURL("http://localhost:8000/settings/account")
     let signedIn = true
-    const user = { id: "user-robin", email: "robin@example.test", role: "user", notify_by_email: true, language: null }
+    const user = { id: "user-robin", email: "robin@example.test", role: "user", notify_by_email: true, instant_sync: true, instant_sync_availability: "on", instant_sync_help: null, language: null }
     vi.stubGlobal(
       "fetch",
       vi.fn((input: string | URL, init?: RequestInit) => {
@@ -275,7 +275,7 @@ describe("App", () => {
     const address = window.location.href
     page.happyDOM.setURL("http://localhost:8000/settings/account")
     let remaining = true
-    const user = { id: "user-dana", email: "dana@example.test", role: "installation_administrator", notify_by_email: true, language: null }
+    const user = { id: "user-dana", email: "dana@example.test", role: "installation_administrator", notify_by_email: true, instant_sync: true, instant_sync_availability: "on", instant_sync_help: null, language: null }
     vi.stubGlobal(
       "fetch",
       vi.fn((input: string | URL, init?: RequestInit) => {
@@ -320,7 +320,7 @@ describe("App", () => {
     const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
     const address = window.location.href
     page.happyDOM.setURL("http://localhost:8000/settings")
-    const user = { id: "user-robin", email: "robin@example.test", role: "user", notify_by_email: true, language: null }
+    const user = { id: "user-robin", email: "robin@example.test", role: "user", notify_by_email: true, instant_sync: true, instant_sync_availability: "on", instant_sync_help: null, language: null }
     const signedIn = { authenticated: true, user, installation_sends_email: false }
     const signedOut = { authenticated: false, user: null, installation_sends_email: false }
     let session: object = signedIn
@@ -354,8 +354,8 @@ describe("App", () => {
     const address = window.location.href
     page.happyDOM.setURL("http://localhost:8000/settings/connections")
     const people = {
-      a: { id: "user-a", email: "alex@example.test", role: "user", notify_by_email: true, language: null },
-      b: { id: "user-b", email: "blake@example.test", role: "user", notify_by_email: true, language: null },
+      a: { id: "user-a", email: "alex@example.test", role: "user", notify_by_email: true, instant_sync: true, instant_sync_availability: "on", instant_sync_help: null, language: null },
+      b: { id: "user-b", email: "blake@example.test", role: "user", notify_by_email: true, instant_sync: true, instant_sync_availability: "on", instant_sync_help: null, language: null },
     }
     const accountOf = (who: "a" | "b") => ({
       id: `acct-${who}`,
@@ -443,6 +443,9 @@ describe("People", () => {
     email: "dana@example.test",
     role: "installation_administrator",
     notify_by_email: true,
+    instant_sync: true,
+    instant_sync_availability: "on",
+    instant_sync_help: null,
     language: null,
   }
   const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }

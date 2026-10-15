@@ -1,7 +1,7 @@
 # Activity without repeated decisions: design
 
 Terms are in `CONTEXT.md` (Audit Entry, Source Observation, Source Change, Sync Run, Event
-Projection, Full Reconciliation). This design amends ADR 0013 and ADR 0017 through a new ADR 0036.
+Projection, Full Reconciliation). This design amends ADR 0013 and ADR 0017 through a new ADR 0037.
 
 ## Problem
 
@@ -228,7 +228,7 @@ decision function gets a new parameter.
 
 ## Storage, API, and UI
 
-- **Migration `0031_audit_entry_provenance.sql`** adds three nullable `TEXT` columns to
+- **Migration `0032_audit_entry_provenance.sql`** adds three nullable `TEXT` columns to
   `audit_entries`: `run_reason`, `found_by`, and `source_comparison`. Earlier entries keep
   `NULL`. The values are codes, like `reason`, and contain no event content, so ADR 0014's limits
   are unchanged. Register the migration as the others are. `docs/deployment.md` notes the new
@@ -310,7 +310,7 @@ feature. The `unrecorded=N` log field covers investigations for now.
 
 ## Documentation
 
-- **ADR 0036**, "Record a decision only when it says something new". It amends ADR 0013 (the
+- **ADR 0037**, "Record a decision only when it says something new". It amends ADR 0013 (the
   repeated-decision rule and provenance on entries) and ADR 0017 (compare before observing; a
   comparison that completes the baseline is recorded; digests rejected again, for the reasons
   above).

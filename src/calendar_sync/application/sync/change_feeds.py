@@ -55,7 +55,7 @@ def run_reason(
     saved_destination: bool,
     feeds: ChangeFeeds,
 ) -> RunReason:
-    """Why the run read the calendars as it did: the first reason that applies (ADR 0036)."""
+    """Why the run read the calendars as it did: the first reason that applies (ADR 0037)."""
     if reproject:
         return RunReason.REPROJECTION
     if origin is RunOrigin.RECONCILE_NOW:

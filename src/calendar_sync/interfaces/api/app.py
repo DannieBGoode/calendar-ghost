@@ -32,6 +32,7 @@ from calendar_sync.interfaces.api.routes import (
     setup,
     storage,
     users,
+    watch_notices,
 )
 from calendar_sync.interfaces.mcp.server import (
     McpIdentity,
@@ -76,6 +77,7 @@ class ApiServices(
     accounts.AuthorizationServices,
     integrations.StatusServices,
     storage.StorageServices,
+    watch_notices.NoticeServices,
     McpServices,
     Protocol,
 ):
@@ -101,6 +103,10 @@ def create_app(container: Container | None = None) -> FastAPI:
             tasks.append(asyncio.create_task(resolved.scheduler.run_forever()))
         if resolved.scheduler_watch is not None:
             tasks.append(asyncio.create_task(resolved.scheduler_watch.run_forever()))
+        if resolved.instant_dispatcher is not None:
+            tasks.append(asyncio.create_task(resolved.instant_dispatcher.run_forever()))
+        if resolved.watch_keeper is not None:
+            tasks.append(asyncio.create_task(resolved.watch_keeper.run_forever()))
         try:
             async with mcp.running():
                 yield
@@ -134,6 +140,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         storage,
         integrations,
         users,
+        watch_notices,
     ):
         app.router.routes.extend(module.router.routes)
 

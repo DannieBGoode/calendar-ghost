@@ -217,12 +217,67 @@ Synchronization of provider-reported changes after the initial sync window has c
 _Avoid_: Delta import, partial sync
 
 **Scheduled Sync**:
-An incremental sync requested by the local scheduler every five minutes. It does not require a public webhook.
-_Avoid_: Real-time sync, push sync
+An incremental sync requested by the local scheduler every five minutes, or as often as the User's
+Sync Cadence sets. It needs no public address, and it catches every change Instant Sync missed.
+_Avoid_: Cron sync, background sync
 
 **Sync Now**:
 A user-requested synchronization that runs through the same behavior as a scheduled sync without waiting for the next interval.
 _Avoid_: Force sync, manual import
+
+## Instant Sync
+
+**Instant Sync**:
+A sync of a Directional Sync Rule run soon after its Source Calendar's provider reports a change
+that may concern it, instead of at the next Scheduled Sync. It runs through the same behavior as a
+Scheduled Sync. It needs a public `https` address the providers reach, and runs for every enabled
+rule of a User whose Sync Cadence allows it, unless the User turns it off. It promises no delivery
+time: Scheduled Sync and the daily full pass still run and catch every missed report. Only Source
+Calendars are watched, so Drift in a destination is still repaired by Scheduled Sync (ADR 0036).
+_Avoid_: Real-time sync, push sync, live sync
+
+**Sync Cadence**:
+How a User's rules may synchronize: whether Instant Sync is allowed, and how often Scheduled Sync
+runs. With Plans off, every User has Instant Sync and a five-minute Scheduled Sync; once Plans
+exist, a Plan's shortest sync interval decides it, whose shortest value is "instant".
+_Avoid_: Sync frequency, polling interval
+
+**Calendar Watch**:
+A provider's commitment to report changes in one Watch Scope of a User's Connected Account. It
+records which Source Calendars it covers, so a report wakes only rules whose Source Calendar it
+covers. A watch exists only while an enabled rule needs it.
+_Avoid_: Subscription, webhook, channel
+
+**Watch Scope**:
+What one Calendar Watch covers, as its provider allows: one calendar for Google, and the whole
+mailbox for Outlook, whose event reports cannot be limited to one calendar.
+_Avoid_: Watch target, watched resource
+
+**Watch Registration**:
+One Google channel or Microsoft Graph subscription that carries a Calendar Watch. Its own
+identifier is part of its notice address, and its secret token is kept only as a hash. It is
+created, confirmed, renewed or replaced before it expires, and stopped once nothing needs it;
+while one replaces another, notices on both count.
+_Avoid_: Webhook, hook
+
+**Watch Notice**:
+One request a provider sends about a Watch Registration: that it started, that something in its
+scope changed, that reports were missed, that it needs renewing, or that it was removed. It carries
+no event content, and none is logged. A notice whose registration, token, or handle does not match
+changes nothing.
+_Avoid_: Push notification, webhook event, ping
+
+**Instant Sync Request**:
+The durable, per-rule record that a Watch Notice asked the rule to run soon. A run acknowledges
+what it saw once it returns, succeeded or failed, and a notice during the run asks again. It
+survives a restart.
+_Avoid_: Wake-up flag, dirty flag
+
+**Delivery Evidence**:
+What the installation knows about whether one provider reaches its current public address: when a
+notice last arrived or a registration proved delivery, and when delivery last failed. It belongs to
+the installation, not a User. It only explains: it never removes a watch or blocks a run.
+_Avoid_: Reachability check, health probe
 
 ## Health
 
@@ -277,13 +332,15 @@ _Avoid_: Error reason, root cause, error message
 **Installation Hint**:
 A likely cause Installation Health suggests to Installation Administrators, never from one User's
 content: an administrator's Cause any User met within a day, since only the administrator can fix
-it; and, as patterns across Users, Google refusing two or more Users' grants about 7 days after they authorized, which an OAuth app
-in Testing mode does; or two or more Users failing within a day for a reason Calendar Ghost does not
-recognize (`unknown`), which the service logs name by the provider's reason code. Each hint is per
-provider and names it. Each names its Cause, how
-many Users show it, and the troubleshooting section that explains the fix. It names no User, rule,
-calendar, or account. Hints are what People flags; a User's own problems are not flagged, and the
-administrator finds them, with what the User does, on that User's page.
+it; as patterns across Users, Google refusing two or more Users' grants about 7 days after they
+authorized, which an OAuth app in Testing mode does, or two or more Users failing within a day for
+a reason Calendar Ghost does not recognize (`unknown`), which the service logs name by the
+provider's reason code; and, while any User who may sign in wants Instant Sync, a public address
+that uses plain `http` at a host the internet reaches, or a provider whose Delivery Evidence is
+failing. Each hint names its provider when it concerns one, its Cause when a failed provider call
+explains it, how many Users show it, and the troubleshooting section that explains the fix. It
+names no User, rule, calendar, or account. Hints are what People flags; a User's own problems are
+not flagged, and the administrator finds them, with what the User does, on that User's page.
 _Avoid_: Diagnosis, alert, recommendation
 
 ## Access
@@ -411,6 +468,7 @@ diagnostics keep the glossary terms above.
 | Rule Preview, then enable | "Preview rule", then "Start syncing", which exists only on the preview page; a previewed rule reads "Ready to start" with "Review and start". Each previewed event "Will sync" (with Add, Update, Remove, or Already up to date) or "Not synced", with its reason ("Not synced: birthday") |
 | Degraded Rule | "Stopped", with the cause and its one next step: "Reauthorize account" when an account it uses has Lapsed Authorization, otherwise "Preview to restart" |
 | Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote from the starting point onward and reports any that still differ; never "repaired" for what the check only reported |
+| Instant Sync | "Instant sync" under Settings → Your account, a choice between "Instantly", the default, and "On schedule"; where it cannot run, it says why and offers "Learn why", opening that reason's section of the Instant Sync guide, and keeps the choice only while providers cannot reach the installation, so a person can stop the retries. On a rule, "Syncs instantly", or "Syncs every 5 minutes" with why |
 | Connected Account | named by its Provider Kind: "Google account" or "Microsoft account"; "calendar account" where no one provider is meant. Its row in Settings says which ("Microsoft account · dana@contoso.example") |
 | Lapsed Authorization | "Needs reauthorization", naming the account; its action is "Reauthorize with Google" or "Reauthorize with Microsoft" on the account's row, which opens the provider's consent, and "Reauthorize account" elsewhere, which opens that row |
 | Initial Sync Window | "Starting point: includes events from the past 30 days onward" |

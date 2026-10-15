@@ -7,13 +7,22 @@ from pathlib import Path
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 
 # Tables that hold no User's records: the migration ledger, the Users themselves, the
-# installation's settings, and Invitations, which belong to nobody until they are used.
-INSTALLATION_TABLES = {"schema_migrations", "users", "installation_settings", "invitations"}
+# installation's settings, Invitations, which belong to nobody until they are used, and Delivery
+# Evidence, which says whether providers reach the installation's own address.
+INSTALLATION_TABLES = {
+    "schema_migrations",
+    "users",
+    "installation_settings",
+    "invitations",
+    "delivery_evidence",
+}
 SOURCE = Path(__file__).resolve().parents[2] / "src" / "calendar_sync"
 # Only these may receive the installation-wide unit of work: the ports that declare it, the
-# adapters that implement it and run migrations, the scheduled pass, the Operator Overview, and
-# the composition root that hands it to both.
+# adapters that implement it and run migrations, the scheduled pass, Instant Sync's upkeep and
+# dispatch, which run beside it (ADR 0036), the Operator Overview, and the composition root that
+# hands it to them.
 INSTALLATION_UNIT_RECEIVERS = {
+    "application/operations/instant_sync.py",
     "application/operations/operator_overview.py",
     "application/operations/ports.py",
     "application/operations/scheduled_pass.py",

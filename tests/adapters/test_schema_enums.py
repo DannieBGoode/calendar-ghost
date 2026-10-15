@@ -23,15 +23,18 @@ from calendar_sync.domain.model import (
     TentativeEventPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.watches import Availability, CadenceReason
 from calendar_sync.interfaces.api import schemas
 
 MIRRORS: dict[str, type[StrEnum]] = {
     "CauseValue": Cause,
+    "EffectiveCadenceValue": CadenceReason,
     "FoundByValue": FoundBy,
     "HintKindValue": HintKind,
     "IncidentCategoryValue": IncidentCategory,
     "IncidentResolutionValue": IncidentResolution,
     "IncidentStepValue": IncidentStep,
+    "InstantSyncAvailabilityValue": Availability,
     "PrivacyPolicy": ProjectionContent,
     "ProblemKindValue": ProblemKind,
     "ProjectionChoice": ProjectionHandling,

@@ -5,7 +5,7 @@
 The first run selects source events ending no earlier than 30 days before the run, with no future
 cutoff, and observes the destination endpoint. A successful initial run establishes separate opaque
 incremental cursors for source and destination. Later runs request both change feeds every five
-minutes or through Sync Now. Source changes project forward; mapped destination changes load their
+minutes, soon after a provider reports a change (Instant Sync), or through Sync Now. Source changes project forward; mapped destination changes load their
 authoritative source and repair edits or deletions during that same run. Google's incremental feed
 is not bounded by the initial `timeMin`, so it also reports changes to events that ended long ago;
 the Outlook adapter's feed, a Graph delta round plus a listing of everything modified since the
@@ -46,6 +46,32 @@ For each changed source event, the decision service chooses one action:
 - **Delete** when a mapped source is cancelled or becomes excluded by rule policy: an all-day event under an all-day exclusion, a birthday under a rule that leaves birthdays out ([ADR 0035](adr/0035-leave-out-birthdays-unless-a-rule-syncs-them.md)), a declined event, an event answered Maybe under a rule that skips them, or an unanswered invitation under a rule that waits for an answer ([ADR 0018](adr/0018-project-by-invitation-response.md)).
 - **Ignore** when content is current, the source is itself managed, an excluded/cancelled source has no mapping, or an unmapped single event ended before the window.
 - **Conflict** only when identity or ownership is ambiguous.
+
+## Instant Sync
+
+When an installation has a public `https` address, a rule also runs soon after its Source
+Calendar's provider reports a change ([Instant Sync](instant-sync.md),
+[ADR 0036](adr/0036-instant-sync-through-provider-notices.md)).
+
+- Upkeep keeps one Calendar Watch per User, Connected Account, and Watch Scope for the Source
+  Calendars of enabled rules, every five minutes: it creates, confirms, renews or replaces, and
+  stops Watch Registrations, and records which Source Calendars each watch covers.
+- A Watch Notice raises an Instant Sync Request for every enabled rule of the watch's User whose
+  Source Calendar the watch covers. The request is durable, so a restart loses nothing.
+- The dispatcher runs a requested rule once 10 seconds pass without another notice for it, at
+  most 30 seconds after the first, and at most once every 30 seconds per rule, up to two rules
+  at once. A run takes the rule lock like any other, so scheduled, manual, and instant runs of one
+  rule never overlap.
+- After the run returns, succeeded or failed, its request is acknowledged up to the notice it
+  saw; a notice during the run asks for another. A failed run leaves the rule to Scheduled Sync's
+  retries and backoff until a run succeeds. A crash before acknowledgement runs the rule again
+  after restart.
+- A run from Instant Sync is an ordinary incremental run that reads both change feeds, so it
+  costs what any run costs, on top of the Scheduled Sync that still runs every five minutes.
+  Destination Drift is still repaired by the next Scheduled Sync, because only Source Calendars
+  are watched. An Outlook watch covers the whole mailbox, so a change anywhere in it, including
+  the installation's own writes there, wakes every source rule of that mailbox; such a run finds
+  nothing to do and writes nothing.
 
 ## Reprojection after a Material Rule Change
 
@@ -191,7 +217,7 @@ event (title, time as instants, recurrence, cancellation) and the comparison is 
 recorded. Writes, blocks, and a decision that differs from the previous entry are always recorded,
 and an unrecorded decision leaves the observation as it was. An occurrence without its own source
 reference is recorded under its series, so the rule does not apply to it. See
-[ADR 0036](adr/0036-record-a-decision-only-when-it-says-something-new.md).
+[ADR 0037](adr/0037-record-a-decision-only-when-it-says-something-new.md).
 
 Every entry a Sync Run records also carries `run_reason`, why the run read the calendars as it did
 (`reprojection`, `reconcile_now`, `daily_pass`, `first_run`, `relisted`, or `changes`), and

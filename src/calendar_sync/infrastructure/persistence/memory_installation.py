@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
-from dataclasses import dataclass
+from collections.abc import Collection, Iterator, Sequence
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from types import TracebackType
 from typing import Self
@@ -11,16 +11,20 @@ from typing import Self
 from calendar_sync.application.operations.ports import (
     AccountStanding,
     CauseSighting,
+    InboxBusy,
     IncidentSummary,
     InstallationUnitOfWork,
+    InstantSyncOwner,
     OpenBlock,
     OperationsOverview,
+    PendingInstantRun,
     ProviderCallUse,
     RecordedRule,
     ResourceUse,
     StatusRecords,
 )
 from calendar_sync.application.sync.ports import ProviderCallCounts, ScheduledRule
+from calendar_sync.application.sync.watch_ports import NoticeKind, WatchNotice
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry
@@ -28,12 +32,21 @@ from calendar_sync.domain.causes import WITHOUT_CAUSE
 from calendar_sync.domain.incidents import AccountAuthorization
 from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId, SyncRuleState
 from calendar_sync.domain.runs import RunKind
+from calendar_sync.domain.watches import (
+    CalendarWatchId,
+    DeliveryEvidence,
+    RegistrationState,
+    WatchRegistration,
+)
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryIncidentRepository,
     MemoryDatabase,
     MemoryIncident,
     MemoryState,
+    raise_instant_request,
 )
+from calendar_sync.infrastructure.persistence.watch_inbox import EVIDENCE_REFRESH, presents
+from calendar_sync.infrastructure.persistence.watches import upkeep_due
 
 
 class InMemoryInstallationUnitOfWork:
@@ -114,6 +127,30 @@ class InMemoryInstallationUnitOfWork:
 
     def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
         return {user: _status_records(self._database, user) for user in users}
+
+    def instant_sync_owners(self) -> tuple[InstantSyncOwner, ...]:
+        database = self._database
+        return tuple(
+            InstantSyncOwner(
+                owner,
+                wanted=owner not in database.instant_sync_off,
+                disabled=owner in database.disabled,
+                next_due=upkeep_due(state.watches.values(), state.registrations.values()),
+            )
+            for owner, state in sorted(database.partitions.items(), key=lambda item: item[0].value)
+            if state.watches
+            or any(rule.state is SyncRuleState.ENABLED for rule in state.rules.values())
+        )
+
+    def pending_instant_runs(self) -> tuple[PendingInstantRun, ...]:
+        return tuple(
+            run
+            for owner, state in sorted(
+                self._database.partitions.items(), key=lambda item: item[0].value
+            )
+            if owner not in self._database.disabled
+            for run in _pending_runs(owner, state)
+        )
 
 
 def _unfinished(database: MemoryDatabase, owner: UserId, state: MemoryState) -> bool:
@@ -293,6 +330,160 @@ def _authorization(state: MemoryState, account: ConnectedAccountId) -> AccountAu
 def _last_full_sync(state: MemoryState, rule_id: SyncRuleId) -> datetime | None:
     outcome = state.outcomes.get((rule_id, RunKind.SYNC))
     return outcome.last_full_succeeded_at if outcome is not None else None
+
+
+def _pending_runs(owner: UserId, state: MemoryState) -> Iterator[PendingInstantRun]:
+    for rule_id, request in sorted(state.instant_requests.items(), key=lambda item: item[0].value):
+        rule = state.rules.get(rule_id)
+        if rule is None or rule.state is not SyncRuleState.ENABLED:
+            continue
+        if request.requested_seq <= request.handled_seq:
+            continue
+        outcome = state.outcomes.get((rule_id, RunKind.SYNC))
+        yield PendingInstantRun(
+            ScheduledRule(owner, rule, _last_full_sync(state, rule_id)),
+            request,
+            last_run_failed=outcome is not None and not outcome.succeeded,
+        )
+
+
+@dataclass(slots=True)
+class InMemoryWatchNoticeInbox:
+    """Every User's Watch Notices, as SQLite's inbox records them. Its writes reach each User's
+    committed records at once. Setting `busy` stands for a store that stays locked."""
+
+    database: MemoryDatabase
+    busy: bool = False
+
+    def record(
+        self,
+        notices: Sequence[WatchNotice],
+        provider: ProviderKind,
+        address_base: str,
+        at: datetime,
+    ) -> int:
+        if self.busy:
+            raise InboxBusy("the store stayed locked; the notice is to be sent again")
+        requested, delivered = 0, False
+        for notice in dict.fromkeys(notices):
+            found = _authentic(self.database, notice, provider)
+            if found is None:
+                continue
+            state, registration = found
+            delivered = delivered or registration.address.startswith(f"{address_base}/")
+            requested += _apply(state, registration, notice.kind, at)
+        if delivered:
+            _refresh_success(self.database, provider, address_base, at)
+        return requested
+
+
+_REMOVED_TO = {
+    RegistrationState.LIVE: RegistrationState.RETIRING,
+    RegistrationState.CREATING: RegistrationState.ABANDONED,
+}
+"""What a removal notice makes of a registration: one still being created is abandoned, so its
+late receipt cannot make it live."""
+
+
+def _authentic(
+    database: MemoryDatabase, notice: WatchNotice, provider: ProviderKind
+) -> tuple[MemoryState, WatchRegistration] | None:
+    for state in database.partitions.values():
+        registration = state.registrations.get(notice.registration_id)
+        if registration is None:
+            continue
+        watch = state.watches.get(registration.watch_id)
+        if (
+            registration.state is RegistrationState.ABANDONED
+            or watch is None
+            or state.providers.get(watch.account) is not provider
+            or not presents(notice, registration.token_hash, registration.handle)
+        ):
+            return None
+        return state, registration
+    return None
+
+
+def _apply(
+    state: MemoryState, registration: WatchRegistration, kind: NoticeKind, at: datetime
+) -> int:
+    key = registration.id
+    # Any authentic notice proves the provider reaches the installation through it.
+    registration = replace(registration, confirmed_at=registration.confirmed_at or at)
+    state.registrations[key] = registration
+    if kind is NoticeKind.STARTED:
+        return 0
+    if kind is NoticeKind.REAUTHORIZE:
+        asked = registration.renew_requested_at
+        state.registrations[key] = replace(
+            registration, renew_requested_at=max(asked, at) if asked else at
+        )
+        return 0
+    if kind is NoticeKind.REMOVED and registration.state in _REMOVED_TO:
+        state.registrations[key] = replace(registration, state=_REMOVED_TO[registration.state])
+    return _request_runs(state, registration.watch_id, at)
+
+
+def _request_runs(state: MemoryState, watch_id: CalendarWatchId, at: datetime) -> int:
+    watch = state.watches.get(watch_id)
+    if watch is None:
+        return 0
+    woken = [
+        rule.id
+        for rule in state.rules.values()
+        if rule.state is SyncRuleState.ENABLED and watch.covers(rule.source)
+    ]
+    for rule_id in woken:
+        raise_instant_request(state, rule_id, at)
+    return len(woken)
+
+
+def _refresh_success(
+    database: MemoryDatabase, provider: ProviderKind, address: str, at: datetime
+) -> None:
+    kept = database.delivery_evidence.get((provider, address))
+    latest = kept.last_success_at if kept else None
+    failed_since = (
+        kept is not None
+        and latest is not None
+        and kept.last_failure_at is not None
+        and kept.last_failure_at >= latest
+    )
+    if latest is None or latest <= at - EVIDENCE_REFRESH or failed_since:
+        InMemoryDeliveryEvidenceLog(database).succeeded(provider, address, at)
+
+
+@dataclass(frozen=True, slots=True)
+class InMemoryDeliveryEvidenceLog:
+    database: MemoryDatabase
+
+    def succeeded(self, provider: ProviderKind, address: str, at: datetime) -> None:
+        kept = self._kept(provider, address)
+        latest = kept.last_success_at
+        self.database.delivery_evidence[(provider, address)] = replace(
+            kept, last_success_at=max(latest, at) if latest else at
+        )
+
+    def failed(self, provider: ProviderKind, address: str, at: datetime) -> None:
+        kept = self._kept(provider, address)
+        latest = kept.last_failure_at
+        self.database.delivery_evidence[(provider, address)] = replace(
+            kept, last_failure_at=max(latest, at) if latest else at
+        )
+
+    def evidence(self, address: str) -> dict[ProviderKind, DeliveryEvidence]:
+        return {
+            provider: kept
+            for (provider, kept_address), kept in sorted(
+                self.database.delivery_evidence.items(), key=lambda item: item[0][0].value
+            )
+            if kept_address == address
+        }
+
+    def _kept(self, provider: ProviderKind, address: str) -> DeliveryEvidence:
+        return self.database.delivery_evidence.get((provider, address)) or DeliveryEvidence(
+            provider, address
+        )
 
 
 @dataclass(frozen=True, slots=True)

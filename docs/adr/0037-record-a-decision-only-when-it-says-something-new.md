@@ -93,7 +93,7 @@ decisions, so all three values stay `NULL`. Entries recorded before this release
 unknown stored code reads as null in the API, so a rollback and a later upgrade cannot break
 Activity.
 
-Migration 31 adds the three nullable `TEXT` columns. The values are codes and hold no event
+Migration 32 adds the three nullable `TEXT` columns. The values are codes and hold no event
 content, so ADR 0014's limits are unchanged.
 
 ## Alternatives considered

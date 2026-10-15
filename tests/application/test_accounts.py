@@ -478,3 +478,36 @@ def test_a_refused_calendar_listing_lapses_the_account() -> None:
     assert incident.cause is Cause.ACCESS_REVOKED
     assert ACCOUNT in units.state.lapsed
     assert units.state.calendar_names == {}
+
+
+def test_disconnecting_stops_the_accounts_watches_while_its_credentials_remain() -> None:
+    affected = replace(_rule("affected", ACCOUNT.value), state=SyncRuleState.ENABLED)
+    unit_of_work = _with_rules(affected)
+    accounts = RecordingAccounts(_account())
+    stopped: list[tuple[ConnectedAccountId, bool, SyncRuleState]] = []
+
+    def stop(account_id: ConnectedAccountId) -> None:
+        rule_state = unit_of_work.state.rules[affected.id].state
+        stopped.append((account_id, accounts.is_connected(account_id), rule_state))
+
+    DisconnectConnectedAccount(unit_of_work, accounts, RuleLocks(), stop).execute(ACCOUNT)
+
+    # The rule stopped first, so upkeep wants no watch for it, and the account still connected.
+    assert stopped == [(ACCOUNT, True, SyncRuleState.DEGRADED)]
+
+
+def test_watches_that_cannot_be_stopped_never_hold_a_disconnection_back(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    accounts = RecordingAccounts(_account())
+
+    def stop(_account_id: ConnectedAccountId) -> None:
+        raise RuntimeError("synthetic provider outage")
+
+    with caplog.at_level("ERROR", logger="calendar_sync.application.sync.accounts"):
+        disconnected = DisconnectConnectedAccount(
+            _with_rules(), accounts, RuleLocks(), stop
+        ).execute(ACCOUNT)
+
+    assert disconnected.account.state is ConnectedAccountState.DISCONNECTED
+    assert "Could not stop the watches of a disconnecting account" in caplog.text

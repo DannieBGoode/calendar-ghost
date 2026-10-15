@@ -355,6 +355,60 @@ If you had to register a new application, Microsoft's grants to the old one do n
 person reauthorizes once. With the expiry date in `.env`, People warns you 30 days before the next
 secret expires, so you can create its successor in time.
 
+## Instant Sync cannot reach the installation
+
+Instant Sync runs a rule soon after Google or Microsoft reports a change, and needs them to reach
+this installation from the internet. While it cannot, rules sync on their schedule, every five
+minutes, and nothing is lost. **Installation health** on **People** names the cause below as soon
+as anyone wants Instant Sync, with **How to fix** linking here.
+
+### Instant Sync needs an HTTPS public address
+
+**Symptom.** Installation health says people want instant sync, but this installation's public
+address uses plain HTTP. Each person's **Instant sync** under **Settings → Your account** says
+Calendar Ghost needs a public HTTPS address.
+
+**Confirm.** `CALENDAR_SYNC_PUBLIC_URL` in `.env` starts with `http://` and names a host on the
+internet. A plain HTTP address on this machine or your home network is never hinted: providers
+cannot reach it, and people's settings already say so.
+
+**Fix.** Google and Microsoft report changes only to an `https` address with a valid certificate.
+Serve `/api/v1/watch-notices/` through HTTPS, for example with a reverse proxy or Cloudflare
+Tunnel, set `CALENDAR_SYNC_PUBLIC_URL` to that `https` address, and run `docker compose up -d`.
+Within five minutes, Calendar Ghost asks each provider to report changes there. If you do not want
+Instant Sync, the hint does no harm: without an HTTPS address, Calendar Ghost asks no provider to
+report changes, and rules sync on their schedule. See
+[Instant Sync](instant-sync.md#no-public-https-address) for the requirements and proxy examples.
+
+### Calendar providers cannot reach the installation
+
+**Symptom.** Installation health says people want instant sync, but Google or Microsoft cannot
+reach this installation. When no provider a person uses reaches it, their **Instant sync** says so
+beside its choice, and their rules say "Syncs every 5 minutes". Calendar Ghost keeps asking the
+providers meanwhile; choosing **On schedule** there stops it.
+
+**Confirm.** From a machine outside your network, send a request shaped like Google's to an
+unknown registration. It changes nothing:
+
+```sh
+curl -i -X POST https://calendar.example.com/api/v1/watch-notices/google/00000000000000000000000000000000 \
+  -H 'X-Goog-Channel-ID: 00000000000000000000000000000000' \
+  -H 'X-Goog-Channel-Token: reachability-check' \
+  -H 'X-Goog-Resource-ID: reachability-check' \
+  -H 'X-Goog-Resource-State: exists'
+```
+
+Calendar Ghost answers `202 Accepted`. A timeout, a `502` or `504`, a `403` from a firewall, or a
+sign-in page means the proxy or tunnel stops the request before it reaches Calendar Ghost.
+
+**Fix.** Make the proxy or tunnel forward `POST /api/v1/watch-notices/` with its query string,
+headers, and body unchanged, and let it through any sign-in gate, such as Cloudflare Access, and any
+bot challenge. The certificate must be valid for the public name: providers refuse a self-signed
+one. Google's notices count again with the next change in a watched calendar; Microsoft is asked
+again on Calendar Ghost's next try, which waits longer after each failure, at most a day. See
+[Forward the notices path](instant-sync.md#forward-the-notices-path) for working proxy and tunnel
+examples.
+
 ## Problems you fix yourself
 
 When Google or Microsoft refuses one of your requests for a reason that is yours to handle, your Overview and

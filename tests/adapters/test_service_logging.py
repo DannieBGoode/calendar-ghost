@@ -11,7 +11,7 @@ import pytest
 
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import service_container
-from calendar_sync.bootstrap.logs import HANDLER, LOGGER, configure_logging
+from calendar_sync.bootstrap.logs import HANDLER, LOGGER, NoticePathFilter, configure_logging
 from calendar_sync.interfaces.api.app import create_app
 
 
@@ -124,3 +124,39 @@ def test_settings_shows_file_logging_as_off_when_its_directory_cannot_be_used(
             handler.close()
 
     assert (logs is not None) is usable
+
+
+def _access_record(path: str) -> logging.LogRecord:
+    """A line as Uvicorn's access logger writes it."""
+    return logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("203.0.113.9:443", "POST", path, "1.1", 202),
+        None,
+    )
+
+
+def test_uvicorns_access_log_never_names_a_watch_notices_registration(
+    service_logger: logging.Logger,
+) -> None:
+    registration = "0123456789abcdef0123456789abcdef"
+    notice = _access_record(f"/api/v1/watch-notices/google/{registration}")
+    validation = _access_record(
+        f"/api/v1/watch-notices/microsoft/{registration}?validationToken=synthetic"
+    )
+    other = _access_record("/api/v1/rules")
+
+    configure_logging("INFO")
+    configure_logging("INFO")
+
+    access = logging.getLogger("uvicorn.access")
+    filters = [each for each in access.filters if isinstance(each, NoticePathFilter)]
+    assert len(filters) == 1
+    assert all(filters[0].filter(record) for record in (notice, validation, other))
+    assert '"POST /api/v1/watch-notices/google/… HTTP/1.1" 202' in notice.getMessage()
+    assert '"POST /api/v1/watch-notices/microsoft/… HTTP/1.1" 202' in validation.getMessage()
+    assert registration not in notice.getMessage() + validation.getMessage()
+    assert '"POST /api/v1/rules HTTP/1.1" 202' in other.getMessage()

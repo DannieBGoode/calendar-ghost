@@ -25,9 +25,10 @@ from calendar_sync.interfaces.api.dependencies import administrator as administr
 from tests.helpers import NOW, rule
 from tests.users import OTHER_USER, add_user, administrator, session_for, sign_in, sqlite_units
 
-# AGENTS.md: only setup, sign-in, and the token-protected Invitation and Password Reset Links are
-# public under /api/, beside the session status and sign-out, which reveal or revoke nothing
-# without a session.
+# AGENTS.md: only setup, sign-in, the token-protected Invitation and Password Reset Links, and the
+# Watch Notice route providers call, which authenticates each notice by its registration's secret
+# token (ADR 0036), are public under /api/, beside the session status and sign-out, which reveal or
+# revoke nothing without a session.
 PUBLIC_API_ROUTES = {
     ("GET", "/api/v1/setup"),
     ("POST", "/api/v1/setup/admin"),
@@ -38,6 +39,7 @@ PUBLIC_API_ROUTES = {
     ("POST", "/api/v1/invitations/accept"),
     ("POST", "/api/v1/password-resets/check"),
     ("POST", "/api/v1/password-resets"),
+    ("POST", "/api/v1/watch-notices/{provider_slug}/{registration_id}"),
 }
 # Only an Installation Administrator may use these (ADR 0030).
 ADMINISTRATOR_ROUTES = {
@@ -266,6 +268,8 @@ def test_every_route_answers_another_users_record_as_not_found(tmp_path: Path) -
                 or "{" not in route.path
                 # A connection flow names a provider, which is no User's record.
                 or "{slug}" in route.path
+                # A Watch Notice names a registration, which no session reads (ADR 0036).
+                or "{registration_id}" in route.path
             ):
                 continue
             for method in route.methods or ():
