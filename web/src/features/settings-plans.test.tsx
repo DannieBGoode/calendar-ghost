@@ -79,14 +79,14 @@ type Call = { method: string; path: string; body: unknown }
 type Scenario = {
   registration?: Registration
   plans?: PlansOverview
-  /** Answers by "METHOD /path", overriding the defaults. */
-  answers?: Record<string, Response>
+  /** Answers by "METHOD /path", overriding the defaults. A promise lets a test hold an answer back. */
+  answers?: Record<string, Response | Promise<Response>>
 }
 
 let calls: Call[] = []
 
 function serve({ registration = INVITATION_ONLY, plans = overview(), answers = {} }: Scenario) {
-  const defaults: Record<string, Response> = {
+  const defaults: Record<string, Response | Promise<Response>> = {
     "GET /api/v1/session": jsonResponse(session),
     "GET /api/v1/providers": jsonResponse([]),
     "GET /api/v1/storage": jsonResponse({
@@ -299,6 +299,27 @@ describe("Plans under Administration", () => {
     expect(field("plans-enabled").checked).toBe(true)
   })
 
+  it("shows the plan asked for, and holds the select, while the default is on its way", async () => {
+    const neverAnswered = new Promise<Response>(() => undefined)
+    await renderAdministration(testI18n(), { answers: { "PUT /api/v1/plan-settings": neverAnswered } })
+    await choose(select("plans-default"), "family")
+    expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: false, default_plan: "family" })
+    expect(select("plans-default").value).toBe("family")
+    expect(select("plans-default").disabled).toBe(true)
+  })
+
+  it("keeps the box ticked, and holds it, while turning plans on is on its way", async () => {
+    const neverAnswered = new Promise<Response>(() => undefined)
+    await renderAdministration(testI18n(), {
+      plans: overview({ defaultPlan: "free" }),
+      answers: { "PUT /api/v1/plan-settings": neverAnswered },
+    })
+    await click(field("plans-enabled"))
+    expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: true, default_plan: "free" })
+    expect(field("plans-enabled").checked).toBe(true)
+    expect(field("plans-enabled").disabled).toBe(true)
+  })
+
   it("offers no way to clear the default while plans are on", async () => {
     await renderAdministration(testI18n(), { plans: overview({ enabled: true, defaultPlan: "free" }) })
     const none = select("plans-default").querySelector<HTMLOptionElement>("option[value='']")!
@@ -364,6 +385,19 @@ describe("Plans under Administration", () => {
     type(field("plan-new-accounts"), "2")
     await settle()
     expect(button("Save plan").disabled).toBe(false)
+  })
+
+  it.each([
+    ["plan-new-rules", "Rules that sync"],
+    ["plan-new-accounts", "Calendar accounts"],
+    ["plan-new-tokens", "Integration Tokens"],
+  ])("labels the %s limit with the shared label, grouping its number and Unlimited", async (id, label) => {
+    await renderAdministration(testI18n())
+    await click(button("Add a plan"))
+    expect(container.querySelector(`label[for='${id}']`)?.textContent).toBe(label)
+    const group = element("plan-edit-new").querySelector(`[role='group'][aria-labelledby='${id}-label']`)
+    expect(group?.querySelector(`#${id}`)).toBe(field(id))
+    expect(group?.querySelector(`#${id}-unlimited`)).toBe(field(`${id}-unlimited`))
   })
 
   it.each([

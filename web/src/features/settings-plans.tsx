@@ -147,7 +147,7 @@ function DefaultItem({ overview, commands }: { overview: PlansOverview; commands
             id="plans-default"
             aria-labelledby="plans-default-title"
             aria-describedby="plans-default-hint"
-            value={overview.default_plan ?? ""}
+            value={(setting.isPending ? setting.variables.defaultPlan : overview.default_plan) ?? ""}
             disabled={setting.isPending}
             onChange={(event) => setting.mutate({ enabled: overview.enabled, defaultPlan: event.target.value || null })}
           >

@@ -240,8 +240,8 @@ function LimitField({
 }) {
   const { t } = useI18n()
   return (
-    <fieldset className="field-stack">
-      <legend id={`${id}-label`}>{label}</legend>
+    <div role="group" aria-labelledby={`${id}-label`} className="field-stack">
+      <Label id={`${id}-label`} htmlFor={id}>{label}</Label>
       <Input
         id={id}
         type="number"
@@ -251,7 +251,6 @@ function LimitField({
         step={1}
         value={limit.amount}
         disabled={limit.unlimited}
-        aria-labelledby={`${id}-label`}
         onChange={(event) => onChange({ ...limit, amount: event.target.value })}
       />
       <label className="checkbox-row" htmlFor={`${id}-unlimited`}>
@@ -265,6 +264,6 @@ function LimitField({
           <strong>{t("settings.plans.editor.unlimited")}</strong>
         </span>
       </label>
-    </fieldset>
+    </div>
   )
 }
