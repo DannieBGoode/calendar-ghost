@@ -304,6 +304,10 @@ class RuleDetailResponse(RuleResponse):
     last_reconciliation: RunOutcomeResponse | None
     latest_preview: PreviewSummaryResponse | None
     running: RuleWorkResponse | None
+    can_start: bool
+    """Whether the rule may start now under its User's rule limit; Start checks again."""
+    rule_limit: int | None
+    """The rule limit that applies to the User; null when none does."""
 
 
 class UpdateRulePolicyRequest(BaseModel):

@@ -2566,6 +2566,10 @@
       },
       "RuleDetailResponse": {
         "properties": {
+          "can_start": {
+            "title": "Can Start",
+            "type": "boolean"
+          },
           "destination": {
             "$ref": "#/components/schemas/NamedCalendarEndpointResponse"
           },
@@ -2640,6 +2644,17 @@
             "title": "Reprojection Required",
             "type": "boolean"
           },
+          "rule_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Limit"
+          },
           "running": {
             "anyOf": [
               {
@@ -2701,7 +2716,9 @@
           "last_sync",
           "last_reconciliation",
           "latest_preview",
-          "running"
+          "running",
+          "can_start",
+          "rule_limit"
         ],
         "title": "RuleDetailResponse",
         "type": "object"

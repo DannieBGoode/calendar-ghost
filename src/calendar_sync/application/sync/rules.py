@@ -1,4 +1,5 @@
-from collections.abc import Callable, Mapping
+import logging
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.shared.errors import ApplicationError
@@ -12,8 +13,14 @@ from calendar_sync.application.sync.errors import (
     RuleNotFound,
 )
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork
-from calendar_sync.application.sync.ports import RulePreviewSummary, UnitOfWorkFactory
+from calendar_sync.application.sync.ports import (
+    Allowances,
+    RulePreviewSummary,
+    UnitOfWork,
+    UnitOfWorkFactory,
+)
 from calendar_sync.application.sync.removal import RemovalResult, RemoveSyncRule
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
@@ -27,7 +34,10 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.plans import LimitedResource, PlanLimitReached, may_start
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -75,13 +85,34 @@ class CreateDraftSyncRule:
 
 @dataclass(slots=True)
 class EnableSyncRule:
-    """Enables a previewed rule; its next run reconciles before scheduled synchronization."""
+    """Enables a previewed rule within its User's rule limit (ADR 0038); its next run reconciles
+    before scheduled synchronization."""
 
     unit_of_work: UnitOfWorkFactory
     locks: RuleLocks
+    allowances: Allowances
+    owner: UserId
 
     def execute(self, rule_id: SyncRuleId) -> SyncRule:
-        return _transition(self.unit_of_work, self.locks, rule_id, SyncRule.enable)
+        with self.locks.for_writes(rule_id), self.unit_of_work() as uow:
+            rule = uow.rules.get(rule_id)
+            if rule is None:
+                raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
+            enabled = rule.enable()
+            # Saved first: the save takes SQLite's writer lock, so no Start and no change of Plan
+            # can commit between the limit read next and this unit's commit (ADR 0038). A read
+            # that raises fails the Start, so a fault never admits a rule past the limit.
+            uow.rules.save(enabled)
+            limit = self.allowances.of(self.owner).limits.rules
+            if limit is not None and not may_start(rule, _counted(uow.rules.list()), limit):
+                raise PlanLimitReached(LimitedResource.RULES, limit)
+            uow.commit()
+        return enabled
+
+
+def _counted(rules: Iterable[SyncRule]) -> int:
+    """How many of a User's rules count toward their Plan's rule limit (ADR 0038)."""
+    return sum(rule.counts_toward_plan for rule in rules)
 
 
 @dataclass(slots=True)
@@ -210,18 +241,25 @@ class SyncRuleDetails:
     running: RuleWork | None = None
     names: Mapping[CalendarEndpoint, str] = field(default_factory=dict)
     """The last name the provider gave each of the rule's calendars, when one was recorded."""
+    can_start: bool = True
+    """Whether Start would admit the rule now under its User's rule limit; Start checks again."""
+    rule_limit: int | None = None
+    """The rule limit that applies to the User; None when none does, or it could not be read."""
 
 
 @dataclass(slots=True)
 class GetSyncRuleDetails:
     unit_of_work: UnitOfWorkFactory
     locks: RuleLocks
+    allowances: Allowances
+    owner: UserId
 
     def execute(self, rule_id: SyncRuleId) -> SyncRuleDetails:
         with self.unit_of_work() as uow:
             rule = uow.rules.get(rule_id)
             if rule is None:
                 raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
+            can_start, rule_limit = self._start_check(uow, rule)
             return SyncRuleDetails(
                 rule=rule,
                 mapping_count=uow.mappings.count_for_rule(rule_id),
@@ -230,7 +268,29 @@ class GetSyncRuleDetails:
                 latest_preview=uow.previews.latest(rule_id),
                 running=self.locks.current_work(rule_id),
                 names=uow.calendar_names.names((rule.source, rule.destination)),
+                can_start=can_start,
+                rule_limit=rule_limit,
             )
+
+    def _start_check(self, uow: UnitOfWork, rule: SyncRule) -> tuple[bool, int | None]:
+        """Whether Start would admit the rule now, and the rule limit it would apply.
+
+        Fails open: when the User's Allowance cannot be read, Start shows as allowed with no
+        limit, because Start reads it again and refuses then (ADR 0038).
+        """
+        try:
+            limit = self.allowances.of(self.owner).limits.rules
+        except Exception as error:
+            # Only the class: the error's text could name more than the User.
+            logger.warning(
+                "Could not read the rule limit of User %s; Start checks it again (%s)",
+                self.owner.value,
+                error.__class__.__name__,
+            )
+            return True, None
+        counting = _counted(uow.rules.list())
+        after = counting if rule.counts_toward_plan else counting + 1
+        return may_start(rule, after, limit), limit
 
 
 @dataclass(frozen=True, slots=True)

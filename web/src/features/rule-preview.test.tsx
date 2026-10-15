@@ -45,6 +45,8 @@ const previewedRule: RuleDetail = {
   last_reconciliation: null,
   latest_preview: null,
   running: null,
+  can_start: true,
+  rule_limit: null,
 }
 
 const today = new Date()

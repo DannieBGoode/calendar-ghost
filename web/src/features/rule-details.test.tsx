@@ -97,6 +97,8 @@ const enabledRule: RuleDetail = {
   running: null,
   effective_cadence: "instant",
   poll_every_minutes: 5,
+  can_start: true,
+  rule_limit: null,
 }
 
 /**

@@ -1828,6 +1828,8 @@ export interface components {
         };
         /** RuleDetailResponse */
         RuleDetailResponse: {
+            /** Can Start */
+            can_start: boolean;
             destination: components["schemas"]["NamedCalendarEndpointResponse"];
             /**
              * Effective Cadence
@@ -1852,6 +1854,8 @@ export interface components {
             privacy_policy: "busy_only" | "copy_details";
             /** Reprojection Required */
             reprojection_required: boolean;
+            /** Rule Limit */
+            rule_limit: number | null;
             running: components["schemas"]["RuleWorkResponse"] | null;
             source: components["schemas"]["NamedCalendarEndpointResponse"];
             /** State */

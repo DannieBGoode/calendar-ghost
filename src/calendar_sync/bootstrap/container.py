@@ -879,10 +879,10 @@ def _compose_user(
         ),
         list_sync_rules=list_sync_rules,
         create_draft_rule=CreateDraftSyncRule(create_sync_rule, adapters.ids),
-        enable_sync_rule=EnableSyncRule(unit_of_work, locks),
+        enable_sync_rule=EnableSyncRule(unit_of_work, locks, adapters.allowances, user_id),
         pause_sync_rule=PauseSyncRule(unit_of_work, locks),
         change_sync_rule_policy=ChangeSyncRulePolicy(unit_of_work, clock, locks),
-        get_sync_rule_details=GetSyncRuleDetails(unit_of_work, locks),
+        get_sync_rule_details=GetSyncRuleDetails(unit_of_work, locks, adapters.allowances, user_id),
         remove_sync_rule=remove_sync_rule,
         replace_sync_rule_calendars=ReplaceSyncRuleCalendars(
             unit_of_work, remove_sync_rule, create_sync_rule, adapters.ids
