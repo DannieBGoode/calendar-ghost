@@ -363,13 +363,16 @@ Plans are on and whom they limit. The box sends the plan the Default plan select
 not, and says before what turning on does with it, so a choice not saved yet is never ignored;
 with no Plan it is one empty state whose action is Add a plan.
 The default Plan has no Remove; where Remove would be, it says to choose another default first. On
-a Plan someone has, Remove says at once how many people have it, instead of a confirmation the
-server would refuse. The Plan form asks for a name and the limits, never a key. While a Plan
-command is on its way, its controls stay focusable and wait, so focus never drops to the page; a
-refusal shows under the field it names, which takes focus. Change plan on a person's page lists
-what each Plan allows. Everyone
+a Plan someone has, Remove says at once who has it, the first three by email and then how many
+more, instead of a confirmation the server would refuse, with one next step: a link to Everyone
+filtered by that Plan. The Plan form asks for a name and the limits, never a key, and refuses a
+name another Plan has before sending it. While a Plan command is on its way, its controls stay
+focusable and wait, so focus never drops to the page; a refusal shows under the field it names,
+which takes focus. Change plan on a person's page lists the Plans by name and says what the chosen
+one allows under the choice, so nothing is cut off on a narrow screen. Everyone
 shows Installation Health in a card, then everyone here in one card holding its search, filters,
-table, and pages, sorted by when people joined unless asked otherwise. Installation Health leads with what
+table, and pages, sorted by when people joined unless asked otherwise. Once a Plan exists, the
+table has a Plan column, in the words of the person's page, and the filters a Plan filter. Installation Health leads with what
 the administrator must do: "Needs you" in Destructive Red with the likely causes only they can fix,
 or "Nothing needs you" in Healthy Moss with one quiet sentence on how many people have something
 of their own to fix ("1 of 4 people has something to fix on their own dashboard"). While something

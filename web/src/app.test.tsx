@@ -478,6 +478,7 @@ describe("People", () => {
             problems: 0,
             last_synced_at: null,
             resources: NOTHING_SET_UP.resources,
+            plan: null,
           },
         ],
         total: 1,

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpDown, TriangleAlert } from "lucide-react"
 import { Fragment, useEffect, useRef } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -8,19 +8,21 @@ import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
 import type { PeopleQuery, PeopleSort, PersonRow, SortOrder } from "@/lib/api"
 import { appPathForPerson, isPlainLeftClick, type OpenPerson } from "@/lib/navigation"
-import { lastSignIn, personName } from "@/lib/people"
+import { isAdministrator, lastSignIn, personName } from "@/lib/people"
+import { personPlanOver, personPlanText } from "@/lib/plans"
 import { rememberOpenedPerson, takeOpenedPerson, type PeopleCommands } from "@/lib/use-people"
 
-const COLUMNS = 7
-// Fixed widths, so columns stay put whatever a filter shows.
+// Fixed widths, so columns stay put whatever a filter shows; Plan only once a Plan exists.
 const COLUMN_CLASSES = ["col-email", "col-sync", "col-role", "col-state", "col-joined", "col-last", "col-actions"]
+const PLAN_COLUMN_CLASSES = ["col-email", "col-sync", "col-role", "col-state", "col-plan", "col-joined", "col-last", "col-actions"]
 const ARIA_SORT: Record<SortOrder, "ascending" | "descending"> = { asc: "ascending", desc: "descending" }
 const SORT_ICONS = { asc: ArrowUp, desc: ArrowDown }
 
 /**
  * One page of people as a table. Email, Sync, Joined, and Last sign-in sort when their heading is
- * pressed; each email opens that person's page. On a narrow screen each row becomes a card that labels its own values, and the sortable
- * headings stay above the cards as buttons.
+ * pressed; each email opens that person's page. Once a Plan exists, each person's Plan has a
+ * column, in the words of their page. On a narrow screen each row becomes a card that labels its
+ * own values, and the sortable headings stay above the cards as buttons.
  */
 export function PeopleTable({
   people,
@@ -50,10 +52,13 @@ export function PeopleTable({
   const sortable = (column: PeopleSort, label: MessageKey) => (
     <SortHeader column={column} label={t(label)} query={query} onSort={onSort} />
   )
+  // The Operator Overview gives everyone a Plan once any Plan exists, and nobody before.
+  const planned = people.some((person) => person.plan !== null)
+  const columns = planned ? PLAN_COLUMN_CLASSES : COLUMN_CLASSES
   return (
-    <table ref={table} className="people-table" role="table" aria-labelledby="people-list-title">
+    <table ref={table} className="people-table" role="table" aria-labelledby="people-list-title" data-plans={planned}>
       <colgroup>
-        {COLUMN_CLASSES.map((name) => (
+        {columns.map((name) => (
           <col key={name} className={name} />
         ))}
       </colgroup>
@@ -63,6 +68,7 @@ export function PeopleTable({
           {sortable("verdict", "people.table.sync")}
           <th scope="col" role="columnheader">{t("people.table.role")}</th>
           <th scope="col" role="columnheader">{t("people.table.state")}</th>
+          {planned && <th scope="col" role="columnheader">{t("people.table.plan")}</th>}
           {sortable("joined", "people.table.joined")}
           {sortable("last_sign_in", "people.table.lastSignIn")}
           <th scope="col" role="columnheader">
@@ -76,6 +82,8 @@ export function PeopleTable({
             key={person.id}
             person={person}
             you={person.id === currentUserId}
+            planned={planned}
+            columns={columns.length}
             now={now}
             commands={commands}
             onOpen={onOpenPerson}
@@ -109,15 +117,42 @@ function SortHeader({
   )
 }
 
+/**
+ * A person's Plan, as their page says it after "Plan:". A limit they have more of than it allows
+ * takes Attention Ochre and the attention icon beside the words that say so, never the tone alone.
+ */
+function PlanCell({ person }: { person: PersonRow }) {
+  const i18n = useI18n()
+  const administrator = isAdministrator(person)
+  const over = person.plan !== null && personPlanOver(person.plan, administrator)
+  return (
+    <td
+      role="cell"
+      className="person-col-plan"
+      data-label={i18n.t("people.table.plan")}
+      data-tone={over ? "attention" : undefined}
+    >
+      {over && <TriangleAlert aria-hidden="true" />}
+      {person.plan && personPlanText(i18n, person.plan, administrator)}
+    </td>
+  )
+}
+
 function PersonRows({
   person,
   you,
+  planned,
+  columns,
   now,
   commands,
   onOpen,
 }: {
   person: PersonRow
   you: boolean
+  /** A Plan exists, so the row has a Plan column. */
+  planned: boolean
+  /** How many columns the table has, which a row of details spans. */
+  columns: number
   now: number
   commands: PeopleCommands
   onOpen: OpenPerson
@@ -156,6 +191,7 @@ function PersonRows({
         <td role="cell" className="person-col-state" data-label={t("people.table.state")}>
           {person.state === "disabled" ? <DisabledBadge /> : t("people.states.active")}
         </td>
+        {planned && <PlanCell person={person} />}
         <td role="cell" className="person-col-joined" data-label={t("people.table.joined")}>
           <time dateTime={person.created_at} title={i18n.format.dateTime(person.created_at)}>
             {i18n.format.relative(person.created_at, now)}
@@ -176,7 +212,7 @@ function PersonRows({
       </tr>
       {commands.hasDetails(person) && (
         <tr role="row" className="person-details-row">
-          <td role="cell" colSpan={COLUMNS}>
+          <td role="cell" colSpan={columns}>
             <PersonDetails person={person} name={name} commands={commands} />
           </td>
         </tr>

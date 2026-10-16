@@ -258,13 +258,15 @@ export type PeoplePage = Schemas["UserPageResponse"]
 type PeopleParams = NonNullable<paths["/api/v1/users"]["get"]["parameters"]["query"]>
 export type PeopleSort = NonNullable<PeopleParams["sort"]>
 export type SortOrder = NonNullable<PeopleParams["order"]>
-/** What the People page asks for; an empty role, state, or verdict matches everyone. */
+/** What the People page asks for; an empty role, state, verdict, or Plan matches everyone. */
 export type PeopleQuery = {
   /** Part of an email, in any case. */
   search: string
   role: PersonRole | ""
   state: PersonState | ""
   verdict: Verdict | ""
+  /** The key of the Plan people have, their own or as the default, as the Plans tab counts them. */
+  plan: string
   sort: PeopleSort
   order: SortOrder
   /** From 1. */
@@ -279,6 +281,8 @@ export const ACTIVITY_PAGE_SIZE = 100
 /** How many incidents the server lists at a time, as `INCIDENTS_READ` sets it. */
 export const INCIDENTS_PAGE_SIZE = 100
 const PEOPLE_PAGE_SIZE = 50
+/** How many people the Remove note on a Plan names before "and 2 more". */
+const PLAN_HOLDERS_NAMED = 3
 
 export const api = {
   setup: () => call("/api/v1/setup", "get"),
@@ -330,18 +334,24 @@ export const api = {
   checkPasswordReset: (token: string) => call("/api/v1/password-resets/check", "post", { body: { token } }),
   resetPassword: (token: string, password: string) =>
     call("/api/v1/password-resets", "post", { body: { token, password } }),
-  people: ({ search, role, state, verdict, sort, order, page }: PeopleQuery) =>
+  people: ({ search, role, state, verdict, plan, sort, order, page }: PeopleQuery) =>
     call("/api/v1/users", "get", {
       query: {
         ...(search.trim() ? { search: search.trim() } : {}),
         role: role || null,
         state: state || null,
         verdict: verdict || null,
+        plan: plan || null,
         sort,
         order,
         page,
         page_size: PEOPLE_PAGE_SIZE,
       },
+    }),
+  /** The first people who have a Plan, by email, and how many have it, for its Remove note. */
+  planHolders: (plan: string) =>
+    call("/api/v1/users", "get", {
+      query: { plan, sort: "email", order: "asc", page: 1, page_size: PLAN_HOLDERS_NAMED },
     }),
   setPersonRole: (userId: string, role: PersonRole) =>
     call("/api/v1/users/{user_id}/role", "put", { params: { user_id: userId }, body: { role } }),

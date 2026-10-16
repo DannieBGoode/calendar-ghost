@@ -8,13 +8,14 @@ import { NativeSelect } from "@/components/ui/native-select"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
-import type { PlanChange, PlanSummary, SyncInterval } from "@/lib/api"
+import type { ApiError, PlanChange, PlanSummary, SyncInterval } from "@/lib/api"
 import {
   COUNT_LIMIT,
   LIMIT_MINIMUM,
   LIMIT_NAMES,
   draftOf,
   missingField,
+  nameRefusal,
   payloadOf,
   peopleOver,
   refusedField,
@@ -66,7 +67,8 @@ function describedBy(...ids: (string | false | null | undefined)[]): string | un
 }
 
 /**
- * A refusal of the last save: the field it names, which takes focus as it arrives, and its
+ * A refusal of the last save, or one found before sending, as for a name another Plan has: the
+ * field it names, which takes focus as it arrives and again at each Save it stops, and its
  * message. Changing that field puts the refusal away; one that names no field stays until the
  * next save.
  */
@@ -74,18 +76,26 @@ function useRefusal(error: unknown, draft: PlanDraft, form: RefObject<HTMLFormEl
   const i18n = useI18n()
   const [sent, setSent] = useState<PlanDraft | null>(null)
   const [dismissed, setDismissed] = useState<unknown>(null)
-  const shown = error && error !== dismissed ? error : null
-  const field = shown ? refusedField(shown, sent ?? draft) : null
+  const [found, setFound] = useState<ApiError | null>(null)
+  const shown = found ?? (error && error !== dismissed ? error : null)
+  const field = shown ? refusedField(shown, found ? draft : (sent ?? draft)) : null
   useEffect(() => {
     if (field !== null) focusField(form.current, field)
-  }, [error, field, form])
+  }, [shown, field, form])
   return {
     field,
     message: shown ? apiErrorMessage(i18n, shown) : null,
     /** Remembers the draft a save sends, so its refusal names a field of that draft. */
-    sending: setSent,
+    sending: (next: PlanDraft) => {
+      setFound(null)
+      setSent(next)
+    },
+    /** Shows a refusal found before sending, as the server would answer it. */
+    found: setFound,
     changed: (next: Partial<PlanDraft>) => {
-      if (field !== null && field in next) setDismissed(error)
+      if (field === null || !(field in next)) return
+      setDismissed(error)
+      setFound(null)
     },
   }
 }
@@ -95,12 +105,14 @@ function useRefusal(error: unknown, draft: PlanDraft, form: RefObject<HTMLFormEl
  * each a whole number or No limit, and how soon calendars sync. It asks for no key: the server
  * makes a new Plan's from its name. `intervals` are the offered ones, plus the Plan's own when a
  * later release saved one this release does not offer. While a save is on its way, every control
- * keeps its focus but ignores changes; a refusal moves focus to the field it names. A limit typed
- * lower than the Plan's says how many of the people it limits would have more than it allows.
+ * keeps its focus but ignores changes; a refusal moves focus to the field it names, and so does a
+ * name another Plan already has, before anything is sent. A limit typed lower than the Plan's
+ * says how many of the people it limits would have more than it allows.
  */
 export function PlanEditor({
   plan,
   enabled,
+  others,
   intervals,
   pending,
   error,
@@ -110,6 +122,8 @@ export function PlanEditor({
   plan: PlanSummary | null
   /** Plans limit people now, so a lower limit's warning says what it does now, not once they are on. */
   enabled: boolean
+  /** The names of every other Plan, which this one's may not read as. */
+  others: readonly string[]
   intervals: SyncInterval[]
   pending: boolean
   error: unknown
@@ -141,6 +155,11 @@ export function PlanEditor({
     event.preventDefault()
     const payload = payloadOf(draft)
     if (!payload || pending) return
+    const taken = nameRefusal(draft, others)
+    if (taken) {
+      refusal.found(taken)
+      return
+    }
     refusal.sending(draft)
     onSave(payload)
   }

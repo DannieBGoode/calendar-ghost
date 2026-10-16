@@ -18,7 +18,9 @@ import {
   ownPlanRows,
   ownPlanShown,
   personPlanFact,
-  planChoiceLabel,
+  personPlanText,
+  planAllows,
+  planChoiceAllows,
   planLimitsSummary,
   planWarning,
   previewedStartRefusal,
@@ -169,23 +171,23 @@ describe("planLimitsSummary", () => {
   })
 })
 
-describe("planChoiceLabel", () => {
+describe("planAllows", () => {
   const choice = (name: string, limits: PlanLimits) => ({ name, limits })
 
   it("names a Plan with each limit and how soon calendars sync", () => {
-    expect(planChoiceLabel(i18n, choice("Family", FAMILY_LIMITS))).toBe(
+    expect(planAllows(i18n, choice("Family", FAMILY_LIMITS))).toBe(
       "Family: 5 rules, 3 calendar accounts, 2 Integration Tokens, instant sync",
     )
-    expect(planChoiceLabel(i18n, choice("Free", FREE_LIMITS))).toBe(
+    expect(planAllows(i18n, choice("Free", FREE_LIMITS))).toBe(
       "Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes",
     )
   })
 
   it("says No limit in the same words as the Plan's row, after the name", () => {
-    expect(planChoiceLabel(i18n, choice("Family", { ...FAMILY_LIMITS, rules: null, integration_tokens: null }))).toBe(
+    expect(planAllows(i18n, choice("Family", { ...FAMILY_LIMITS, rules: null, integration_tokens: null }))).toBe(
       "Family: no limit on rules, 3 calendar accounts, no limit on Integration Tokens, instant sync",
     )
-    expect(planChoiceLabel(i18n, choice("No limits", UNLIMITED))).toBe(
+    expect(planAllows(i18n, choice("No limits", UNLIMITED))).toBe(
       "No limits: no limit on rules, calendar accounts, or Integration Tokens, instant sync",
     )
   })
@@ -198,9 +200,29 @@ describe("planChoiceLabel", () => {
     ["30_minutes", "every 30 minutes"],
     ["60_minutes", "every hour"],
   ])("names the %s interval", (interval, words) => {
-    expect(planChoiceLabel(i18n, choice("Free", { ...FREE_LIMITS, sync_interval: interval }))).toBe(
+    expect(planAllows(i18n, choice("Free", { ...FREE_LIMITS, sync_interval: interval }))).toBe(
       `Free: 1 rule, 1 calendar account, no Integration Tokens, ${words}`,
     )
+  })
+})
+
+describe("planChoiceAllows", () => {
+  it("says what the Plan chosen allows, naming it", () => {
+    const free: PlanSummary = {
+      key: "free",
+      name: "Free",
+      limits: FREE_LIMITS,
+      is_default: true,
+      people: 0,
+      limited_people: 0,
+      over_people: 0,
+      use: { rules: [], connected_accounts: [], integration_tokens: [] },
+    }
+    expect(planChoiceAllows(i18n, free)).toBe("Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes")
+  })
+
+  it("says no Plan is the default yet when the default plan is chosen while there is none", () => {
+    expect(planChoiceAllows(i18n, undefined)).toBe("No plan is the default yet.")
   })
 })
 
@@ -440,5 +462,46 @@ describe("personPlanFact", () => {
   it("says what a person has past a limit while Plans are off, as turning them on would find it", () => {
     const plan = person({ basis: "plans_off", has: hasFree, over: [{ limit: "rules", in_use: 2, allowed: 1 }] })
     expect(personPlanFact(i18n, plan, false)).toBe("Plan: Free (default), once plans are on. 2 rules, 1 allowed")
+  })
+})
+
+describe("personPlanText", () => {
+  const familyName = { key: "family", name: "Family" }
+  const hasFamily = { ...familyName, on_default: false }
+  const hasFree = { key: "free", name: "Free", on_default: true }
+  const person = (plan: Partial<PersonPlanOverview>): PersonPlanOverview => ({
+    basis: "plan",
+    plan: null,
+    assigned: null,
+    has: null,
+    over: [],
+    ...plan,
+  })
+
+  it.each<[string, PersonPlanOverview, boolean, string]>([
+    ["their own Plan", person({ plan: hasFamily, assigned: familyName, has: hasFamily }), false, "Family"],
+    ["the Default Plan", person({ plan: hasFree, has: hasFree }), false, "Free (default)"],
+    [
+      "their own Plan while Plans are off",
+      person({ basis: "plans_off", assigned: familyName, has: hasFamily }),
+      false,
+      "Family, once plans are on",
+    ],
+    ["no Plan yet while Plans are off", person({ basis: "plans_off" }), false, "The default, once plans are on"],
+    ["an administrator who has no Plan", person({ basis: "administrator" }), true, "No plan limits administrators"],
+    [
+      "an administrator who has the Default Plan",
+      person({ basis: "administrator", has: hasFree }),
+      true,
+      "Free (default). No plan limits administrators",
+    ],
+    [
+      "a limit they are over",
+      person({ plan: hasFamily, has: hasFamily, over: [{ limit: "connected_accounts", in_use: 2, allowed: 1 }] }),
+      false,
+      "Family. 2 calendar accounts, 1 allowed",
+    ],
+  ])("says the person fact's words for %s, without its label, for People's Plan column", (_case, plan, administrator, text) => {
+    expect(personPlanText(i18n, plan, administrator)).toBe(text)
   })
 })

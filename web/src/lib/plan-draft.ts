@@ -87,13 +87,31 @@ export function peopleOver(plan: PlanSummary | null, draft: PlanDraft, name: Lim
   return plan.use[SAVED[name]].reduce((total, { in_use, people }) => (in_use > next ? total + people : total), 0)
 }
 
+/** What two Plan names that read as one have in common, as `_name_key` in domain/plans.py compares them. */
+function nameKey(name: string): string {
+  return name.normalize("NFKC").trim().toLowerCase()
+}
+
+/**
+ * The refusal the server would answer for a name that another Plan, one of `others`, already reads
+ * as, whatever its case or the spaces around it, so the editor says so before sending it; null
+ * while the name is free. The server still checks, as two Plans can be saved at once.
+ */
+export function nameRefusal(draft: PlanDraft, others: readonly string[]): ApiError | null {
+  const taken = others.find((other) => nameKey(other) === nameKey(draft.name))
+  if (taken === undefined || !draft.name.trim()) return null
+  return new ApiError("Another plan has this name.", 409, null, { code: "plan_name_taken", params: { name: taken } })
+}
+
 /**
  * The field a refusal of the Plan sent as `draft` names, or null when it names none, as when the
  * Plan was removed meanwhile. The server does not say which limit it refused, and No limit is
  * always allowed, so a limit refusal names the first limit with a number.
  */
 export function refusedField(error: unknown, draft: PlanDraft): DraftField | null {
-  if (!(error instanceof ApiError) || error.code !== "invalid_plan") return null
+  if (!(error instanceof ApiError)) return null
+  if (error.code === "plan_name_taken") return "name"
+  if (error.code !== "invalid_plan") return null
   const { reason } = error.params
   if (reason === "name" || reason === "interval") return reason
   if (reason === "limit") return LIMIT_NAMES.find((name) => !draft[name].unlimited) ?? null

@@ -15,7 +15,10 @@ import type {
   PendingInvitation,
   PeoplePage,
   Person,
+  PersonPlanOverview,
   PersonRow,
+  PlanSummary,
+  PlansOverview,
   SessionStatus,
 } from "@/lib/api"
 
@@ -64,6 +67,47 @@ const NOTHING_SET_UP: Omit<PersonRow, keyof Person> = {
 const OVERVIEWS: Record<string, Partial<PersonRow>> = {
   "user-robin": { verdict: "stopped", problems: 2 },
   "user-sam": { verdict: "healthy" },
+}
+
+const FREE = { key: "free", name: "Free", on_default: true }
+const FAMILY = { key: "family", name: "Family", on_default: false }
+
+/** Each person's Plan once a Plan exists: Dana administers, Robin is over Family, Sam has the default. */
+const PLANS_HELD: Record<string, PersonPlanOverview> = {
+  "user-dana": { basis: "administrator", plan: null, assigned: null, has: FREE, over: [] },
+  "user-robin": {
+    basis: "plan",
+    plan: FAMILY,
+    assigned: { key: "family", name: "Family" },
+    has: FAMILY,
+    over: [{ limit: "connected_accounts", in_use: 2, allowed: 1 }],
+  },
+  "user-sam": { basis: "plan", plan: FREE, assigned: null, has: FREE, over: [] },
+}
+
+/** The same page once a Plan exists, each person with the Plan they have. */
+function withPlans(page: PeoplePage): PeoplePage {
+  return { ...page, users: page.users.map((user) => ({ ...user, plan: PLANS_HELD[user.id] ?? null })) }
+}
+
+function planSummary(key: string, name: string, isDefault: boolean): PlanSummary {
+  return {
+    key,
+    name,
+    limits: { rules: 1, connected_accounts: 1, integration_tokens: 0, sync_interval: "5_minutes" },
+    is_default: isDefault,
+    people: 1,
+    limited_people: 1,
+    over_people: 0,
+    use: { rules: [], connected_accounts: [], integration_tokens: [] },
+  }
+}
+
+const PLANS: PlansOverview = {
+  enabled: true,
+  default_plan: "free",
+  sync_intervals: ["instant", "5_minutes"],
+  plans: [planSummary("family", "Family", false), planSummary("free", "Free", true)],
 }
 
 function onePage(users: Person[], page: Partial<PeoplePage> = {}): PeoplePage {
@@ -320,6 +364,93 @@ describe("People page", () => {
     expect(personRow("robin@example.test").querySelector("[aria-haspopup='menu']")?.getAttribute("aria-label")).toBe(
       "Actions for robin@example.test",
     )
+  })
+
+  it("shows the plan each person has once a plan exists, in the words of their page", async () => {
+    await renderPeople(testI18n(), {
+      people: () => jsonResponse(withPlans(onePage([me, robin, sam]))),
+      answers: { "GET /api/v1/plans": jsonResponse(PLANS) },
+    })
+    expect([...container.querySelectorAll("thead th")].map((cell) => cell.textContent.trim())).toEqual([
+      "Email",
+      "Sync",
+      "Role",
+      "State",
+      "Plan",
+      "Joined",
+      "Last sign-in",
+      "Actions",
+    ])
+    const plan = (email: string) => personRow(email).querySelector<HTMLElement>(".person-col-plan")!
+    expect(plan("dana@example.test").textContent).toBe("Free (default). No plan limits administrators")
+    expect(plan("sam@example.test").textContent).toBe("Free (default)")
+    // Over a limit: in words, with the attention icon and tone, never the tone alone.
+    expect(plan("robin@example.test").textContent).toBe("Family. 2 calendar accounts, 1 allowed")
+    expect(plan("robin@example.test").getAttribute("data-tone")).toBe("attention")
+    expect(plan("robin@example.test").querySelector("svg[aria-hidden='true']")).not.toBeNull()
+    expect(plan("sam@example.test").hasAttribute("data-tone")).toBe(false)
+    expect(plan("sam@example.test").getAttribute("data-label")).toBe("Plan")
+  })
+
+  it("shows no Plan column or filter, and asks for no plans, while no plan exists", async () => {
+    await renderPeople(testI18n())
+    expect([...container.querySelectorAll("thead th")].map((cell) => cell.textContent.trim())).not.toContain("Plan")
+    expect(container.querySelector(".person-col-plan")).toBeNull()
+    expect(container.querySelector("#people-plan")).toBeNull()
+    expect(calls.some((call) => call.path === "/api/v1/plans")).toBe(false)
+  })
+
+  it("filters by plan from the first page, kept in the address", async () => {
+    await renderPeople(testI18n(), {
+      search: "?page=2",
+      people: () => jsonResponse(withPlans(onePage([me, robin, sam], { total: 60 }))),
+      answers: { "GET /api/v1/plans": jsonResponse(PLANS) },
+    })
+    const plan = container.querySelector<HTMLSelectElement>("#people-plan")!
+    expect(container.querySelector("label[for='people-plan']")?.textContent).toBe("Plan")
+    expect([...plan.options].map((option) => [option.value, option.textContent])).toEqual([
+      ["", "Any plan"],
+      ["family", "Family"],
+      ["free", "Free (default)"],
+    ])
+    await select("people-plan", "family")
+    expect(lastPeopleQuery()).toMatchObject({ plan: "family", page: "1" })
+    expect(window.location.search).toBe("?plan=family")
+    await select("people-plan", "")
+    expect(lastPeopleQuery().plan).toBeUndefined()
+    expect(window.location.search).toBe("")
+  })
+
+  it("restores a plan filter from the address, even for a plan that no longer exists", async () => {
+    await renderPeople(testI18n(), {
+      search: "?plan=free",
+      people: () => jsonResponse(withPlans(onePage([sam]))),
+      answers: { "GET /api/v1/plans": jsonResponse(PLANS) },
+    })
+    expect(lastPeopleQuery()).toMatchObject({ plan: "free" })
+    expect(container.querySelector<HTMLSelectElement>("#people-plan")!.value).toBe("free")
+
+    act(() => root?.unmount())
+    root = null
+    await renderPeople(testI18n(), {
+      search: "?plan=gone",
+      people: () => jsonResponse(onePage([], { total: 0 })),
+      answers: { "GET /api/v1/plans": jsonResponse(PLANS) },
+    })
+    const plan = container.querySelector<HTMLSelectElement>("#people-plan")!
+    expect(plan.value).toBe("gone")
+    expect(plan.selectedOptions[0]?.textContent).toBe("A plan that no longer exists")
+    await click(button("Clear filters"))
+    expect(lastPeopleQuery().plan).toBeUndefined()
+  })
+
+  it("has no untranslated text with each person's plan", async () => {
+    await renderPeople(pseudoI18n(), {
+      people: () => jsonResponse(withPlans(onePage([me, robin, sam]))),
+      answers: { "GET /api/v1/plans": jsonResponse(PLANS) },
+    })
+    const fixtures = [me.email!, robin.email!, sam.email!, "Family", "Free", ...dateWords()]
+    expect(untranslatedText(container, fixtures)).toEqual([])
   })
 
   it("restores the search, filters, sort, and page from the address", async () => {

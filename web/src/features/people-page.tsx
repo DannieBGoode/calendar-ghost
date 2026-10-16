@@ -13,7 +13,7 @@ import type { MessageKey } from "@/i18n/types"
 import { api } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
 import { appPathForPeopleTab, type OpenPerson, type PeopleTab } from "@/lib/navigation"
-import { peopleSearch } from "@/lib/people-query"
+import { DEFAULT_PEOPLE_QUERY, peopleSearch } from "@/lib/people-query"
 import { useNow } from "@/lib/use-now"
 import { usePeopleAccess } from "@/lib/use-people-access"
 import { useInvitations, type InvitationCommands } from "@/lib/use-invitations"
@@ -68,9 +68,14 @@ function PeopleContent({
   const [query, update] = usePeopleLocation()
   const invitations = useInvitations()
   const now = useNow()
+  // Counts arrivals at the list from elsewhere on this page, each of which starts at its heading.
+  const [listArrivals, setListArrivals] = useState(0)
   useEffect(() => {
     document.title = documentTitle(i18n, i18n.t(TAB_TITLES[tab]))
   }, [i18n, tab])
+  useEffect(() => {
+    if (listArrivals > 0) document.getElementById("people-list-title")?.focus()
+  }, [listArrivals])
 
   // Each tab has its own address; switching keeps this page, and what it shows, in place.
   function openTab(next: PeopleTab) {
@@ -78,6 +83,15 @@ function PeopleContent({
     const search = next === "everyone" ? peopleSearch(query) : ""
     window.history.pushState(null, "", `${appPathForPeopleTab(next)}${search}`)
     setTab(next)
+  }
+
+  // Everyone who has a Plan, from its Remove note: that Plan alone filters the list, from its heading.
+  function showHolders(plan: string) {
+    const shown = { ...DEFAULT_PEOPLE_QUERY, plan }
+    window.history.pushState(null, "", `${appPathForPeopleTab("everyone")}${peopleSearch(shown)}`)
+    update(shown, "replace")
+    setTab("everyone")
+    setListArrivals((count) => count + 1)
   }
 
   function inviteSomeone() {
@@ -111,7 +125,7 @@ function PeopleContent({
         />
       )}
       {tab === "invitations" && <InvitationsSection commands={invitations} now={now} />}
-      {tab === "plans" && <PlansSection />}
+      {tab === "plans" && <PlansSection onShowHolders={showHolders} />}
       <p className="sr-only" role="status">
         {invitations.message}
       </p>

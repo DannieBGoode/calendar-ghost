@@ -13,13 +13,16 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   minutes. The form says what counts toward each limit, and before a lower limit is saved, how many
   people it would leave with more than it allows. Each Plan says how many people have it, how many
   it limits, and how many of those have more than it allows, and a person's page names each limit
-  they are over. The default has no Remove and says to choose another default first, and Remove on
-  a Plan someone has says how many people have it.
+  they are over. **Everyone** shows each person's Plan in its own column, with any limit they are
+  over, and can list only the people who have one Plan. Two Plans cannot share a name; the form
+  says so under Name. The default has no Remove and says to choose another default first, and
+  Remove on a Plan someone has names the first three of them and links to everyone who has it.
   The administrator chooses the Default Plan with **Save default**, and turns Plans on with
   **Limit people with plans**, which says how many people Plans limit. Turning Plans on with no
   default adds a Plan named No limits, which limits nobody, as the default, so nothing changes until
   someone has a smaller Plan; it can be renamed and changed like any Plan. **Change plan** on a
-  person's page gives them a Plan of their own, listing what each Plan allows. Plans are off by
+  person's page gives them a Plan of their own, saying what the chosen Plan allows under the
+  choice. Plans are off by
   default, and while they are off nothing changes. Administrators are never limited, and under
   **Only me** Plans stay hidden. Once Plans are on, starting a rule, connecting a new calendar
   account, and issuing a token respect the person's Plan: each control says so at the limit and

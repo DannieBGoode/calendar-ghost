@@ -30,7 +30,10 @@
     "active": "Active",
     "disabled": "Disabled",
     "verdict": "Sync",
-    "anyVerdict": "Any sync status"
+    "anyVerdict": "Any sync status",
+    "plan": "Plan",
+    "anyPlan": "Any plan",
+    "missingPlan": "A plan that no longer exists"
   },
   "table": {
     "email": "Email",
@@ -39,7 +42,8 @@
     "joined": "Joined",
     "lastSignIn": "Last sign-in",
     "actions": "Actions",
-    "sync": "Sync"
+    "sync": "Sync",
+    "plan": "Plan"
   },
   "pagination": {
     "label": "Pages of people",
@@ -318,7 +322,8 @@
     "default": "Default plan ({name})",
     "defaultUnnamed": "Default plan",
     "hint": "Default plan always means whichever plan is the default. Any other plan stays theirs until you change it.",
-    "option": "{name}: {limits}, {interval}",
+    "allows": "{name}: {limits}, {interval}",
+    "allowsNoDefault": "No plan is the default yet.",
     "limits": {
       "unlimitedRules": "no limit on rules",
       "unlimited": "no limit on rules, calendar accounts, or Integration Tokens"
@@ -333,14 +338,16 @@
     },
     "save": "Save plan",
     "cancel": "Cancel",
+    "held": {
+      "default": "{name} (default)",
+      "later": "{plan}, once plans are on",
+      "laterNone": "The default, once plans are on",
+      "administrator": "{plan}. No plan limits administrators"
+    },
     "fact": {
-      "own": "Plan: {name}",
-      "default": "Plan: {name} (default)",
-      "later": "Plan: {name}, once plans are on",
-      "laterDefault": "Plan: {name} (default), once plans are on",
+      "label": "Plan: {plan}",
       "laterNone": "Plan: the default, once plans are on",
       "administrator": "No plan limits administrators",
-      "administratorHas": "{plan}. No plan limits administrators",
       "over": "{fact}. {over}"
     },
     "over": {
@@ -457,6 +464,15 @@
       "one": "{count} person has {name}. Give them another plan to remove it.",
       "other": "{count} people have {name}. Give them another plan to remove it."
     },
+    "inUseNamed": {
+      "one": "{people} has {name}. Give them another plan to remove it.",
+      "other": "{people} have {name}. Give them another plan to remove it."
+    },
+    "inUseMore": {
+      "one": "{count} more",
+      "other": "{count} more"
+    },
+    "inUseShow": "Show who has {name}",
     "add": "Add a plan",
     "editor": {
       "name": "Name",

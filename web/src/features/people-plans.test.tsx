@@ -9,7 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { PlanSummary, PlansOverview, Registration, SessionStatus } from "@/lib/api"
+import type { PeoplePage, PersonRow, PlanSummary, PlansOverview, Registration, SessionStatus } from "@/lib/api"
 
 import { PeopleView } from "./people-page"
 
@@ -92,6 +92,28 @@ function overview({
 
 const INVITATION_ONLY: Registration = { policy: "invitation_only", only_me_available: false }
 
+/** Someone People lists, by email, as the Remove note names them. */
+function holder(email: string): PersonRow {
+  return {
+    id: `user-${email.split("@")[0]}`,
+    email,
+    role: "user",
+    state: "active",
+    created_at: "2026-10-01T09:00:00Z",
+    last_sign_in_at: null,
+    verdict: "healthy",
+    problems: 0,
+    last_synced_at: null,
+    resources: { rules: 0, connected_accounts: 0, activity_entries: 0, provider_calls: [], since: "2026-09-10" },
+    plan: null,
+  }
+}
+
+/** The first people who have a Plan, as GET /api/v1/users?plan= answers, and how many have it. */
+function holders(emails: string[], total = emails.length): PeoplePage {
+  return { users: emails.map(holder), total, page: 1, page_size: 3 }
+}
+
 /** What Limit people with plans says while off with no default plan. */
 const OFF_NO_DEFAULT =
   "Off. Limits nobody. There is no default plan yet, so turning this on adds a plan named No limits as the default. It limits nobody until you give someone a smaller plan."
@@ -106,7 +128,7 @@ function refusal(status: number, code: string, params: Record<string, string | n
 
 const NO_CONTENT = { ok: true, status: 204, json: () => Promise.resolve(null) } as Response
 
-type Call = { method: string; path: string; body: unknown }
+type Call = { method: string; path: string; query: URLSearchParams; body: unknown }
 type Scenario = {
   registration?: Registration
   plans?: PlansOverview
@@ -123,6 +145,16 @@ function serve({ registration = INVITATION_ONLY, plans = overview(), answers = {
     "GET /api/v1/registration": jsonResponse(registration),
     "GET /api/v1/invitations": jsonResponse([]),
     "GET /api/v1/plans": jsonResponse(plans),
+    "GET /api/v1/users": jsonResponse(holders(["robin@example.test"])),
+    "GET /api/v1/installation/health": jsonResponse({
+      status: "healthy",
+      needs_attention: false,
+      incidents: [],
+      users: { healthy: 1 },
+      disabled_users: 0,
+      checked_at: "2026-10-16T09:00:00Z",
+      hints: [],
+    }),
   }
   routes = { ...defaults, ...answers }
   calls = []
@@ -130,9 +162,9 @@ function serve({ registration = INVITATION_ONLY, plans = overview(), answers = {
     "fetch",
     vi.fn((input: string | URL, init?: RequestInit) => {
       const method = init?.method ?? "GET"
-      const path = String(input).split("?")[0] ?? ""
+      const [path = "", search = ""] = String(input).split("?")
       const body: unknown = init?.body ? JSON.parse(init.body as string) : undefined
-      calls.push({ method, path, body })
+      calls.push({ method, path, query: new URLSearchParams(search), body })
       return Promise.resolve(routes[`${method} ${path}`] ?? jsonResponse({}))
     }),
   )
@@ -293,6 +325,11 @@ function alertText(): string | null | undefined {
   return plansSection().querySelector("[role='alert']")?.textContent
 }
 
+/** What the Remove note on a Plan someone has says, without its link. */
+function inUseNote(key: string): string | null | undefined {
+  return element(`plan-remove-${key}`).querySelector("p")?.textContent
+}
+
 describe("People's Plans tab", () => {
   it("is hidden with People under Only me, where the only person administers, and never asks for plans", async () => {
     await renderPlans(testI18n(), { registration: { policy: "only_me", only_me_available: true } })
@@ -390,7 +427,7 @@ describe("People's Plans tab", () => {
     await renderPlans(testI18n(), { plans: overview({ enabled: true, defaultPlan: "free", plans: [free, robinOnly] }) })
     expect(copyLines("No limits")[2]).toBe("1 person has it. Limits nobody.")
     await click(button("Remove", planRow("No limits")))
-    expect(element("plan-remove-no-limits").textContent).toBe("1 person has No limits. Give them another plan to remove it.")
+    expect(inUseNote("no-limits")).toBe("robin@example.test has No limits. Give them another plan to remove it.")
     expect(element("plans-enabled-hint").textContent).toBe("On. Limits 2 people.")
   })
 
@@ -675,7 +712,7 @@ describe("People's Plans tab", () => {
       answers: { "POST /api/v1/plans": refusal(422, "invalid_plan", { reason: "name" }) },
     })
     await click(button("Add a plan"))
-    type(field("plan-new-name"), "Family")
+    type(field("plan-new-name"), "Family Plus")
     await submit(field("plan-new-name").closest("form")!)
     expect(element("plan-edit-new").querySelector("[role='alert']")?.textContent).toBe(
       "Give the plan a name of 1 to 60 characters, without line breaks or other control characters.",
@@ -683,6 +720,47 @@ describe("People's Plans tab", () => {
     expect(field("plan-new-name").getAttribute("aria-invalid")).toBe("true")
     expect(document.activeElement).toBe(field("plan-new-name"))
     expect(status()).toBe("")
+  })
+
+  it("refuses a name another plan has before sending it, and shows the server's refusal the same way", async () => {
+    await renderPlans(testI18n(), {
+      answers: { "POST /api/v1/plans": refusal(409, "plan_name_taken", { name: "Family plus" }) },
+    })
+    await click(button("Add a plan"))
+    type(field("plan-new-name"), " family ")
+    await submit(field("plan-new-name").closest("form")!)
+    expect(sent("POST", "/api/v1/plans")).toBeUndefined()
+    expect(element("plan-edit-new").querySelector("[role='alert']")?.textContent).toBe(
+      "Another plan is named Family. Choose a different name.",
+    )
+    expect(field("plan-new-name").getAttribute("aria-invalid")).toBe("true")
+    expect(document.activeElement).toBe(field("plan-new-name"))
+
+    // Added meanwhile by someone else: the server refuses it the same way.
+    type(field("plan-new-name"), "Family Plus")
+    await submit(field("plan-new-name").closest("form")!)
+    expect(sent("POST", "/api/v1/plans")).toMatchObject({ name: "Family Plus" })
+    expect(element("plan-edit-new").querySelector("[role='alert']")?.textContent).toBe(
+      "Another plan is named Family plus. Choose a different name.",
+    )
+    expect(field("plan-new-name").getAttribute("aria-invalid")).toBe("true")
+    expect(document.activeElement).toBe(field("plan-new-name"))
+  })
+
+  it("lets a plan keep its own name, and refuses another plan's, while editing", async () => {
+    await renderPlans(testI18n(), {
+      answers: { "PUT /api/v1/plans/family": jsonResponse({ ...family, name: "FAMILY" }) },
+    })
+    await click(button("Edit", planRow("Family")))
+    type(field("plan-family-name"), "free")
+    await submit(field("plan-family-name").closest("form")!)
+    expect(sent("PUT", "/api/v1/plans/family")).toBeUndefined()
+    expect(element("plan-edit-family").querySelector("[role='alert']")?.textContent).toBe(
+      "Another plan is named Free. Choose a different name.",
+    )
+    type(field("plan-family-name"), "FAMILY")
+    await submit(field("plan-family-name").closest("form")!)
+    expect(sent("PUT", "/api/v1/plans/family")).toMatchObject({ name: "FAMILY" })
   })
 
   it("edits a plan without showing its key, and warns before lowering its rule limit", async () => {
@@ -825,22 +903,80 @@ describe("People's Plans tab", () => {
   })
 
   it.each([
-    [4, "4 people have Family. Give them another plan to remove it."],
-    [1, "1 person has Family. Give them another plan to remove it."],
-  ])("says at once who has a plan (%i of them), instead of asking to remove it", async (people, reason) => {
-    await renderPlans(testI18n(), { plans: overview({ plans: [{ ...family, people }, free] }) })
+    [["robin@example.test"], 1, "robin@example.test has Family. Give them another plan to remove it."],
+    [
+      ["robin@example.test", "sam@example.test"],
+      2,
+      "robin@example.test and sam@example.test have Family. Give them another plan to remove it.",
+    ],
+    [
+      ["ada@example.test", "robin@example.test", "sam@example.test"],
+      3,
+      "ada@example.test, robin@example.test, and sam@example.test have Family. Give them another plan to remove it.",
+    ],
+    [
+      ["ada@example.test", "robin@example.test", "sam@example.test"],
+      5,
+      "ada@example.test, robin@example.test, sam@example.test, and 2 more have Family. Give them another plan to remove it.",
+    ],
+  ])("names who has a plan (%j of %i), instead of asking to remove it", async (emails, people, reason) => {
+    await renderPlans(testI18n(), {
+      plans: overview({ plans: [{ ...family, people }, free] }),
+      answers: { "GET /api/v1/users": jsonResponse(holders(emails, people)) },
+    })
     const remove = button("Remove", planRow("Family"))
     await click(remove)
     expect(remove.getAttribute("aria-expanded")).toBe("true")
     const shown = element("plan-remove-family")
-    expect(shown.textContent).toBe(reason)
+    expect(inUseNote("family")).toBe(reason)
     expect(document.activeElement).toBe(shown)
     expect(buttonOrNull("Remove plan")).toBeNull()
+    // The first three by email, from everyone who has the plan, as People counts them.
+    const asked = calls.filter((call) => call.method === "GET" && call.path === "/api/v1/users")
+    expect(asked.map((call) => Object.fromEntries(call.query))).toEqual([
+      { plan: "family", sort: "email", order: "asc", page: "1", page_size: "3" },
+    ])
+    const link = shown.querySelector("a")!
+    expect(link.textContent).toBe("Show who has Family")
+    expect(link.getAttribute("href")).toBe("/people?plan=family")
 
     await click(remove)
     expect(container.querySelector("#plan-remove-family")).toBeNull()
     expect(remove.getAttribute("aria-expanded")).toBe("false")
     expect(calls.some((call) => call.method === "DELETE")).toBe(false)
+  })
+
+  it("says how many have a plan while their names load, or when they cannot", async () => {
+    let answer: (response: Response) => void = () => undefined
+    const held = new Promise<Response>((resolve) => {
+      answer = resolve
+    })
+    await renderPlans(testI18n(), { answers: { "GET /api/v1/users": held } })
+    await click(button("Remove", planRow("Family")))
+    expect(inUseNote("family")).toBe("4 people have Family. Give them another plan to remove it.")
+    // The sentence is announced again once it names them.
+    expect(element("plan-remove-family").querySelector("p")?.getAttribute("aria-live")).toBe("polite")
+    expect(element("plan-remove-family").querySelector("a")?.getAttribute("href")).toBe("/people?plan=family")
+
+    await act(async () => {
+      answer(jsonResponse({ detail: "boom" }, 500))
+      await Promise.resolve()
+    })
+    await settle()
+    expect(inUseNote("family")).toBe("4 people have Family. Give them another plan to remove it.")
+  })
+
+  it("opens Everyone filtered by the plan from its Remove note, at the list", async () => {
+    await renderPlans(testI18n(), { plans: overview({ plans: [{ ...family, people: 1 }, free] }) })
+    await click(button("Remove", planRow("Family")))
+    await click(element("plan-remove-family").querySelector("a")!)
+
+    expect(`${window.location.pathname}${window.location.search}`).toBe("/people?plan=family")
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Everyone")
+    const listed = calls.filter((call) => call.method === "GET" && call.path === "/api/v1/users").at(-1)
+    expect(Object.fromEntries(listed!.query)).toMatchObject({ plan: "family", page: "1", page_size: "50" })
+    expect(container.querySelector<HTMLSelectElement>("#people-plan")?.value).toBe("family")
+    expect(document.activeElement).toBe(element("people-list-title"))
   })
 
   it("asks inline before removing a plan nobody has", async () => {
@@ -928,7 +1064,7 @@ describe("People's Plans tab", () => {
     await renderPlans(pseudoI18n(), {
       plans: overview({ enabled: true, defaultPlan: "free", plans: [{ ...family, over_people: 1 }, free, spare] }),
     })
-    const names = [...dateWords(), family.name, free.name, spare.name]
+    const names = [...dateWords(), family.name, free.name, spare.name, "robin@example.test"]
     expect(untranslatedText(container, names)).toEqual([])
     await choose(select("plans-default"), "family")
     await click(planRow("Family").querySelectorAll("button")[1]!)

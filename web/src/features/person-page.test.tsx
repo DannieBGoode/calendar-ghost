@@ -245,6 +245,12 @@ function menuLabels() {
   return [...container.querySelectorAll("[role='menuitem'] .overflow-menu-label")].map((label) => label.textContent)
 }
 
+/** The text of the elements an element's aria-describedby names, in order. */
+function describedBy(target: Element): (string | undefined)[] {
+  const ids = target.getAttribute("aria-describedby")?.split(" ").filter(Boolean) ?? []
+  return ids.map((id) => container.querySelector(`#${id}`)?.textContent)
+}
+
 /** Chooses a value in the open Plan choice. */
 async function pick(value: string) {
   const select = container.querySelector<HTMLSelectElement>("#person-plan-user-robin")!
@@ -660,25 +666,40 @@ describe("A person's page", () => {
       expect(item?.querySelector(".overflow-menu-description")?.textContent).toBe("Choose which plan limits this person.")
     })
 
-    it("chooses inline among the plans, each with its limits, and the default plan, which names its plan", async () => {
+    it("chooses inline among the plans by name, and the default plan, which names its plan", async () => {
       await renderPerson(testI18n(), "user-robin", withPlan(onFamily, { "PUT /api/v1/users/user-robin/plan": jsonResponse(onFree) }))
       await choose("Change plan")
 
       const select = container.querySelector<HTMLSelectElement>("#person-plan-user-robin")!
       expect(container.querySelector("label[for='person-plan-user-robin']")?.textContent).toBe("Plan for robin@example.test")
+      // Short names, so nothing is cut off on a narrow screen.
       expect([...select.options].map((option) => [option.value, option.textContent])).toEqual([
         ["", "Default plan (Free)"],
-        ["family", "Family: 5 rules, 3 calendar accounts, 2 Integration Tokens, instant sync"],
-        ["free", "Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes"],
+        ["family", "Family"],
+        ["free", "Free"],
       ])
-      // What choosing the default means, beside the choice.
-      const hint = container.querySelector(`#${select.getAttribute("aria-describedby")!}`)
-      expect(hint?.textContent).toBe(
+      // What the chosen Plan allows, then what choosing the default means, beside the choice.
+      expect(describedBy(select)).toEqual([
+        "Family: 5 rules, 3 calendar accounts, 2 Integration Tokens, instant sync",
         "Default plan always means whichever plan is the default. Any other plan stays theirs until you change it.",
-      )
+      ])
       // It opens on their own Plan, with focus on the choice.
       expect(select.value).toBe("family")
       expect(document.activeElement).toBe(select)
+    })
+
+    it("says what the chosen plan allows under the choice, and announces it as the choice changes", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily))
+      await choose("Change plan")
+      const allows = container.querySelector<HTMLElement>("#person-plan-user-robin-allows")!
+      expect(allows.getAttribute("aria-live")).toBe("polite")
+      await pick("free")
+      expect(allows.textContent).toBe("Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes")
+      // The default plan's choice says what the Plan that is the default allows.
+      await pick("")
+      expect(allows.textContent).toBe("Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes")
+      await pick("family")
+      expect(allows.textContent).toBe("Family: 5 rules, 3 calendar accounts, 2 Integration Tokens, instant sync")
     })
 
     it("names no plan in the default plan's option while none is the default", async () => {
@@ -692,6 +713,8 @@ describe("A person's page", () => {
       await choose("Change plan")
       const select = container.querySelector<HTMLSelectElement>("#person-plan-user-robin")!
       expect(select.options[0]?.textContent).toBe("Default plan")
+      await pick("")
+      expect(container.querySelector("#person-plan-user-robin-allows")?.textContent).toBe("No plan is the default yet.")
     })
 
     it("returns them to the default plan, and says which plan that is", async () => {

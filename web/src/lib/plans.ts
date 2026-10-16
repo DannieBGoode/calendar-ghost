@@ -3,6 +3,7 @@ import type { MessageKey } from "@/i18n/types"
 import type {
   OverLimit,
   OwnPlan,
+  PeoplePage,
   PersonPlanOverview,
   PlanLimits,
   PlanSummary,
@@ -11,6 +12,7 @@ import type {
   RuleSummary,
   SyncInterval,
 } from "@/lib/api"
+import { personName } from "@/lib/people"
 
 /**
  * Whether Your plan shows: only when a Plan limits the User, or for an administrator while other
@@ -85,7 +87,7 @@ function tokenLimit({ t }: I18n, tokens: number | null): string {
 
 /**
  * How a list of a Plan's counts says "No limit" where it starts: a Plan's row starts a line with
- * it, and Change plan's options after the Plan's name.
+ * it, and Change plan's line on what the chosen Plan allows after the Plan's name.
  */
 type NoLimitWords = { rules: MessageKey; all: MessageKey }
 
@@ -114,15 +116,38 @@ export function planLimitsSummary(i18n: I18n, limits: PlanLimits): string {
 }
 
 /**
- * A Plan as Change plan offers it, with what it allows, so the administrator need not remember:
- * "Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes".
+ * What a Plan allows, by name, as Change plan says it under the choice, so the administrator need
+ * not remember: "Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes".
  */
-export function planChoiceLabel(i18n: I18n, { name, limits }: Pick<PlanSummary, "name" | "limits">): string {
-  return i18n.t("people.plan.option", {
+export function planAllows(i18n: I18n, { name, limits }: Pick<PlanSummary, "name" | "limits">): string {
+  return i18n.t("people.plan.allows", {
     name,
     limits: countsList(i18n, limits, OPTION_NO_LIMIT),
     interval: i18n.t(`people.plan.interval.${limits.sync_interval}`),
   })
+}
+
+/**
+ * What the Plan chosen in Change plan allows; for the Default Plan, the Plan that is the default
+ * now, and while none is, that none is yet.
+ */
+export function planChoiceAllows(i18n: I18n, plan: PlanSummary | undefined): string {
+  return plan ? planAllows(i18n, plan) : i18n.t("people.plan.allowsNoDefault")
+}
+
+/**
+ * Why a Plan people have cannot be removed yet, naming the first of them, by email, from
+ * `holders`, the first page of the people who have it: "robin@example.test and sam@example.test
+ * have Family.", or "a, b, c, and 2 more have Family." Until they are known, or when they cannot
+ * be read, it counts them as the Plan's row does.
+ */
+export function planInUseText(i18n: I18n, plan: PlanSummary, holders: PeoplePage | undefined): string {
+  const { t } = i18n
+  if (!holders || holders.users.length === 0) return t("people.plans.inUse", { count: plan.people, name: plan.name })
+  const names = holders.users.map((person) => personName(i18n, person))
+  const more = holders.total - names.length
+  const people = i18n.format.list(more > 0 ? [...names, t("people.plans.inUseMore", { count: more })] : names)
+  return t("people.plans.inUseNamed", { count: holders.total, people, name: plan.name })
 }
 
 /**
@@ -216,10 +241,18 @@ function overLimitText({ t }: I18n, { limit, in_use, allowed }: OverLimit): stri
 
 type HeldPlan = NonNullable<PersonPlanOverview["has"]>
 
-/** The Plan a person has, by name, "(default)" when it is theirs as the default. */
-function heldPlanText({ t }: I18n, { name, on_default }: HeldPlan, later: boolean): string {
-  if (later) return on_default ? t("people.plan.fact.laterDefault", { name }) : t("people.plan.fact.later", { name })
-  return on_default ? t("people.plan.fact.default", { name }) : t("people.plan.fact.own", { name })
+/**
+ * A Plan by name, "(default)" when it is someone's as the default: "Free (default)". People's Plan
+ * filter names the default Plan the same way.
+ */
+export function heldPlanName({ t }: I18n, { name, on_default }: Pick<HeldPlan, "name" | "on_default">): string {
+  return on_default ? t("people.plan.held.default", { name }) : name
+}
+
+/** The Plan a person has, by name, "once plans are on" while Plans are off. */
+function heldPlanText(i18n: I18n, held: HeldPlan, later: boolean): string {
+  const named = heldPlanName(i18n, held)
+  return later ? i18n.t("people.plan.held.later", { plan: named }) : named
 }
 
 /** Whether no Plan limits this person because they administer, whether or not Plans are on. */
@@ -228,20 +261,34 @@ function administers({ basis }: PersonPlanOverview, administrator: boolean): boo
 }
 
 /**
- * The Plan fact on a person's page: the Plan they have, as the Plans tab counts who has it, "once
- * plans are on" while Plans are off, and each limit they have more of than it allows. An
- * administrator has a Plan as anyone does, but no Plan limits them, whether Plans are on or off.
+ * A person's Plan as People's Plan column says it, in the words of the Plan fact on their page:
+ * the Plan they have, as the Plans tab counts who has it ("Free (default)"), "once plans are on"
+ * while Plans are off, and each limit they have more of than it allows ("Family. 2 calendar
+ * accounts, 1 allowed"). An administrator has a Plan as anyone does, but no Plan limits them,
+ * whether Plans are on or off.
  */
-export function personPlanFact(i18n: I18n, plan: PersonPlanOverview, administrator: boolean): string {
+export function personPlanText(i18n: I18n, plan: PersonPlanOverview, administrator: boolean): string {
   const { t } = i18n
   const held = plan.has ?? plan.plan
   if (administers(plan, administrator)) {
     return held
-      ? t("people.plan.fact.administratorHas", { plan: heldPlanText(i18n, held, false) })
+      ? t("people.plan.held.administrator", { plan: heldPlanText(i18n, held, false) })
       : t("people.plan.fact.administrator")
   }
-  const fact = held ? heldPlanText(i18n, held, plan.basis !== "plan") : t("people.plan.fact.laterNone")
-  return plan.over.reduce((text, over) => t("people.plan.fact.over", { fact: text, over: overLimitText(i18n, over) }), fact)
+  const text = held ? heldPlanText(i18n, held, plan.basis !== "plan") : t("people.plan.held.laterNone")
+  return plan.over.reduce((words, over) => t("people.plan.fact.over", { fact: words, over: overLimitText(i18n, over) }), text)
+}
+
+/**
+ * The Plan fact on a person's page: People's Plan column's words after "Plan:", as "Plan: Family.
+ * 2 calendar accounts, 1 allowed". An administrator with no Plan reads only that no Plan limits
+ * administrators.
+ */
+export function personPlanFact(i18n: I18n, plan: PersonPlanOverview, administrator: boolean): string {
+  const { t } = i18n
+  const held = plan.has ?? plan.plan
+  if (held) return t("people.plan.fact.label", { plan: personPlanText(i18n, plan, administrator) })
+  return administers(plan, administrator) ? t("people.plan.fact.administrator") : t("people.plan.fact.laterNone")
 }
 
 /** Whether a person's Plan fact names a limit they are over, and so takes the attention tone. */

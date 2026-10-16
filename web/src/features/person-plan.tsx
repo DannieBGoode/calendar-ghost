@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query"
 import { useEffect, useRef, useState, type SyntheticEvent } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -6,18 +5,36 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
-import { api, type Person, type PersonPlan, type PlanSummary } from "@/lib/api"
-import { defaultPlanChoice, planChoiceLabel } from "@/lib/plans"
+import type { Person, PersonPlan, PlanSummary } from "@/lib/api"
+import { defaultPlanChoice, planChoiceAllows } from "@/lib/plans"
 import type { PeopleCommands, PlanChoice } from "@/lib/use-people"
-import { PLANS_QUERY } from "@/lib/use-plans"
+import { usePlanList } from "@/lib/use-plans"
 
 /** The choice's value for the Default Plan; no Plan key is empty. */
 const DEFAULT_PLAN = ""
 
+/** The Plan a value of the choice gives: for the Default Plan, the Plan that is the default now. */
+function chosenPlan(value: string, plans: readonly PlanSummary[]): PlanSummary | undefined {
+  return plans.find((plan) => (value === DEFAULT_PLAN ? plan.is_default : plan.key === value))
+}
+
 /** The Plan a value of the choice gives, with the name its result says. */
 function planChoice(value: string, plans: readonly PlanSummary[]): PlanChoice {
-  if (value === DEFAULT_PLAN) return { key: null, name: plans.find((plan) => plan.is_default)?.name ?? null }
-  return { key: value, name: plans.find((plan) => plan.key === value)?.name ?? value }
+  const name = chosenPlan(value, plans)?.name
+  return value === DEFAULT_PLAN ? { key: null, name: name ?? null } : { key: value, name: name ?? value }
+}
+
+/**
+ * What the Plan chosen allows, under the choice. It is always present, so a screen reader
+ * announces each new choice's limits; it says nothing until the Plans are read.
+ */
+function ChosenPlanAllows({ id, plans, value }: { id: string; plans: readonly PlanSummary[] | undefined; value: string }) {
+  const i18n = useI18n()
+  return (
+    <p id={id} className="field-hint" aria-live="polite">
+      {plans ? planChoiceAllows(i18n, chosenPlan(value, plans)) : null}
+    </p>
+  )
 }
 
 /** The ids an element's aria-describedby names, leaving out those not shown. */
@@ -32,7 +49,7 @@ function describedBy(...ids: (string | false | null | undefined)[]): string | un
  */
 function usePlanChoice(person: Person, current: PersonPlan | null, commands: PeopleCommands) {
   // People's Plans tab reads the same list under the same key.
-  const plans = useQuery({ queryKey: PLANS_QUERY, queryFn: api.plans })
+  const plans = usePlanList()
   const listed = plans.data?.plans ?? []
   // Null until the administrator chooses, so the choice opens on their own Plan. A Plan no
   // longer listed is no choice, so it falls back to their own, then the default.
@@ -66,9 +83,11 @@ function usePlanChoice(person: Person, current: PersonPlan | null, commands: Peo
 }
 
 /**
- * Which Plan limits this person, chosen inline beside them: one of the Plans, each with what it
- * allows, or the Default Plan, named by the Plan that is the default now, which they then follow
- * whenever it changes. It opens on their own Plan. Save sends the key, or null for the default;
+ * Which Plan limits this person, chosen inline beside them: one of the Plans by name, or the
+ * Default Plan, named by the Plan that is the default now, which they then follow whenever it
+ * changes. What the chosen Plan allows shows under the choice, rather than in its options, so
+ * nothing is cut off on a narrow screen, and is announced as the choice changes. It opens on their
+ * own Plan. Save sends the key, or null for the default;
  * the result names the Plan, and a refusal shows under the choice. The Plans are read again after
  * a refusal, so one removed meanwhile leaves the choice. Once the choice closes, by Cancel or a
  * saved Plan, focus returns to their actions, where Change plan opened it.
@@ -119,16 +138,17 @@ export function PersonPlanChoice({
           value={value}
           aria-disabled={waiting}
           aria-invalid={refused ? true : undefined}
-          aria-describedby={describedBy(Boolean(refused) && `${id}-error`, `${id}-hint`)}
+          aria-describedby={describedBy(Boolean(refused) && `${id}-error`, `${id}-allows`, `${id}-hint`)}
           onChange={(event) => choose(event.target.value)}
         >
           <option value={DEFAULT_PLAN}>{defaultPlanChoice(i18n, listed)}</option>
           {listed.map((plan) => (
             <option key={plan.key} value={plan.key}>
-              {planChoiceLabel(i18n, plan)}
+              {plan.name}
             </option>
           ))}
         </NativeSelect>
+        <ChosenPlanAllows id={`${id}-allows`} plans={plans.data?.plans} value={value} />
         <p id={`${id}-hint`} className="field-hint">
           {t("people.plan.hint")}
         </p>

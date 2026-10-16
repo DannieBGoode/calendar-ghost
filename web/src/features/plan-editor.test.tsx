@@ -38,7 +38,14 @@ const family: PlanSummary = {
   },
 }
 
-type Props = { plan: PlanSummary | null; pending: boolean; error: unknown; enabled?: boolean }
+type Props = {
+  plan: PlanSummary | null
+  pending: boolean
+  error: unknown
+  enabled?: boolean
+  /** The names of the other Plans. */
+  others?: string[]
+}
 
 let container: HTMLDivElement
 let root: Root | null = null
@@ -63,7 +70,7 @@ afterEach(() => {
 })
 
 /** Renders the editor, or renders it again with new props, keeping what was typed. */
-function show({ plan, pending, error, enabled = true }: Props) {
+function show({ plan, pending, error, enabled = true, others = [] }: Props) {
   root ??= createRoot(container)
   act(() => {
     root?.render(
@@ -71,6 +78,7 @@ function show({ plan, pending, error, enabled = true }: Props) {
         <PlanEditor
           plan={plan}
           enabled={enabled}
+          others={others}
           intervals={["instant", "5_minutes"]}
           pending={pending}
           error={error}
@@ -308,6 +316,7 @@ describe("PlanEditor", () => {
       "Give the plan a name of 1 to 60 characters, without line breaks or other control characters.",
     ],
     [refusal("invalid_plan", { reason: "interval" }), "plan-family-interval", "Choose one of the offered sync intervals."],
+    [refusal("plan_name_taken", { name: "Free" }), "plan-family-name", "Another plan is named Free. Choose a different name."],
     [
       refusal("invalid_plan", { reason: "limit" }),
       "plan-family-rules",
@@ -326,6 +335,44 @@ describe("PlanEditor", () => {
     expect(shown.map((alert) => alert.textContent)).toEqual([reason])
     expect(shown[0]?.closest(".field-stack")?.contains(refused)).toBe(true)
     expect(form().querySelectorAll("[aria-invalid='true']")).toHaveLength(1)
+  })
+
+  it.each([" free ", "FREE", "Ｆｒｅｅ"])(
+    "refuses %j before sending it, since another plan reads as that name, under Name and with focus there",
+    (name) => {
+      show({ plan: null, pending: false, error: null, others: ["Family", "Free"] })
+      type(field("plan-new-name"), name)
+      act(() => button("Save plan").focus())
+      submit()
+
+      expect(onSave).not.toHaveBeenCalled()
+      const named = field("plan-new-name")
+      expect(document.activeElement).toBe(named)
+      expect(named.getAttribute("aria-invalid")).toBe("true")
+      const reason = "Another plan is named Free. Choose a different name."
+      expect(description(named)).toEqual([reason])
+      expect([...form().querySelectorAll("[role='alert']")].map((alert) => alert.textContent)).toEqual([reason])
+
+      // Pressing Save again takes focus back to the name it waits for.
+      act(() => button("Save plan").focus())
+      submit()
+      expect(document.activeElement).toBe(named)
+      expect(onSave).not.toHaveBeenCalled()
+
+      type(named, "Free 2")
+      expect(named.getAttribute("aria-invalid")).toBeNull()
+      expect(form().querySelector("[role='alert']")).toBeNull()
+      submit()
+      expect(onSave.mock.calls[0]?.[0]).toMatchObject({ name: "Free 2" })
+    },
+  )
+
+  it("lets a plan keep its own name in another case", () => {
+    show({ plan: family, pending: false, error: null, others: ["Free"] })
+    type(field("plan-family-name"), "FAMILY")
+    submit()
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ name: "FAMILY" })
+    expect(form().querySelector("[role='alert']")).toBeNull()
   })
 
   it("names the first limit with a number when a limit is refused", () => {
@@ -468,5 +515,11 @@ describe("PlanEditor", () => {
     type(field("plan-family-accounts"), "1")
     type(field("plan-family-tokens"), "0")
     expect(untranslatedText(container, [family.name])).toEqual([])
+    act(() => root?.unmount())
+    root = null
+    show({ plan: null, pending: false, error: null, others: ["Free"] })
+    type(field("plan-new-name"), "Free")
+    submit()
+    expect(untranslatedText(container, ["Free"])).toEqual([])
   })
 })

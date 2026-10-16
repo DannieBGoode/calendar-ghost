@@ -3,12 +3,39 @@ import { useState } from "react"
 
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
-import { api, type PlanChange, type PlanPayload, type PlansOverview } from "@/lib/api"
+import { api, type PeoplePage, type PlanChange, type PlanPayload, type PlanSummary, type PlansOverview } from "@/lib/api"
 import { limitedPeople } from "@/lib/plans"
 import { OWN_PLAN_QUERY } from "@/lib/use-own-plan"
 
 /** Every Plan and the Plans setting; only Installation Administrators may read them. */
 export const PLANS_QUERY = ["plans"] as const
+
+/**
+ * Every Plan and the Plans setting, read only while `enabled`: People's Plan filter asks for them
+ * once its people show that a Plan exists, and Change plan as it opens.
+ */
+export function usePlanList(enabled = true) {
+  return useQuery({ queryKey: PLANS_QUERY, queryFn: api.plans, enabled })
+}
+
+/**
+ * The Plans People's Plan filter offers. They are read only once People's `page` shows that a Plan
+ * exists, or the address names a `plan`, and kept once read, so the filter stays while a search
+ * finds nobody. Undefined, and no filter, until then, or while no Plan exists and none is named.
+ */
+export function useFilterPlans(page: PeoplePage | undefined, plan: string): readonly PlanSummary[] | undefined {
+  const planned = page?.users.some((person) => person.plan !== null) ?? false
+  const plans = usePlanList(planned || plan !== "").data?.plans
+  return plans && (plans.length > 0 || plan !== "") ? plans : undefined
+}
+
+/**
+ * The first people who have a Plan, by email, and how many have it, for its Remove note. Kept
+ * under People's key, so every change to someone's Plan reads them again.
+ */
+export function usePlanHolders(plan: string) {
+  return useQuery({ queryKey: ["people", "plan-holders", plan], queryFn: () => api.planHolders(plan) })
+}
 
 /** The Plans setting's change: whether Plans limit people now, and the Default Plan. */
 type SettingChange = { enabled: boolean; defaultPlan: string | null }
@@ -44,7 +71,7 @@ export function usePlans() {
   const i18n = useI18n()
   const { t } = i18n
   const queryClient = useQueryClient()
-  const plans = useQuery({ queryKey: PLANS_QUERY, queryFn: api.plans })
+  const plans = usePlanList()
   const [message, setMessage] = useState("")
   const refreshOthers = () =>
     Promise.all([

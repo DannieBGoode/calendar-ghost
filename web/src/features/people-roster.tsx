@@ -13,6 +13,7 @@ import type { OpenPerson } from "@/lib/navigation"
 import { DEFAULT_PEOPLE_QUERY, nextSort, pageRange } from "@/lib/people-query"
 import { usePeoplePage, usePersonCommands, type PeopleCommands } from "@/lib/use-people"
 import type { UpdatePeopleQuery } from "@/lib/use-people-location"
+import { useFilterPlans } from "@/lib/use-plans"
 
 /**
  * People's first tab: Installation Health, then everyone here in one card with its search,
@@ -37,6 +38,7 @@ export function PeopleRoster({
   const { t } = i18n
   const people = usePeoplePage(query)
   const commands = usePersonCommands()
+  const plans = useFilterPlans(people.data, query.plan)
 
   return (
     <>
@@ -51,7 +53,11 @@ export function PeopleRoster({
             {t("people.page.listTitle")}
           </h2>
         </div>
-        <PeopleFilters query={query} onChange={(next) => update({ ...next, page: 1 }, "replace")} />
+        <PeopleFilters
+          query={query}
+          plans={plans}
+          onChange={(next) => update({ ...next, page: 1 }, "replace")}
+        />
         <p className="sr-only" role="status">
           {resultsStatus(i18n, people.data, people.isPlaceholderData)}
         </p>

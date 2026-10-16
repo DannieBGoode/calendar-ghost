@@ -694,8 +694,12 @@ Indicator rule.
   from `over_people`, "1 has more than this plan allows." in Attention Ochre with an icon; then an
   inline edit form, and Remove, then "Add a plan". The default Plan has "Default" beside its name and, instead of Remove,
   "Default plan. Choose another default to remove it."; Remove on a Plan someone has says at once
-  "2 people have Family. Give them another plan to remove it." instead of a confirmation the
-  server would refuse; on any other Plan it confirms inline. Then a select for the default, which
+  who has it, the first three by email from `GET /api/v1/users?plan=` (`page_size=3`, by email),
+  then how many more ("robin@example.test and sam@example.test have Family. Give them another plan
+  to remove it.", "a, b, c, and 2 more have Family. ..."; the count alone until the names arrive),
+  with one link, "Show who has Family", to Everyone filtered by that Plan, which starts at the
+  list's heading, instead of a confirmation the server would refuse; on any other Plan it confirms
+  inline. Then a select for the default, which
   saves with "Save default", shown while the choice differs from the saved one. Last, the
   checkbox "Limit people with plans", never disabled, which says its state and whom it limits
   ("On. Limits 3 people.", "Off. Limits nobody."). It sends the default the select shows, saved or
@@ -704,7 +708,9 @@ Indicator rule.
   smaller Plan; with a choice not saved yet, "Turning this on also makes Free the default plan." While a setting change is on its way, both
   controls keep focus with `aria-disabled`; a refusal shows under the control that sent it, which
   takes focus. The form asks for a name and no key (the server makes it from the name, and the UI
-  never shows it). Under "Limits for each person" each limit is "No limit" or a whole number, with
+  never shows it). A name another Plan reads as, whatever its case or the spaces around it, is
+  refused under Name before it is sent, as the server's 409 `plan_name_taken` is: "Another plan is
+  named Free. Choose a different name.", with focus on Name. Under "Limits for each person" each limit is "No limit" or a whole number, with
   what counts as its hint: "Rules that can sync" ("Paused rules and drafts don't count."),
   "Calendar accounts they can connect" ("Disconnected accounts count. Reconnecting an account is
   never refused."), and "Integration Tokens they can have" ("Revoked tokens don't count."); then
@@ -720,10 +726,15 @@ Indicator rule.
   Family, once plans are on"; for an administrator, "Plan: Free (default). No plan limits
   administrators", or "No plan limits administrators" when they have none. Each limit they are
   over (`over`) follows in Attention Ochre with the attention icon: "Plan: Family. 2 calendar
-  accounts, 1 allowed". Change plan opens an inline select whose options say what each Plan
-  allows ("Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes"), after
-  "Default plan (Free)", which names the Plan that is the default now, with the hint that it
-  follows the default while any other Plan stays. The result names the Plan ("robin@example.test
+  accounts, 1 allowed". Once a Plan exists, Everyone has a Plan column in the same words without
+  "Plan:" ("Free (default)", "Family. 2 calendar accounts, 1 allowed", in Attention Ochre with the
+  icon), and a Plan filter ("Any plan", then each Plan, the default as "Free (default)"), kept in
+  the address as `?plan=`; Everyone reads Plans for the filter only then. Change plan opens an
+  inline select of the Plans by name, after "Default plan (Free)", which names the Plan that is the
+  default now; under it, what the chosen Plan allows ("Free: 1 rule, 1 calendar account, no
+  Integration Tokens, every 5 minutes"), in the select's description and announced as the choice
+  changes, so nothing is cut off on a narrow screen; then the hint that it follows the default
+  while any other Plan stays. The result names the Plan ("robin@example.test
   now has Family.") in a status a screen reader announces. While the change is on its way, every
   control keeps focus with `aria-disabled`; a refusal shows under the select, which takes focus.
 - **Settings, Your account, Your plan** (`#your-plan`): "You have Family, chosen by your

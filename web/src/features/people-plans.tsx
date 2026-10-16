@@ -5,7 +5,7 @@ import { GhostMark } from "@/components/ghost-mark"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { PlanRemoval } from "@/features/people-plan-removal"
+import { PlanRemoval, type ShowHolders } from "@/features/people-plan-removal"
 import { PlansSetting } from "@/features/people-plans-setting"
 import { PlanEditor } from "@/features/plan-editor"
 import { useI18n } from "@/i18n/provider"
@@ -23,9 +23,10 @@ type Open = (next: Opened) => void
  * Remove, then Add a plan; then the Default Plan; then whether Plans limit people. With no Plan yet
  * it holds only an empty state whose one action is Add a plan. It shows only while People does, so
  * never under Only me, where the only person administers and no Plan limits an administrator;
- * Plans are read only once it opens.
+ * Plans are read only once it opens, or once Everyone shows that a Plan exists. `onShowHolders`
+ * lists who has a Plan, from the note Remove opens on a Plan someone has.
  */
-export function PlansSection() {
+export function PlansSection({ onShowHolders }: { onShowHolders: ShowHolders }) {
   const { t } = useI18n()
   const commands = usePlans()
   const { plans, message } = commands
@@ -47,7 +48,7 @@ export function PlansSection() {
           </Button>
         </div>
       )}
-      {overview?.plans && <PlansList overview={overview} commands={commands} />}
+      {overview?.plans && <PlansList overview={overview} commands={commands} onShowHolders={onShowHolders} />}
       {overview?.plans && (overview.plans.length > 0 || overview.enabled) && (
         <PlansSetting overview={overview} commands={commands} />
       )}
@@ -59,7 +60,15 @@ export function PlansSection() {
   )
 }
 
-function PlansList({ overview, commands }: { overview: PlansOverview; commands: PlanCommands }) {
+function PlansList({
+  overview,
+  commands,
+  onShowHolders,
+}: {
+  overview: PlansOverview
+  commands: PlanCommands
+  onShowHolders: ShowHolders
+}) {
   const [opened, setOpened] = useState<Opened>(null)
   const addButton = useRef<HTMLButtonElement>(null)
   // While a Plan is saved or removed, no other form or confirmation opens: opening one forgets
@@ -86,11 +95,13 @@ function PlansList({ overview, commands }: { overview: PlansOverview; commands: 
           key={plan.key}
           plan={plan}
           enabled={overview.enabled}
+          others={otherNames(overview.plans, plan.key)}
           intervals={editorIntervals(overview.sync_intervals, plan)}
           opened={opened}
           busy={busy}
           onOpen={open}
           commands={commands}
+          onShowHolders={onShowHolders}
           onRemoved={() => {
             open(null)
             addButton.current?.focus()
@@ -100,6 +111,7 @@ function PlansList({ overview, commands }: { overview: PlansOverview; commands: 
       <AddPlanItem
         empty={empty}
         enabled={overview.enabled}
+        others={otherNames(overview.plans, null)}
         intervals={overview.sync_intervals}
         adding={opened?.action === "add"}
         busy={busy}
@@ -109,6 +121,11 @@ function PlansList({ overview, commands }: { overview: PlansOverview; commands: 
       />
     </div>
   )
+}
+
+/** The names of every Plan but the one with `key`, which a Plan's name may not read as. */
+function otherNames(plans: readonly PlanSummary[], key: string | null): string[] {
+  return plans.filter((plan) => plan.key !== key).map((plan) => plan.name)
 }
 
 /** The offered intervals, plus a Plan's own when a later release saved one not offered here. */
@@ -166,22 +183,27 @@ function PlanOver({ count }: { count: number }) {
 function PlanItem({
   plan,
   enabled,
+  others,
   intervals,
   opened,
   busy,
   onOpen,
   commands,
+  onShowHolders,
   onRemoved,
 }: {
   plan: PlanSummary
   /** Plans limit people now. */
   enabled: boolean
+  /** The names of every other Plan. */
+  others: readonly string[]
   intervals: SyncInterval[]
   opened: Opened
   /** A Plan command is on its way, so Edit and Remove wait. They stay focusable: focus returns to them as its form closes. */
   busy: boolean
   onOpen: Open
   commands: PlanCommands
+  onShowHolders: ShowHolders
   /** Moves focus on once the Plan's row is gone. */
   onRemoved: () => void
 }) {
@@ -226,6 +248,7 @@ function PlanItem({
           <PlanEditor
             plan={plan}
             enabled={enabled}
+            others={others}
             intervals={intervals}
             pending={change.isPending}
             error={change.error}
@@ -235,7 +258,13 @@ function PlanItem({
         </div>
       )}
       {removing && (
-        <PlanRemoval plan={plan} commands={commands} onRemoved={onRemoved} onKeep={() => close(removeButton)} />
+        <PlanRemoval
+          plan={plan}
+          commands={commands}
+          onShowHolders={onShowHolders}
+          onRemoved={onRemoved}
+          onKeep={() => close(removeButton)}
+        />
       )}
     </div>
   )
@@ -302,6 +331,7 @@ function PlanActions({
 function AddPlanItem({
   empty,
   enabled,
+  others,
   intervals,
   adding,
   busy,
@@ -313,6 +343,8 @@ function AddPlanItem({
   empty: boolean
   /** Plans limit people now. */
   enabled: boolean
+  /** The names of every Plan. */
+  others: readonly string[]
   intervals: SyncInterval[]
   adding: boolean
   /** A Plan command is on its way, so Add a plan waits. It stays focusable: focus returns to it as its form closes. */
@@ -351,6 +383,7 @@ function AddPlanItem({
           <PlanEditor
             plan={null}
             enabled={enabled}
+            others={others}
             intervals={intervals}
             pending={define.isPending}
             error={define.error}

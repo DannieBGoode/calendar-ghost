@@ -272,7 +272,12 @@ two Plans that could share a name, and no way to find who has a Plan.
 - **People finds people by Plan.** `UserQuery.plan` and `GET /api/v1/users?plan=` list everyone
   who has the Plan, as `people` counts them: their own Plan, or, for the Default Plan, none of
   their own, whatever their role or state. A malformed key is an invalid request; a key no Plan has
-  finds nobody.
+  finds nobody. The Web UI's Everyone tab shows each person's Plan in a column and filters by
+  Plan in its address (`/people?plan=family`) once its people show that a Plan exists; only then
+  does it read Plans, for the filter's names, so an installation that never defined one still
+  reads them only on the Plans tab. Remove on a Plan someone has names the first three of them
+  from the same list (`?plan=` with `page_size=3`, by email) and links to Everyone filtered by
+  that Plan. The Plan form also checks a name against the Plans it shows before sending it.
 
 Rejected: counting in Identity, which would read other Users' records outside the Operator
 Overview (ADR 0029); computing who is over only while Plans are on, which would hide from an
