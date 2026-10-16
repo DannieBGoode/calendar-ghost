@@ -636,8 +636,9 @@ Today `SyncScheduler` runs a pass, sleeps 300 seconds, and runs every enabled ru
   billing may overwrite an assignment an administrator made.
 - **Provenance.** The current assignment records its source, actor, and time. A history waits for
   the deferred record of administrator actions. Each change writes a log line with ids only.
-- **Operator Overview.** The person page shows a Plan fact ("Family", "Free (default)", "No plan
-  limits administrators") and a "Change plan" action, whenever at least one Plan exists. This
+- **Operator Overview.** The person page shows a Plan fact ("Plan: Family", "Plan: Free
+  (default)", "No plan limits administrators") and a "Change plan" action, whenever at least one
+  Plan exists. This
   keeps ADR 0030's promise, and CONTEXT's Operator Overview entry gains the Plan.
 - **Invitations** carry no Plan. Invited Users start on the default.
 - A malformed Plan key in a path names no Plan, so it answers 404 `plan_not_found`.
@@ -701,7 +702,14 @@ Indicator rule.
   with `aria-disabled`; a refusal shows under the field it names, which takes focus. Lowering a
   limit of a Plan that limits people warns under that limit, in a status a screen reader
   announces, naming how many people the Plan limits.
-- **People:** the Plan fact and "Change plan" on the person page.
+- **People:** the Plan fact and "Change plan" on the person page. The fact reads "Plan: Family",
+  "Plan: Free (default)", or "Plan: Family, once plans are on"; for an administrator, "No plan
+  limits administrators". Change plan opens an inline select whose options say what each Plan
+  allows ("Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes"), after
+  "Default plan (Free)", which names the Plan that is the default now, with the hint that it
+  follows the default while any other Plan stays. The result names the Plan ("robin@example.test
+  now has Family.") in a status a screen reader announces. While the change is on its way, every
+  control keeps focus with `aria-disabled`; a refusal shows under the select, which takes focus.
 - **Settings, Your account, Your plan** (`#your-plan`): for example "Family: 3 of 5 rules counted,
   2 of 3 calendar accounts, 1 of 2 tokens, syncs about every 15 minutes". An administrator reads
   "You administer this installation, so no plan limits you." Hidden while Plans are off and under

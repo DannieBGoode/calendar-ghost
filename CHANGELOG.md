@@ -13,7 +13,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   every 5 minutes; chooses the Default Plan; and turns Plans on with **Limit people with plans**,
   which says how many people Plans limit. Turning Plans on with no default adds a Plan named No
   limits, which limits nobody, as the default. **Change plan** on a person's page gives them a Plan
-  of their own. Plans are off by default, and
+  of their own, listing what each Plan allows. Plans are off by default, and
   while they are off nothing changes. Administrators are never limited, and under **Only me**
   Plans stay hidden. Once Plans are on, starting a rule, connecting a new calendar account, and
   issuing a token respect the person's Plan: each control says so at the limit and links to

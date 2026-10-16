@@ -1816,6 +1816,17 @@ p {
   gap: 0.75rem;
 }
 
+/* Change plan's options say what each Plan allows, so its choice is wider than a setting's; its
+   sentences keep a readable measure. */
+.person-plan-choice {
+  max-width: 40rem;
+}
+
+.person-plan-choice .field-hint,
+.person-plan-choice .field-error {
+  max-width: 66ch;
+}
+
 /* A Plan's limits for each person, and how soon calendars sync, under one legend. */
 .plan-limits {
   display: grid;

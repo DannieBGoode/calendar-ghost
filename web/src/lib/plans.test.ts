@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest"
 import { testI18n } from "@/i18n/testing"
 import type { OwnPlan, PersonPlan, PlanLimits, PlanSummary, RegistrationPolicy, SyncInterval } from "@/lib/api"
 import {
+  defaultPlanChoice,
   intervalLabel,
   limitedPeople,
   limitsNothing,
   ownPlanShown,
   ownPlanSummary,
   personPlanFact,
+  planChoiceLabel,
   planLimitsSummary,
   planWarning,
   previewedStartRefusal,
@@ -159,6 +161,61 @@ describe("planLimitsSummary", () => {
   })
 })
 
+describe("planChoiceLabel", () => {
+  const choice = (name: string, limits: PlanLimits) => ({ name, limits })
+
+  it("names a Plan with each limit and how soon calendars sync", () => {
+    expect(planChoiceLabel(i18n, choice("Family", FAMILY_LIMITS))).toBe(
+      "Family: 5 rules, 3 calendar accounts, 2 Integration Tokens, instant sync",
+    )
+    expect(planChoiceLabel(i18n, choice("Free", FREE_LIMITS))).toBe(
+      "Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes",
+    )
+  })
+
+  it("says No limit in the same words as the Plan's row, after the name", () => {
+    expect(planChoiceLabel(i18n, choice("Family", { ...FAMILY_LIMITS, rules: null, integration_tokens: null }))).toBe(
+      "Family: no limit on rules, 3 calendar accounts, no limit on Integration Tokens, instant sync",
+    )
+    expect(planChoiceLabel(i18n, choice("No limits", UNLIMITED))).toBe(
+      "No limits: no limit on rules, calendar accounts, or Integration Tokens, instant sync",
+    )
+  })
+
+  it.each<[SyncInterval, string]>([
+    ["instant", "instant sync"],
+    ["5_minutes", "every 5 minutes"],
+    ["10_minutes", "every 10 minutes"],
+    ["15_minutes", "every 15 minutes"],
+    ["30_minutes", "every 30 minutes"],
+    ["60_minutes", "every hour"],
+  ])("names the %s interval", (interval, words) => {
+    expect(planChoiceLabel(i18n, choice("Free", { ...FREE_LIMITS, sync_interval: interval }))).toBe(
+      `Free: 1 rule, 1 calendar account, no Integration Tokens, ${words}`,
+    )
+  })
+})
+
+describe("defaultPlanChoice", () => {
+  const plan = (name: string, isDefault: boolean): PlanSummary => ({
+    key: name.toLowerCase(),
+    name,
+    limits: FREE_LIMITS,
+    is_default: isDefault,
+    people: 0,
+    limited_people: 0,
+  })
+
+  it("names the Plan that is the default now", () => {
+    expect(defaultPlanChoice(i18n, [plan("Family", false), plan("Free", true)])).toBe("Default plan (Free)")
+  })
+
+  it("names no Plan while none is the default", () => {
+    expect(defaultPlanChoice(i18n, [plan("Family", false)])).toBe("Default plan")
+    expect(defaultPlanChoice(i18n, [])).toBe("Default plan")
+  })
+})
+
 describe("limitsNothing", () => {
   it("holds for a Plan with no limit on any count that syncs instantly, such as No limits", () => {
     expect(limitsNothing(UNLIMITED)).toBe(true)
@@ -263,17 +320,21 @@ describe("personPlanFact", () => {
   const familyName = { key: "family", name: "Family" }
 
   it.each<[string, PersonPlan, string]>([
-    ["their own Plan", { basis: "plan", plan: { ...familyName, on_default: false }, assigned: familyName }, "Family"],
+    ["their own Plan", { basis: "plan", plan: { ...familyName, on_default: false }, assigned: familyName }, "Plan: Family"],
     [
       "the Default Plan",
       { basis: "plan", plan: { key: "free", name: "Free", on_default: true }, assigned: null },
-      "Free (default)",
+      "Plan: Free (default)",
     ],
-    ["their own Plan while Plans are off", { basis: "plans_off", plan: null, assigned: familyName }, "Family, once plans are on"],
+    [
+      "their own Plan while Plans are off",
+      { basis: "plans_off", plan: null, assigned: familyName },
+      "Plan: Family, once plans are on",
+    ],
     [
       "the Default Plan while Plans are off",
       { basis: "plans_off", plan: null, assigned: null },
-      "The default plan, once plans are on",
+      "Plan: the default, once plans are on",
     ],
     ["an administrator", { basis: "administrator", plan: null, assigned: null }, "No plan limits administrators"],
     [

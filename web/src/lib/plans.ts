@@ -83,21 +83,54 @@ function tokenLimit({ t }: I18n, tokens: number | null): string {
 }
 
 /**
- * A Plan's counts on its row in People's Plans tab: rules, calendar accounts, then Integration
- * Tokens, with "No limit" where a count has none, said once when none has.
+ * How a list of a Plan's counts says "No limit" where it starts: a Plan's row starts a line with
+ * it, and Change plan's options after the Plan's name.
  */
-export function planLimitsSummary(i18n: I18n, { rules, connected_accounts, integration_tokens }: PlanLimits): string {
+type NoLimitWords = { rules: MessageKey; all: MessageKey }
+
+const ROW_NO_LIMIT: NoLimitWords = { rules: "people.plans.limits.unlimitedRules", all: "people.plans.limits.unlimited" }
+const OPTION_NO_LIMIT: NoLimitWords = { rules: "people.plan.limits.unlimitedRules", all: "people.plan.limits.unlimited" }
+
+/**
+ * A Plan's counts: rules, calendar accounts, then Integration Tokens, with "No limit" where a
+ * count has none, said once when none has.
+ */
+function countsList(i18n: I18n, { rules, connected_accounts, integration_tokens }: PlanLimits, noLimit: NoLimitWords): string {
   const { t } = i18n
-  if (rules === null && connected_accounts === null && integration_tokens === null) {
-    return t("people.plans.limits.unlimited")
-  }
+  if (rules === null && connected_accounts === null && integration_tokens === null) return t(noLimit.all)
   return i18n.format.unitList([
-    rules === null ? t("people.plans.limits.unlimitedRules") : t("people.plans.limits.rules", { count: rules }),
+    rules === null ? t(noLimit.rules) : t("people.plans.limits.rules", { count: rules }),
     connected_accounts === null
       ? t("people.plans.limits.unlimitedAccounts")
       : t("people.plans.limits.accounts", { count: connected_accounts }),
     tokenLimit(i18n, integration_tokens),
   ])
+}
+
+/** A Plan's counts on its row in People's Plans tab, such as "5 rules, 3 calendar accounts, 2 Integration Tokens". */
+export function planLimitsSummary(i18n: I18n, limits: PlanLimits): string {
+  return countsList(i18n, limits, ROW_NO_LIMIT)
+}
+
+/**
+ * A Plan as Change plan offers it, with what it allows, so the administrator need not remember:
+ * "Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes".
+ */
+export function planChoiceLabel(i18n: I18n, { name, limits }: Pick<PlanSummary, "name" | "limits">): string {
+  return i18n.t("people.plan.option", {
+    name,
+    limits: countsList(i18n, limits, OPTION_NO_LIMIT),
+    interval: i18n.t(`people.plan.interval.${limits.sync_interval}`),
+  })
+}
+
+/**
+ * Change plan's choice to follow the Default Plan, naming the Plan that is the default now, as
+ * "Default plan (Free)"; without one yet, "Default plan".
+ */
+export function defaultPlanChoice({ t }: I18n, plans: readonly PlanSummary[]): string {
+  const current = plans.find((plan) => plan.is_default)
+  return current ? t("people.plan.default", { name: current.name }) : t("people.plan.defaultUnnamed")
 }
 
 /** How Your plan words one count: with no limit, within the limit, and past it. */

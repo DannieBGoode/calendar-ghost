@@ -2,6 +2,7 @@ import { keepPreviousData, useIsMutating, useMutation, useQuery, useQueryClient 
 import { useState } from "react"
 
 import { useI18n } from "@/i18n/provider"
+import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
 import { api, type IssuedLink, type PeopleQuery, type Person, type UserDeletion } from "@/lib/api"
 import { deletionMessage, personName } from "@/lib/people"
@@ -10,10 +11,15 @@ import { PLANS_QUERY } from "@/lib/use-plans"
 /** What an Installation Administrator can do to another User. */
 type PersonAction = "promote" | "demote" | "disable" | "enable" | "reset" | "delete" | "plan"
 /**
- * A command on someone. `plan` is the Plan a "plan" command gives them, null for the Default
- * Plan; starting "plan" without it opens the choice instead, as "delete" opens its confirmation.
+ * The Plan a "plan" command gives someone, by its key and the name its result says, or the
+ * Default Plan (no key), named by the Plan that is the default, while one is.
  */
-export type PersonCommand = { person: Person; action: PersonAction; plan?: string | null }
+export type PlanChoice = { key: string; name: string } | { key: null; name: string | null }
+/**
+ * A command on someone. `plan` is the Plan a "plan" command gives them; starting "plan" without
+ * it opens the choice instead, as "delete" opens its confirmation.
+ */
+export type PersonCommand = { person: Person; action: PersonAction; plan?: PlanChoice }
 
 /** What a command returned that the administrator needs next: a link to pass on, or a deletion's counts. */
 type Outcome = { link?: IssuedLink; deletion?: UserDeletion }
@@ -23,7 +29,19 @@ const CHANGED: Partial<Record<PersonAction, MessageKey>> = {
   demote: "people.status.notAdministrator",
   disable: "people.status.disabled",
   enable: "people.status.enabled",
-  plan: "people.status.planChanged",
+}
+
+/** What giving someone a Plan did, naming the Plan: "robin@example.test now has Free." */
+function planChanged({ t }: I18n, email: string, { key, name }: PlanChoice): string {
+  if (key !== null) return t("people.status.planChanged", { email, name })
+  return name === null ? t("people.status.planDefaultUnnamed", { email }) : t("people.status.planDefault", { email, name })
+}
+
+/** What a command on someone says once it is done, or null for one that says nothing beside them. */
+function changedMessage(i18n: I18n, name: string, { action, plan }: PersonCommand): string | null {
+  if (action === "plan") return plan ? planChanged(i18n, name, plan) : null
+  const changed = CHANGED[action]
+  return changed ? i18n.t(changed, { email: name }) : null
 }
 
 // Every person command shares this key, so the query client, which outlives the People page,
@@ -49,7 +67,7 @@ async function run({ person, action, plan }: PersonCommand): Promise<Outcome> {
     case "delete":
       return { deletion: await api.deletePerson(person.id) }
     case "plan":
-      await api.setPersonPlan(person.id, plan ?? null)
+      await api.setPersonPlan(person.id, plan?.key ?? null)
       return {}
   }
 }
@@ -101,9 +119,10 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     },
   })
 
-  function finish({ link, deletion }: Outcome, { person, action }: PersonCommand) {
+  function finish({ link, deletion }: Outcome, done: PersonCommand) {
+    const { person, action } = done
     const name = personName(i18n, person)
-    const changed = CHANGED[action]
+    const changed = changedMessage(i18n, name, done)
     if (link) setResetLink({ personId: person.id, link })
     if (action === "plan") setChoosingPlan(null)
     if (deletion) {
@@ -112,10 +131,9 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
       setMessage(deleted)
       setDeletedMessage(deleted)
     }
-    if (changed) {
-      const text = i18n.t(changed, { email: name })
-      setMessage(text)
-      setResult({ personId: person.id, text })
+    if (changed !== null) {
+      setMessage(changed)
+      setResult({ personId: person.id, text: changed })
     }
   }
 

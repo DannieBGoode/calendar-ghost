@@ -79,15 +79,17 @@ export function PersonDetails({
   const { t } = i18n
   const error = commands.errorFor(person)
   const result = commands.resultFor(person)
+  // The Plan choice shows its own refusal, under the choice it refuses.
+  const choosingPlan = commands.choosingPlan === person.id
   return (
     <>
       {result !== null && <p className="command-result">{result}</p>}
-      {error !== null && (
+      {error !== null && !choosingPlan && (
         <p className="field-error" role="alert">
           {apiErrorMessage(i18n, error)}
         </p>
       )}
-      {commands.choosingPlan === person.id && (
+      {choosingPlan && (
         <PersonPlanChoice person={person} name={name} current={plan ?? null} commands={commands} />
       )}
       {commands.deleting === person.id && <PersonDeletion person={person} name={name} commands={commands} />}

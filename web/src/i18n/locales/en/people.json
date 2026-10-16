@@ -80,7 +80,9 @@
   },
   "status": {
     "administrator": "{email} is now an administrator.",
-    "planChanged": "{email} has a new plan.",
+    "planChanged": "{email} now has {name}.",
+    "planDefault": "{email} now has the default plan, {name}.",
+    "planDefaultUnnamed": "{email} now has the default plan.",
     "notAdministrator": "{email} is no longer an administrator.",
     "disabled": "{email} can no longer sign in. Their rules wait until you enable them again.",
     "enabled": "{email} can sign in again.",
@@ -313,14 +315,29 @@
   },
   "plan": {
     "label": "Plan for {email}",
-    "default": "The default plan",
+    "default": "Default plan ({name})",
+    "defaultUnnamed": "Default plan",
+    "hint": "Default plan always means whichever plan is the default. Any other plan stays theirs until you change it.",
+    "option": "{name}: {limits}, {interval}",
+    "limits": {
+      "unlimitedRules": "no limit on rules",
+      "unlimited": "no limit on rules, calendar accounts, or Integration Tokens"
+    },
+    "interval": {
+      "instant": "instant sync",
+      "5_minutes": "every 5 minutes",
+      "10_minutes": "every 10 minutes",
+      "15_minutes": "every 15 minutes",
+      "30_minutes": "every 30 minutes",
+      "60_minutes": "every hour"
+    },
     "save": "Save plan",
     "cancel": "Cancel",
     "fact": {
-      "own": "{name}",
-      "default": "{name} (default)",
-      "later": "{name}, once plans are on",
-      "laterDefault": "The default plan, once plans are on",
+      "own": "Plan: {name}",
+      "default": "Plan: {name} (default)",
+      "later": "Plan: {name}, once plans are on",
+      "laterDefault": "Plan: the default, once plans are on",
       "administrator": "No plan limits administrators",
       "administratorAssigned": "No plan limits administrators (assigned: {name})"
     }
