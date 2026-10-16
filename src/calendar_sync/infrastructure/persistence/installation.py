@@ -25,6 +25,7 @@ from calendar_sync.domain.access import UserId, UserState
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import SyncRuleState
+from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.watches import CalendarWatch, WatchRegistration
 from calendar_sync.infrastructure.persistence.activity_queries import operations_of
 from calendar_sync.infrastructure.persistence.connections import USERS_PER_QUERY, open_connection
@@ -170,6 +171,14 @@ class SqliteInstallationUnitOfWork:
         for start in range(0, len(ordered), USERS_PER_QUERY):
             chunk = ordered[start : start + USERS_PER_QUERY]
             use |= _resource_use(self._connection, chunk, since)
+        return use
+
+    def plan_use(self, users: Collection[UserId]) -> dict[UserId, PlanUse]:
+        assert self._connection is not None
+        use: dict[UserId, PlanUse] = {}
+        ordered = sorted({user.value for user in users})
+        for start in range(0, len(ordered), USERS_PER_QUERY):
+            use |= _plan_use(self._connection, ordered[start : start + USERS_PER_QUERY])
         return use
 
     def forget_provider_calls(self, before: date) -> None:
@@ -334,6 +343,46 @@ def _resource_use(
             activity_entries=entries.get(user, 0),
             provider_calls=tuple(calls.get(user, ())),
         )
+        for user in users
+    }
+
+
+# The rules `SyncRule.counts_toward_plan` counts: enabled, stopped only by Lapsed Authorization,
+# or a draft or previewed Rule Replacement keeping its place, as the row reader reads the mark.
+_COUNTED_RULE = """
+    state = ? OR (state = ? AND awaiting_reauthorization = 1)
+    OR (keeps_place = 1 AND state IN (?, ?))
+"""
+_COUNTED_RULE_STATES = (
+    SyncRuleState.ENABLED.value,
+    SyncRuleState.DEGRADED.value,
+    SyncRuleState.DRAFT.value,
+    SyncRuleState.PREVIEWED.value,
+)
+
+
+def _plan_use(connection: sqlite3.Connection, users: Sequence[str]) -> dict[UserId, PlanUse]:
+    """Each of `users`' counts as their Plan's limits count them, in one query per limit."""
+    marks = ", ".join("?" * len(users))
+
+    def counted(table: str, condition: str, values: Sequence[str] = ()) -> dict[str, int]:
+        # Interpolates only constant tables, conditions, and `?` placeholders; values stay bound.
+        return dict(
+            connection.execute(
+                f"""
+                SELECT user_id, COUNT(*) FROM {table}
+                WHERE user_id IN ({marks}) AND ({condition}) GROUP BY user_id
+                """,  # noqa: S608
+                (*users, *values),
+            ).fetchall()
+        )
+
+    rules = counted("sync_rules", _COUNTED_RULE, _COUNTED_RULE_STATES)
+    # Every account, Disconnected Accounts included.
+    accounts = counted("connected_accounts", "1 = 1")
+    tokens = counted("integration_tokens", "revoked_at IS NULL")
+    return {
+        UserId(user): PlanUse(rules.get(user, 0), accounts.get(user, 0), tokens.get(user, 0))
         for user in users
     }
 

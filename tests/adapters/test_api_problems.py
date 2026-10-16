@@ -34,6 +34,7 @@ from calendar_sync.domain.plans import (
     PlanLimitReached,
     needs_no_limits_plan,
     require_removable,
+    require_unique_name,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.interfaces.api import problems
@@ -211,6 +212,11 @@ FAMILY_KEY = PlanKey("family")
         (_refusal(lambda: require_removable(FAMILY_KEY, FAMILY_KEY, 0)), "plan_is_default", {}),
         (PlanNotFound("plan family does not exist"), "plan_not_found", {}),
         (PlanKeyTaken("a plan with the key family already exists"), "plan_key_taken", {}),
+        (
+            _refusal(lambda: require_unique_name("family", ["Family"])),
+            "plan_name_taken",
+            {"name": "Family"},
+        ),
     ],
 )
 def test_problem_from_maps_exceptions(

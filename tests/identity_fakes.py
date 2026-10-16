@@ -38,6 +38,7 @@ from calendar_sync.domain.plans import (
     allowance_for,
     needs_no_limits_plan,
     require_removable,
+    require_unique_name,
 )
 
 
@@ -55,6 +56,9 @@ class MemoryUsers:
     hashes: dict[UserId, str] = field(default_factory=dict)
     meanwhile: Callable[[MemoryUsers], object] | None = None
     """Another request's change, landing once just before this directory's next guarded write."""
+    default_plan: PlanKey | None = None
+    """The Default Plan, which MemoryPlans keeps here, as SQLite keeps Users and Plans in one
+    database."""
 
     def count(self) -> int:
         return len(self.users)
@@ -69,6 +73,7 @@ class MemoryUsers:
             if query.search.casefold() in (user.email or "").casefold()
             and query.role in (None, user.role)
             and query.state in (None, user.state)
+            and query.plan in (None, user.plan or self.default_plan)
         ]
         known = [user for user in matching if _sort_value(user, query.sort) is not None]
         known.sort(key=lambda user: str(_sort_value(user, query.sort)), reverse=query.descending)
@@ -351,10 +356,13 @@ class MemoryPlans:
 
     users: MemoryUsers = field(default_factory=MemoryUsers)
     enabled: bool = False
-    default: PlanKey | None = None
     catalog: dict[PlanKey, Plan] = field(default_factory=dict)
     changes: dict[UserId, AssignmentChange] = field(default_factory=dict)
     """How each User's own Plan was last set, as SQLite's users table records it."""
+
+    @property
+    def default(self) -> PlanKey | None:
+        return self.users.default_plan
 
     def of(self, user: UserId) -> Allowance:
         found = self.users.get(user)
@@ -377,8 +385,9 @@ class MemoryPlans:
         if default is not None:
             self._require(default)
         if needs_no_limits_plan(enabled, default, self.default):
-            default = self.add(NO_LIMITS_PLAN, at).key
-        self.enabled, self.default = enabled, default
+            names = [plan.name for plan in self.catalog.values()]
+            default = self.add(NO_LIMITS_PLAN.named_apart(names), at).key
+        self.enabled, self.users.default_plan = enabled, default
         return self.settings()
 
     def plans(self) -> tuple[PlanListing, ...]:
@@ -392,6 +401,7 @@ class MemoryPlans:
         return self.catalog.get(key)
 
     def add(self, plan: NewPlan, at: datetime) -> Plan:
+        require_unique_name(plan.name, [other.name for other in self.catalog.values()])
         taken = {key.value for key in self.catalog}
         if plan.key is not None and plan.key.value in taken:
             raise PlanKeyTaken(f"a plan with the key {plan.key.value} already exists")
@@ -401,6 +411,8 @@ class MemoryPlans:
 
     def change(self, plan: Plan, at: datetime) -> None:
         self._require(plan.key)
+        others = [other.name for other in self.catalog.values() if other.key != plan.key]
+        require_unique_name(plan.name, others)
         self.catalog[plan.key] = plan
 
     def remove(self, key: PlanKey) -> None:

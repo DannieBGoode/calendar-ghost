@@ -57,6 +57,7 @@ const NOTHING_SET_UP: Omit<PersonRow, keyof Person> = {
   problems: 0,
   last_synced_at: null,
   resources: { rules: 0, connected_accounts: 0, activity_entries: 0, provider_calls: [], since: "2026-09-10" },
+  plan: null,
 }
 
 /** What the Operator Overview says of people who have more than nothing set up. */

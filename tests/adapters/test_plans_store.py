@@ -33,6 +33,7 @@ from calendar_sync.domain.plans import (
     PlanIsDefault,
     PlanKey,
     PlanLimits,
+    PlanNameTaken,
     PlansNeedDefault,
     SyncInterval,
 )
@@ -115,9 +116,9 @@ def test_plans_start_off_with_no_default_and_no_plans_so_nobody_is_limited(
     }
 
 
-def test_plans_are_defined_changed_and_listed_by_name_then_key(store: PlansStore) -> None:
+def test_plans_are_defined_changed_and_listed_by_name(store: PlansStore) -> None:
     team_b = Plan(PlanKey("team-b"), "Team", PlanLimits(10, 5, 5, SyncInterval.INSTANT))
-    team_a = replace(team_b, key=PlanKey("team-a"))
+    team_a = replace(team_b, key=PlanKey("team-a"), name="Small team")
     for plan in (FREE, team_b, FAMILY, team_a):
         store.plans.add(as_new(plan), NOW)
     starter = replace(FREE, name="Starter", limits=PlanLimits(2, None, None, SyncInterval.INSTANT))
@@ -129,10 +130,35 @@ def test_plans_are_defined_changed_and_listed_by_name_then_key(store: PlansStore
     assert store.plans.get(PlanKey("missing")) is None
     assert store.plans.plans() == (
         PlanListing(FAMILY, is_default=False, people=0, limited_people=0),
-        PlanListing(starter, is_default=False, people=0, limited_people=0),
         PlanListing(team_a, is_default=False, people=0, limited_people=0),
+        PlanListing(starter, is_default=False, people=0, limited_people=0),
         PlanListing(team_b, is_default=False, people=0, limited_people=0),
     )
+
+
+@pytest.mark.parametrize("name", ["Free", "free", "FREE"])
+def test_a_name_another_plan_reads_as_is_refused_and_changes_nothing(
+    store: PlansStore, name: str
+) -> None:
+    store.plans.add(as_new(FREE), NOW)
+    store.plans.add(as_new(FAMILY), NOW)
+
+    with pytest.raises(PlanNameTaken) as on_add:
+        store.plans.add(NewPlan(name, FAMILY.limits), LATER)
+    with pytest.raises(PlanNameTaken) as on_change:
+        store.plans.change(replace(FAMILY, name=name), LATER)
+
+    assert (on_add.value.name, on_change.value.name) == ("Free", "Free")
+    assert [listing.plan for listing in store.plans.plans()] == [FAMILY, FREE]
+
+
+def test_a_plan_may_keep_its_own_name_in_another_case(store: PlansStore) -> None:
+    store.plans.add(as_new(FREE), NOW)
+    store.plans.add(as_new(FAMILY), NOW)
+
+    store.plans.change(replace(FREE, name="FREE"), LATER)
+
+    assert store.plans.get(FREE.key) == replace(FREE, name="FREE")
 
 
 def test_a_key_another_plan_has_is_refused(store: PlansStore) -> None:
@@ -156,11 +182,11 @@ def test_a_new_plan_without_a_key_gets_one_from_its_name_that_no_plan_has(
     store: PlansStore,
 ) -> None:
     first = store.plans.add(NewPlan("Free", FREE.limits), NOW)
-    second = store.plans.add(NewPlan("Free", FAMILY.limits), NOW)
+    second = store.plans.add(NewPlan("Free!", FAMILY.limits), NOW)
     unnamed = store.plans.add(NewPlan("日本", FAMILY.limits), NOW)
 
     assert first == FREE
-    assert second == Plan(PlanKey("free-2"), "Free", FAMILY.limits)
+    assert second == Plan(PlanKey("free-2"), "Free!", FAMILY.limits)
     assert unnamed == Plan(PlanKey("plan"), "日本", FAMILY.limits)
     assert [listing.plan.key for listing in store.plans.plans()] == [
         FREE.key,
@@ -225,14 +251,16 @@ def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_the_default(
     assert store.plans.of(MEMBER.id).limits == NO_LIMITS
 
 
-def test_the_no_limits_plan_gets_a_key_no_plan_has_and_can_change_but_not_go(
+def test_the_no_limits_plan_gets_a_name_and_key_no_plan_has_and_can_change_but_not_go(
     store: PlansStore,
 ) -> None:
     store.people(ADMIN, MEMBER)
-    earlier = store.plans.add(NewPlan("No limits", FREE.limits), NOW)
+    earlier = store.plans.add(NewPlan("no limits", FREE.limits), NOW)
 
     turned_on = store.plans.change_settings(True, None, NOW)
-    made = replace(NO_LIMITS_PLAN, key=PlanKey("no-limits-2"))
+    made = Plan(PlanKey("no-limits-2"), "No limits 2", NO_LIMITS)
+    # Named apart from the Plan already named so, as no two Plans may read as one name.
+    assert store.plans.get(made.key) == made
     renamed = replace(made, name="Everyone", limits=FAMILY.limits)
     store.plans.change(renamed, LATER)
 

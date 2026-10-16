@@ -73,6 +73,9 @@ SyncIntervalValue = Literal[
 """How soon a Plan's rules sync (ADR 0038); only the offered ones may be saved."""
 AllowanceBasisValue = Literal["plans_off", "administrator", "plan"]
 """Why a User has the limits they have: Plans are off, they administer, or a Plan limits them."""
+LimitedResourceValue = Literal["rules", "connected_accounts", "integration_tokens"]
+"""What a Plan limits by count: rules that count toward it, calendar accounts, and Integration
+Tokens."""
 RunReasonValue = Literal[
     "changes", "first_run", "daily_pass", "reconcile_now", "reprojection", "relisted"
 ]
@@ -765,7 +768,7 @@ class PlanNameResponse(ApiResponse):
 
 
 class AppliedPlanResponse(PlanNameResponse):
-    """The Plan that limits a User now."""
+    """A Plan a User has, such as the one that limits them now."""
 
     on_default: bool
     """It is the Default Plan, because they have no Plan of their own."""
@@ -784,6 +787,26 @@ class PlanLimitsResponse(ApiResponse):
     sync_interval: SyncIntervalValue
 
 
+class UseCountResponse(ApiResponse):
+    """How many of the people a Plan limits have exactly `in_use` of one resource."""
+
+    in_use: int
+    people: int
+
+
+class PlanUseCountsResponse(ApiResponse):
+    """How much the people a Plan limits have of each resource it limits: each count above 0,
+    highest first, with how many people have it, so a lower limit can say how many people it
+    would leave with more than it allows. Counts only; never who."""
+
+    rules: list[UseCountResponse]
+    """Rules that count toward the rule limit."""
+    connected_accounts: list[UseCountResponse]
+    """Calendar accounts, Disconnected Accounts included."""
+    integration_tokens: list[UseCountResponse]
+    """Unrevoked Integration Tokens."""
+
+
 class PlanResponse(ApiResponse):
     """One Plan, as Administration lists it."""
 
@@ -792,9 +815,14 @@ class PlanResponse(ApiResponse):
     limits: PlanLimitsResponse
     is_default: bool
     people: int
-    """Everyone who has it: their own Plan, plus, for the default, everyone with none."""
+    """Everyone who has it: their own Plan, plus, for the default, everyone with none. People
+    finds the same people by the Plan."""
     limited_people: int
     """Active Users who do not administer and have it, whom it limits while Plans are on."""
+    over_people: int
+    """Of `limited_people`, how many have more than it allows of rules, calendar accounts, or
+    Integration Tokens, as after a limit was lowered, whether or not Plans are on."""
+    use: PlanUseCountsResponse
 
 
 class PlansResponse(ApiResponse):
@@ -810,13 +838,37 @@ class PlansResponse(ApiResponse):
 
 
 class PersonPlanResponse(ApiResponse):
-    """A person's Plan, as the Operator Overview shows it (ADR 0038)."""
+    """A person's Plan as it limits them now (ADR 0038)."""
 
     basis: AllowanceBasisValue
     plan: AppliedPlanResponse | None
     """The Plan that limits them; null unless the basis is "plan"."""
     assigned: PlanNameResponse | None
     """Their own Plan, whatever the basis; null when they have the Default Plan."""
+
+
+class OverLimitResponse(ApiResponse):
+    """One limit a person has more of than their Plan allows: they keep everything, but cannot
+    add another until they are within it."""
+
+    limit: LimitedResourceValue
+    in_use: int
+    """Rules that count toward the rule limit, every calendar account, Disconnected Accounts
+    included, or unrevoked Integration Tokens."""
+    allowed: int
+
+
+class PersonPlanOverviewResponse(PersonPlanResponse):
+    """A person's Plan, as the Operator Overview shows it on their page and their row of People
+    (ADR 0038)."""
+
+    has: AppliedPlanResponse | None
+    """The Plan they have, whether or not it limits them now: their own, or else the Default
+    Plan; null when they have neither. People finds them by it."""
+    over: list[OverLimitResponse]
+    """Each limit of the Plan they have that they have more of than it allows, rules first,
+    whether or not Plans are on; empty for an administrator or a disabled person, whom no Plan
+    limits."""
 
 
 class OwnPlanResponse(ApiResponse):
@@ -887,6 +939,8 @@ class PersonResponse(UserResponse):
     problems: int
     last_synced_at: str | None
     resources: ResourceUseResponse
+    plan: PersonPlanOverviewResponse | None
+    """Their Plan, as their page shows it; null while no Plan exists (ADR 0038)."""
 
 
 class UserOverviewResponse(ApiResponse):
@@ -897,7 +951,7 @@ class UserOverviewResponse(ApiResponse):
     user: UserResponse
     status: StatusResponse
     resources: ResourceUseResponse
-    plan: PersonPlanResponse | None
+    plan: PersonPlanOverviewResponse | None
     """Their Plan, and their own if it differs; null while no Plan exists (ADR 0038)."""
 
 
@@ -917,6 +971,9 @@ class PeopleQuery(BaseModel):
     state: Literal["active", "disabled"] | None = None
     verdict: StatusVerdictValue | None = None
     """Only people whose Installation Status has this verdict."""
+    plan: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,31}$")
+    """Only people who have the Plan with this key: as their own, or, for the Default Plan, by
+    having none of their own."""
     sort: Literal["joined", "email", "last_sign_in", "verdict"] = "joined"
     """By verdict, the most urgent comes first in ascending order."""
     order: Literal["asc", "desc"] = "asc"

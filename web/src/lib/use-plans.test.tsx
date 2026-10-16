@@ -20,6 +20,8 @@ const family: PlanSummary = {
   is_default: false,
   people: 4,
   limited_people: 3,
+  over_people: 0,
+  use: { rules: [], connected_accounts: [], integration_tokens: [] },
 }
 const free: PlanSummary = {
   key: "free",
@@ -28,6 +30,8 @@ const free: PlanSummary = {
   is_default: true,
   people: 2,
   limited_people: 2,
+  over_people: 0,
+  use: { rules: [], connected_accounts: [], integration_tokens: [] },
 }
 const overview: PlansOverview = {
   enabled: false,
@@ -156,6 +160,8 @@ describe("usePlans", () => {
       is_default: true,
       people: 3,
       limited_people: 2,
+      over_people: 0,
+      use: { rules: [], connected_accounts: [], integration_tokens: [] },
     }
     const off: PlansOverview = { ...overview, default_plan: null, plans: [family, { ...free, is_default: false }] }
     const on: PlansOverview = {

@@ -23,7 +23,7 @@ from calendar_sync.domain.model import (
     TentativeEventPolicy,
     UnansweredInvitationPolicy,
 )
-from calendar_sync.domain.plans import AllowanceBasis, SyncInterval
+from calendar_sync.domain.plans import AllowanceBasis, LimitedResource, SyncInterval
 from calendar_sync.domain.watches import Availability, CadenceReason
 from calendar_sync.interfaces.api import schemas
 
@@ -37,6 +37,7 @@ MIRRORS: dict[str, type[StrEnum]] = {
     "IncidentResolutionValue": IncidentResolution,
     "IncidentStepValue": IncidentStep,
     "InstantSyncAvailabilityValue": Availability,
+    "LimitedResourceValue": LimitedResource,
     "PrivacyPolicy": ProjectionContent,
     "ProblemKindValue": ProblemKind,
     "ProjectionChoice": ProjectionHandling,

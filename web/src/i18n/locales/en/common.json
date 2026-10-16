@@ -94,6 +94,7 @@
     },
     "plan_is_default": "This is the default plan. Choose another default before you remove it.",
     "plan_key_taken": "Another plan already uses this key. Choose a different key.",
+    "plan_name_taken": "Another plan is named {name}. Choose a different name.",
     "plan_limit_reached": "Your plan's limit is reached. Settings, Your account, Your plan shows what it allows.",
     "plan_limit_reached_integration_tokens": {
       "one": "Your plan allows {count} Integration Token, and it is in use. Revoke it to issue another.",

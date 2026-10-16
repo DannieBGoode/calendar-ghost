@@ -64,6 +64,13 @@ NO_LIMITS_BODY: dict[str, Any] = {
     },
 }
 """The Plan turning Plans on with no default makes the default."""
+NO_USE: dict[str, Any] = {
+    "over_people": 0,
+    "use": {"rules": [], "connected_accounts": [], "integration_tokens": []},
+}
+"""What a Plan says when the people it limits have nothing it counts."""
+NOBODY_ON_IT: dict[str, Any] = {"is_default": False, "people": 0, "limited_people": 0, **NO_USE}
+"""What a Plan nobody has says about the people who have it."""
 CHANGE_FREE = {"name": "Free", "limits": FREE_BODY["limits"]}
 CHANGE_FAMILY = {"name": "Family", "limits": FAMILY_BODY["limits"]}
 OFFERED = ["instant", "5_minutes"]
@@ -179,7 +186,7 @@ def test_an_administrator_defines_lists_changes_and_removes_plans(
         "plans": [],
     }
     assert defined.status_code == 201
-    assert defined.json() == {**FREE_BODY, "is_default": False, "people": 0, "limited_people": 0}
+    assert defined.json() == {**FREE_BODY, **NOBODY_ON_IT}
     # By name: Family before Free.
     assert [plan["key"] for plan in listed] == ["family", "free"]
     # The key stays, spaces around the name go, and null is unlimited.
@@ -193,9 +200,7 @@ def test_an_administrator_defines_lists_changes_and_removes_plans(
             "integration_tokens": None,
             "sync_interval": "5_minutes",
         },
-        "is_default": False,
-        "people": 0,
-        "limited_people": 0,
+        **NOBODY_ON_IT,
     }
     assert removed.status_code == 204
     assert [plan["key"] for plan in after] == ["free"]
@@ -208,22 +213,78 @@ def test_a_new_plan_without_a_key_gets_one_made_from_its_name(
     unkeyed = {key: value for key, value in FREE_BODY.items() if key != "key"}
 
     first = client.post("/api/v1/plans", json=unkeyed)
-    second = client.post("/api/v1/plans", json={**FAMILY_BODY, "key": None, "name": "Free"})
+    second = client.post("/api/v1/plans", json={**FAMILY_BODY, "key": None, "name": "Free!"})
     unnamed = client.post("/api/v1/plans", json={**unkeyed, "name": "日本"})
     taken = client.post("/api/v1/plans", json={**FAMILY_BODY, "key": "free-2"})
     listed = client.get("/api/v1/plans").json()["plans"]
 
     assert first.status_code == 201
-    assert first.json() == {**FREE_BODY, "is_default": False, "people": 0, "limited_people": 0}
+    assert first.json() == {**FREE_BODY, **NOBODY_ON_IT}
     assert (second.status_code, second.json()["key"]) == (201, "free-2")
     assert (unnamed.status_code, unnamed.json()["key"]) == (201, "plan")
     # A key asked for is never changed to fit: another Plan has it, so it is refused.
     assert _problem(taken) == (409, "plan_key_taken", {})
     assert [(plan["key"], plan["name"]) for plan in listed] == [
         ("free", "Free"),
-        ("free-2", "Free"),
+        ("free-2", "Free!"),
         ("plan", "日本"),
     ]
+
+
+def test_a_name_another_plan_has_is_refused_on_define_and_change(
+    installation: Installation,
+) -> None:
+    client = installation.client
+    installation.define(FREE_BODY, FAMILY_BODY)
+
+    defined = client.post("/api/v1/plans", json={**FAMILY_BODY, "key": None, "name": " free "})
+    renamed = client.put("/api/v1/plans/family", json={**CHANGE_FAMILY, "name": "FREE"})
+    recased = client.put("/api/v1/plans/free", json={**CHANGE_FREE, "name": "FREE"})
+    listed = client.get("/api/v1/plans").json()["plans"]
+
+    assert _problem(defined) == (409, "plan_name_taken", {"name": "Free"})
+    assert _problem(renamed) == (409, "plan_name_taken", {"name": "Free"})
+    # A Plan may keep its own name in another case.
+    assert (recased.status_code, recased.json()["name"]) == (200, "FREE")
+    assert {plan["key"]: plan["name"] for plan in listed} == {"family": "Family", "free": "FREE"}
+
+
+def test_each_plan_says_how_many_people_it_limits_have_more_than_it_allows(
+    installation: Installation,
+) -> None:
+    """The member has two rules that count and two calendar accounts, where Free allows one of
+    each; nobody has Family."""
+    client = installation.client
+    _member_rules(installation)
+    installation.define(FREE_BODY, FAMILY_BODY)
+
+    turned_on = client.put("/api/v1/plan-settings", json={"enabled": True, "default_plan": "free"})
+    listed = {plan["key"]: plan for plan in client.get("/api/v1/plans").json()["plans"]}
+    raised = client.put(
+        "/api/v1/plans/free", json=_with_limits(CHANGE_FREE, rules=2, connected_accounts=2)
+    )
+    member_page = installation.overview_plan(installation.member)
+
+    free_use = {
+        "rules": [{"in_use": 2, "people": 1}],
+        "connected_accounts": [{"in_use": 2, "people": 1}],
+        "integration_tokens": [],
+    }
+    assert turned_on.json()["plans"] == [
+        {**FAMILY_BODY, **NOBODY_ON_IT},
+        {
+            **FREE_BODY,
+            "is_default": True,
+            "people": 2,
+            "limited_people": 1,
+            "over_people": 1,
+            "use": free_use,
+        },
+    ]
+    assert listed["free"] == turned_on.json()["plans"][1]
+    # Within the raised limits, nobody has more than Free allows.
+    assert (raised.json()["over_people"], raised.json()["use"]) == (0, free_use)
+    assert member_page["over"] == []
 
 
 def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_that_limits_nobody(
@@ -247,9 +308,9 @@ def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_that_limits_nob
         "default_plan": "no-limits",
         "sync_intervals": OFFERED,
         "plans": [
-            {**FREE_BODY, "is_default": False, "people": 0, "limited_people": 0},
+            {**FREE_BODY, **NOBODY_ON_IT},
             # Everyone has it, and it limits the member, by nothing.
-            {**NO_LIMITS_BODY, "is_default": True, "people": 2, "limited_people": 1},
+            {**NO_LIMITS_BODY, "is_default": True, "people": 2, "limited_people": 1, **NO_USE},
         ],
     }
     # An ordinary Plan: it can be renamed, but not removed while it is the default.
@@ -293,7 +354,7 @@ def test_the_default_is_never_cleared_while_plans_are_on_and_turning_them_off_ke
         "default_plan": "free",
         "sync_intervals": OFFERED,
         # Everyone has the default; it would limit only the member, never an administrator.
-        "plans": [{**FREE_BODY, "is_default": True, "people": 2, "limited_people": 1}],
+        "plans": [{**FREE_BODY, "is_default": True, "people": 2, "limited_people": 1, **NO_USE}],
     }
     assert (turned_on.json()["enabled"], turned_on.json()["default_plan"]) == (True, "free")
     assert _problem(cleared_while_on) == (409, "plans_need_default", {})
@@ -401,7 +462,7 @@ def test_a_plan_change_that_is_not_valid_is_refused_with_its_reason(
     listed = installation.client.get("/api/v1/plans").json()["plans"]
 
     assert _problem(response) == (422, "invalid_plan", {"reason": reason})
-    assert listed == [{**FREE_BODY, "is_default": False, "people": 0, "limited_people": 0}]
+    assert listed == [{**FREE_BODY, **NOBODY_ON_IT}]
 
 
 def test_an_interval_this_release_does_not_know_is_an_invalid_request(
@@ -627,6 +688,8 @@ def test_an_administrator_assigns_plans_even_while_plans_are_off(
         "basis": "plan",
         "plan": {**family, "on_default": False},
         "assigned": family,
+        "has": {**family, "on_default": False},
+        "over": [],
     }
     assert returned.json() == {
         "basis": "plan",
@@ -666,20 +729,26 @@ def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
     installation.as_member()
     member_own = client.get("/api/v1/account/plan").json()
 
-    on_family = {
+    default_family = {"key": "family", "name": "Family", "on_default": True}
+    on_family: dict[str, Any] = {
         "basis": "plan",
-        "plan": {"key": "family", "name": "Family", "on_default": True},
+        "plan": default_family,
         "assigned": None,
+        "has": default_family,
+        "over": [],
     }
     assert switched.status_code == 200
     assert joined.status_code == 200, joined.text
     assert member_seen == on_family
     assert invited_seen == on_family
     # Someone with a Plan of their own keeps it.
+    free_of_their_own = {"key": "free", "name": "Free", "on_default": False}
     assert own_seen == {
         "basis": "plan",
-        "plan": {"key": "free", "name": "Free", "on_default": False},
+        "plan": free_of_their_own,
         "assigned": {"key": "free", "name": "Free"},
+        "has": free_of_their_own,
+        "over": [],
     }
     assert (member_own["plan"], member_own["limits"]) == (
         {"key": "family", "name": "Family", "on_default": True},

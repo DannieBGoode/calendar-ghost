@@ -10,6 +10,7 @@ import pytest
 
 from calendar_sync.application.identity.errors import EmailTaken
 from calendar_sync.application.identity.ports import (
+    AssignmentChange,
     IssuedLink,
     PlansSetting,
     RegistrationSettings,
@@ -27,7 +28,7 @@ from calendar_sync.domain.access import (
     UserId,
     UserState,
 )
-from calendar_sync.domain.plans import UNLIMITED, PlanKey
+from calendar_sync.domain.plans import UNLIMITED, AssignmentSource, PlanKey
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.plans import SqlitePlans
@@ -44,7 +45,7 @@ from tests.adapters.test_user_migration import (
     seed_single_administrator,
 )
 from tests.identity_fakes import MemoryPlans, MemoryRegistration, MemoryUsers
-from tests.plans import FAMILY, FREE, plans_on
+from tests.plans import FAMILY, FREE, as_new, plans_on
 
 NOW = datetime(2026, 10, 9, 9, 0, tzinfo=UTC)
 FIRST = User(
@@ -568,6 +569,35 @@ def test_returning_to_setup_turns_plans_off_and_keeps_them_for_the_next_administ
         new_first.id: UNLIMITED,
         SECOND.id: UNLIMITED,
     }
+
+
+@pytest.mark.parametrize("kind", ["sqlite", "memory"])
+def test_people_are_found_by_the_plan_they_have(kind: str, tmp_path: Path) -> None:
+    """Everyone with a Plan of their own, and, for the default, everyone without one, whatever
+    their role or state and whether Plans are on or off, as a Plan counts the people who have
+    it."""
+    users, _, plans = _setup_with_plans(kind, tmp_path)
+    away = User(UserId("away"), "away@example.test", Role.USER, UserState.DISABLED, NOW)
+    for number, person in enumerate((FIRST, SECOND, away)):
+        users.add(person, f"hash-{number}")
+    plans.add(as_new(FREE), NOW)
+    plans.add(as_new(FAMILY), NOW)
+    plans.assign(SECOND.id, FAMILY.key, AssignmentChange(AssignmentSource.ADMINISTRATOR, None, NOW))
+
+    def having(plan: str, **query: object) -> list[UserId]:
+        found = users.find(UserQuery(plan=PlanKey(plan), **query))  # type: ignore[arg-type]
+        assert found.total == len(found.users)
+        return [user.id for user in found.users]
+
+    # With no default yet, only a Plan of one's own counts.
+    assert having("free") == []
+    assert having("family") == [SECOND.id]
+    plans.change_settings(False, FREE.key, NOW)
+    assert having("free") == [FIRST.id, away.id]
+    assert having("free", role=Role.USER) == [away.id]
+    assert having("family") == [SECOND.id]
+    assert having("missing") == []
+    assert [listing.people for listing in plans.plans()] == [1, 2]
 
 
 def test_a_reset_link_sets_the_password_once_and_a_newer_one_replaces_it(tmp_path: Path) -> None:

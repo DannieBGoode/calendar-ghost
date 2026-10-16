@@ -412,8 +412,7 @@ def test_the_person_page_shows_no_plan_until_one_exists(installation: Installati
     people = client.get("/api/v1/users").json()["users"]
 
     assert seen["plan"] is None
-    # People rows never carry a Plan; only the person page shows it.
-    assert all("plan" not in row for row in people)
+    assert [row["plan"] for row in people] == [None, None, None]
 
 
 def test_the_person_page_shows_the_plan_that_limits_them_and_their_own(
@@ -431,22 +430,63 @@ def test_the_person_page_shows_the_plan_that_limits_them_and_their_own(
 
     member_while_on = plan_of(installation.member.user)
     admin_while_on = plan_of(admin)
+    people_while_on = client.get("/api/v1/users").json()["users"]
     plans.change_settings(False, FREE.key, NOW)
     member_while_off = plan_of(installation.member.user)
-    people = client.get("/api/v1/users").json()["users"]
 
+    free = {"key": "free", "name": "Free", "on_default": True}
+    # The member's two calendar accounts, where Free allows one.
+    accounts_over = [{"limit": "connected_accounts", "in_use": 2, "allowed": 1}]
     assert assigned
     assert member_while_on == {
         "basis": "plan",
-        "plan": {"key": "free", "name": "Free", "on_default": True},
+        "plan": free,
         "assigned": None,
+        "has": free,
+        "over": accounts_over,
     }
     # No Plan limits an administrator; the one they were given waits until they stop.
     assert admin_while_on == {
         "basis": "administrator",
         "plan": None,
         "assigned": {"key": "family", "name": "Family"},
+        "has": {"key": "family", "name": "Family", "on_default": False},
+        "over": [],
     }
-    # Once a Plan exists, the person page shows it even while Plans are off.
-    assert member_while_off == {"basis": "plans_off", "plan": None, "assigned": None}
-    assert all("plan" not in row for row in people)
+    # Once a Plan exists, the person page shows it even while Plans are off, with what the Plan
+    # they have would say once Plans are on.
+    assert member_while_off == {
+        "basis": "plans_off",
+        "plan": None,
+        "assigned": None,
+        "has": free,
+        "over": accounts_over,
+    }
+    # Each row of People shows the Plan as the person's page does.
+    assert _person_row({"users": people_while_on}, admin)["plan"] == admin_while_on
+    assert _person_row({"users": people_while_on}, installation.member.user)["plan"] == (
+        member_while_on
+    )
+
+
+def test_people_are_found_by_the_plan_they_have(installation: Installation) -> None:
+    client = installation.client
+    plans = SqlitePlans(installation.database)
+    plans_on(plans, FREE, FAMILY)
+    member = installation.member.user
+    given = AssignmentChange(AssignmentSource.ADMINISTRATOR, installation.admin.user, NOW)
+    plans.assign(member, FAMILY.key, given)
+
+    def having(plan: str, **query: str) -> set[str]:
+        page = client.get("/api/v1/users", params={"plan": plan, **query}).json()
+        assert page["total"] == len(page["users"])
+        return {row["id"] for row in page["users"]}
+
+    malformed = client.get("/api/v1/users", params={"plan": "Not a key"})
+
+    assert having("family") == {member.value}
+    # The default is everyone's without a Plan of their own, an administrator's too.
+    assert having("free") == {installation.admin.user.value, OUTLOOK_USER.value}
+    assert having("free", role="user") == {OUTLOOK_USER.value}
+    assert having("gold") == set()
+    assert (malformed.status_code, malformed.json()["code"]) == (422, "invalid_request")

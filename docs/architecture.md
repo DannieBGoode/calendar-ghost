@@ -192,8 +192,12 @@ with the one privacy contract the status API already uses. Installation Health c
 Resource Use from `InstallationUnitOfWork.resource_use`: counts of rules, Connected Accounts, and
 Activity entries, and the provider calls each Sync Run, reconciliation, and Rule Removal adds to its
 User's `provider_calls` row for that provider and UTC day. The scheduler pass discards days older
-than 30. Once any Plan exists, it also adds each User's Allowance, read for the whole page at once;
-a failure to read Plans leaves it out instead of failing People. `OperatorOverview.page` lists
+than 30. Once any Plan exists, it also adds each User's Plan, read for the whole page at once: their
+Allowance, the Plan they have, and each of its limits they are over, from the counts
+`InstallationUnitOfWork.plan_use` reads as each limit counts them; a failure to read Plans leaves
+it out instead of failing People. `OperatorOverview.reach_of` counts, for People's Plans tab, how
+many of the people each Plan limits are over it and how many have each count, and fails as the
+Plans routes do (ADR 0038, amended). `OperatorOverview.page` lists
 Users for People, and `OperatorOverview.of` answers an administrator about one User; both come
 from one function, so they cannot differ. `interfaces/access.py` holds the one access decision both transports use: a present
 `Authorization` header decides alone and must carry the scope the route needs, and only the status

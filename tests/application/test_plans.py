@@ -34,6 +34,7 @@ from calendar_sync.domain.plans import (
     PlanIsDefault,
     PlanKey,
     PlanLimits,
+    PlanNameTaken,
     PlansNeedDefault,
     SyncInterval,
 )
@@ -198,10 +199,10 @@ def test_a_new_plan_without_a_key_gets_one_made_from_its_name() -> None:
     plans = _plans()
 
     first = _define(plans).execute(ADMIN.id, NewPlan("Solo", SOLO.limits))
-    second = _define(plans).execute(ADMIN.id, NewPlan("Solo", FAMILY.limits))
+    second = _define(plans).execute(ADMIN.id, NewPlan("Solo!", FAMILY.limits))
 
     assert first == PlanListing(SOLO, False, 0, 0)
-    assert second == PlanListing(Plan(PlanKey("solo-2"), "Solo", FAMILY.limits), False, 0, 0)
+    assert second == PlanListing(Plan(PlanKey("solo-2"), "Solo!", FAMILY.limits), False, 0, 0)
 
 
 def test_a_new_plan_whose_interval_is_not_offered_is_refused() -> None:
@@ -222,6 +223,21 @@ def test_a_taken_key_is_refused_and_the_plan_with_it_is_kept() -> None:
         _define(plans).execute(ADMIN.id, NewPlan("Another free plan", FREE.limits, FREE.key))
 
     assert plans.get(FREE.key) == FREE
+
+
+def test_a_name_another_plan_reads_as_is_refused_on_define_and_change() -> None:
+    plans = _plans()
+    plans.add(as_new(FREE), NOW)
+    plans.add(as_new(FAMILY), NOW)
+    before = _snapshot(plans)
+
+    with pytest.raises(PlanNameTaken) as on_define:
+        _define(plans).execute(ADMIN.id, NewPlan("free", SOLO.limits))
+    with pytest.raises(PlanNameTaken) as on_change:
+        _change(plans).execute(ADMIN.id, replace(FAMILY, name="FREE"))
+
+    assert (on_define.value.name, on_change.value.name) == ("Free", "Free")
+    assert _snapshot(plans) == before
 
 
 def test_changing_a_plan_keeps_its_key_and_its_new_limits_apply_at_once() -> None:

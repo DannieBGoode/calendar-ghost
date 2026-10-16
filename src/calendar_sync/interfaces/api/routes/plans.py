@@ -16,10 +16,13 @@ from calendar_sync.application.identity.errors import PlanKeyTaken, PlanNotFound
 from calendar_sync.application.identity.plans import (
     ChangePlan,
     DefinePlan,
+    PlansOverview,
     RemovePlan,
     SetPlansSetting,
     ShowPlans,
 )
+from calendar_sync.application.identity.ports import PlanListing
+from calendar_sync.application.operations.operator_overview import OperatorOverview
 from calendar_sync.application.operations.own_plan import ShowOwnPlan
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.plans import (
@@ -29,6 +32,7 @@ from calendar_sync.domain.plans import (
     PlanInUse,
     PlanIsDefault,
     PlanKey,
+    PlanNameTaken,
     PlansNeedDefault,
 )
 from calendar_sync.interfaces.api.dependencies import administrator, app_services, user_services
@@ -67,6 +71,10 @@ class PlanAdministration(Protocol):
 class PlansApiServices(Protocol):
     @property
     def plans(self) -> PlanAdministration: ...
+    @property
+    def operator_overview(self) -> OperatorOverview:
+        """Counts how much the people each Plan limits use, as only it reads across Users."""
+        ...
 
 
 class OwnPlanServices(Protocol):
@@ -82,9 +90,10 @@ router = APIRouter()
 
 @router.get("/api/v1/plans", response_model=PlansResponse)
 def list_plans(services: Services, actor: Administrator) -> PlansResponse:
-    """Every Plan with how many people have it, the Plans setting, and the offered intervals."""
+    """Every Plan with how many people have it and how many of them have more than it allows,
+    the Plans setting, and the offered intervals."""
     try:
-        return plans_response(services.plans.show_plans.execute(actor))
+        return _plans(services, actor, services.plans.show_plans.execute(actor))
     except AdministratorRequired as error:
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
 
@@ -99,13 +108,13 @@ def set_plans_setting(
     default = named_plan(payload.default_plan) if payload.default_plan is not None else None
     try:
         overview = services.plans.set_plans_setting.execute(actor, payload.enabled, default)
+        return _plans(services, actor, overview)
     except PlanNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except PlansNeedDefault as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
     except AdministratorRequired as error:
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
-    return plans_response(overview)
 
 
 @router.post("/api/v1/plans", response_model=PlanResponse, status_code=status.HTTP_201_CREATED)
@@ -117,17 +126,16 @@ def define_plan(
     try:
         key = PlanKey(payload.key) if payload.key is not None else None
         plan = NewPlan(payload.name.strip(), plan_limits(payload.limits), key)
-        listing = services.plans.define_plan.execute(actor, plan)
+        return _plan(services, actor, services.plans.define_plan.execute(actor, plan))
     except InvalidPlan as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
-    except PlanKeyTaken as error:
+    except (PlanKeyTaken, PlanNameTaken) as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
     except PlanNotFound as error:
         # Stored, then removed by another administrator before it was read back.
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except AdministratorRequired as error:
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
-    return plan_response(listing)
 
 
 @router.put("/api/v1/plans/{plan_key}", response_model=PlanResponse)
@@ -138,15 +146,16 @@ def change_plan(
     rules, accounts, and tokens, and stop nothing that exists."""
     key = named_plan(plan_key)
     try:
-        plan = _plan(key, payload.name, payload.limits)
-        listing = services.plans.change_plan.execute(actor, plan)
+        plan = _changed(key, payload.name, payload.limits)
+        return _plan(services, actor, services.plans.change_plan.execute(actor, plan))
     except InvalidPlan as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
+    except PlanNameTaken as error:
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
     except PlanNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except AdministratorRequired as error:
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
-    return plan_response(listing)
 
 
 @router.delete("/api/v1/plans/{plan_key}", status_code=status.HTTP_204_NO_CONTENT)
@@ -170,6 +179,19 @@ def own_plan(services: OwnServices) -> OwnPlanResponse:
     return own_plan_response(services.show_own_plan.execute())
 
 
-def _plan(key: PlanKey, name: str, limits: PlanLimitsRequest) -> Plan:
+def _changed(key: PlanKey, name: str, limits: PlanLimitsRequest) -> Plan:
     """The Plan a request describes, without spaces around its name; raises InvalidPlan."""
     return Plan(key, name.strip(), plan_limits(limits))
+
+
+def _plans(services: PlansApiServices, actor: UserId, overview: PlansOverview) -> PlansResponse:
+    """Every Plan, each with how much the people it limits use, which the Operator Overview
+    counts; raises AdministratorRequired."""
+    plans = [listing.plan for listing in overview.plans]
+    return plans_response(overview, services.operator_overview.reach_of(actor, plans))
+
+
+def _plan(services: PlansApiServices, actor: UserId, listing: PlanListing) -> PlanResponse:
+    """A Plan as listed, with how much the people it limits use; raises AdministratorRequired."""
+    reach = services.operator_overview.reach_of(actor, [listing.plan])
+    return plan_response(listing, reach[listing.plan.key])

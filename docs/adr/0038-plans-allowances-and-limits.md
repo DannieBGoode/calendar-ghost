@@ -12,7 +12,8 @@ Builds on [ADR 0028](0028-plans-apart-from-commercial-mode.md),
 
 Amended 2026-10-16: a Plan's key is made from its name, turning Plans on with no default makes a
 Plan named "No limits" the default, and Plans moved to a tab of People; see the amendment at the
-end.
+end. Amended again 2026-10-16: administrators see who is over a limit, computed by the Operator
+Overview, Plan names are unique, and People finds people by their Plan; see the second amendment.
 
 ## Context
 
@@ -229,3 +230,51 @@ as an irreversible first choice; keeping "choose a default first", which made an
 who wanted to limit one person first define an unlimited Plan for everyone else by hand; and
 keeping Plans in Settings → Administration, a tab away from the people they limit and from
 Change plan.
+
+## Amendment: who is over a limit, unique names, and People by Plan (2026-10-16)
+
+A second design review found that the person who can fix an over-limit state was the last to
+know: a User saw on Your plan that they had 2 calendar accounts where their Plan allowed 1, while
+the administrator's Plan row, person page, and lowered-limit warning said nothing. It also found
+two Plans that could share a name, and no way to find who has a Plan.
+
+- **The Operator Overview computes who is over a limit.** Counting another User's rules,
+  accounts, and tokens reads across Users, so it lives in the Operator Overview read model
+  (`application/operations/operator_overview.py`), the reader ADR 0029 allows, and never in
+  Identity. `InstallationUnitOfWork.plan_use(users)` counts, for each User, what each limit counts:
+  rules for which `SyncRule.counts_toward_plan` holds, every Connected Account, Disconnected
+  Accounts included, and unrevoked Integration Tokens, in one query per limit for up to 500 Users.
+  `PlanUse.over(limits)` in `domain/plans.py` names each limit a User has more of than it allows,
+  with how many are in use and how many are allowed.
+- **A person's Plan on their page and their row of People.** `UserOverview.plan` is a
+  `PersonPlan`: the Allowance as before, the Plan they have (their own, or else the Default Plan,
+  whether or not Plans are on), and each limit of it they are over. Only an active User who does
+  not administer (`User.limited_by_plans`) is ever over, the people `limited_people` counts. The
+  facts are computed while Plans are off too, so an administrator sees whom a Plan would leave
+  over it before turning Plans on. The person's overview and each row of People answer them as
+  `has` and `over` beside `basis`, `plan`, and `assigned`; `PUT /api/v1/users/{user_id}/plan` still
+  answers only the Allowance. Like the rest of the Plan fact, a fault reading them leaves the Plan
+  out and never fails People.
+- **Each Plan's reach.** `OperatorOverview.reach_of(actor, plans)` finds each Plan's people as
+  People does, keeps those it limits, and answers a `PlanReach`: how many of them are over any of
+  its limits (`over_people`), and, per limit, how many people have each count above 0
+  (`use`), so the editor can say exactly how many people a lower limit would leave over it. Only
+  counts reach the response, never who. `GET /api/v1/plans`, `PUT /api/v1/plan-settings`, and
+  the define and change routes answer both for every Plan they list. Like every Plans route,
+  they fail when it cannot be read.
+- **Plan names are unique.** Two Plans may not read as one name: names compare after Unicode
+  compatibility folding, without case, and without spaces around them (`require_unique_name`).
+  `PlanCatalog.add` and `change` check it under the same write lock as the key, so two Plans added
+  at once cannot both take a name, and a Plan may keep its own name in another case. A refused
+  name answers 409 `plan_name_taken` with the other Plan's `name`. When Plans turn on with no
+  default and a Plan already reads as "No limits", the Plan made is named apart, "No limits 2",
+  so turning Plans on is never refused for a name.
+- **People finds people by Plan.** `UserQuery.plan` and `GET /api/v1/users?plan=` list everyone
+  who has the Plan, as `people` counts them: their own Plan, or, for the Default Plan, none of
+  their own, whatever their role or state. A malformed key is an invalid request; a key no Plan has
+  finds nobody.
+
+Rejected: counting in Identity, which would read other Users' records outside the Operator
+Overview (ADR 0029); computing who is over only while Plans are on, which would hide from an
+administrator what turning them on would do; and a list of each limited person's counts per Plan,
+which grows with the people a Plan limits where the counts per value stay small.

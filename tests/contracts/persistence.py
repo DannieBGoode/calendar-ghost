@@ -77,6 +77,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TimedInterval,
 )
+from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.watches import (
@@ -140,6 +141,9 @@ class PersistenceHarness:
     prefer: Callable[[UserId, bool], object]
     """Record whether a User wants Instant Sync, as their account settings would outside any unit
     of work."""
+    issue_token: Callable[[UserId, bool], object]
+    """Record an Integration Token of a User, revoked or not, as issuing one would outside any
+    unit of work."""
 
     @property
     def unit_of_work(self) -> UnitOfWorkFactory:
@@ -1852,6 +1856,55 @@ class PersistenceContract:
         assert use[USER].provider_calls == ()
         assert (use[OTHER_USER].rules, use[OTHER_USER].connected_accounts) == (0, 1)
         assert use[OTHER_USER].activity_entries == 0
+
+    def test_plan_use_counts_rules_that_count_every_account_and_unrevoked_tokens(
+        self, harness: PersistenceHarness
+    ) -> None:
+        def to(
+            calendar: str, state: SyncRuleState, *, lapsed: bool = False, keeps: bool = False
+        ) -> SyncRule:
+            return replace(
+                RULE,
+                id=SyncRuleId(f"rule-{calendar}"),
+                destination=endpoint("work-account", calendar),
+                state=state,
+                awaiting_reauthorization=lapsed,
+                keeps_place=keeps,
+            )
+
+        counting = [
+            to("enabled", SyncRuleState.ENABLED),
+            to("lapsed", SyncRuleState.DEGRADED, lapsed=True),
+            to("previewed-keeping", SyncRuleState.PREVIEWED, keeps=True),
+            to("draft-keeping", SyncRuleState.DRAFT, keeps=True),
+        ]
+        not_counting = [
+            to("stopped", SyncRuleState.DEGRADED),
+            to("paused", SyncRuleState.PAUSED),
+            to("draft", SyncRuleState.DRAFT),
+            to("previewed", SyncRuleState.PREVIEWED),
+            to("removing", SyncRuleState.REMOVING),
+        ]
+        with harness.unit_of_work() as uow:
+            for each in (*counting, *not_counting):
+                uow.rules.add(each)
+            uow.commit()
+        old_account = ConnectedAccountId("old-account")
+        harness.connect_account(old_account)
+        harness.disconnect_account(old_account)
+        for revoked in (False, False, True):
+            harness.issue_token(USER, revoked)
+        harness.connect_account(THEIR_SOURCE.connected_account_id, OTHER_USER)
+        harness.issue_token(OTHER_USER, False)
+        nobody = UserId("user-3")
+
+        with harness.installation() as installation:
+            use = installation.plan_use([USER, OTHER_USER, nobody])
+
+        # USER's two accounts the rules use and a disconnected one.
+        assert use[USER] == PlanUse(rules=4, connected_accounts=3, integration_tokens=2)
+        assert use[OTHER_USER] == PlanUse(rules=0, connected_accounts=1, integration_tokens=1)
+        assert use[nobody] == PlanUse(rules=0, connected_accounts=0, integration_tokens=0)
 
     # Calendar Watches and Instant Sync Requests
 

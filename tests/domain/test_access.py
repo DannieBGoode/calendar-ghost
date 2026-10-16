@@ -79,6 +79,20 @@ def test_a_user_has_the_default_plan_until_one_of_their_own_is_assigned() -> Non
     assert replace(_user(), plan=PlanKey("family")).plan == PlanKey("family")
 
 
+@pytest.mark.parametrize(
+    ("role", "state", "limited"),
+    [
+        pytest.param(Role.USER, UserState.ACTIVE, True, id="active user"),
+        pytest.param(Role.USER, UserState.DISABLED, False, id="disabled user"),
+        pytest.param(Role.INSTALLATION_ADMINISTRATOR, UserState.ACTIVE, False, id="administrator"),
+    ],
+)
+def test_plans_limit_only_active_users_who_do_not_administer(
+    role: Role, state: UserState, limited: bool
+) -> None:
+    assert replace(_user(role=role), state=state).limited_by_plans is limited
+
+
 def test_only_me_is_the_default_registration_policy() -> None:
     assert RegistrationPolicy.default() is RegistrationPolicy.ONLY_ME
 

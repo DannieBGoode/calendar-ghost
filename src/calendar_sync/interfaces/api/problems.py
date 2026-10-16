@@ -73,6 +73,7 @@ from calendar_sync.domain.plans import (
     PlanInUse,
     PlanIsDefault,
     PlanLimitReached,
+    PlanNameTaken,
     PlansNeedDefault,
 )
 
@@ -157,6 +158,7 @@ _CODES: dict[type[Exception], str] = {
     PlansNeedDefault: "plans_need_default",
     PlanNotFound: "plan_not_found",
     PlanKeyTaken: "plan_key_taken",
+    PlanNameTaken: "plan_name_taken",
     PlanInUse: "plan_in_use",
     PlanIsDefault: "plan_is_default",
     # A DomainValidationError too; the MRO reaches this code before "invalid_rule".
@@ -214,6 +216,8 @@ def _plan_params(error: Exception) -> dict[str, ParamValue]:
         return {"people": error.people, "count": error.people}
     if isinstance(error, InvalidPlan):
         return {"reason": error.reason.value}
+    if isinstance(error, PlanNameTaken):
+        return {"name": error.name}
     return {}
 
 

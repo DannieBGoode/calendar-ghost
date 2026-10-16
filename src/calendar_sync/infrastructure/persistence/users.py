@@ -243,6 +243,13 @@ def _conditions(query: UserQuery) -> tuple[list[str], list[str]]:
     if query.state is not None:
         conditions.append("state = ?")
         parameters.append(query.state.value)
+    if query.plan is not None:
+        # Their own Plan, or else the Default Plan, as a Plan's listing counts who has it.
+        conditions.append(
+            "COALESCE(plan_key, (SELECT default_plan_key FROM installation_settings"
+            " WHERE singleton = 1)) = ?"
+        )
+        parameters.append(query.plan.value)
     return conditions, parameters
 
 

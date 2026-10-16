@@ -20,6 +20,8 @@ const family: PlanSummary = {
   is_default: false,
   people: 4,
   limited_people: 3,
+  over_people: 0,
+  use: { rules: [], connected_accounts: [], integration_tokens: [] },
 }
 
 type Props = { plan: PlanSummary | null; pending: boolean; error: unknown }

@@ -23,6 +23,7 @@ from calendar_sync.domain.incidents import (
     next_step,
 )
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule
+from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.runs import RuleRunOutcome
 
 
@@ -143,6 +144,12 @@ class InstallationUnitOfWork(Protocol):
     def resource_use(self, users: Collection[UserId], since: date) -> Mapping[UserId, ResourceUse]:
         """How much each of `users` uses: their rules, Connected Accounts, and Activity entries,
         and their provider calls from `since` on."""
+        ...
+
+    def plan_use(self, users: Collection[UserId]) -> Mapping[UserId, PlanUse]:
+        """How much each of `users` has of what a Plan limits, counted as each limit counts it:
+        rules that count toward the rule limit, every Connected Account, and unrevoked
+        Integration Tokens (ADR 0038). A User with none has none of each."""
         ...
 
     def forget_provider_calls(self, before: date) -> None:

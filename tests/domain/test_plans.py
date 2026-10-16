@@ -18,22 +18,29 @@ from calendar_sync.domain.plans import (
     InvalidPlanReason,
     LimitedResource,
     NewPlan,
+    OverLimit,
     Plan,
     PlanInUse,
     PlanIsDefault,
     PlanKey,
     PlanLimitReached,
     PlanLimits,
+    PlanNameTaken,
+    PlanReach,
     PlansNeedDefault,
+    PlanUse,
     SyncInterval,
+    UseCount,
     allowance_for,
     exceeds,
     has_room,
     needs_no_limits_plan,
     plan_key_from,
+    plan_reach,
     require_offered,
     require_removable,
     require_room,
+    require_unique_name,
 )
 
 FREE = Plan(PlanKey("free"), "Free", PlanLimits(1, 1, 0, SyncInterval.EVERY_5_MINUTES))
@@ -472,6 +479,101 @@ def test_no_room_refuses_with_the_resource_and_its_limit(
         limit,
         message,
     )
+
+
+FAMILY_USE = PlanUse(rules=6, connected_accounts=3, integration_tokens=1)
+
+
+def test_a_use_is_over_each_limit_it_passes_rules_first() -> None:
+    lowered = PlanLimits(4, 2, 0, SyncInterval.INSTANT)
+
+    assert FAMILY_USE.over(lowered) == (
+        OverLimit(LimitedResource.RULES, in_use=6, allowed=4),
+        OverLimit(LimitedResource.CONNECTED_ACCOUNTS, in_use=3, allowed=2),
+        OverLimit(LimitedResource.INTEGRATION_TOKENS, in_use=1, allowed=0),
+    )
+
+
+@pytest.mark.parametrize(
+    "limits",
+    [
+        pytest.param(PlanLimits(6, 3, 1, SyncInterval.INSTANT), id="at every limit"),
+        pytest.param(NO_LIMITS, id="no limits"),
+    ],
+)
+def test_a_use_at_or_within_its_limits_is_over_none(limits: PlanLimits) -> None:
+    assert FAMILY_USE.over(limits) == ()
+
+
+def test_a_use_counts_each_resource_a_plan_limits() -> None:
+    assert [FAMILY_USE.of(resource) for resource in LimitedResource] == [6, 3, 1]
+
+
+def test_a_plans_reach_counts_who_is_over_and_how_many_have_each_count() -> None:
+    uses = [
+        PlanUse(rules=1, connected_accounts=2, integration_tokens=0),
+        PlanUse(rules=1, connected_accounts=1, integration_tokens=0),
+        PlanUse(rules=0, connected_accounts=2, integration_tokens=1),
+        PlanUse(rules=0, connected_accounts=0, integration_tokens=0),
+    ]
+
+    reach = plan_reach(FREE.limits, uses)
+
+    # Two have 2 calendar accounts where Free allows 1, and one of them also has a token.
+    assert reach.over == 2
+    assert reach.rules == (UseCount(in_use=1, people=2),)
+    assert reach.connected_accounts == (UseCount(2, 2), UseCount(1, 1))
+    assert reach.integration_tokens == (UseCount(1, 1),)
+
+
+def test_a_plan_nobody_uses_reaches_nobody() -> None:
+    assert plan_reach(FREE.limits, []) == PlanReach(over=0)
+    assert plan_reach(NO_LIMITS, [FAMILY_USE]).over == 0
+
+
+# Plan names
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        pytest.param("Family", id="same"),
+        pytest.param("family", id="lower case"),
+        pytest.param("FAMILY", id="upper case"),
+        pytest.param(" Family ", id="spaces around"),
+        pytest.param("\uff46\uff41\uff4d\uff49\uff4c\uff59", id="full-width letters"),
+    ],
+)
+def test_a_name_another_plan_reads_as_is_refused_with_that_plans_name(other: str) -> None:
+    with pytest.raises(PlanNameTaken) as refused:
+        require_unique_name("Family", [FREE.name, other])
+
+    assert refused.value.name == other
+    assert isinstance(refused.value, DomainError)
+    assert not isinstance(refused.value, DomainValidationError)
+
+
+@pytest.mark.parametrize("others", [[], ["Free", "Family 2", "Famly"]])
+def test_a_name_no_other_plan_reads_as_may_be_saved(others: list[str]) -> None:
+    assert refusal(lambda: require_unique_name("Family", others)) is None
+
+
+@pytest.mark.parametrize(
+    ("names", "name"),
+    [
+        pytest.param(["Free"], "No limits", id="free"),
+        pytest.param(["no limits"], "No limits 2", id="taken"),
+        pytest.param(["No limits", "No limits 2"], "No limits 3", id="taken twice"),
+    ],
+)
+def test_the_no_limits_plan_is_named_apart_from_every_plan(names: list[str], name: str) -> None:
+    assert NO_LIMITS_PLAN.named_apart(names) == NewPlan(name, NO_LIMITS)
+
+
+def test_a_long_name_stays_within_sixty_characters_when_named_apart() -> None:
+    long = NewPlan("x" * 60, NO_LIMITS)
+
+    assert long.named_apart(["x" * 60]).name == "x" * 58 + " 2"
 
 
 def test_a_reached_limit_is_a_domain_error_but_not_a_validation_error() -> None:

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Container
-from dataclasses import dataclass
+from collections import Counter
+from collections.abc import Container, Iterable
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -193,10 +194,45 @@ class NewPlan:
         key = self.key if self.key is not None else plan_key_from(self.name, taken)
         return Plan(key, self.name, self.limits)
 
+    def named_apart(self, names: Iterable[str]) -> NewPlan:
+        """This Plan, or, when a Plan in `names` reads as its name, the same Plan with " 2",
+        " 3", and so on added to the name, the first that none reads as, shortening the rest so
+        the name still fits."""
+        taken = {_name_key(name) for name in names}
+        name, number = self.name, 1
+        while _name_key(name) in taken:
+            number += 1
+            suffix = f" {number}"
+            name = self.name[: PLAN_NAME_LIMIT - len(suffix)].rstrip() + suffix
+        return replace(self, name=name)
+
 
 def _require_name(name: str) -> None:
     if not _printable(name):
         raise InvalidPlan(InvalidPlanReason.NAME, "a plan name is 1 to 60 printable characters")
+
+
+def _name_key(name: str) -> str:
+    """What two Plan names that read as one have in common: compatible characters as one, no
+    space around, and no case."""
+    return unicodedata.normalize("NFKC", name).strip().casefold()
+
+
+class PlanNameTaken(DomainError):
+    """Another Plan already reads as this name, so the two could not be told apart."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"another plan is named {name}")
+        self.name = name
+        """The other Plan's name, as it is saved."""
+
+
+def require_unique_name(name: str, others: Iterable[str]) -> None:
+    """Refuse `name` when one of `others`, the names of every other Plan, reads as it: the same
+    once case, spaces around, and compatible characters are set aside."""
+    taken = next((other for other in others if _name_key(other) == _name_key(name)), None)
+    if taken is not None:
+        raise PlanNameTaken(taken)
 
 
 def _printable(name: str) -> bool:
@@ -365,3 +401,87 @@ def may_start(before: SyncRule, counting_after: int, limit: int | None) -> bool:
     Start does not change the count; any other starts while `counting_after`, the rules that
     count once it runs, stays within `limit`."""
     return limit is None or before.keeps_place or counting_after <= limit
+
+
+@dataclass(frozen=True, slots=True)
+class OverLimit:
+    """One limit a User has more of than their Plan allows, as after it was lowered: they keep
+    everything, but cannot add another until they are within it."""
+
+    resource: LimitedResource
+    in_use: int
+    allowed: int
+
+
+@dataclass(frozen=True, slots=True)
+class PlanUse:
+    """How much one User has of each resource a Plan limits, counted as its limit counts it."""
+
+    rules: int
+    """Rules that count toward the rule limit (`SyncRule.counts_toward_plan`)."""
+    connected_accounts: int
+    """Every Connected Account, Disconnected Accounts included."""
+    integration_tokens: int
+    """Integration Tokens not revoked."""
+
+    def of(self, resource: LimitedResource) -> int:
+        return {
+            LimitedResource.RULES: self.rules,
+            LimitedResource.CONNECTED_ACCOUNTS: self.connected_accounts,
+            LimitedResource.INTEGRATION_TOKENS: self.integration_tokens,
+        }[resource]
+
+    def over(self, limits: PlanLimits) -> tuple[OverLimit, ...]:
+        """Each limit of `limits` this use passes: rules, then calendar accounts, then
+        Integration Tokens."""
+        allowed = {
+            LimitedResource.RULES: limits.rules,
+            LimitedResource.CONNECTED_ACCOUNTS: limits.connected_accounts,
+            LimitedResource.INTEGRATION_TOKENS: limits.integration_tokens,
+        }
+        return tuple(
+            OverLimit(resource, self.of(resource), limit)
+            for resource, limit in allowed.items()
+            if limit is not None and exceeds(self.of(resource), limit)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class UseCount:
+    """How many people have exactly `in_use` of one resource."""
+
+    in_use: int
+    people: int
+
+
+@dataclass(frozen=True, slots=True)
+class PlanReach:
+    """How much the people one Plan limits use, in counts only: how many have more than it
+    allows, and for each resource how many have each count above 0, highest first, so a lower
+    limit can say how many people it would leave with more than it allows."""
+
+    over: int
+    """People with more than the Plan allows of any resource."""
+    rules: tuple[UseCount, ...] = ()
+    connected_accounts: tuple[UseCount, ...] = ()
+    integration_tokens: tuple[UseCount, ...] = ()
+
+
+def plan_reach(limits: PlanLimits, uses: Iterable[PlanUse]) -> PlanReach:
+    """The reach of a Plan with `limits` over the `uses` of the people it limits."""
+    listed = tuple(uses)
+
+    def counts(resource: LimitedResource) -> tuple[UseCount, ...]:
+        found = Counter(use.of(resource) for use in listed)
+        return tuple(
+            UseCount(in_use, people)
+            for in_use, people in sorted(found.items(), reverse=True)
+            if in_use > 0
+        )
+
+    return PlanReach(
+        over=sum(1 for use in listed if use.over(limits)),
+        rules=counts(LimitedResource.RULES),
+        connected_accounts=counts(LimitedResource.CONNECTED_ACCOUNTS),
+        integration_tokens=counts(LimitedResource.INTEGRATION_TOKENS),
+    )

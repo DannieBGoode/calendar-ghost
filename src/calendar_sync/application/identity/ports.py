@@ -35,6 +35,9 @@ class UserQuery:
     """Part of an email, in any case."""
     role: Role | None = None
     state: UserState | None = None
+    plan: PlanKey | None = None
+    """Only Users who have this Plan: as their own, or, for the Default Plan, by having none of
+    their own, whatever their role or state and whether Plans are on (ADR 0038)."""
     sort: UserSort = UserSort.JOINED
     descending: bool = False
     offset: int = 0

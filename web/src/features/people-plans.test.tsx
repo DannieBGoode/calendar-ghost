@@ -39,6 +39,8 @@ const family: PlanSummary = {
   is_default: false,
   people: 4,
   limited_people: 3,
+  over_people: 0,
+  use: { rules: [], connected_accounts: [], integration_tokens: [] },
 }
 const free: PlanSummary = {
   key: "free",
@@ -47,6 +49,8 @@ const free: PlanSummary = {
   is_default: false,
   people: 2,
   limited_people: 2,
+  over_people: 0,
+  use: { rules: [], connected_accounts: [], integration_tokens: [] },
 }
 
 /** The Plan the server makes the default when Plans turn on with none. */
@@ -57,6 +61,8 @@ const noLimits: PlanSummary = {
   is_default: false,
   people: 3,
   limited_people: 2,
+  over_people: 0,
+  use: { rules: [], connected_accounts: [], integration_tokens: [] },
 }
 
 /** Plans as GET /api/v1/plans answers, with `defaultPlan` marked as the default. */
@@ -570,6 +576,8 @@ describe("People's Plans tab", () => {
       is_default: false,
       people: 0,
       limited_people: 0,
+      over_people: 0,
+      use: { rules: [], connected_accounts: [], integration_tokens: [] },
     }
     await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse(added, 201) } })
     await click(button("Add a plan"))

@@ -834,6 +834,9 @@ class MemoryDatabase:
         default_factory=dict
     )
     """Whether each provider reached each public address, as SQLite's installation table keeps."""
+    unrevoked_tokens: dict[UserId, int] = field(default_factory=dict)
+    """How many Integration Tokens each User has not revoked. Tokens are kept in their own store,
+    which tests stand in for apart; this records only what the installation unit counts."""
 
     def state_of(self, user_id: UserId) -> MemoryState:
         return self.partitions.setdefault(user_id, MemoryState())

@@ -585,7 +585,8 @@ export interface paths {
         };
         /**
          * List Plans
-         * @description Every Plan with how many people have it, the Plans setting, and the offered intervals.
+         * @description Every Plan with how many people have it and how many of them have more than it allows,
+         *     the Plans setting, and the offered intervals.
          */
         get: operations["list_plans_api_v1_plans_get"];
         put?: never;
@@ -1149,7 +1150,7 @@ export interface components {
         };
         /**
          * AppliedPlanResponse
-         * @description The Plan that limits a User now.
+         * @description A Plan a User has, such as the one that limits them now.
          */
         AppliedPlanResponse: {
             /** Key */
@@ -1641,6 +1642,22 @@ export interface components {
             /** Notify By Email */
             notify_by_email: boolean;
         };
+        /**
+         * OverLimitResponse
+         * @description One limit a person has more of than their Plan allows: they keep everything, but cannot
+         *     add another until they are within it.
+         */
+        OverLimitResponse: {
+            /** Allowed */
+            allowed: number;
+            /** In Use */
+            in_use: number;
+            /**
+             * Limit
+             * @enum {string}
+             */
+            limit: "rules" | "connected_accounts" | "integration_tokens";
+        };
         /** OwnAccountDeletionResponse */
         OwnAccountDeletionResponse: {
             /** Last User */
@@ -1687,8 +1704,25 @@ export interface components {
             id: string;
         };
         /**
+         * PersonPlanOverviewResponse
+         * @description A person's Plan, as the Operator Overview shows it on their page and their row of People
+         *     (ADR 0038).
+         */
+        PersonPlanOverviewResponse: {
+            assigned: components["schemas"]["PlanNameResponse"] | null;
+            /**
+             * Basis
+             * @enum {string}
+             */
+            basis: "plans_off" | "administrator" | "plan";
+            has: components["schemas"]["AppliedPlanResponse"] | null;
+            /** Over */
+            over: components["schemas"]["OverLimitResponse"][];
+            plan: components["schemas"]["AppliedPlanResponse"] | null;
+        };
+        /**
          * PersonPlanResponse
-         * @description A person's Plan, as the Operator Overview shows it (ADR 0038).
+         * @description A person's Plan as it limits them now (ADR 0038).
          */
         PersonPlanResponse: {
             assigned: components["schemas"]["PlanNameResponse"] | null;
@@ -1714,6 +1748,7 @@ export interface components {
             last_sign_in_at: string | null;
             /** Last Synced At */
             last_synced_at: string | null;
+            plan: components["schemas"]["PersonPlanOverviewResponse"] | null;
             /** Problems */
             problems: number;
             resources: components["schemas"]["ResourceUseResponse"];
@@ -1791,8 +1826,25 @@ export interface components {
             limits: components["schemas"]["PlanLimitsResponse"];
             /** Name */
             name: string;
+            /** Over People */
+            over_people: number;
             /** People */
             people: number;
+            use: components["schemas"]["PlanUseCountsResponse"];
+        };
+        /**
+         * PlanUseCountsResponse
+         * @description How much the people a Plan limits have of each resource it limits: each count above 0,
+         *     highest first, with how many people have it, so a lower limit can say how many people it
+         *     would leave with more than it allows. Counts only; never who.
+         */
+        PlanUseCountsResponse: {
+            /** Connected Accounts */
+            connected_accounts: components["schemas"]["UseCountResponse"][];
+            /** Integration Tokens */
+            integration_tokens: components["schemas"]["UseCountResponse"][];
+            /** Rules */
+            rules: components["schemas"]["UseCountResponse"][];
         };
         /**
          * PlansResponse
@@ -2510,6 +2562,16 @@ export interface components {
              */
             unanswered_invitations: "wait" | "as_tentative";
         };
+        /**
+         * UseCountResponse
+         * @description How many of the people a Plan limits have exactly `in_use` of one resource.
+         */
+        UseCountResponse: {
+            /** In Use */
+            in_use: number;
+            /** People */
+            people: number;
+        };
         /** UserDeletionResponse */
         UserDeletionResponse: {
             /** Deleted */
@@ -2528,7 +2590,7 @@ export interface components {
          *     their resource use. Never a calendar's name or identifier, an account's email, or an event.
          */
         UserOverviewResponse: {
-            plan: components["schemas"]["PersonPlanResponse"] | null;
+            plan: components["schemas"]["PersonPlanOverviewResponse"] | null;
             resources: components["schemas"]["ResourceUseResponse"];
             status: components["schemas"]["StatusResponse"];
             user: components["schemas"]["UserResponse"];
@@ -4660,6 +4722,7 @@ export interface operations {
                 role?: ("installation_administrator" | "user") | null;
                 state?: ("active" | "disabled") | null;
                 verdict?: ("stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy") | null;
+                plan?: string | null;
                 sort?: "joined" | "email" | "last_sign_in" | "verdict";
                 order?: "asc" | "desc";
                 page?: number;

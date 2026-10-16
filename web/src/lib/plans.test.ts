@@ -204,6 +204,8 @@ describe("defaultPlanChoice", () => {
     is_default: isDefault,
     people: 0,
     limited_people: 0,
+    over_people: 0,
+    use: { rules: [], connected_accounts: [], integration_tokens: [] },
   })
 
   it("names the Plan that is the default now", () => {
@@ -239,6 +241,8 @@ describe("limitedPeople", () => {
     is_default: false,
     people: limited + 1,
     limited_people: limited,
+    over_people: 0,
+    use: { rules: [], connected_accounts: [], integration_tokens: [] },
   })
 
   it("adds the people each Plan limits, leaving out a Plan that limits nothing", () => {

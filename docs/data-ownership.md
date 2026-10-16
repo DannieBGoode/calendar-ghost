@@ -62,12 +62,23 @@ shows:
 - their email, role, state, when they joined, and when they last signed in;
 - once any Plan exists, their Plan: which Plan limits them and whether it is their own or the
   default, or, while Plans are off or for an administrator, the Plan they were given that does not
-  apply yet;
+  apply yet; the Plan they have, their own or the default; and each limit of it they have more of
+  than it allows, such as "2 calendar accounts, 1 allowed", whether or not Plans are on, counted as
+  the limit counts: rules that count toward it, every calendar account, and unrevoked Integration
+  Tokens. No Plan limits an administrator or a disabled User, so neither is ever shown over a
+  limit;
 - their Installation Status: its verdict, each problem, and each rule's state and last successful
   sync, with every calendar named only "Calendar 1", "Calendar 2", and so on, numbered in the order
   their rules were created; and
 - their resource use: how many rules, calendar accounts, and Activity entries they have, and the calls
   their rules made to each calendar provider over the last 30 days.
+
+People can list everyone who has a given Plan. People's Plans tab shows, for each Plan, how
+many people have it, how many it limits, how many of those have more than it allows, and, for
+rules, calendar accounts, and Integration Tokens, how many people have each count, so an
+administrator can see what a lower limit would do; it names nobody, though on a Plan only one
+person has, the counts are theirs
+([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 
 It never shows a User's calendar names or identifiers, their Google or Microsoft account emails, or any event
 title or other event content, and there is no setting that shows more. Installation Health, above

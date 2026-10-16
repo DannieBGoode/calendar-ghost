@@ -105,6 +105,8 @@ const plans: PlansOverview = {
       is_default: false,
       people: 1,
       limited_people: 1,
+      over_people: 0,
+      use: { rules: [], connected_accounts: [], integration_tokens: [] },
     },
     {
       key: "free",
@@ -113,6 +115,8 @@ const plans: PlansOverview = {
       is_default: true,
       people: 3,
       limited_people: 2,
+      over_people: 0,
+      use: { rules: [], connected_accounts: [], integration_tokens: [] },
     },
   ],
 }

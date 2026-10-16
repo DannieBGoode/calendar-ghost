@@ -31,6 +31,7 @@ from calendar_sync.domain.audit import AuditAction, AuditEntry
 from calendar_sync.domain.causes import WITHOUT_CAUSE
 from calendar_sync.domain.incidents import AccountAuthorization
 from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId, SyncRuleState
+from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.runs import RunKind
 from calendar_sync.domain.watches import (
     CalendarWatchId,
@@ -93,6 +94,9 @@ class InMemoryInstallationUnitOfWork:
 
     def resource_use(self, users: Collection[UserId], since: date) -> dict[UserId, ResourceUse]:
         return {user: _resource_use(self._database.partitions.get(user), since) for user in users}
+
+    def plan_use(self, users: Collection[UserId]) -> dict[UserId, PlanUse]:
+        return {user: _plan_use(self._database, user) for user in users}
 
     def forget_provider_calls(self, before: date) -> None:
         for state in self._database.partitions.values():
@@ -194,6 +198,15 @@ def _resource_use(state: MemoryState | None, since: date) -> ResourceUse:
             ProviderCallUse(provider, total.calls, total.rate_limited, total.failed)
             for provider, total in sorted(calls.items(), key=lambda item: item[0].value)
         ),
+    )
+
+
+def _plan_use(database: MemoryDatabase, user: UserId) -> PlanUse:
+    state = database.partitions.get(user) or MemoryState()
+    return PlanUse(
+        rules=sum(rule.counts_toward_plan for rule in state.rules.values()),
+        connected_accounts=len(state.accounts),
+        integration_tokens=database.unrevoked_tokens.get(user, 0),
     )
 
 

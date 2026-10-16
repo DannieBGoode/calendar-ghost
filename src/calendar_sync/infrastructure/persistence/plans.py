@@ -25,6 +25,7 @@ from calendar_sync.domain.plans import (
     allowance_for,
     needs_no_limits_plan,
     require_removable,
+    require_unique_name,
 )
 from calendar_sync.infrastructure.persistence.connections import USERS_PER_QUERY, transaction
 
@@ -70,7 +71,8 @@ class SqlitePlans:
                 _require_plan(connection, default)
             if needs_no_limits_plan(enabled, default, _setting(connection).default):
                 # Made in this transaction, so it exists only if the setting is saved.
-                default = _insert(connection, NO_LIMITS_PLAN, at).key
+                made = NO_LIMITS_PLAN.named_apart(_names(connection).values())
+                default = _insert(connection, made, at).key
             # Migration 22 creates the one row.
             connection.execute(
                 """
@@ -117,17 +119,20 @@ class SqlitePlans:
 
     def change(self, plan: Plan, at: datetime) -> None:
         with transaction(self._database_path) as connection:
+            # Held from reading the names to the update, so no other Plan takes the name meanwhile.
             connection.execute("BEGIN IMMEDIATE")
-            changed = connection.execute(
+            others = _names(connection)
+            if others.pop(plan.key.value, None) is None:
+                raise PlanNotFound(f"plan {plan.key.value} does not exist")
+            require_unique_name(plan.name, others.values())
+            connection.execute(
                 """
                 UPDATE plans SET name = ?, rule_limit = ?, account_limit = ?, token_limit = ?,
                     sync_interval = ?, updated_at = ?
                 WHERE key = ?
                 """,
                 (*_plan_values(plan)[1:], at.isoformat(), plan.key.value),
-            ).rowcount
-            if changed == 0:
-                raise PlanNotFound(f"plan {plan.key.value} does not exist")
+            )
 
     def remove(self, key: PlanKey) -> None:
         with transaction(self._database_path) as connection:
@@ -172,11 +177,13 @@ class SqlitePlans:
 
 def _insert(connection: sqlite3.Connection, new: NewPlan, at: datetime) -> Plan:
     """Store `new` under the key it asks for, or under one made from its name that no Plan has;
-    raises PlanKeyTaken when another Plan has the key it asks for."""
-    taken = _keys(connection)
-    if new.key is not None and new.key.value in taken:
+    raises PlanNameTaken when another Plan reads as its name, and PlanKeyTaken when another Plan
+    has the key it asks for."""
+    names = _names(connection)
+    require_unique_name(new.name, names.values())
+    if new.key is not None and new.key.value in names:
         raise PlanKeyTaken(f"a plan with the key {new.key.value} already exists")
-    plan = new.keyed(taken)
+    plan = new.keyed(names)
     connection.execute(
         """
         INSERT INTO plans (
@@ -189,9 +196,13 @@ def _insert(connection: sqlite3.Connection, new: NewPlan, at: datetime) -> Plan:
     return plan
 
 
-def _keys(connection: sqlite3.Connection) -> set[str]:
-    """Every stored Plan key, including one a later release wrote that this one cannot read."""
-    return {str(row["key"]) for row in connection.execute("SELECT key FROM plans")}
+def _names(connection: sqlite3.Connection) -> dict[str, str]:
+    """Every stored Plan's name by its key, including a Plan a later release wrote that this one
+    cannot read, so neither its key nor its name is taken again."""
+    return {
+        str(row["key"]): str(row["name"])
+        for row in connection.execute("SELECT key, name FROM plans")
+    }
 
 
 def _allowance_rows(connection: sqlite3.Connection, users: Sequence[str]) -> list[sqlite3.Row]:

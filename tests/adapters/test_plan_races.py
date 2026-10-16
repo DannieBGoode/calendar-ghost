@@ -34,6 +34,7 @@ from calendar_sync.domain.plans import (
     PlanKey,
     PlanLimitReached,
     PlanLimits,
+    PlanNameTaken,
     SyncInterval,
 )
 from calendar_sync.infrastructure.clock import SystemClock
@@ -429,37 +430,67 @@ def test_two_connects_for_the_last_account_place_store_exactly_one(tmp_path: Pat
     assert [account.email for account in store.for_user(member).list()] == ["first@example.test"]
 
 
-def test_two_plans_added_at_once_with_one_name_get_different_keys(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """An add reads the keys once it holds the write lock, so a second add with the same name
-    waits for it, then sees its key and makes another."""
-    database = tmp_path / "test.db"
+def _added_while_another_adds(
+    database: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> tuple[bool, list[Plan | Exception]]:
+    """Add "Free", and while it holds the write lock, add a Plan named `name`: whether the
+    second add waited, and what each add answered, in the order they finished."""
     initialize_database(database)
     plans = SqlitePlans(database)
     reading, release = Event(), Event()
-    read_keys = plans_store._keys
+    read_names = plans_store._names
 
-    def held(connection: sqlite3.Connection) -> set[str]:
-        keys = read_keys(connection)
+    def held(connection: sqlite3.Connection) -> dict[str, str]:
+        names = read_names(connection)
         if not reading.is_set():
             reading.set()
             assert release.wait(5)
-        return keys
+        return names
 
-    monkeypatch.setattr(plans_store, "_keys", held)
-    added: list[Plan] = []
-    first = Thread(target=lambda: added.append(plans.add(NewPlan("Free", FREE.limits), NOW)))
+    monkeypatch.setattr(plans_store, "_names", held)
+    answers: list[Plan | Exception] = []
+
+    def add(plan: NewPlan) -> None:
+        try:
+            answers.append(plans.add(plan, NOW))
+        except PlanNameTaken as refused:
+            answers.append(refused)
+
+    first = Thread(target=add, args=(NewPlan("Free", FREE.limits),))
     first.start()
     assert reading.wait(5)
-    second = Thread(target=lambda: added.append(plans.add(NewPlan("Free", FAMILY.limits), NOW)))
+    second = Thread(target=add, args=(NewPlan(name, FAMILY.limits),))
     second.start()
     second.join(WAIT)
     waited = second.is_alive()
     release.set()
     first.join(5)
     second.join(5)
+    return waited, answers
+
+
+def test_two_plans_added_at_once_whose_names_make_one_key_get_different_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An add reads the keys once it holds the write lock, so a second add whose name makes the
+    same key waits for it, then sees its key and makes another."""
+    waited, answers = _added_while_another_adds(tmp_path / "test.db", monkeypatch, "Free!")
 
     assert waited
-    assert sorted(plan.key.value for plan in added) == ["free", "free-2"]
-    assert [listing.plan.key.value for listing in plans.plans()] == ["free", "free-2"]
+    assert [answer.key.value for answer in answers if isinstance(answer, Plan)] == [
+        "free",
+        "free-2",
+    ]
+
+
+def test_two_plans_added_at_once_with_one_name_are_not_both_added(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An add reads the names once it holds the write lock, so the second add with the name
+    waits, then sees it taken."""
+    database = tmp_path / "test.db"
+    waited, answers = _added_while_another_adds(database, monkeypatch, "free")
+
+    assert waited
+    assert [type(answer) for answer in answers] == [Plan, PlanNameTaken]
+    assert [listing.plan for listing in SqlitePlans(database).plans()] == [answers[0]]

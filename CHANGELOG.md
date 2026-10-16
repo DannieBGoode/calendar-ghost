@@ -28,9 +28,14 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   and existing calendar accounts and tokens keep working. Returning to setup turns Plans off and
   keeps their definitions. In the API, a Plan's key is made from its name unless
   `POST /api/v1/plans` names one, rule details gain `can_start` and `rule_limit`, and rules and rule
-  details gain `keeps_place`. Migration 33 adds the `plans` table and the Plan columns; rolling back
-  to an earlier release works with the same database, which ignores them and limits nobody, and
-  after upgrading again, Plans are as the administrator left them.
+  details gain `keeps_place`. Two Plans may not share a name, whatever its case (409
+  `plan_name_taken`). Each Plan in `GET /api/v1/plans` gains `over_people`, how many of the people
+  it limits have more than it allows, and `use`, how many of them have each count. Each row of
+  `GET /api/v1/users` gains the person's `plan`, as their overview shows it, and both gain `has`,
+  the Plan they have, and `over`, each of its limits they are over. `GET /api/v1/users?plan=` lists
+  everyone who has a Plan. Migration 33 adds the `plans` table and the Plan columns; rolling back to
+  an earlier release works with the same database, which ignores them and limits nobody, and after
+  upgrading again, Plans are as the administrator left them.
 - Instant Sync: with a public HTTPS address in `CALENDAR_SYNC_PUBLIC_URL` that Google and Microsoft
   reach at `/api/v1/watch-notices/`, a rule runs soon after its provider reports a change in its
   Source Calendar instead of waiting for the next five-minute sync. Scheduled syncs and the daily

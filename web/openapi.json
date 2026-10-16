@@ -90,7 +90,7 @@
         "type": "object"
       },
       "AppliedPlanResponse": {
-        "description": "The Plan that limits a User now.",
+        "description": "A Plan a User has, such as the one that limits them now.",
         "properties": {
           "key": {
             "title": "Key",
@@ -1680,6 +1680,35 @@
         "title": "NotificationPreferenceRequest",
         "type": "object"
       },
+      "OverLimitResponse": {
+        "description": "One limit a person has more of than their Plan allows: they keep everything, but cannot\nadd another until they are within it.",
+        "properties": {
+          "allowed": {
+            "title": "Allowed",
+            "type": "integer"
+          },
+          "in_use": {
+            "title": "In Use",
+            "type": "integer"
+          },
+          "limit": {
+            "enum": [
+              "rules",
+              "connected_accounts",
+              "integration_tokens"
+            ],
+            "title": "Limit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "limit",
+          "in_use",
+          "allowed"
+        ],
+        "title": "OverLimitResponse",
+        "type": "object"
+      },
       "OwnAccountDeletionResponse": {
         "properties": {
           "last_user": {
@@ -1802,8 +1831,68 @@
         "title": "PendingInvitationResponse",
         "type": "object"
       },
+      "PersonPlanOverviewResponse": {
+        "description": "A person's Plan, as the Operator Overview shows it on their page and their row of People\n(ADR 0038).",
+        "properties": {
+          "assigned": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanNameResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "basis": {
+            "enum": [
+              "plans_off",
+              "administrator",
+              "plan"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "has": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPlanResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "over": {
+            "items": {
+              "$ref": "#/components/schemas/OverLimitResponse"
+            },
+            "title": "Over",
+            "type": "array"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPlanResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "basis",
+          "plan",
+          "assigned",
+          "has",
+          "over"
+        ],
+        "title": "PersonPlanOverviewResponse",
+        "type": "object"
+      },
       "PersonPlanResponse": {
-        "description": "A person's Plan, as the Operator Overview shows it (ADR 0038).",
+        "description": "A person's Plan as it limits them now (ADR 0038).",
         "properties": {
           "assigned": {
             "anyOf": [
@@ -1887,6 +1976,16 @@
             ],
             "title": "Last Synced At"
           },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonPlanOverviewResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "problems": {
             "title": "Problems",
             "type": "integer"
@@ -1934,7 +2033,8 @@
           "verdict",
           "problems",
           "last_synced_at",
-          "resources"
+          "resources",
+          "plan"
         ],
         "title": "PersonResponse",
         "type": "object"
@@ -2096,9 +2196,16 @@
             "title": "Name",
             "type": "string"
           },
+          "over_people": {
+            "title": "Over People",
+            "type": "integer"
+          },
           "people": {
             "title": "People",
             "type": "integer"
+          },
+          "use": {
+            "$ref": "#/components/schemas/PlanUseCountsResponse"
           }
         },
         "required": [
@@ -2107,9 +2214,44 @@
           "limits",
           "is_default",
           "people",
-          "limited_people"
+          "limited_people",
+          "over_people",
+          "use"
         ],
         "title": "PlanResponse",
+        "type": "object"
+      },
+      "PlanUseCountsResponse": {
+        "description": "How much the people a Plan limits have of each resource it limits: each count above 0,\nhighest first, with how many people have it, so a lower limit can say how many people it\nwould leave with more than it allows. Counts only; never who.",
+        "properties": {
+          "connected_accounts": {
+            "items": {
+              "$ref": "#/components/schemas/UseCountResponse"
+            },
+            "title": "Connected Accounts",
+            "type": "array"
+          },
+          "integration_tokens": {
+            "items": {
+              "$ref": "#/components/schemas/UseCountResponse"
+            },
+            "title": "Integration Tokens",
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/UseCountResponse"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules",
+          "connected_accounts",
+          "integration_tokens"
+        ],
+        "title": "PlanUseCountsResponse",
         "type": "object"
       },
       "PlansResponse": {
@@ -4328,6 +4470,25 @@
         "title": "UpdateRulePolicyRequest",
         "type": "object"
       },
+      "UseCountResponse": {
+        "description": "How many of the people a Plan limits have exactly `in_use` of one resource.",
+        "properties": {
+          "in_use": {
+            "title": "In Use",
+            "type": "integer"
+          },
+          "people": {
+            "title": "People",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "in_use",
+          "people"
+        ],
+        "title": "UseCountResponse",
+        "type": "object"
+      },
       "UserDeletionResponse": {
         "properties": {
           "deleted": {
@@ -4362,7 +4523,7 @@
           "plan": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/PersonPlanResponse"
+                "$ref": "#/components/schemas/PersonPlanOverviewResponse"
               },
               {
                 "type": "null"
@@ -6332,7 +6493,7 @@
     },
     "/api/v1/plans": {
       "get": {
-        "description": "Every Plan with how many people have it, the Plans setting, and the offered intervals.",
+        "description": "Every Plan with how many people have it and how many of them have more than it allows,\nthe Plans setting, and the offered intervals.",
         "operationId": "list_plans_api_v1_plans_get",
         "parameters": [
           {
@@ -7941,6 +8102,23 @@
                 }
               ],
               "title": "Verdict"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plan",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plan"
             }
           },
           {

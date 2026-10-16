@@ -29,24 +29,26 @@ availability. It runs the same open code, with no closed components (ADR 0023).
 A named set of limits that an Installation Administrator defines and assigns to Users: how many
 Directional Sync Rules may count toward it, how many Connected Accounts and Integration Tokens a
 User may have, and how soon their rules sync. Each Plan has a stable key, made from its name and
-never changed, and a name that can change; each count is a number or unlimited. The rules that
-count are enabled rules, rules stopped only by Lapsed Authorization, and a Rule Replacement's new
-draft that keeps its previous rule's place; drafts, previewed rules, and paused rules do not. Every
-Connected Account counts, Disconnected Accounts included, and every Integration Token not revoked.
-A Plan limits only how much a User uses, never how a rule projects events or how a User sees and
-recovers from a problem. Plans are an installation setting that is off by default; when off, every
-User has every feature with no limits (ADR 0028). An Installation Administrator is never limited.
-A User's own Plan is set by an Installation Administrator, and later also by billing under
-Commercial Mode, through one assignment that records who set it and when (ADR 0038).
+never changed, and a name that can change but that no other Plan has, whatever its case; each count
+is a number or unlimited. The rules that count are enabled rules, rules stopped only by Lapsed
+Authorization, and a Rule Replacement's new draft that keeps its previous rule's place; drafts,
+previewed rules, and paused rules do not. Every Connected Account counts, Disconnected Accounts
+included, and every Integration Token not revoked. A Plan limits only how much a User uses, never
+how a rule projects events or how a User sees and recovers from a problem. Plans are an installation
+setting that is off by default; when off, every User has every feature with no limits (ADR 0028). An
+Installation Administrator is never limited. A User's own Plan is set by an Installation
+Administrator, and later also by billing under Commercial Mode, through one assignment that records
+who set it and when (ADR 0038).
 _Avoid_: Tier, subscription, quota
 
 **Default Plan**:
-The Plan an Installation Administrator marks as the default. Every User without a Plan of their
-own has it, including Users who join later, so changing the default changes their limits at once.
-Turning Plans on with no default makes an ordinary Plan named "No limits", which limits nobody,
-the default, so turning Plans on changes nothing until an administrator gives someone a smaller
-Plan. Plans are never on without a default: it cannot be cleared while they are on, nor removed
-while it is the default. Billing will return a User to it when a payment ends.
+The Plan an Installation Administrator marks as the default. Every User without a Plan of their own
+has it, including Users who join later, so changing the default changes their limits at once.
+Turning Plans on with no default makes an ordinary Plan named "No limits" ("No limits 2" when a Plan
+already has that name), which limits nobody, the default, so turning Plans on changes nothing until
+an administrator gives someone a smaller Plan. Plans are never on without a default: it cannot be
+cleared while they are on, nor removed while it is the default. Billing will return a User to it
+when a payment ends.
 _Avoid_: Base plan, fallback plan
 
 **Allowance**:
@@ -386,7 +388,7 @@ A User who holds the role that operates the installation. The first User holds i
 _Avoid_: Owner, superuser, admin user
 
 **Operator Overview**:
-The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, Resource Use, and, once any Plan exists, their Plan. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content. What it shows and never shows is documented, so every User can know it; Settings does not repeat it to them (ADR 0030, amended).
+The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, Resource Use, and, once any Plan exists, their Plan with each of its limits they have more of than it allows. For People's Plans tab it also counts, per Plan, how many of the people it limits have more than it allows. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content. What it shows and never shows is documented, so every User can know it; Settings does not repeat it to them (ADR 0030, amended).
 _Avoid_: Admin dashboard, user management, support view
 
 **Resource Use**:

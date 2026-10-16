@@ -253,6 +253,7 @@ that is gone by the next pass moves the admission counter, which restarts the gr
 | `application/identity/plans.py` | `ShowPlans`, `DefinePlan`, `ChangePlan`, `RemovePlan`, `SetPlansSetting`, `AssignPlan`. Each calls `require_administrator` first. |
 | `application/identity/integration_tokens.py` | New `IssueIntegrationToken`, which also takes over the route's `installation:read` administrator check |
 | `application/operations/own_plan.py` | `ShowOwnPlan`: a read model across sync and identity |
+| `application/operations/operator_overview.py` | Each person's `PersonPlan` (the Plan they have and each limit of it they are over) and `reach_of`, each Plan's `PlanReach`, from `InstallationUnitOfWork.plan_use` (amended 2026-10-16) |
 | `application/operations/scheduled_pass.py` | Slice 2: the due filter. Slice 4: the settle step and the notices it hands to the scheduler. |
 | `infrastructure/persistence/plans.py` | `SqlitePlans` implements `Allowances`, `PlanCatalog`, and `PlanAssignments`. Each client depends only on the port it uses. |
 
@@ -624,11 +625,11 @@ Today `SyncScheduler` runs a pass, sleeps 300 seconds, and runs every enabled ru
 
 | Use case | Effect and refusals |
 |---|---|
-| `ShowPlans` | Every Plan with `people` and `limited_people`, the setting, the default, and the offered intervals |
-| `DefinePlan` | The key is the one the request names, or one made from the name: lower case, accents dropped, each run of other characters one hyphen, at most 32 characters, or `plan` when nothing is left, with `-2`, `-3`, and so on when another Plan has it. `PlanCatalog.add` makes it after it takes the write lock, so it is unique. 409 `plan_key_taken` only for a named key another Plan has; 422 `invalid_plan` with the reason |
-| `ChangePlan` | The key never changes. New limits apply at once to new resources. The form warns how many people the Plan limits, and that rules beyond a lower limit keep syncing for 7 days, then are held (before slice 4: that no new rule can start). |
+| `ShowPlans` | Every Plan with `people` and `limited_people`, the setting, the default, and the offered intervals. The route adds each Plan's reach from the Operator Overview (`reach_of`): `over_people`, how many of the people it limits have more than it allows, and `use`, how many people have each count of each limit, so a lowered limit can say exactly whom it leaves over it |
+| `DefinePlan` | The key is the one the request names, or one made from the name: lower case, accents dropped, each run of other characters one hyphen, at most 32 characters, or `plan` when nothing is left, with `-2`, `-3`, and so on when another Plan has it. `PlanCatalog.add` makes it after it takes the write lock, so it is unique. The name must not read as another Plan's, without case, spaces around, or compatibility differences: 409 `plan_name_taken` with that Plan's `name`, checked under the same lock. 409 `plan_key_taken` only for a named key another Plan has; 422 `invalid_plan` with the reason |
+| `ChangePlan` | The key never changes. New limits apply at once to new resources. A new name must not read as another Plan's (409 `plan_name_taken`); a Plan may keep its own in another case. The form warns how many people the Plan limits, and that rules beyond a lower limit keep syncing for 7 days, then are held (before slice 4: that no new rule can start). |
 | `RemovePlan` | 409 `plan_is_default`, or 409 `plan_in_use` with `people`. The administrator moves those Users first, which is also safe for billing. |
-| `SetPlansSetting` | Turning Plans on when neither the request nor the installation names a default adds "No limits" (every count unlimited, Instant, its key made from its name) and makes it the default, in the same transaction. It is an ordinary Plan: it can be renamed and changed, and not removed while it is the default. 409 `plans_need_default` when the request would clear the default with Plans on, or as they turn on. Turning them off is always allowed and keeps everything. |
+| `SetPlansSetting` | Turning Plans on when neither the request nor the installation names a default adds "No limits" (every count unlimited, Instant, its key made from its name, named "No limits 2" and so on when a Plan already reads as that name) and makes it the default, in the same transaction. It is an ordinary Plan: it can be renamed and changed, and not removed while it is the default. 409 `plans_need_default` when the request would clear the default with Plans on, or as they turn on. Turning them off is always allowed and keeps everything. |
 | `AssignPlan` | `PlanAssignments.assign(user, plan, AssignmentChange(administrator, actor, now))`. `None` returns the User to the default. Allowed while Plans are off, so an administrator can prepare. |
 
 - **Billing seam.** Billing will call the same port with `AssignmentChange(billing, None, at)`,
@@ -639,7 +640,12 @@ Today `SyncScheduler` runs a pass, sleeps 300 seconds, and runs every enabled ru
 - **Operator Overview.** The person page shows a Plan fact ("Plan: Family", "Plan: Free
   (default)", "No plan limits administrators") and a "Change plan" action, whenever at least one
   Plan exists. This
-  keeps ADR 0030's promise, and CONTEXT's Operator Overview entry gains the Plan.
+  keeps ADR 0030's promise, and CONTEXT's Operator Overview entry gains the Plan. Since
+  2026-10-16 the overview also computes, for the Plan each person has (their own, or else the
+  default, whether or not Plans are on), each limit they have more of than it allows, with how
+  many are in use and allowed, counted through `InstallationUnitOfWork.plan_use`; only active
+  Users who do not administer are ever over. The person's overview and every row of People answer
+  it as `has` and `over`, and People finds people by Plan (`?plan=`), as `people` counts them.
 - **Invitations** carry no Plan. Invited Users start on the default.
 - A malformed Plan key in a path names no Plan, so it answers 404 `plan_not_found`.
 
@@ -662,7 +668,8 @@ Today `SyncScheduler` runs a pass, sleeps 300 seconds, and runs every enabled ru
 - New codes, each with an English `common.apiError.*` message, and with `count` beside every
   number so the translator picks the plural form: `plan_limit_reached` (reason `rules`,
   `rules_with_held`, or `integration_tokens`), `plans_need_default`, `plan_not_found`,
-  `plan_key_taken`, `plan_in_use`, `plan_is_default`, `invalid_plan`, `too_many_kept_rules`, and
+  `plan_key_taken`, `plan_name_taken` (param `name`), `plan_in_use`, `plan_is_default`,
+  `invalid_plan`, `too_many_kept_rules`, and
   `manual_runs_throttled`.
 - The OAuth outcome `account_limit_reached` carries `limit` through the settings arrival params.
   Its notice links to Your plan in place of "Try again". A new test checks that the server's OAuth

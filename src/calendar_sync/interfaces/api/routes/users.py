@@ -63,6 +63,7 @@ from calendar_sync.domain.access import (
     UserState,
 )
 from calendar_sync.domain.errors import DomainValidationError
+from calendar_sync.domain.plans import PlanKey
 from calendar_sync.interfaces.api.dependencies import (
     Identity,
     administrator,
@@ -70,7 +71,11 @@ from calendar_sync.interfaces.api.dependencies import (
     current_user,
     set_session_cookie,
 )
-from calendar_sync.interfaces.api.plan_payload import named_plan, person_plan_response
+from calendar_sync.interfaces.api.plan_payload import (
+    named_plan,
+    person_plan_overview_response,
+    person_plan_response,
+)
 from calendar_sync.interfaces.api.problems import ApiProblem, problem_from
 from calendar_sync.interfaces.api.routes.session import SignedInAnswers, signed_in
 from calendar_sync.interfaces.api.schemas import (
@@ -81,6 +86,7 @@ from calendar_sync.interfaces.api.schemas import (
     LinkStatusResponse,
     PendingInvitationResponse,
     PeopleQuery,
+    PersonPlanOverviewResponse,
     PersonPlanResponse,
     PersonResponse,
     RegistrationRequest,
@@ -413,6 +419,8 @@ def _overview_query(query: PeopleQuery) -> OverviewQuery:
             search=query.search.strip(),
             role=Role(query.role) if query.role else None,
             state=UserState(query.state) if query.state else None,
+            # The query's pattern admits only well-formed keys.
+            plan=PlanKey(query.plan) if query.plan else None,
             # Within a verdict, people keep the order they joined in.
             sort=UserSort.JOINED if by_verdict else UserSort(query.sort),
             descending=query.order == "desc",
@@ -425,13 +433,17 @@ def _overview_query(query: PeopleQuery) -> OverviewQuery:
 
 
 def user_overview_response(overview: UserOverview) -> UserOverviewResponse:
-    allowance = overview.allowance
     return UserOverviewResponse(
         user=_user(overview.user),
         status=status_response(overview.status),
         resources=resource_use_response(overview),
-        plan=person_plan_response(allowance) if allowance is not None else None,
+        plan=_person_plan(overview),
     )
+
+
+def _person_plan(overview: UserOverview) -> PersonPlanOverviewResponse | None:
+    plan = overview.plan
+    return person_plan_overview_response(plan) if plan is not None else None
 
 
 def _person(overview: UserOverview) -> PersonResponse:
@@ -444,6 +456,7 @@ def _person(overview: UserOverview) -> PersonResponse:
         if (last_synced := status_.overview.last_synced_at)
         else None,
         resources=resource_use_response(overview),
+        plan=_person_plan(overview),
     )
 
 

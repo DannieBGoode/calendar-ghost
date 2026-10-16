@@ -80,6 +80,12 @@ class User:
         """Whether they hold the Installation Administrator role."""
         return self.role is Role.INSTALLATION_ADMINISTRATOR
 
+    @property
+    def limited_by_plans(self) -> bool:
+        """Whether the Plan they have limits them while Plans are on: they are active and do not
+        administer. A disabled User adds nothing, so no Plan counts them (ADR 0038)."""
+        return self.state is UserState.ACTIVE and not self.administers
+
     def with_email(self, email: str) -> User:
         return replace(self, email=email_address(email))
 
