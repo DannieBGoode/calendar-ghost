@@ -11,6 +11,7 @@ import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testin
 import type { I18n } from "@/i18n/translator"
 import type { ConnectedAccount, RuleDetail, RulePreview } from "@/lib/api"
 import type { OpenRule } from "@/lib/navigation"
+import { RULE_CHANGE_QUERIES } from "@/lib/use-rule-commands"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -158,9 +159,12 @@ async function settle(times = 8) {
   }
 }
 
-async function renderPreview(i18n: I18n, onOpenRule: OpenRule = () => undefined) {
+async function renderPreview(
+  i18n: I18n,
+  onOpenRule: OpenRule = () => undefined,
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   root = createRoot(container)
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   act(() => {
     root?.render(
       <StaticI18nProvider i18n={i18n}>
@@ -359,6 +363,28 @@ describe("RulePreviewView", () => {
     expect(button("Start syncing to Work").getAttribute("aria-disabled")).toBeNull()
     expect(container.querySelector("#rule-preview-start-note")).toBeNull()
     expect(container.querySelector(".rule-preview-footer a[href='/settings/account#your-plan']")).toBeNull()
+  })
+
+  it("reads the rule again on return, so a rule paused elsewhere meanwhile frees Start", async () => {
+    // The app keeps answers fresh for 30 seconds; the rule's details were read as the preview ended.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
+    mockFetch({ status: 200, body: preview }, { ...previewedRule, can_start: false, rule_limit: 1 })
+    await renderPreview(testI18n(), undefined, queryClient)
+    expect(button("Start syncing to Work").getAttribute("aria-disabled")).toBe("true")
+
+    // Away on Rules, pausing another rule refreshes the rule views but not this rule's details.
+    act(() => root?.unmount())
+    root = null
+    await act(() =>
+      Promise.all([...RULE_CHANGE_QUERIES, ["rule", "other"]].map((queryKey) => queryClient.invalidateQueries({ queryKey }))),
+    )
+    mockFetch({ status: 200, body: preview })
+    await renderPreview(testI18n(), undefined, queryClient)
+
+    expect(calls).toContain("GET /api/v1/rules/rule-1")
+    expect(calls).not.toContain("POST /api/v1/rules/rule-1/preview")
+    expect(button("Start syncing to Work").getAttribute("aria-disabled")).toBeNull()
+    expect(container.querySelector("#rule-preview-start-note")).toBeNull()
   })
 
   it("says what the plan allows, not to try again, when Start meets the rule limit", async () => {

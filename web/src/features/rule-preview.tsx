@@ -86,7 +86,9 @@ export function RulePreviewView({
   onOpenRule: OpenRule
 }) {
   const { t } = useI18n()
-  const rule = useQuery({ queryKey: ["rule", ruleId], queryFn: () => api.rule(ruleId), retry: false })
+  // Read again on every visit: Start depends on can_start, which a change to another rule moves,
+  // and those changes do not mark this rule's details stale.
+  const rule = useQuery({ queryKey: ["rule", ruleId], queryFn: () => api.rule(ruleId), retry: false, refetchOnMount: "always" })
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   const preview = useRulePreview(ruleId, rule.data ? previewSettings(rule.data) : null)
   const { calendarsByAccount, namesReady } = useRuleCalendars(rule.data, accounts.data)
