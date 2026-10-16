@@ -32,10 +32,11 @@ rules, or events ([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
 - The Registration Policy.
 - Plans, once an administrator defines one: each Plan's key, name, limits, and sync interval, and
   when it was defined and last changed; whether Plans are on, and which Plan is the default. For
-  each User given a Plan of their own: that Plan, whether an administrator or billing set it, which
-  administrator, and when. A User without one has the default, and nothing more is stored for
-  them. Each rule also records whether it keeps the place of the rule it replaced under its User's
-  Plan ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
+  each User an administrator or billing gave a Plan, or returned to the Default Plan: their own
+  Plan, if they have one, whether an administrator or billing set it, which administrator, and
+  when. A User nobody has given a Plan has the default, and nothing more is stored for them. Each
+  rule also records whether it keeps the place of the rule it replaced under its User's Plan
+  ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 - Provider call counts: for each User, calendar provider, and UTC day, how many calls their runs
   made, how many the provider refused for its rate limit, and how many failed. Only counts are
   kept, never what a call asked for, and days older than 30 are discarded.
