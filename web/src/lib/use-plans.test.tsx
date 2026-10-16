@@ -142,9 +142,46 @@ describe("usePlans", () => {
       body: { enabled: true, default_plan: "free" },
     })
     expect(queryClient.getQueryData(PLANS_QUERY)).toEqual(on)
-    expect(commands?.message).toBe("Plans now limit people.")
+    // Family limits 3 people and Free, the default, 2.
+    expect(commands?.message).toBe("Plans now limit 5 people.")
     expect(refreshed(["people", "overview", "user-robin"])).toBe(true)
     expect(refreshed(OWN_PLAN_QUERY)).toBe(true)
+  })
+
+  it("turns Plans on with no default, and names the No limits plan the server made the default", async () => {
+    const noLimits: PlanSummary = {
+      key: "no-limits",
+      name: "No limits",
+      limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" },
+      is_default: true,
+      people: 3,
+      limited_people: 2,
+    }
+    const off: PlansOverview = { ...overview, default_plan: null, plans: [family, { ...free, is_default: false }] }
+    const on: PlansOverview = {
+      ...overview,
+      enabled: true,
+      default_plan: "no-limits",
+      plans: [family, { ...free, is_default: false }, noLimits],
+    }
+    await render({ "GET /api/v1/plans": jsonResponse(off), "PUT /api/v1/plan-settings": jsonResponse(on) })
+    await run((plans) => plans.setting.mutate({ enabled: true, defaultPlan: null }))
+    expect(calls.find((call) => call.method === "PUT")?.body).toEqual({ enabled: true, default_plan: null })
+    expect(commands?.message).toBe("Plans are on. No limits is the new default plan, and it limits nothing.")
+  })
+
+  it("says Plans limit nobody yet when no Plan that limits something has anyone", async () => {
+    const on: PlansOverview = {
+      ...overview,
+      enabled: true,
+      plans: [
+        { ...family, limited_people: 0 },
+        { ...free, limited_people: 0 },
+      ],
+    }
+    await render({ "PUT /api/v1/plan-settings": jsonResponse(on) })
+    await run((plans) => plans.setting.mutate({ enabled: true, defaultPlan: "free" }))
+    expect(commands?.message).toBe("Plans are on. They limit nobody yet.")
   })
 
   it("turns Plans off, keeping every Plan", async () => {
@@ -195,7 +232,7 @@ describe("usePlans", () => {
       "PUT /api/v1/plan-settings": jsonResponse({ ...overview, enabled: true }),
     })
     await run((plans) => plans.setting.mutate({ enabled: true, defaultPlan: "free" }))
-    expect(commands?.message).toBe("Plans now limit people.")
+    expect(commands?.message).toBe("Plans now limit 5 people.")
     await run((plans) => plans.define.mutate({ key: "free", name: "Free", limits: free.limits }))
     expect(commands?.define.error).not.toBeNull()
     expect(commands?.message).toBe("")

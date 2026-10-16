@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import { api, type PlanChange, type PlanPayload, type PlansOverview } from "@/lib/api"
+import { limitedPeople } from "@/lib/plans"
 import { OWN_PLAN_QUERY } from "@/lib/use-own-plan"
 
 /** Every Plan and the Plans setting; only Installation Administrators may read them. */
@@ -12,9 +13,25 @@ export const PLANS_QUERY = ["plans"] as const
 /** The Plans setting's change: whether Plans limit people now, and the Default Plan. */
 type SettingChange = { enabled: boolean; defaultPlan: string | null }
 
+/**
+ * What turning Plans on did: the Plan the server made the default when there was none, or how many
+ * people Plans now limit.
+ */
+function turnedOnMessage({ t }: I18n, before: PlansOverview | undefined, after: PlansOverview): string {
+  const made =
+    before &&
+    after.plans.find((plan) => plan.key === after.default_plan && !before.plans.some((known) => known.key === plan.key))
+  if (made) return t("people.plans.saved.onNoLimits", { name: made.name })
+  const count = limitedPeople(after.plans)
+  return count > 0 ? t("people.plans.saved.on", { count }) : t("people.plans.saved.onNobody")
+}
+
 /** What a change of the Plans setting did, in the active language; empty when nothing to say. */
-function settingMessage({ t }: I18n, before: PlansOverview | undefined, after: PlansOverview): string {
-  if (before?.enabled !== after.enabled) return t(after.enabled ? "people.plans.saved.on" : "people.plans.saved.off")
+function settingMessage(i18n: I18n, before: PlansOverview | undefined, after: PlansOverview): string {
+  const { t } = i18n
+  if (before?.enabled !== after.enabled) {
+    return after.enabled ? turnedOnMessage(i18n, before, after) : t("people.plans.saved.off")
+  }
   const chosen = after.plans.find((plan) => plan.key === after.default_plan)
   return chosen ? t("people.plans.saved.defaultChanged", { name: chosen.name }) : ""
 }

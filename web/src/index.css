@@ -1853,6 +1853,95 @@ p {
   width: 7rem;
 }
 
+/* With no Plan yet, the Plans group holds one centered empty state, closed by Add a plan below it. */
+.plans-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem 0.75rem;
+  text-align: center;
+}
+
+.plans-empty .empty-ghost {
+  margin-bottom: 1rem;
+}
+
+.plans-empty h3 {
+  color: var(--foreground);
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.plans-empty p {
+  max-width: 34rem;
+  margin-top: 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.plans-empty-action {
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem 0 2rem;
+}
+
+/* A Plan's name, with Default beside it rather than on a line of its own. */
+.plan-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+/* Where Remove would be on the default Plan: how to remove it, quietly. */
+.setting-row .plan-remove-note {
+  max-width: 16rem;
+  margin: 0;
+  align-self: center;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+/* Why a Plan people have cannot be removed yet, in place of the confirmation it would get. It
+   takes focus as it opens, like a confirmation's heading. */
+.plan-in-use {
+  display: flex;
+  max-width: 48rem;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.plan-in-use:focus {
+  outline: none;
+}
+
+.plan-in-use > svg {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.15rem;
+  flex: none;
+  color: var(--muted-foreground);
+}
+
+/* The Default Plan's choice, and Save default beside it while the choice is not saved. */
+.plans-default-control {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .setting-item .disconnect-confirmation {
   margin-top: 0;
   margin-bottom: 1rem;
@@ -3784,6 +3873,15 @@ a.recent-change-rule:focus-visible {
 .checkbox-row input:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+/* A box waiting for its change keeps focus, so it reads as unavailable without being disabled. */
+.checkbox-row:has(> input[aria-disabled="true"]) {
+  cursor: not-allowed;
+}
+
+.checkbox-row input[aria-disabled="true"] {
+  opacity: 0.5;
 }
 
 .checkbox-row span {

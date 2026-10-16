@@ -104,7 +104,7 @@
       "other": "Your plan lets {count} rules sync. Pause or remove one to start this rule."
     },
     "plan_not_found": "This plan no longer exists. Reload to see the current plans.",
-    "plans_need_default": "Choose a default plan before you turn plans on.",
+    "plans_need_default": "Plans can't be on without a default plan. Choose another default instead.",
     "provider_failed": "{Provider} reported a problem. Try again shortly.",
     "provider_not_configured": "No calendar provider is configured on this installation.",
     "provider_not_found": "No calendar provider connects through this address.",

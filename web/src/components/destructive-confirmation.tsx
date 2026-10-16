@@ -4,6 +4,12 @@ import { useEffect, useRef, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
+/**
+ * A destructive change confirmed inline: its title, which takes focus, its consequence, and a
+ * neutral way back beside the button that names the effect. While the change is on its way both
+ * buttons stay focusable but ignore presses, so focus never falls to the page; `confirmDisabled`
+ * holds the confirm button back until a prerequisite, such as a password, is met.
+ */
 export function DestructiveConfirmation({
   id,
   title,
@@ -52,14 +58,16 @@ export function DestructiveConfirmation({
       </div>
       {children}
       <div className="confirmation-actions">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
+        <Button type="button" variant="outline" aria-disabled={pending || undefined} onClick={() => !pending && onCancel()}>
           {cancelLabel}
         </Button>
         <Button
           type="button"
           variant="destructive"
-          onClick={onConfirm}
-          disabled={pending || confirmDisabled}
+          aria-disabled={pending || undefined}
+          aria-busy={pending || undefined}
+          onClick={() => !pending && onConfirm()}
+          disabled={confirmDisabled}
         >
           {confirmIcon}
           {pending ? pendingLabel : confirmLabel}

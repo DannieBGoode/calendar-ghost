@@ -49,6 +49,16 @@ const free: PlanSummary = {
   limited_people: 2,
 }
 
+/** The Plan the server makes the default when Plans turn on with none. */
+const noLimits: PlanSummary = {
+  key: "no-limits",
+  name: "No limits",
+  limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" },
+  is_default: false,
+  people: 3,
+  limited_people: 2,
+}
+
 /** Plans as GET /api/v1/plans answers, with `defaultPlan` marked as the default. */
 function overview({
   enabled = false,
@@ -84,6 +94,7 @@ type Scenario = {
 }
 
 let calls: Call[] = []
+let routes: Record<string, Response | Promise<Response>> = {}
 
 function serve({ registration = INVITATION_ONLY, plans = overview(), answers = {} }: Scenario) {
   const defaults: Record<string, Response | Promise<Response>> = {
@@ -92,7 +103,7 @@ function serve({ registration = INVITATION_ONLY, plans = overview(), answers = {
     "GET /api/v1/invitations": jsonResponse([]),
     "GET /api/v1/plans": jsonResponse(plans),
   }
-  const routes = { ...defaults, ...answers }
+  routes = { ...defaults, ...answers }
   calls = []
   vi.stubGlobal(
     "fetch",
@@ -163,14 +174,39 @@ function plansSection(): HTMLElement {
   return found
 }
 
+/** Changes what the server answers from now on, as after a change it saved. */
+function reply(route: string, response: Response) {
+  routes[route] = response
+}
+
 function sections(): (string | null)[] {
   return [...container.querySelectorAll(".people-page > section")].map((item) => item.getAttribute("aria-labelledby"))
 }
 
+function buttonOrNull(name: string, within: ParentNode = plansSection()): HTMLButtonElement | null {
+  return [...within.querySelectorAll("button")].find((candidate) => candidate.textContent.trim() === name) ?? null
+}
+
 function button(name: string, within: ParentNode = plansSection()): HTMLButtonElement {
-  const found = [...within.querySelectorAll("button")].find((candidate) => candidate.textContent.trim() === name)
+  const found = buttonOrNull(name, within)
   if (!found) throw new Error(`No button "${name}"`)
   return found
+}
+
+/** A Plan row's lines under its name: its limits, how soon it syncs, and whom it limits. */
+function copyLines(name: string): (string | null)[] {
+  return [...planRow(name).querySelectorAll(".setting-copy p")].map((line) => line.textContent)
+}
+
+/** Whether each element comes after the one before it on the page. */
+function inOrder(...elements: Element[]): boolean {
+  return elements.every(
+    (item, index) => index === 0 || Boolean(elements[index - 1]!.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING),
+  )
+}
+
+function focus(target: HTMLElement) {
+  act(() => target.focus())
 }
 
 /** The row of one Plan, by its name. */
@@ -251,70 +287,218 @@ describe("People's Plans tab", () => {
     expect(plansSection().querySelector("h2")?.textContent).toBe("Plans")
   })
 
-  it("lists each Plan with its limits, interval, people, and which is the default", async () => {
-    await renderPlans(testI18n(), { plans: overview({ defaultPlan: "free" }) })
-    expect([...planRow("Family").querySelectorAll("p")].map((line) => line.textContent)).toEqual([
-      "5 rules, 3 calendar accounts, 2 tokens",
-      "Instant sync, and a check every 5 minutes",
-      "4 people",
-    ])
-    expect([...planRow("Free").querySelectorAll("p")].map((line) => line.textContent)).toEqual([
-      "1 rule, 1 calendar account, no tokens",
-      "Every 5 minutes",
-      "2 people",
-    ])
-    expect(planRow("Free").textContent).toContain("Default")
-    expect(planRow("Family").textContent).not.toContain("Default")
+  it("starts with an empty state whose one action is Add a plan", async () => {
+    await renderPlans(testI18n(), { plans: overview({ plans: [] }) })
+    expect(plansSection().querySelector("h3")?.textContent).toBe("No plans yet")
+    expect(plansSection().textContent).toContain(
+      "Add a plan with the limits you want. Make it the default to limit everyone, or give it to someone from their page to limit only them.",
+    )
+    expect([...plansSection().querySelectorAll("button")].map((item) => item.textContent.trim())).toEqual(["Add a plan"])
+    expect(container.querySelector("#plans-default")).toBeNull()
+    expect(container.querySelector("#plans-enabled")).toBeNull()
   })
 
-  it("keeps Limit people with plans unavailable until a default exists, and says why", async () => {
-    await renderPlans(testI18n())
-    const enabled = field("plans-enabled")
-    expect(enabled.disabled).toBe(true)
-    expect(element("plans-enabled-hint").textContent).toBe("Choose a default plan first.")
-  })
-
-  it("chooses a default, leaving plans off", async () => {
+  it("adds the first plan from the empty state, then offers the default and the on/off control", async () => {
+    const added: PlanSummary = { ...free, people: 0, limited_people: 0 }
     await renderPlans(testI18n(), {
-      answers: { "PUT /api/v1/plan-settings": jsonResponse(overview({ defaultPlan: "family" })) },
+      plans: overview({ plans: [] }),
+      answers: { "POST /api/v1/plans": jsonResponse(added, 201) },
     })
-    await choose(select("plans-default"), "family")
-    expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: false, default_plan: "family" })
-    expect(status()).toBe("Family is now the default plan.")
-    expect(field("plans-enabled").disabled).toBe(false)
-    expect(element("plans-enabled-hint").textContent).toBe("While this is off, nobody is limited.")
+    await click(button("Add a plan"))
+    expect(document.activeElement).toBe(field("plan-new-name"))
+    type(field("plan-new-name"), "Free")
+    reply("GET /api/v1/plans", jsonResponse(overview({ plans: [added] })))
+    await submit(field("plan-new-name").closest("form")!)
+
+    expect(status()).toBe("Free was added.")
+    expect(plansSection().textContent).not.toContain("No plans yet")
+    expect(copyLines("Free")[2]).toBe("Limits nobody")
+    expect(document.activeElement).toBe(button("Add a plan"))
+    expect(inOrder(planRow("Free"), button("Add a plan"), select("plans-default"), field("plans-enabled"))).toBe(true)
   })
 
-  it("turns plans on with the default it has", async () => {
+  it("puts the plans first, then the default, then the on/off control, each step after the one it needs", async () => {
+    await renderPlans(testI18n(), { plans: overview({ defaultPlan: "free" }) })
+    expect(
+      inOrder(planRow("Family"), planRow("Free"), button("Add a plan"), select("plans-default"), field("plans-enabled")),
+    ).toBe(true)
+  })
+
+  it("lists each Plan with its limits, interval, and how many people it limits, marking the default", async () => {
+    await renderPlans(testI18n(), { plans: overview({ enabled: true, defaultPlan: "free" }) })
+    expect(copyLines("Family")).toEqual([
+      "5 rules, 3 calendar accounts, 2 Integration Tokens",
+      "Instant sync, and a check every 5 minutes",
+      "Limits 3 people",
+    ])
+    expect(copyLines("Free")).toEqual(["1 rule, 1 calendar account, no Integration Tokens", "Every 5 minutes", "Limits 2 people"])
+    expect(planRow("Free").querySelector(".plan-title")?.textContent).toBe("FreeDefault")
+    expect(planRow("Family").querySelector(".plan-title")?.textContent).toBe("Family")
+  })
+
+  it("says whom a plan will limit once plans are on, and that a plan with no limits limits nobody", async () => {
+    const spare: PlanSummary = { ...family, key: "spare", name: "Spare", people: 1, limited_people: 0 }
+    await renderPlans(testI18n(), {
+      plans: overview({ plans: [family, { ...free, limited_people: 1 }, spare, noLimits] }),
+    })
+    expect(copyLines("Family")[2]).toBe("Limits 3 people once plans are on")
+    expect(copyLines("Free")[2]).toBe("Limits 1 person once plans are on")
+    expect(copyLines("Spare")[2]).toBe("Limits nobody")
+    expect(copyLines("No limits")).toEqual([
+      "No limit on rules, calendar accounts, or Integration Tokens",
+      "Instant sync, and a check every 5 minutes",
+      "Limits nobody",
+    ])
+  })
+
+  it.each([
+    ["off with a default", overview({ defaultPlan: "free" }), "Off. Nobody is limited."],
+    [
+      "off with no default",
+      overview(),
+      "Off. Nobody is limited. With no default plan, turning this on adds one named No limits, which limits nobody.",
+    ],
+    ["on", overview({ enabled: true, defaultPlan: "free" }), "On. 5 people are limited."],
+    ["on for one person", overview({ enabled: true, defaultPlan: "free", plans: [{ ...free, limited_people: 1 }] }), "On. 1 person is limited."],
+    ["on with only No limits", overview({ enabled: true, defaultPlan: "no-limits", plans: [noLimits] }), "On. Nobody is limited yet."],
+  ])("says whether plans are on and whom they limit: %s", async (_state, plans, hint) => {
+    await renderPlans(testI18n(), { plans })
+    const box = field("plans-enabled")
+    expect(box.disabled).toBe(false)
+    expect(box.checked).toBe(plans.enabled)
+    expect(element(box.getAttribute("aria-labelledby")!).textContent).toBe("Limit people with plans")
+    expect(box.getAttribute("aria-describedby")).toBe("plans-enabled-hint")
+    expect(element("plans-enabled-hint").textContent).toBe(hint)
+  })
+
+  it("turns plans on with no default, showing the No limits plan the server made the default", async () => {
+    const on = overview({ enabled: true, defaultPlan: "no-limits", plans: [family, free, noLimits] })
+    await renderPlans(testI18n(), { answers: { "PUT /api/v1/plan-settings": jsonResponse(on) } })
+    await click(field("plans-enabled"))
+    expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: true, default_plan: null })
+    expect(status()).toBe("Plans are on. No limits is the new default plan, and it limits nothing.")
+    expect(field("plans-enabled").checked).toBe(true)
+    // Family and Free limit the people who have them; No limits limits nobody.
+    expect(element("plans-enabled-hint").textContent).toBe("On. 5 people are limited.")
+    expect(select("plans-default").value).toBe("no-limits")
+    expect(planRow("No limits").querySelector(".plan-title")?.textContent).toBe("No limitsDefault")
+  })
+
+  it("turns plans on with the default it has, and says how many people they now limit", async () => {
     await renderPlans(testI18n(), {
       plans: overview({ defaultPlan: "free" }),
       answers: { "PUT /api/v1/plan-settings": jsonResponse(overview({ enabled: true, defaultPlan: "free" })) },
     })
     await click(field("plans-enabled"))
     expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: true, default_plan: "free" })
-    expect(status()).toBe("Plans now limit people.")
+    expect(status()).toBe("Plans now limit 5 people.")
     expect(field("plans-enabled").checked).toBe(true)
+    expect(element("plans-enabled-hint").textContent).toBe("On. 5 people are limited.")
   })
 
-  it("shows the plan asked for, and holds the select, while the default is on its way", async () => {
-    const neverAnswered = new Promise<Response>(() => undefined)
-    await renderPlans(testI18n(), { answers: { "PUT /api/v1/plan-settings": neverAnswered } })
-    await choose(select("plans-default"), "family")
-    expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: false, default_plan: "family" })
-    expect(select("plans-default").value).toBe("family")
-    expect(select("plans-default").disabled).toBe(true)
-  })
-
-  it("keeps the box ticked, and holds it, while turning plans on is on its way", async () => {
+  it("keeps the box ticked and focused while turning plans on is on its way, ignoring another click", async () => {
     const neverAnswered = new Promise<Response>(() => undefined)
     await renderPlans(testI18n(), {
       plans: overview({ defaultPlan: "free" }),
       answers: { "PUT /api/v1/plan-settings": neverAnswered },
     })
-    await click(field("plans-enabled"))
+    const box = field("plans-enabled")
+    focus(box)
+    await click(box)
     expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: true, default_plan: "free" })
-    expect(field("plans-enabled").checked).toBe(true)
-    expect(field("plans-enabled").disabled).toBe(true)
+    expect(box.checked).toBe(true)
+    expect(box.disabled).toBe(false)
+    expect(box.getAttribute("aria-disabled")).toBe("true")
+    expect(document.activeElement).toBe(box)
+
+    await click(box)
+    expect(calls.filter((call) => call.method === "PUT").length).toBe(1)
+    expect(box.checked).toBe(true)
+    expect(select("plans-default").getAttribute("aria-disabled")).toBe("true")
+  })
+
+  it("says why turning plans on was refused under the box, and moves focus to it", async () => {
+    await renderPlans(testI18n(), {
+      plans: overview({ defaultPlan: "free" }),
+      answers: { "PUT /api/v1/plan-settings": refusal(404, "plan_not_found") },
+    })
+    const box = field("plans-enabled")
+    await click(box)
+    const error = element("plans-enabled-error")
+    expect(error.textContent).toBe("This plan no longer exists. Reload to see the current plans.")
+    expect(error.getAttribute("role")).toBe("alert")
+    expect(box.checked).toBe(false)
+    expect(box.getAttribute("aria-invalid")).toBe("true")
+    expect(box.getAttribute("aria-describedby")).toBe("plans-enabled-hint plans-enabled-error")
+    expect(document.activeElement).toBe(box)
+    expect(container.querySelector("#plans-default-error")).toBeNull()
+  })
+
+  it("chooses a default only once Save default is pressed", async () => {
+    await renderPlans(testI18n(), {
+      answers: { "PUT /api/v1/plan-settings": jsonResponse(overview({ defaultPlan: "family" })) },
+    })
+    expect(buttonOrNull("Save default")).toBeNull()
+    await choose(select("plans-default"), "family")
+    expect(sent("PUT", "/api/v1/plan-settings")).toBeUndefined()
+    expect(buttonOrNull("Save default")).not.toBeNull()
+    // Choosing the saved default again leaves nothing to save.
+    await choose(select("plans-default"), "")
+    expect(buttonOrNull("Save default")).toBeNull()
+
+    await choose(select("plans-default"), "family")
+    await click(button("Save default"))
+    expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: false, default_plan: "family" })
+    expect(status()).toBe("Family is now the default plan.")
+    expect(buttonOrNull("Save default")).toBeNull()
+    expect(document.activeElement).toBe(select("plans-default"))
+    expect(element("plans-enabled-hint").textContent).toBe("Off. Nobody is limited.")
+  })
+
+  it("keeps the default's controls focusable while it saves, showing the plan asked for", async () => {
+    const neverAnswered = new Promise<Response>(() => undefined)
+    await renderPlans(testI18n(), { answers: { "PUT /api/v1/plan-settings": neverAnswered } })
+    await choose(select("plans-default"), "family")
+    const save = button("Save default")
+    focus(save)
+    await click(save)
+    expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: false, default_plan: "family" })
+    for (const held of [select("plans-default"), save]) {
+      expect(held.disabled).toBe(false)
+      expect(held.getAttribute("aria-disabled")).toBe("true")
+    }
+    expect(save.getAttribute("aria-busy")).toBe("true")
+    expect(document.activeElement).toBe(save)
+
+    await click(save)
+    await choose(select("plans-default"), "free")
+    expect(calls.filter((call) => call.method === "PUT").length).toBe(1)
+    expect(select("plans-default").value).toBe("family")
+    expect(field("plans-enabled").getAttribute("aria-disabled")).toBe("true")
+  })
+
+  it.each([
+    ["family", refusal(404, "plan_not_found"), "This plan no longer exists. Reload to see the current plans."],
+    ["", refusal(409, "plans_need_default"), "Plans can't be on without a default plan. Choose another default instead."],
+  ])("says why choosing %j as the default was refused under the select, and moves focus to it", async (chosen, answer, reason) => {
+    await renderPlans(testI18n(), {
+      plans: overview({ defaultPlan: chosen ? "free" : "family" }),
+      answers: { "PUT /api/v1/plan-settings": answer },
+    })
+    await choose(select("plans-default"), chosen)
+    await click(button("Save default"))
+    const error = element("plans-default-error")
+    expect(error.textContent).toBe(reason)
+    expect(error.getAttribute("role")).toBe("alert")
+    expect(select("plans-default").getAttribute("aria-invalid")).toBe("true")
+    expect(select("plans-default").getAttribute("aria-describedby")).toBe("plans-default-hint plans-default-error")
+    expect(document.activeElement).toBe(select("plans-default"))
+    expect(container.querySelector("#plans-enabled-error")).toBeNull()
+
+    // Choosing again puts the refusal away.
+    await choose(select("plans-default"), "free")
+    expect(container.querySelector("#plans-default-error")).toBeNull()
+    expect(select("plans-default").hasAttribute("aria-invalid")).toBe(false)
   })
 
   it("offers no way to clear the default while plans are on", async () => {
@@ -322,14 +506,6 @@ describe("People's Plans tab", () => {
     const none = select("plans-default").querySelector<HTMLOptionElement>("option[value='']")!
     expect(none.textContent).toBe("No default")
     expect(none.disabled).toBe(true)
-  })
-
-  it("says why a setting was refused", async () => {
-    await renderPlans(testI18n(), {
-      answers: { "PUT /api/v1/plan-settings": refusal(404, "plan_not_found") },
-    })
-    await choose(select("plans-default"), "family")
-    expect(alertText()).toBe("This plan no longer exists. Reload to see the current plans.")
   })
 
   it("adds a plan without a key, which the server makes from its name, with No limit sent as no limit", async () => {
@@ -431,6 +607,20 @@ describe("People's Plans tab", () => {
     expect(button("Remove", planRow("Free")).getAttribute("aria-label")).toBe("Remove Free")
   })
 
+  it("names what each toggle opens only while it is open", async () => {
+    await renderPlans(testI18n())
+    const edit = button("Edit", planRow("Family"))
+    const add = button("Add a plan")
+    expect(edit.hasAttribute("aria-controls")).toBe(false)
+    expect(add.hasAttribute("aria-controls")).toBe(false)
+    await click(edit)
+    expect(edit.getAttribute("aria-controls")).toBe("plan-edit-family")
+    expect(element("plan-edit-family")).not.toBeNull()
+    await click(add)
+    expect(edit.hasAttribute("aria-controls")).toBe(false)
+    expect(element(add.getAttribute("aria-controls")!).querySelector("form")).not.toBeNull()
+  })
+
   it("keeps a save on its way, and then its refusal, while the other plan commands wait", async () => {
     let answer: (response: Response) => void = () => undefined
     const held = new Promise<Response>((resolve) => {
@@ -501,13 +691,45 @@ describe("People's Plans tab", () => {
     expect(document.activeElement).toBe(button("Edit", planRow("Family")))
   })
 
-  it("asks inline before removing a plan", async () => {
-    await renderPlans(testI18n(), { answers: { "DELETE /api/v1/plans/family": NO_CONTENT } })
+  it("replaces Remove on the default plan with how to remove it", async () => {
+    await renderPlans(testI18n(), { plans: overview({ defaultPlan: "free" }) })
+    expect(buttonOrNull("Remove", planRow("Free"))).toBeNull()
+    expect(planRow("Free").querySelector(".plan-remove-note")?.textContent).toBe(
+      "Default plan. Choose another default to remove it.",
+    )
+    expect(button("Edit", planRow("Free"))).not.toBeNull()
+    expect(button("Remove", planRow("Family"))).not.toBeNull()
+  })
+
+  it.each([
+    [4, "4 people have Family. Give them another plan to remove it."],
+    [1, "1 person has Family. Give them another plan to remove it."],
+  ])("says at once who has a plan (%i of them), instead of asking to remove it", async (people, reason) => {
+    await renderPlans(testI18n(), { plans: overview({ plans: [{ ...family, people }, free] }) })
+    const remove = button("Remove", planRow("Family"))
+    await click(remove)
+    expect(remove.getAttribute("aria-expanded")).toBe("true")
+    const shown = element("plan-remove-family")
+    expect(shown.textContent).toBe(reason)
+    expect(document.activeElement).toBe(shown)
+    expect(buttonOrNull("Remove plan")).toBeNull()
+
+    await click(remove)
+    expect(container.querySelector("#plan-remove-family")).toBeNull()
+    expect(remove.getAttribute("aria-expanded")).toBe("false")
+    expect(calls.some((call) => call.method === "DELETE")).toBe(false)
+  })
+
+  it("asks inline before removing a plan nobody has", async () => {
+    await renderPlans(testI18n(), {
+      plans: overview({ plans: [{ ...family, people: 0, limited_people: 0 }, free] }),
+      answers: { "DELETE /api/v1/plans/family": NO_CONTENT },
+    })
     await click(button("Remove", planRow("Family")))
     const confirmation = element("plan-remove-family")
     expect(confirmation.querySelector("h3")?.textContent).toBe("Remove Family?")
     expect(confirmation.querySelector("p")?.textContent).toBe(
-      "Nobody can have this plan afterwards. Rules, accounts, and tokens stay as they are.",
+      "Nobody has this plan, so removing it changes nothing for anyone. You can't undo this.",
     )
     await click(button("Keep plan", confirmation))
     expect(container.querySelector("#plan-remove-family")).toBeNull()
@@ -521,16 +743,43 @@ describe("People's Plans tab", () => {
     expect(document.activeElement).toBe(button("Add a plan"))
   })
 
-  it.each([
-    [refusal(409, "plan_in_use", { people: 2, count: 2 }), "2 people have this plan. Give them another plan before you remove it."],
-    [refusal(409, "plan_in_use", { people: 1, count: 1 }), "1 person has this plan. Give them another plan before you remove it."],
-    [refusal(409, "plan_is_default"), "This is the default plan. Choose another default before you remove it."],
-  ])("says why a plan cannot be removed", async (answer, reason) => {
-    await renderPlans(testI18n(), { answers: { "DELETE /api/v1/plans/family": answer } })
+  it("keeps Remove plan and Keep plan focusable while the removal is on its way, then says why it was refused", async () => {
+    let answer: (response: Response) => void = () => undefined
+    const held = new Promise<Response>((resolve) => {
+      answer = resolve
+    })
+    await renderPlans(testI18n(), {
+      plans: overview({ plans: [{ ...family, people: 0, limited_people: 0 }, free] }),
+      answers: { "DELETE /api/v1/plans/family": held },
+    })
     await click(button("Remove", planRow("Family")))
-    await click(button("Remove plan", element("plan-remove-family")))
-    expect(planRow("Family").querySelector("[role='alert']")?.textContent).toBe(reason)
-    expect(element("plan-remove-family")).not.toBeNull()
+    const confirmation = element("plan-remove-family")
+    const confirm = button("Remove plan", confirmation)
+    const keep = button("Keep plan", confirmation)
+    focus(confirm)
+    await click(confirm)
+    for (const waiting of [confirm, keep]) {
+      expect(waiting.disabled).toBe(false)
+      expect(waiting.getAttribute("aria-disabled")).toBe("true")
+    }
+    expect(confirm.getAttribute("aria-busy")).toBe("true")
+    expect(document.activeElement).toBe(confirm)
+    await click(keep)
+    await click(confirm)
+    expect(element("plan-remove-family")).toBe(confirmation)
+    expect(calls.filter((call) => call.method === "DELETE").length).toBe(1)
+
+    // Someone was given the plan meanwhile.
+    await act(async () => {
+      answer(refusal(409, "plan_in_use", { people: 1, count: 1 }))
+      await Promise.resolve()
+    })
+    await settle()
+    expect(planRow("Family").querySelector("[role='alert']")?.textContent).toBe(
+      "1 person has this plan. Give them another plan before you remove it.",
+    )
+    expect(document.activeElement).toBe(confirm)
+    expect(confirm.getAttribute("aria-disabled")).toBeNull()
   })
 
   it("shows its own error with Try again when plans cannot load, and the rest still works", async () => {
@@ -546,15 +795,26 @@ describe("People's Plans tab", () => {
     expect(button("Invite someone", container)).not.toBeNull()
   })
 
+  it("has no untranslated text in the empty state", async () => {
+    await renderPlans(pseudoI18n(), { plans: overview({ plans: [] }) })
+    expect(untranslatedText(container, dateWords())).toEqual([])
+  })
+
   it("has no untranslated text", async () => {
-    await renderPlans(pseudoI18n(), { plans: overview({ defaultPlan: "free" }) })
-    await click(container.querySelector<HTMLButtonElement>("[aria-controls='plan-edit-new']")!)
-    expect(untranslatedText(container, [...dateWords(), family.name, free.name])).toEqual([])
-    await click(container.querySelector<HTMLButtonElement>("[aria-controls='plan-edit-family']")!)
+    const spare: PlanSummary = { ...family, key: "spare", name: "Spare", people: 0, limited_people: 0 }
+    await renderPlans(pseudoI18n(), { plans: overview({ enabled: true, defaultPlan: "free", plans: [family, free, spare] }) })
+    const names = [...dateWords(), family.name, free.name, spare.name]
+    expect(untranslatedText(container, names)).toEqual([])
+    await choose(select("plans-default"), "family")
+    await click(planRow("Family").querySelectorAll("button")[1]!)
+    expect(untranslatedText(container, names)).toEqual([])
+    await click(planRow("Spare").querySelectorAll("button")[1]!)
+    expect(untranslatedText(container, names)).toEqual([])
+    await click(planRow("Family").querySelectorAll("button")[0]!)
     type(field("plan-family-rules"), "2")
     await settle()
-    expect(untranslatedText(container, [...dateWords(), family.name, free.name])).toEqual([])
-    await click(container.querySelector<HTMLButtonElement>("[aria-controls='plan-remove-family']")!)
-    expect(untranslatedText(container, [...dateWords(), family.name, free.name])).toEqual([])
+    expect(untranslatedText(container, names)).toEqual([])
+    await click(element("plans-add"))
+    expect(untranslatedText(container, names)).toEqual([])
   })
 })

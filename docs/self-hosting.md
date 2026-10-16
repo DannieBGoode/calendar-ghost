@@ -282,10 +282,12 @@ stay as they were. Plans, if you turned them on, turn off and keep their definit
 To keep one person from using up what everyone shares, open **People → Plans**. Choose
 **Add a plan** for each set of limits you want: how many rules may sync, how many
 calendar accounts and Integration Tokens a person may have, and whether their calendars sync
-instantly or every 5 minutes. Choose a **Default plan**, which everyone without a Plan of their
-own has, including people who join later, then tick **Limit people with plans**. **Change plan**
-on someone's page under **People** gives them another Plan. Administrators are never limited, and
-while Plans are off, which is the default, nobody is. A lower limit stops nothing: rules beyond it
+instantly or every 5 minutes. To limit everyone, choose a **Default plan**, which everyone without
+a Plan of their own has, including people who join later, and **Save default**. To limit only some
+people, give them a Plan with **Change plan** on their page under **People**. Then tick **Limit
+people with plans**; with no default, this adds a Plan named No limits, which limits nobody, as the
+default. Administrators are never limited, and while Plans are off, which is the default, nobody
+is. A lower limit stops nothing: rules beyond it
 keep syncing, and accounts and tokens keep working, but nobody can start a rule, connect a new
 calendar account, or issue a token past it. Each person sees what their Plan allows under
 **Settings → Your account → Your plan**

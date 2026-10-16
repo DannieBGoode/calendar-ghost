@@ -1,6 +1,15 @@
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
-import type { OwnPlan, PersonPlan, PlanLimits, RegistrationPolicy, RuleDetail, RuleSummary, SyncInterval } from "@/lib/api"
+import type {
+  OwnPlan,
+  PersonPlan,
+  PlanLimits,
+  PlanSummary,
+  RegistrationPolicy,
+  RuleDetail,
+  RuleSummary,
+  SyncInterval,
+} from "@/lib/api"
 
 /**
  * Whether Your plan shows: only when a Plan limits the User, or for an administrator while other
@@ -55,14 +64,33 @@ export function intervalLabel({ t }: I18n, interval: SyncInterval): string {
   return t(`people.plans.interval.${interval}`)
 }
 
+/**
+ * Whether a Plan limits nothing: no limit on any count, and instant sync. The Plan the server makes
+ * when Plans turn on with no default is one, so whoever has it is not limited.
+ */
+export function limitsNothing({ rules, connected_accounts, integration_tokens, sync_interval }: PlanLimits): boolean {
+  return rules === null && connected_accounts === null && integration_tokens === null && sync_interval === "instant"
+}
+
+/** How many people Plans limit while on: those each Plan limits, except a Plan that limits nothing. */
+export function limitedPeople(plans: readonly PlanSummary[]): number {
+  return plans.reduce((total, plan) => (limitsNothing(plan.limits) ? total : total + plan.limited_people), 0)
+}
+
 function tokenLimit({ t }: I18n, tokens: number | null): string {
   if (tokens === null) return t("people.plans.limits.unlimitedTokens")
   return tokens === 0 ? t("people.plans.limits.noTokens") : t("people.plans.limits.tokens", { count: tokens })
 }
 
-/** A Plan's counts on its row in People's Plans tab: rules, calendar accounts, then Integration Tokens. */
+/**
+ * A Plan's counts on its row in People's Plans tab: rules, calendar accounts, then Integration
+ * Tokens, with "No limit" where a count has none, said once when none has.
+ */
 export function planLimitsSummary(i18n: I18n, { rules, connected_accounts, integration_tokens }: PlanLimits): string {
   const { t } = i18n
+  if (rules === null && connected_accounts === null && integration_tokens === null) {
+    return t("people.plans.limits.unlimited")
+  }
   return i18n.format.unitList([
     rules === null ? t("people.plans.limits.unlimitedRules") : t("people.plans.limits.rules", { count: rules }),
     connected_accounts === null

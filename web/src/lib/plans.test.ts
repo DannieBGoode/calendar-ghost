@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest"
 
 import { testI18n } from "@/i18n/testing"
-import type { OwnPlan, PersonPlan, PlanLimits, RegistrationPolicy, SyncInterval } from "@/lib/api"
+import type { OwnPlan, PersonPlan, PlanLimits, PlanSummary, RegistrationPolicy, SyncInterval } from "@/lib/api"
 import {
   intervalLabel,
+  limitedPeople,
+  limitsNothing,
   ownPlanShown,
   ownPlanSummary,
   personPlanFact,
@@ -133,15 +135,60 @@ describe("intervalLabel", () => {
 
 describe("planLimitsSummary", () => {
   it("counts each limit", () => {
-    expect(planLimitsSummary(i18n, FAMILY_LIMITS)).toBe("5 rules, 3 calendar accounts, 2 tokens")
+    expect(planLimitsSummary(i18n, FAMILY_LIMITS)).toBe("5 rules, 3 calendar accounts, 2 Integration Tokens")
     expect(planLimitsSummary(i18n, { ...FAMILY_LIMITS, rules: 1, connected_accounts: 1, integration_tokens: 1 })).toBe(
-      "1 rule, 1 calendar account, 1 token",
+      "1 rule, 1 calendar account, 1 Integration Token",
     )
   })
 
-  it("names unlimited values and a Plan that offers no tokens", () => {
-    expect(planLimitsSummary(i18n, UNLIMITED)).toBe("Unlimited rules, unlimited calendar accounts, unlimited tokens")
-    expect(planLimitsSummary(i18n, FREE_LIMITS)).toBe("1 rule, 1 calendar account, no tokens")
+  it("says No limit where a count has none, and names a Plan that offers no tokens", () => {
+    expect(planLimitsSummary(i18n, { ...FAMILY_LIMITS, rules: null })).toBe(
+      "No limit on rules, 3 calendar accounts, 2 Integration Tokens",
+    )
+    expect(planLimitsSummary(i18n, { ...FAMILY_LIMITS, connected_accounts: null, integration_tokens: null })).toBe(
+      "5 rules, no limit on calendar accounts, no limit on Integration Tokens",
+    )
+    expect(planLimitsSummary(i18n, FREE_LIMITS)).toBe("1 rule, 1 calendar account, no Integration Tokens")
+  })
+
+  it("says once that a Plan has no limit on any count", () => {
+    expect(planLimitsSummary(i18n, UNLIMITED)).toBe("No limit on rules, calendar accounts, or Integration Tokens")
+    expect(planLimitsSummary(i18n, { ...UNLIMITED, sync_interval: "5_minutes" })).toBe(
+      "No limit on rules, calendar accounts, or Integration Tokens",
+    )
+  })
+})
+
+describe("limitsNothing", () => {
+  it("holds for a Plan with no limit on any count that syncs instantly, such as No limits", () => {
+    expect(limitsNothing(UNLIMITED)).toBe(true)
+  })
+
+  it.each([
+    ["a rule limit", { ...UNLIMITED, rules: 3 }],
+    ["a calendar account limit", { ...UNLIMITED, connected_accounts: 1 }],
+    ["no Integration Tokens", { ...UNLIMITED, integration_tokens: 0 }],
+    ["a slower sync", { ...UNLIMITED, sync_interval: "5_minutes" as const }],
+  ])("fails for a Plan with %s", (_name, limits) => {
+    expect(limitsNothing(limits)).toBe(false)
+  })
+})
+
+describe("limitedPeople", () => {
+  const plan = (key: string, limits: PlanLimits, limited: number): PlanSummary => ({
+    key,
+    name: key,
+    limits,
+    is_default: false,
+    people: limited + 1,
+    limited_people: limited,
+  })
+
+  it("adds the people each Plan limits, leaving out a Plan that limits nothing", () => {
+    expect(limitedPeople([plan("family", FAMILY_LIMITS, 3), plan("free", FREE_LIMITS, 2)])).toBe(5)
+    expect(limitedPeople([plan("no-limits", UNLIMITED, 4), plan("free", FREE_LIMITS, 1)])).toBe(1)
+    expect(limitedPeople([plan("no-limits", UNLIMITED, 4)])).toBe(0)
+    expect(limitedPeople([])).toBe(0)
   })
 })
 

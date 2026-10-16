@@ -344,20 +344,35 @@
     "intro": "Plans limit how many rules, calendar accounts, and Integration Tokens each person may have, and how soon their calendars sync. Administrators are never limited.",
     "loadError": "Plans could not load.",
     "tryAgain": "Try again",
+    "empty": {
+      "title": "No plans yet",
+      "body": "Add a plan with the limits you want. Make it the default to limit everyone, or give it to someone from their page to limit only them."
+    },
     "enabled": {
       "label": "Limit people with plans",
-      "hint": "While this is off, nobody is limited.",
-      "needsDefault": "Choose a default plan first."
+      "on": {
+        "one": "On. {count} person is limited.",
+        "other": "On. {count} people are limited."
+      },
+      "onNobody": "On. Nobody is limited yet.",
+      "off": "Off. Nobody is limited.",
+      "offNoDefault": "Off. Nobody is limited. With no default plan, turning this on adds one named No limits, which limits nobody."
     },
     "default": {
       "label": "Default plan",
-      "hint": "People without a plan of their own have it, including people who join later.",
-      "none": "No default"
+      "hint": "Everyone without a plan of their own has this one, including people who join later.",
+      "none": "No default",
+      "save": "Save default"
     },
     "people": {
-      "one": "{count} person",
-      "other": "{count} people"
+      "one": "Limits {count} person",
+      "other": "Limits {count} people"
     },
+    "peopleLater": {
+      "one": "Limits {count} person once plans are on",
+      "other": "Limits {count} people once plans are on"
+    },
+    "peopleNone": "Limits nobody",
     "isDefault": "Default",
     "limits": {
       "rules": {
@@ -369,13 +384,14 @@
         "other": "{count} calendar accounts"
       },
       "tokens": {
-        "one": "{count} token",
-        "other": "{count} tokens"
+        "one": "{count} Integration Token",
+        "other": "{count} Integration Tokens"
       },
-      "unlimitedRules": "Unlimited rules",
-      "unlimitedAccounts": "unlimited calendar accounts",
-      "unlimitedTokens": "unlimited tokens",
-      "noTokens": "no tokens"
+      "unlimited": "No limit on rules, calendar accounts, or Integration Tokens",
+      "unlimitedRules": "No limit on rules",
+      "unlimitedAccounts": "no limit on calendar accounts",
+      "unlimitedTokens": "no limit on Integration Tokens",
+      "noTokens": "no Integration Tokens"
     },
     "interval": {
       "instant": "Instant sync, and a check every 5 minutes",
@@ -389,6 +405,11 @@
     "editLabel": "Edit {name}",
     "remove": "Remove",
     "removeLabel": "Remove {name}",
+    "removeDefault": "Default plan. Choose another default to remove it.",
+    "inUse": {
+      "one": "{count} person has {name}. Give them another plan to remove it.",
+      "other": "{count} people have {name}. Give them another plan to remove it."
+    },
     "add": "Add a plan",
     "editor": {
       "name": "Name",
@@ -427,13 +448,18 @@
     },
     "removeConfirm": {
       "title": "Remove {name}?",
-      "body": "Nobody can have this plan afterwards. Rules, accounts, and tokens stay as they are.",
+      "body": "Nobody has this plan, so removing it changes nothing for anyone. You can't undo this.",
       "confirm": "Remove plan",
       "keep": "Keep plan",
       "pending": "Removing…"
     },
     "saved": {
-      "on": "Plans now limit people.",
+      "on": {
+        "one": "Plans now limit {count} person.",
+        "other": "Plans now limit {count} people."
+      },
+      "onNobody": "Plans are on. They limit nobody yet.",
+      "onNoLimits": "Plans are on. {name} is the new default plan, and it limits nothing.",
       "off": "Plans no longer limit anyone.",
       "defaultChanged": "{name} is now the default plan.",
       "defined": "{name} was added.",

@@ -64,7 +64,9 @@ describe("apiErrorMessage", () => {
     expect(apiErrorMessage(i18n, coded("invalid_plan", { reason: "key" }))).toBe(
       "Use 1 to 32 lower-case letters, digits, and hyphens for the key, starting with a letter or digit.",
     )
-    expect(apiErrorMessage(i18n, coded("plans_need_default"))).toBe("Choose a default plan before you turn plans on.")
+    expect(apiErrorMessage(i18n, coded("plans_need_default"))).toBe(
+      "Plans can't be on without a default plan. Choose another default instead.",
+    )
   })
 
   it("shows the server's detail for an unknown code or a missing param, then a generic message", () => {

@@ -677,10 +677,21 @@ The UI follows DESIGN.md: no modals, inline disclosure, one visible next step, a
 Indicator rule.
 
 - **People, Plans** (`/people/plans`, a tab after Everyone and Invitations, hidden with People under
-  Only Me; until 2026-10-16 it sat in Settings, Administration, between Registration and Storage): a
-  checkbox row "Limit people with plans", disabled until a default exists; a select for the default;
-  one row per Plan with an inline edit form; Remove with an inline confirmation; and an inline "Add
-  a plan" form. The form asks for a name and no key (the server makes it from the name, and the UI
+  Only Me; until 2026-10-16 it sat in Settings, Administration, between Registration and Storage),
+  in the order setting up needs. With no Plan it holds only an empty state ("No plans yet") whose
+  one action is "Add a plan". Otherwise, first one row per Plan, with its limits, its interval, and
+  whom it limits ("Limits 3 people", from `limited_people`; "once plans are on" while they are off;
+  "Limits nobody" at zero and for a Plan that limits nothing), an inline edit form, and Remove,
+  then "Add a plan". The default Plan has "Default" beside its name and, instead of Remove,
+  "Default plan. Choose another default to remove it."; Remove on a Plan someone has says at once
+  "2 people have Family. Give them another plan to remove it." instead of a confirmation the
+  server would refuse; on any other Plan it confirms inline. Then a select for the default, which
+  saves only with "Save default", shown while the choice differs from the saved one. Last, the
+  checkbox "Limit people with plans", never disabled, which says its state and whom it limits
+  ("On. 3 people are limited.", "Off. Nobody is limited."); with no default it adds that turning it
+  on adds a Plan named No limits, which limits nobody. While a setting change is on its way, both
+  controls keep focus with `aria-disabled`; a refusal shows under the control that sent it, which
+  takes focus. The form asks for a name and no key (the server makes it from the name, and the UI
   never shows it). Under "Limits for each person" each limit is "No limit" or a whole number, with
   what counts as its hint: "Rules that can sync" ("Paused rules and drafts don't count."),
   "Calendar accounts they can connect" ("Disconnected accounts count. Reconnecting an account is

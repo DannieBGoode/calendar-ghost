@@ -1,16 +1,17 @@
 import { Plus } from "lucide-react"
 import { useRef, useState, type RefObject } from "react"
 
-import { DestructiveConfirmation } from "@/components/destructive-confirmation"
+import { GhostMark } from "@/components/ghost-mark"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { NativeSelect } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { PlanRemoval } from "@/features/people-plan-removal"
+import { PlansSetting } from "@/features/people-plans-setting"
 import { PlanEditor } from "@/features/plan-editor"
-import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
+import type { I18n } from "@/i18n/translator"
 import type { PlanSummary, PlansOverview, SyncInterval } from "@/lib/api"
-import { intervalLabel, planLimitsSummary } from "@/lib/plans"
+import { intervalLabel, limitsNothing, planLimitsSummary } from "@/lib/plans"
 import { usePlans, type PlanCommands } from "@/lib/use-plans"
 
 /** The one form or confirmation open in the section: a Plan's edit or removal, or a new Plan. */
@@ -18,9 +19,11 @@ type Opened = { action: "edit" | "remove"; key: string } | { action: "add" } | n
 type Open = (next: Opened) => void
 
 /**
- * People's Plans tab: whether Plans limit people, the Default Plan, and each Plan with its limits,
- * an inline edit, and Remove. It shows only while People does, so never under Only me, where the
- * only person administers and no Plan limits an administrator; Plans are read only once it opens.
+ * People's Plans tab, in the order setting up needs: each Plan with its limits, an inline edit, and
+ * Remove, then Add a plan; then the Default Plan; then whether Plans limit people. With no Plan yet
+ * it holds only an empty state whose one action is Add a plan. It shows only while People does, so
+ * never under Only me, where the only person administers and no Plan limits an administrator;
+ * Plans are read only once it opens.
  */
 export function PlansSection() {
   const { t } = useI18n()
@@ -45,6 +48,9 @@ export function PlansSection() {
         </div>
       )}
       {overview?.plans && <PlansList overview={overview} commands={commands} />}
+      {overview?.plans && (overview.plans.length > 0 || overview.enabled) && (
+        <PlansSetting overview={overview} commands={commands} />
+      )}
       {/* Always present, so a screen reader announces each change as it is saved. */}
       <p role="status" className={message ? undefined : "sr-only"}>
         {message}
@@ -68,14 +74,18 @@ function PlansList({ overview, commands }: { overview: PlansOverview; commands: 
     setOpened(next)
   }
 
+  const empty = overview.plans.length === 0
+
+  // Add a plan keeps its place among the children whether or not Plans exist, so focus can return
+  // to it once the first Plan is added and the empty state gives way to the list.
   return (
     <div className="settings-list">
-      <EnabledItem overview={overview} commands={commands} />
-      <DefaultItem overview={overview} commands={commands} />
+      {empty && <NoPlans />}
       {overview.plans.map((plan) => (
         <PlanItem
           key={plan.key}
           plan={plan}
+          enabled={overview.enabled}
           intervals={editorIntervals(overview.sync_intervals, plan)}
           opened={opened}
           busy={busy}
@@ -88,6 +98,7 @@ function PlansList({ overview, commands }: { overview: PlansOverview; commands: 
         />
       ))}
       <AddPlanItem
+        empty={empty}
         intervals={overview.sync_intervals}
         adding={opened?.action === "add"}
         busy={busy}
@@ -105,81 +116,35 @@ function editorIntervals(offered: SyncInterval[], plan: PlanSummary): SyncInterv
   return offered.includes(own) ? offered : [...offered, own]
 }
 
-/** Whether Plans limit people. It turns on only once a default exists, and keeps that default. */
-function EnabledItem({ overview, commands }: { overview: PlansOverview; commands: PlanCommands }) {
+/** With no Plan yet, what Plans are for; Add a plan, right after it, is its one action. */
+function NoPlans() {
   const { t } = useI18n()
-  const { setting } = commands
-  const hasDefault = overview.default_plan !== null
-  // While a change is on its way, the box shows what was asked for.
-  const checked = setting.isPending ? setting.variables.enabled : overview.enabled
   return (
-    <div className="setting-item">
-      <div className="setting-row">
-        <label className="checkbox-row" htmlFor="plans-enabled">
-          <input
-            id="plans-enabled"
-            type="checkbox"
-            checked={checked}
-            disabled={setting.isPending || (!hasDefault && !overview.enabled)}
-            aria-describedby="plans-enabled-hint"
-            onChange={(event) => setting.mutate({ enabled: event.target.checked, defaultPlan: overview.default_plan })}
-          />
-          <span>
-            <strong>{t("people.plans.enabled.label")}</strong>
-            <small id="plans-enabled-hint">
-              {hasDefault ? t("people.plans.enabled.hint") : t("people.plans.enabled.needsDefault")}
-            </small>
-          </span>
-        </label>
-      </div>
+    <div className="plans-empty">
+      <GhostMark className="empty-ghost" />
+      <h3>{t("people.plans.empty.title")}</h3>
+      <p>{t("people.plans.empty.body")}</p>
     </div>
   )
 }
 
-/** The Default Plan. It cannot be cleared while Plans limit people. */
-function DefaultItem({ overview, commands }: { overview: PlansOverview; commands: PlanCommands }) {
-  const i18n = useI18n()
-  const { t } = i18n
-  const { setting } = commands
-  return (
-    <div className="setting-item">
-      <div className="setting-row">
-        <div className="setting-copy">
-          <h3 id="plans-default-title">{t("people.plans.default.label")}</h3>
-          <p id="plans-default-hint">{t("people.plans.default.hint")}</p>
-        </div>
-        <div className="appearance-control">
-          <NativeSelect
-            id="plans-default"
-            aria-labelledby="plans-default-title"
-            aria-describedby="plans-default-hint"
-            value={(setting.isPending ? setting.variables.defaultPlan : overview.default_plan) ?? ""}
-            disabled={setting.isPending}
-            onChange={(event) => setting.mutate({ enabled: overview.enabled, defaultPlan: event.target.value || null })}
-          >
-            <option value="" disabled={overview.enabled}>
-              {t("people.plans.default.none")}
-            </option>
-            {overview.plans.map((plan) => (
-              <option key={plan.key} value={plan.key}>
-                {plan.name}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
-      </div>
-      {setting.error && (
-        <p className="field-error" role="alert">
-          {apiErrorMessage(i18n, setting.error)}
-        </p>
-      )}
-    </div>
-  )
+/**
+ * Whom a Plan limits, from the active people it limits who do not administer: none for a Plan that
+ * limits nothing, and only once Plans are on.
+ */
+function planReach({ t }: I18n, plan: PlanSummary, enabled: boolean): string {
+  const count = limitsNothing(plan.limits) ? 0 : plan.limited_people
+  if (count === 0) return t("people.plans.peopleNone")
+  return enabled ? t("people.plans.people", { count }) : t("people.plans.peopleLater", { count })
 }
 
-/** One Plan: its name, limits, interval, and who has it, with Edit and Remove. */
+/**
+ * One Plan: its name, limits, interval, and whom it limits, with Edit and Remove. The default has
+ * no Remove: it says how to remove it instead.
+ */
 function PlanItem({
   plan,
+  enabled,
   intervals,
   opened,
   busy,
@@ -188,6 +153,8 @@ function PlanItem({
   onRemoved,
 }: {
   plan: PlanSummary
+  /** Plans limit people now. */
+  enabled: boolean
   intervals: SyncInterval[]
   opened: Opened
   /** A Plan command is on its way, so Edit and Remove wait. They stay focusable: focus returns to them as its form closes. */
@@ -198,12 +165,11 @@ function PlanItem({
   onRemoved: () => void
 }) {
   const i18n = useI18n()
-  const { t } = i18n
   const editButton = useRef<HTMLButtonElement>(null)
   const removeButton = useRef<HTMLButtonElement>(null)
-  const mine = opened !== null && opened.action !== "add" && opened.key === plan.key
-  const editing = mine && opened.action === "edit"
-  const removing = mine && opened.action === "remove"
+  const shown = opened !== null && opened.action !== "add" && opened.key === plan.key ? opened.action : null
+  const editing = shown === "edit"
+  const removing = shown === "remove" && !plan.is_default
   const { change } = commands
 
   function close(toggle: RefObject<HTMLButtonElement | null>) {
@@ -215,38 +181,23 @@ function PlanItem({
     <div className="setting-item">
       <div className="setting-row">
         <div className="setting-copy">
-          <h3>{plan.name}</h3>
-          {plan.is_default && <Badge variant="neutral">{t("people.plans.isDefault")}</Badge>}
+          <div className="plan-title">
+            <h3>{plan.name}</h3>
+            {plan.is_default && <Badge variant="neutral">{i18n.t("people.plans.isDefault")}</Badge>}
+          </div>
           <p>{planLimitsSummary(i18n, plan.limits)}</p>
           <p>{intervalLabel(i18n, plan.limits.sync_interval)}</p>
-          <p>{t("people.plans.people", { count: plan.people })}</p>
+          <p>{planReach(i18n, plan, enabled)}</p>
         </div>
-        <div className="setting-form-actions">
-          <Button
-            ref={editButton}
-            type="button"
-            variant="outline"
-            aria-label={t("people.plans.editLabel", { name: plan.name })}
-            aria-expanded={editing}
-            aria-controls={`plan-edit-${plan.key}`}
-            aria-disabled={busy || undefined}
-            onClick={() => !busy && onOpen({ action: "edit", key: plan.key })}
-          >
-            {t("people.plans.edit")}
-          </Button>
-          <Button
-            ref={removeButton}
-            type="button"
-            variant="ghost"
-            aria-label={t("people.plans.removeLabel", { name: plan.name })}
-            aria-expanded={removing}
-            aria-controls={`plan-remove-${plan.key}`}
-            aria-disabled={busy || undefined}
-            onClick={() => !busy && onOpen({ action: "remove", key: plan.key })}
-          >
-            {t("people.plans.remove")}
-          </Button>
-        </div>
+        <PlanActions
+          plan={plan}
+          editing={editing}
+          removing={removing}
+          busy={busy}
+          onOpen={onOpen}
+          editButton={editButton}
+          removeButton={removeButton}
+        />
       </div>
       {editing && (
         <div id={`plan-edit-${plan.key}`}>
@@ -267,45 +218,66 @@ function PlanItem({
   )
 }
 
-/** Remove, confirmed inline. The server refuses the default and a Plan someone has, and says why. */
-function PlanRemoval({
+/**
+ * A Plan's Edit, and Remove, which opens and closes what it shows. Each names the Plan, and the
+ * form or note it opens only while open. The default Plan has a line on how to remove it instead.
+ */
+function PlanActions({
   plan,
-  commands,
-  onRemoved,
-  onKeep,
+  editing,
+  removing,
+  busy,
+  onOpen,
+  editButton,
+  removeButton,
 }: {
   plan: PlanSummary
-  commands: PlanCommands
-  onRemoved: () => void
-  onKeep: () => void
+  editing: boolean
+  removing: boolean
+  busy: boolean
+  onOpen: Open
+  editButton: RefObject<HTMLButtonElement | null>
+  removeButton: RefObject<HTMLButtonElement | null>
 }) {
-  const i18n = useI18n()
-  const { t } = i18n
-  const { remove } = commands
+  const { t } = useI18n()
+  const waiting = busy || undefined
   return (
-    <>
-      <DestructiveConfirmation
-        id={`plan-remove-${plan.key}`}
-        title={t("people.plans.removeConfirm.title", { name: plan.name })}
-        body={t("people.plans.removeConfirm.body")}
-        cancelLabel={t("people.plans.removeConfirm.keep")}
-        confirmLabel={t("people.plans.removeConfirm.confirm")}
-        pendingLabel={t("people.plans.removeConfirm.pending")}
-        pending={remove.isPending}
-        onConfirm={() => remove.mutate(plan.key, { onSuccess: onRemoved })}
-        onCancel={onKeep}
-      />
-      {remove.error && (
-        <p className="field-error" role="alert">
-          {apiErrorMessage(i18n, remove.error)}
-        </p>
+    <div className="setting-form-actions">
+      <Button
+        ref={editButton}
+        type="button"
+        variant="outline"
+        aria-label={t("people.plans.editLabel", { name: plan.name })}
+        aria-expanded={editing}
+        aria-controls={editing ? `plan-edit-${plan.key}` : undefined}
+        aria-disabled={waiting}
+        onClick={() => !busy && onOpen({ action: "edit", key: plan.key })}
+      >
+        {t("people.plans.edit")}
+      </Button>
+      {plan.is_default ? (
+        <p className="plan-remove-note">{t("people.plans.removeDefault")}</p>
+      ) : (
+        <Button
+          ref={removeButton}
+          type="button"
+          variant="ghost"
+          aria-label={t("people.plans.removeLabel", { name: plan.name })}
+          aria-expanded={removing}
+          aria-controls={removing ? `plan-remove-${plan.key}` : undefined}
+          aria-disabled={waiting}
+          onClick={() => !busy && onOpen(removing ? null : { action: "remove", key: plan.key })}
+        >
+          {t("people.plans.remove")}
+        </Button>
       )}
-    </>
+    </div>
   )
 }
 
-/** "Add a plan", and its inline form once opened. */
+/** "Add a plan", and its inline form once opened. With no Plan yet it closes the empty state above it. */
 function AddPlanItem({
+  empty,
   intervals,
   adding,
   busy,
@@ -313,6 +285,8 @@ function AddPlanItem({
   commands,
   addButton,
 }: {
+  /** No Plan exists yet. */
+  empty: boolean
   intervals: SyncInterval[]
   adding: boolean
   /** A Plan command is on its way, so Add a plan waits. It stays focusable: focus returns to it as its form closes. */
@@ -331,13 +305,14 @@ function AddPlanItem({
 
   return (
     <div className="setting-item">
-      <div className="setting-row">
+      <div className={empty ? "plans-empty-action" : "setting-row"}>
         <Button
           ref={addButton}
+          id="plans-add"
           type="button"
           variant="outline"
           aria-expanded={adding}
-          aria-controls="plan-edit-new"
+          aria-controls={adding ? "plan-edit-new" : undefined}
           aria-disabled={busy || undefined}
           onClick={() => !busy && onOpen({ action: "add" })}
         >
