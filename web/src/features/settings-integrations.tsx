@@ -2,6 +2,7 @@ import { Check, ChevronDown, Copy, Info, KeyRound } from "lucide-react"
 import { Fragment, useEffect, useRef, useState, type RefObject } from "react"
 
 import { DestructiveConfirmation } from "@/components/destructive-confirmation"
+import { YourPlanLink } from "@/components/your-plan-link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,6 +20,7 @@ import {
 } from "@/lib/integrations"
 import { useIntegrationTokens, type CopyState, type IntegrationTokens } from "@/lib/use-integration-tokens"
 import { useNow } from "@/lib/use-now"
+import { useTokenLimitReason } from "@/lib/use-own-plan"
 
 /**
  * Integration Tokens as one Settings group. It stays collapsed to a summary row, as Connected
@@ -136,12 +138,14 @@ function IssueTokenForm({
   const i18n = useI18n()
   const { t } = i18n
   const { name, setName, issue } = integrations
+  // At the plan's token limit nothing can be issued; the server still checks.
+  const limit = useTokenLimitReason()
   return (
     <form
       className="setting-row integration-issue"
       onSubmit={(event) => {
         event.preventDefault()
-        issue.mutate()
+        if (limit === undefined) issue.mutate()
       }}
     >
       <div className="integration-issue-field">
@@ -153,9 +157,14 @@ function IssueTokenForm({
           value={name}
           maxLength={80}
           placeholder={t("settings.integrations.issue.placeholder")}
-          aria-describedby="integration-name-hint"
+          aria-describedby={limit === undefined ? "integration-name-hint" : "integration-name-hint integration-limit"}
           onChange={(event) => setName(event.target.value)}
         />
+        {limit !== undefined && (
+          <p id="integration-limit" className="field-hint">
+            {limit} <YourPlanLink />
+          </p>
+        )}
         {administrator && <InstallationScopeField integrations={integrations} />}
         {issue.error && (
           <p className="field-error" role="alert">
@@ -163,7 +172,7 @@ function IssueTokenForm({
           </p>
         )}
       </div>
-      <Button type="submit" disabled={!name.trim() || issue.isPending}>
+      <Button type="submit" disabled={!name.trim() || issue.isPending || limit !== undefined}>
         {issue.isPending ? t("settings.integrations.issue.pending") : t("settings.integrations.issue.submit")}
       </Button>
     </form>

@@ -191,6 +191,7 @@
   "learnWhy": "Learn why",
   "opensInNewTab": " (opens in a new tab)",
   "plan": {
+    "mayNotRestart": "Your plan may not let this rule start again.",
     "seeYourPlan": "See your plan",
     "accountLimit": {
       "one": "Your plan allows {count} calendar account, and disconnected accounts count too.",

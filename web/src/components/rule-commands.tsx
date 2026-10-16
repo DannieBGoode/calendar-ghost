@@ -4,12 +4,14 @@ import { OverflowMenu, type OverflowMenuItem } from "@/components/overflow-menu"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
+import type { I18n } from "@/i18n/translator"
 import type { PreviewSummary } from "@/lib/api"
 import { accountSearch, appPathForRulePreview, connectionsPath, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
 import { ruleStateLabel } from "@/lib/rule-change"
 import { previewReadyLabel } from "@/lib/rule-run"
 import { workDescription, workLabel, workMeta, type RuleWork, type RuleWorkKind } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
+import { usePlanWarning } from "@/lib/use-own-plan"
 import type { RuleCommand, RuleFeedback, RunnableCommand } from "@/lib/use-rule-commands"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
@@ -151,7 +153,10 @@ export function RuleCommandMenu({
   reserveSpace?: boolean
   onRun: (command: RunnableCommand) => void
 }) {
-  const { t } = useI18n()
+  const i18n = useI18n()
+  const { t } = i18n
+  // Read before any return, as the rules of hooks require.
+  const mayNotRestart = usePlanWarning() && countsTowardPlan(state, unauthorized)
   const busy = pending !== undefined
   const items: OverflowMenuItem[] = []
   if (state === "enabled" && !unauthorized) {
@@ -176,13 +181,30 @@ export function RuleCommandMenu({
     items.push({
       id: "pause",
       label: t("ruleDetails.commands.pause"),
-      description: t("ruleDetails.commands.pauseDescription", { destination }),
+      description: pauseDescription(i18n, destination, mayNotRestart),
       disabled: busy,
       onSelect: () => onRun("pause"),
     })
   }
   if (!items.length) return reserveSpace ? <span className="overflow-menu-spacer" aria-hidden="true" /> : null
   return <OverflowMenu label={t("ruleDetails.commands.moreActions", { source, destination })} items={items} />
+}
+
+/**
+ * Whether the rule counts toward its User's plan, as the Web UI can tell: enabled, or stopped
+ * only until an account of it is reauthorized.
+ */
+function countsTowardPlan(state: string, unauthorized: boolean): boolean {
+  return state === "enabled" || (state === "degraded" && unauthorized)
+}
+
+/**
+ * What Pause does; and, while more rules count than the plan allows, that the plan may not let
+ * the rule start again, since a paused rule gives up its place (decision 4).
+ */
+function pauseDescription({ t }: I18n, destination: string, mayNotRestart: boolean): string {
+  const description = t("ruleDetails.commands.pauseDescription", { destination })
+  return mayNotRestart ? `${description} ${t("common.plan.mayNotRestart")}` : description
 }
 
 /** What the latest preview found, which Review and start leads back to. */

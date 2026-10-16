@@ -9,7 +9,7 @@ import { OverviewView } from "./overview"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { CalendarProvider, ConnectedAccount, Dashboard, RecentChange, RuleSummary, ServerProblem } from "@/lib/api"
+import type { CalendarProvider, ConnectedAccount, Dashboard, OwnPlan, RecentChange, RuleSummary, ServerProblem } from "@/lib/api"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -178,6 +178,8 @@ type Scenario = {
   rules: RuleSummary[]
   recentChanges: RecentChange[]
   providers?: CalendarProvider[]
+  /** GET /api/v1/account/plan; `{}`, which names no plan, unless a test says otherwise. */
+  ownPlan?: OwnPlan
 }
 
 function jsonResponse(body: unknown): Response {
@@ -191,6 +193,7 @@ function mockFetch(scenario: Scenario) {
     "/api/v1/accounts": [accountA, accountB],
     "/api/v1/providers": scenario.providers ?? [],
     "/api/v1/recent-changes": scenario.recentChanges,
+    "/api/v1/account/plan": scenario.ownPlan ?? {},
   }
   vi.stubGlobal("fetch", vi.fn((input: string | URL) => Promise.resolve(respond(String(input)))))
   function respond(url: string): Response {
@@ -292,6 +295,58 @@ describe("OverviewView", () => {
     expect(
       [...container.querySelectorAll("[role='menu'] a[role='menuitem']")].map((item) => item.getAttribute("href")),
     ).toEqual(["/api/v1/oauth/google/start", "/api/v1/oauth/outlook/start"])
+  })
+
+  it("keeps the first step's Connect unavailable at the plan's account limit, saying why", async () => {
+    const google: CalendarProvider = {
+      kind: "google",
+      display_name: "Google",
+      connect_url: "/api/v1/oauth/google/start",
+      redirect_uri: "http://localhost/api/v1/oauth/google/callback",
+      cause_anchors: {},
+    }
+    // A disconnected account still counts, so even the first step can meet the limit.
+    const atAccountLimit: OwnPlan = {
+      basis: "plan",
+      plan: { key: "free", name: "Free", on_default: true },
+      limits: { rules: 1, connected_accounts: 1, integration_tokens: 0, sync_interval: "5_minutes" },
+      rules_counted: 0,
+      connected_accounts: 1,
+      integration_tokens: 0,
+      instant: false,
+      poll_every_minutes: 5,
+      may_connect_account: false,
+      may_issue_token: false,
+      over_rule_limit: false,
+    }
+    const { container } = await renderOverview(testI18n(), {
+      dashboard: {
+        ...attentionDashboard,
+        status: "setup",
+        needs_attention: false,
+        problems: [],
+        connected_accounts: 0,
+        sync_rules: 0,
+        enabled_rules: 0,
+        running_rules: 0,
+        open_incidents: 0,
+        last_synced_at: null,
+      },
+      rules: [],
+      recentChanges: [],
+      providers: [google],
+      ownPlan: atAccountLimit,
+    })
+
+    const step = container.querySelector<HTMLElement>(".step-action")!
+    expect(step.children).toHaveLength(1)
+    const connect = step.querySelector("button")!
+    expect(connect.textContent.trim()).toBe("Connect Google account")
+    expect(connect.getAttribute("aria-disabled")).toBe("true")
+    expect(step.querySelector("a[href^='/api/v1/oauth']")).toBeNull()
+    expect(document.getElementById(connect.getAttribute("aria-describedby") ?? "")?.textContent).toBe(
+      "Your plan allows 1 calendar account, and disconnected accounts count too. See your plan",
+    )
   })
 
   it("has no untranslated text for a rule with an open incident and a repeated change", async () => {

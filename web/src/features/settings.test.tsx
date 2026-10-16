@@ -117,6 +117,24 @@ const familyPlan: OwnPlan = {
   over_rule_limit: false,
 }
 
+/** Someone at every limit of their plan, with more rules counting than it allows. */
+const atEveryLimit: OwnPlan = {
+  basis: "plan",
+  plan: { key: "free", name: "Free", on_default: true },
+  limits: { rules: 1, connected_accounts: 1, integration_tokens: 0, sync_interval: "5_minutes" },
+  rules_counted: 2,
+  connected_accounts: 2,
+  integration_tokens: 0,
+  instant: false,
+  poll_every_minutes: 5,
+  may_connect_account: false,
+  may_issue_token: false,
+  over_rule_limit: true,
+}
+
+/** The own-plan answer when Plans cannot be read. */
+const UNREADABLE_PLAN = { detail: "database is locked", code: null, params: {} }
+
 // A few seconds before "now", so `format.relative` resolves to the catalog's "just now" rather
 // than Intl wording such as "3 days ago", which bypasses the pseudo locale.
 const justNow = new Date(Date.now() - 10_000).toISOString()
@@ -388,6 +406,39 @@ describe("SettingsPage", () => {
     expect([...container.querySelectorAll("button")].some((item) => item.textContent.includes("Connect an account"))).toBe(false)
   })
 
+  it("keeps Connect in place but unavailable at the plan's account limit, saying why, and keeps Reauthorize", async () => {
+    await renderSettings(testI18n(), { ownPlan: jsonResponse(atEveryLimit) })
+
+    const heading = container.querySelector<HTMLElement>("[aria-labelledby='accounts-title'] .section-heading")!
+    const connect = heading.querySelector("button")!
+    expect(connect.textContent.trim()).toBe("Connect Google account")
+    expect(connect.getAttribute("aria-disabled")).toBe("true")
+    // Nothing starts a provider's consent: no link, no menu.
+    expect(heading.querySelector("a[href^='/api/v1/oauth']")).toBeNull()
+    expect(heading.querySelector("[aria-haspopup='menu']")).toBeNull()
+    const reason = document.getElementById(connect.getAttribute("aria-describedby") ?? "")
+    expect(reason?.textContent).toBe("Your plan allows 1 calendar account, and disconnected accounts count too. See your plan")
+    expect(reason?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+    // Reauthorization is never refused, so the disconnected account keeps its way back.
+    expect(container.querySelector("#account-acct-b a")?.getAttribute("href")).toBe("/api/v1/oauth/google/start?account=acct-b")
+  })
+
+  it("keeps the empty state's Connect unavailable at the plan's account limit, as disconnected accounts count", async () => {
+    await renderSettings(testI18n(), { accounts: [], ownPlan: jsonResponse(atEveryLimit) })
+
+    const connect = container.querySelector<HTMLButtonElement>(".account-empty button")!
+    expect(connect.textContent.trim()).toBe("Connect Google account")
+    expect(connect.getAttribute("aria-disabled")).toBe("true")
+    expect(container.querySelector(".account-empty a[href^='/api/v1/oauth']")).toBeNull()
+  })
+
+  it("offers Connect as usual when the plan cannot be read, since the server still checks", async () => {
+    await renderSettings(testI18n(), { ownPlan: jsonResponse(UNREADABLE_PLAN, 500) })
+
+    const connect = [...container.querySelectorAll<HTMLAnchorElement>(".section-heading a")]
+    expect(connect.map((link) => link.getAttribute("href"))).toEqual(["/api/v1/oauth/google/start"])
+  })
+
   it("opens consent in a new tab when Google returns elsewhere, and offers to finish here at once", async () => {
     await renderSettings(testI18n())
     const connect = container.querySelector<HTMLAnchorElement>(".section-heading a")!
@@ -651,6 +702,51 @@ describe("SettingsPage", () => {
     )
   })
 
+  it("warns before a disconnect that the plan may not let its rules start again, while more rules count than it allows", async () => {
+    await renderSettings(testI18n(), { ownPlan: jsonResponse(atEveryLimit) })
+    await click(container.querySelector<HTMLButtonElement>("#account-acct-a [aria-haspopup='menu']")!)
+    const disconnect = [...container.querySelectorAll<HTMLButtonElement>("[role='menuitem']")].find(
+      (item) => item.querySelector(".overflow-menu-label")?.textContent === "Disconnect account",
+    )!
+    await click(disconnect)
+    expect(container.querySelector("#disconnect-acct-a p")?.textContent).toBe(
+      "Its stored credentials will be removed. 2 affected rules will require reauthorization before they can run. Your plan may not let this rule start again.",
+    )
+  })
+
+  const NO_DISCONNECT_NOTE: [string, Scenario][] = [
+    ["an account no rule uses", { accounts: [{ ...connected, rule_count: 0 }, disconnected], ownPlan: jsonResponse(atEveryLimit) }],
+    ["a plan that cannot be read", { ownPlan: jsonResponse(UNREADABLE_PLAN, 500) }],
+  ]
+
+  it.each(NO_DISCONNECT_NOTE)("says nothing about the plan before disconnecting %s", async (_case, scenario) => {
+    await renderSettings(testI18n(), scenario)
+    await click(container.querySelector<HTMLButtonElement>("#account-acct-a [aria-haspopup='menu']")!)
+    const disconnect = [...container.querySelectorAll<HTMLButtonElement>("[role='menuitem']")].find(
+      (item) => item.querySelector(".overflow-menu-label")?.textContent === "Disconnect account",
+    )!
+    await click(disconnect)
+    expect(container.querySelector("#disconnect-acct-a p")?.textContent).not.toContain("Your plan")
+  })
+
+  it("has no untranslated text at every limit of a plan", async () => {
+    // The page's own address, so the Integrations examples match the fixture text.
+    page().happyDOM.setURL(`${PUBLIC_ORIGIN}/settings`)
+    await renderSettings(pseudoI18n(), { ownPlan: jsonResponse(atEveryLimit) })
+    await click(container.querySelector<HTMLButtonElement>("[aria-labelledby='integrations-title'] .group-summary")!)
+    await click(container.querySelector<HTMLButtonElement>("#account-acct-a [aria-haspopup='menu']")!)
+    // The item's description id ends with its id, "disconnect"; its label is pseudo-translated.
+    const disconnect = [...container.querySelectorAll<HTMLButtonElement>("#account-acct-a [role='menuitem']")].find((item) =>
+      item.getAttribute("aria-describedby")?.endsWith("-disconnect"),
+    )!
+    await click(disconnect)
+
+    expect(container.querySelector(".action-hint a")).not.toBeNull()
+    expect(container.querySelector("#integration-limit")).not.toBeNull()
+    expect(container.querySelector("#disconnect-acct-a")).not.toBeNull()
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+  })
+
   it("summarizes storage on Administration", async () => {
     await renderSettings(testI18n(), { tab: "administration" })
     const summaries = [...container.querySelectorAll(".setting-row p")].map((paragraph) => paragraph.textContent)
@@ -828,6 +924,8 @@ describe("IntegrationsSection", () => {
     vi.spyOn(api, "integrationTokens").mockResolvedValue([kuma, homepage])
     vi.spyOn(api, "issueIntegrationToken").mockResolvedValue(issued)
     vi.spyOn(api, "revokeIntegrationToken").mockResolvedValue(undefined)
+    // The form reads the own plan for its token limit; Plans are off unless a test says otherwise.
+    vi.spyOn(api, "ownPlan").mockResolvedValue(plansOff)
   })
 
   it("stays collapsed to a summary of the tokens in use", async () => {
@@ -895,6 +993,40 @@ describe("IntegrationsSection", () => {
     await openGroup()
     await issueToken("Claude Code")
     expect(api.issueIntegrationToken).toHaveBeenCalledWith("Claude Code", ["status:read"])
+  })
+
+  it("keeps Issue token unavailable at the plan's token limit, saying why", async () => {
+    vi.mocked(api.ownPlan).mockResolvedValue(atEveryLimit)
+    await renderSection()
+    await openGroup()
+    await tick()
+    await tick()
+
+    // With a name typed, only the limit keeps Issue token from being pressed.
+    const input = container.querySelector<HTMLInputElement>("#integration-name")!
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "Claude Code")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    expect(labelledButton("Issue token").disabled).toBe(true)
+    const reason = container.querySelector("#integration-limit")
+    expect(reason?.textContent).toBe("Your plan allows at most 0 Integration Tokens. Revoked tokens do not count. See your plan")
+    expect(reason?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+    expect(container.querySelector("#integration-name")?.getAttribute("aria-describedby")).toBe(
+      "integration-name-hint integration-limit",
+    )
+    // Enter in the field sends nothing either.
+    await issueToken("Claude Code")
+    expect(api.issueIntegrationToken).not.toHaveBeenCalled()
+  })
+
+  it("offers Issue token as usual while Plans are off", async () => {
+    await renderSection()
+    await openGroup()
+    await tick()
+
+    expect(container.querySelector("#integration-limit")).toBeNull()
+    expect(container.querySelector("#integration-name")?.getAttribute("aria-describedby")).toBe("integration-name-hint")
   })
 
   it("closes the reveal with Done and returns to the name field", async () => {

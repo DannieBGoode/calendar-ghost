@@ -312,6 +312,74 @@ describe("RulePreviewView", () => {
     expect(onOpenRule).toHaveBeenCalledWith("rule-1", { notice: "Enabled. The first sync to Work runs within five minutes, or choose Sync now." })
   })
 
+  it("keeps Start unavailable, with the plan's refusal and a link to Your plan, when the rule may not start", async () => {
+    mockFetch({ status: 200, body: preview }, { ...previewedRule, can_start: false, rule_limit: 3 })
+    await renderPreview(testI18n())
+
+    const start = button("Start syncing to Work")
+    expect(start.getAttribute("aria-disabled")).toBe("true")
+    expect(start.getAttribute("aria-describedby")).toBe("rule-preview-start-note")
+    const note = container.querySelector("#rule-preview-start-note")
+    expect(note?.textContent).toBe("Your plan lets 3 rules sync. Pause or remove one to start this rule. See your plan")
+    expect(note?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+
+    act(() => start.click())
+    await settle()
+    expect(calls).not.toContain("POST /api/v1/rules/rule-1/enable")
+  })
+
+  it("offers Start with nothing about the plan when the rule may start", async () => {
+    mockFetch({ status: 200, body: preview })
+    await renderPreview(testI18n())
+
+    expect(button("Start syncing to Work").getAttribute("aria-disabled")).toBeNull()
+    expect(container.querySelector("#rule-preview-start-note")).toBeNull()
+    expect(container.querySelector(".rule-preview-footer a[href='/settings/account#your-plan']")).toBeNull()
+  })
+
+  it("says what the plan allows, not to try again, when Start meets the rule limit", async () => {
+    mockFetch({ status: 200, body: preview })
+    const answer = vi.mocked(fetch).getMockImplementation()
+    const refusal = {
+      detail: "the plan's limit of 2 rules is reached",
+      code: "plan_limit_reached",
+      params: { reason: "rules", limit: 2, count: 2 },
+    }
+    // After the refusal, the rule's details say it may not start, as the server then answers.
+    let refused = false
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const url = input instanceof Request ? input.url : input.toString()
+      if (url.endsWith("/enable")) {
+        refused = true
+        return Promise.resolve(jsonResponse({ status: 409, body: refusal }))
+      }
+      if (refused && url === "/api/v1/rules/rule-1") {
+        return Promise.resolve(jsonResponse({ status: 200, body: { ...previewedRule, can_start: false, rule_limit: 2 } }))
+      }
+      return answer?.(input, init) ?? Promise.reject(new Error("no answer"))
+    })
+    await renderPreview(testI18n())
+
+    act(() => button("Start syncing to Work").click())
+    await settle()
+
+    const summary = container.querySelector(".rule-preview-summary[role='alert']")
+    expect(summary?.textContent).toBe("Your plan lets 2 rules sync. Pause or remove one to start this rule. See your plan")
+    expect(summary?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+    expect(container.querySelector(".rule-preview-footer")?.textContent).not.toContain("Try again in a moment")
+    // The note under Start does not repeat it: one link to Your plan.
+    expect(container.querySelectorAll(".rule-preview-footer a[href='/settings/account#your-plan']")).toHaveLength(1)
+    expect(button("Start syncing to Work").getAttribute("aria-disabled")).toBe("true")
+  })
+
+  it("leaves no text untranslated when the plan refuses Start", async () => {
+    mockFetch({ status: 200, body: preview }, { ...previewedRule, can_start: false, rule_limit: 3 })
+    await renderPreview(pseudoI18n())
+
+    expect(container.querySelector("#rule-preview-start-note")).not.toBeNull()
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+  })
+
   it("points at the account to reauthorize when the preview could not read it", async () => {
     mockFetch({ status: 424, body: { detail: "denied", code: "provider_failed", params: { kind: "authentication", provider: "google" } } })
     await renderPreview(testI18n())

@@ -12,6 +12,7 @@ import type { CalendarProvider, ConnectedAccount } from "@/lib/api"
 import { connectLink } from "@/lib/oauth-redirect"
 import { accountNoun, providerDisplayName } from "@/lib/providers"
 import type { AccessCheck, AccountCommands } from "@/lib/use-account-commands"
+import { usePlanWarning } from "@/lib/use-own-plan"
 
 function ruleUsage({ t }: I18n, count: number, authorized: boolean): string {
   if (count === 0) return t("settings.accounts.usage.none")
@@ -269,6 +270,9 @@ function DisconnectConfirmation({
 }) {
   const { t } = useI18n()
   const { disconnect } = commands
+  // Its rules stop and need a preview; while more rules count than the plan allows, the plan may
+  // not let them start again (decision 4).
+  const mayNotRestart = usePlanWarning() && account.rule_count > 0
   return (
     <div
       className="disconnect-confirmation"
@@ -284,6 +288,7 @@ function DisconnectConfirmation({
           {account.rule_count > 0
             ? t("settings.accounts.disconnect.bodyWithRules", { count: account.rule_count })
             : t("settings.accounts.disconnect.bodyWithoutRules")}
+          {mayNotRestart && ` ${t("common.plan.mayNotRestart")}`}
         </p>
       </div>
       <div className="confirmation-actions">

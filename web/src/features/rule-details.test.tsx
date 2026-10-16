@@ -11,7 +11,7 @@ import { RuleDetailsView } from "./rule-details"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { ConnectedAccount, DiscoveredCalendar, RuleDetail, RunOutcome } from "@/lib/api"
+import type { ConnectedAccount, DiscoveredCalendar, OwnPlan, RuleDetail, RunOutcome } from "@/lib/api"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -101,6 +101,21 @@ const enabledRule: RuleDetail = {
   rule_limit: null,
 }
 
+/** Someone whose rules count past their plan's limit, so a rule they stop may not start again. */
+const overTheLimit: OwnPlan = {
+  basis: "plan",
+  plan: { key: "free", name: "Free", on_default: true },
+  limits: { rules: 1, connected_accounts: 1, integration_tokens: 0, sync_interval: "5_minutes" },
+  rules_counted: 3,
+  connected_accounts: 2,
+  integration_tokens: 0,
+  instant: false,
+  poll_every_minutes: 5,
+  may_connect_account: false,
+  may_issue_token: false,
+  over_rule_limit: true,
+}
+
 /**
  * Account names, emails, calendar names, avatar initials, the timestamp the run facts show as a
  * tooltip (locale data from `format.dateTime`, not catalog text), and backend-written titles.
@@ -180,7 +195,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
 }
 
-function mockFetch(rule: RuleDetail | null) {
+function mockFetch(rule: RuleDetail | null, ownPlan: Response = jsonResponse({})) {
   const calendars: Record<string, DiscoveredCalendar[]> = {
     [account.id]: [familyCalendar, errandsCalendar],
     [partner.id]: [writableCalendar, readOnlyCalendar],
@@ -189,6 +204,7 @@ function mockFetch(rule: RuleDetail | null) {
   function respond(url: string): Response {
     const path = url.split("?")[0] ?? ""
     if (path === "/api/v1/accounts") return jsonResponse([account, partner])
+    if (path === "/api/v1/account/plan") return ownPlan
     const calendarMatch = /^\/api\/v1\/accounts\/(.+)\/calendars$/.exec(path)
     if (calendarMatch) return jsonResponse(calendars[decodeURIComponent(calendarMatch[1] ?? "")] ?? [])
     if (path.startsWith("/api/v1/rules/")) {
@@ -206,8 +222,13 @@ async function settle(times = 6) {
   }
 }
 
-async function renderDetails(i18n: I18n, rule: RuleDetail | null, notice: string | null = null) {
-  mockFetch(rule)
+async function renderDetails(
+  i18n: I18n,
+  rule: RuleDetail | null,
+  notice: string | null = null,
+  ownPlan: Response = jsonResponse({}),
+) {
+  mockFetch(rule, ownPlan)
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   act(() => {
@@ -281,6 +302,50 @@ describe("RuleDetailsView", () => {
   it("says nothing about how soon a rule syncs until it is enabled", async () => {
     await renderDetails(testI18n(), { ...enabledRule, state: "paused" })
     expect(container.textContent).not.toContain("When it syncs")
+  })
+
+  it("warns before a privacy edit that the plan may not let the rule start again, while more rules count than it allows", async () => {
+    await renderDetails(testI18n(), enabledRule, null, jsonResponse(overTheLimit))
+    click(container.querySelector('[aria-controls="policy-form"]'))
+
+    const note = container.querySelector("#policy-form .field-hint[data-tone='attention']")
+    expect(note?.textContent).toBe("Your plan may not let this rule start again.")
+    // Beside Save: the note comes right before the form's actions.
+    expect(note?.nextElementSibling?.classList.contains("form-actions")).toBe(true)
+  })
+
+  it("warns before editing a stopped rule too, which may still count", async () => {
+    await renderDetails(testI18n(), { ...enabledRule, state: "degraded" }, null, jsonResponse(overTheLimit))
+    click(container.querySelector('[aria-controls="policy-form"]'))
+    expect(container.querySelector("#policy-form")?.textContent).toContain("Your plan may not let this rule start again.")
+  })
+
+  it("says nothing about the plan before editing a paused rule, which no longer counts", async () => {
+    await renderDetails(testI18n(), { ...enabledRule, state: "paused" }, null, jsonResponse(overTheLimit))
+    click(container.querySelector('[aria-controls="policy-form"]'))
+    expect(container.querySelector("#policy-form")).not.toBeNull()
+    expect(container.querySelector("#policy-form")?.textContent).not.toContain("Your plan")
+  })
+
+  it.each([
+    ["names no plan", jsonResponse({})],
+    ["cannot be read", jsonResponse({ detail: "database is locked" }, 500)],
+  ])("says nothing about the plan before a privacy edit when the own plan %s", async (_case, ownPlan) => {
+    await renderDetails(testI18n(), enabledRule, null, ownPlan)
+    click(container.querySelector('[aria-controls="policy-form"]'))
+    expect(container.querySelector("#policy-form")).not.toBeNull()
+    expect(container.querySelector("#policy-form")?.textContent).not.toContain("Your plan")
+  })
+
+  it("has no untranslated text with the plan's note before a privacy edit", async () => {
+    await renderDetails(pseudoI18n(), enabledRule, null, jsonResponse(overTheLimit))
+    click(container.querySelector('[aria-controls="policy-form"]'))
+    // As the test with every form open does: the busy-only title it would show is data, not copy.
+    choose("#edit-privacy-policy", "copy_details")
+    click(container.querySelector('[aria-haspopup="menu"]'))
+    // The form's own hint, not the privacy or invitation hints nested in its fields.
+    expect(container.querySelector("#policy-form > .field-hint")).not.toBeNull()
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
   })
 
   it("has no untranslated text for each reason a rule waits for its schedule", async () => {

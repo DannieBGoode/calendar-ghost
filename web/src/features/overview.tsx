@@ -27,6 +27,7 @@ import { overviewHealth } from "@/lib/overview-health"
 import { isAdministrator } from "@/lib/people"
 import { workRefreshInterval } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
+import { useAccountLimitReason } from "@/lib/use-own-plan"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 import { cn } from "@/lib/utils"
 
@@ -179,6 +180,8 @@ function OnboardingSteps({
 /** The one Connect action, or why no account can be connected yet. */
 function ConnectStep({ providers }: { providers: CalendarProvider[] }) {
   const { t } = useI18n()
+  // Read before the early return below, as the rules of hooks require.
+  const accountLimit = useAccountLimitReason()
   if (providers.length === 0) {
     return (
       <div className="step-action">
@@ -193,7 +196,7 @@ function ConnectStep({ providers }: { providers: CalendarProvider[] }) {
   }
   return (
     <div className="step-action">
-      <ConnectAccount providers={providers} primary />
+      <ConnectAccount providers={providers} primary disabledReason={accountLimit} />
     </div>
   )
 }
