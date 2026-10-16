@@ -360,11 +360,12 @@ Plans sit beside the people they limit, so Settings keeps only each person's own
 Plans tab runs in the order setting up needs: each Plan with whom it limits, then Add a plan, then
 the Default plan, saved only with Save default, then Limit people with plans, which says whether
 Plans are on and whom they limit; with no Plan it is one empty state whose action is Add a plan.
-A Plan that cannot be removed says why where Remove would be: the default says to choose another
-default first, and a Plan someone has says how many people have it. The Plan form asks for a name
-and the limits, never a key. While a Plan command is on its way, its controls stay focusable and
-wait, so focus never drops to the page; a refusal shows under the field it names, which takes
-focus. Change plan on a person's page lists what each Plan allows. Everyone
+The default Plan has no Remove; where Remove would be, it says to choose another default first. On
+a Plan someone has, Remove says at once how many people have it, instead of a confirmation the
+server would refuse. The Plan form asks for a name and the limits, never a key. While a Plan
+command is on its way, its controls stay focusable and wait, so focus never drops to the page; a
+refusal shows under the field it names, which takes focus. Change plan on a person's page lists
+what each Plan allows. Everyone
 shows Installation Health in a card, then everyone here in one card holding its search, filters,
 table, and pages, sorted by when people joined unless asked otherwise. Installation Health leads with what
 the administrator must do: "Needs you" in Destructive Red with the likely causes only they can fix,
