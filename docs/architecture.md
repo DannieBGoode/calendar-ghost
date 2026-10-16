@@ -14,8 +14,10 @@ Every record belongs to one User, and no User sees another's ([ADR 0029](adr/002
 password; an Installation Administrator is a User with a role, not a separate account. The
 Registration Policy starts at Only Me, so a household installation that one person runs behaves as
 before. The future hosted service runs this same codebase (ADR 0023). The Operator Overview shows
-administrators every User's health without their calendars. Plans behind the Plans setting, and
-billing behind Commercial Mode, both off by default (ADR 0028), follow in the phases of
+administrators every User's health without their calendars. Plans, behind their own setting and
+off by default, let an administrator limit how much each User who does not administer uses
+(ADR 0028, [ADR 0038](adr/0038-plans-allowances-and-limits.md)). Billing behind Commercial Mode,
+also off by default, follows in the phases of
 `docs/superpowers/specs/2026-10-09-multi-user-design.md`.
 
 ## Bounded contexts
@@ -32,7 +34,8 @@ ports and errors its modules share
   failures, retries, and provider call counts belong here. Calendar Watches of one User and
   their upkeep (`UpkeepWatches`) live here too.
 - **Identity and Access** (`application/identity`) owns Users, their roles and sessions, the
-  Registration Policy, Invitations and Password Reset Links, and Integration Tokens.
+  Registration Policy, Invitations and Password Reset Links, Integration Tokens, and Plans: their
+  definitions, the Plans setting, and each User's own Plan.
 - **Operations** (`application/operations`) owns Activity, Installation Status, Installation
   Health and Installation Hints, the Operator Overview, and storage. It also runs Instant Sync
   across Users: watch upkeep, the dispatch of Instant Sync Requests, and the Watch Notice inbox.
@@ -99,8 +102,8 @@ check expiry and retry waits without sleeping.
 `interfaces/api/app.py` is only the factory: it installs the container, registers the routers, and
 serves the compiled Web UI after checking each requested file against the resolved static root. The
 routes live in one `APIRouter` module per resource under `interfaces/api/routes/` (session, setup,
-account, users, accounts, rules, activity, incidents, storage, integrations, health). Each module
-declares a small protocol for the container services it reads, since interfaces cannot import
+account, users, plans, accounts, rules, activity, incidents, storage, integrations, health). Each
+module declares a small protocol for the container services it reads, since interfaces cannot import
 bootstrap, and the factory's typed assignment lets mypy prove the container satisfies every one.
 `interfaces/api/dependencies.py` holds the guards: `current_user` resolves the signed-in User and,
 until the upgraded first User adds an email, refuses everything but the add-email step;
@@ -189,8 +192,10 @@ with the one privacy contract the status API already uses. Installation Health c
 Resource Use from `InstallationUnitOfWork.resource_use`: counts of rules, Connected Accounts, and
 Activity entries, and the provider calls each Sync Run, reconciliation, and Rule Removal adds to its
 User's `provider_calls` row for that provider and UTC day. The scheduler pass discards days older
-than 30. `OperatorOverview.of` answers an administrator about one User, and `own` answers a User
-about themself; both come from one function, so they cannot differ. `interfaces/access.py` holds the one access decision both transports use: a present
+than 30. Once any Plan exists, it also adds each User's Allowance, read for the whole page at once;
+a failure to read Plans leaves it out instead of failing People. `OperatorOverview.page` lists
+Users for People, and `OperatorOverview.of` answers an administrator about one User; both come
+from one function, so they cannot differ. `interfaces/access.py` holds the one access decision both transports use: a present
 `Authorization` header decides alone and must carry the scope the route needs, and only the status
 API also accepts a session. `interfaces/api/status_payload.py` translates a verdict into the
 response both transports return. `interfaces/mcp/` serves the MCP SDK's stateless streamable HTTP
@@ -198,6 +203,24 @@ app as one exact `/mcp` route behind a gate that refuses a request before the SD
 creates a fresh SDK server for each application lifespan. Only `interfaces/mcp` may import the
 `mcp` package. Integration Tokens are stored by `infrastructure/integration_tokens.py` behind the
 `IntegrationTokens` port, as SHA-256 hashes, each belonging to one User.
+
+Plans follow the same direction ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
+`domain/plans.py` holds the Plan values and `allowance_for`, which decides a User's `Allowance`
+from whether Plans are on, whether the User administers, their own Plan, and the Default Plan.
+Identity and Access owns the administrator's use cases in `application/identity/plans.py`, over
+the `PlanCatalog` and `PlanAssignments` ports; billing will set a User's Plan through
+`PlanAssignments` alone. Synchronization enforces the limits without importing Identity, through
+the `Allowances` port it declares in `application/sync/ports.py`: `EnableSyncRule` checks the rule
+limit, the Connected Account store checks the account limit when it saves a new address, and
+`IssueIntegrationToken` checks the token limit. `PlanCadence` in
+`application/sync/watch_ports.py` turns each User's Allowance into their Sync Cadence. One
+`SqlitePlans` (`infrastructure/persistence/plans.py`) implements the three ports, and
+`build_adapters` passes the same instance as each, so every client depends only on the port it
+uses. Each limit check reads the Allowance after its own transaction holds SQLite's writer lock,
+and `SqlitePlans` writes under `BEGIN IMMEDIATE`, so a check and the limit it read cannot drift
+apart; a read that fails refuses the request. Every other reader falls back to no limits, so a
+fault in Plans never stops synchronization, sign-in, or the rules API. `ShowOwnPlan`
+(`application/operations/own_plan.py`) reads the Allowance and the User's counts for Your plan.
 
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
 `application/operations/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral

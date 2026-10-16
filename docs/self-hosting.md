@@ -259,10 +259,11 @@ join and the app shows nothing about other people. To share it with your househo
 2. On **People**, choose **Invite someone** and pass the link on yourself. It works once and expires
    after 7 days; the person chooses their own email and password.
 3. Everyone's calendar accounts, rules, Activity, and tokens are their own. As the administrator you
-   see each person's email, role, whether they may sign in, when they joined, and when they last
-   signed in, never their calendars or events. Search by part of an email, filter by role or
-   state, sort by email, joining, or last sign-in, and page through 50 people at a time; the
-   address keeps your choices, so a reload or a shared link shows the same list.
+   see each person's email, role, whether they may sign in, when they joined, when they last signed
+   in, and, once you define a Plan, their Plan, never their calendars or events. Search by part of
+   an email, filter by role or state, sort by email, joining, or last sign-in, and page through 50
+   people at a time; the address keeps your choices, so a reload or a shared link shows the same
+   list.
 
 From **People** you can also make someone an administrator, disable someone, which signs them out
 and holds their rules until you enable them again, create a password reset link for someone who
@@ -276,7 +277,19 @@ off, or delete their own account under **Settings → Your account**, choosing w
 their rules wrote are deleted too. When the last person deletes
 their own account, Calendar Ghost returns to setup: the next person to open it creates the
 administrator, as on a new installation, and the OAuth settings and master key in `.env`
-stay as they were.
+stay as they were. Plans, if you turned them on, turn off and keep their definitions.
+
+To keep one person from using up what everyone shares, open **Settings → Administration →
+Plans**. Choose **Add a plan** for each set of limits you want: how many rules may sync, how many
+calendar accounts and Integration Tokens a person may have, and whether their calendars sync
+instantly or every 5 minutes. Choose a **Default plan**, which everyone without a Plan of their
+own has, including people who join later, then tick **Limit people with plans**. **Change plan**
+on someone's page under **People** gives them another Plan. Administrators are never limited, and
+while Plans are off, which is the default, nobody is. A lower limit stops nothing: rules beyond it
+keep syncing, and accounts and tokens keep working, but nobody can start a rule, connect a new
+calendar account, or issue a token past it. Each person sees what their Plan allows under
+**Settings → Your account → Your plan**
+([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 
 ## 5. Use a LAN host or HTTPS
 

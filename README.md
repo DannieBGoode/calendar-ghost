@@ -28,9 +28,12 @@ The Community Edition is genuine open-source software under the [GNU Affero Gene
 version 3 or later](LICENSE). AGPL permits commercial use, including a competing service, when its
 conditions are met. Calendar Ghost's official name and marks are separate from the software license;
 see [TRADEMARKS.md](TRADEMARKS.md). A future Calendar Ghost hosted service will run this same open
-code for people who do not want to operate it, with no closed components. It will charge for running
-Calendar Ghost for you, not for features: the Community Edition will not have features removed,
-limited, or held back to push people toward it.
+code for people who do not want to operate it, with no closed components and with Plans on. Its
+Plans may differ in how many rules, calendar accounts, and Integration Tokens you have and how soon
+your calendars sync, including Instant Sync. They never limit how a rule protects your privacy, or
+the tools to see and recover from a problem. A self-hosted installation has every feature and no
+limits unless its own administrator turns Plans on
+([ADR 0028](docs/adr/0028-plans-apart-from-commercial-mode.md)).
 
 Read [Licensing and editions](docs/licensing.md) and [Data ownership and privacy](docs/data-ownership.md)
 before deploying it with real calendars.
@@ -358,7 +361,7 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
   as the provider returns them, including any meeting codes in descriptions. Treat the database and its
   backups as sensitive; together with the master key they reveal those details.
 - Every record belongs to one person, and nobody sees another person's calendars, rules, Activity,
-  or tokens; an administrator sees each person's email, role, state, and last sign-in only
+  or tokens; an administrator sees each person's email, role, state, last sign-in, and plan only
   ([ADR 0029](docs/adr/0029-isolate-users-in-one-sqlite-database.md),
   [ADR 0030](docs/adr/0030-users-administrators-and-registration.md)). Deleting a person removes
   them from the live database; backups keep them until they rotate out.

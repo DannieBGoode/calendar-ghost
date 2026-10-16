@@ -59,6 +59,9 @@ table carries `user_id` and refers to its parent by identifier and User together
 `tests/adapters/test_user_isolation_schema.py` fails otherwise.
 Plan limits apply only when an administrator turns Plans on, and billing only when Commercial Mode
 is also on; both are off by default, and with Plans off every user has every feature (ADR 0028).
+Installation Administrators are never limited. A limit check reads the User's Allowance inside the
+transaction it guards and fails closed; every other read of Plans fails open, so a fault in Plans
+never stops synchronization, sign-in, or the rules API (ADR 0038).
 Preserve the self-hosting promise that there is no mandatory Calendar Ghost account, telemetry, or
 hosted coordinator.
 

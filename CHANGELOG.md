@@ -6,6 +6,22 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- Plans let an administrator limit how much each person uses
+  ([ADR 0038](docs/adr/0038-plans-allowances-and-limits.md)). Under **Settings → Administration →
+  Plans**, an administrator adds Plans, each with how many rules may sync, how many calendar
+  accounts and Integration Tokens a person may have, and whether their calendars sync instantly or
+  every 5 minutes; chooses a default plan; and turns Plans on with **Limit people with plans**.
+  **Change plan** on a person's page gives them a Plan of their own. Plans are off by default, and
+  while they are off nothing changes. Administrators are never limited, and under **Only me**
+  Plans stay hidden. Once Plans are on, starting a rule, connecting a new calendar account, and
+  issuing a token respect the person's Plan: each control says so at the limit and links to
+  **Settings → Your account → Your plan**, which shows what the Plan allows and how much of it is
+  in use. Reauthorization is never refused. A lowered rule limit refuses new Starts and stops
+  nothing: rules beyond it keep syncing, and existing calendar accounts and tokens keep working.
+  Returning to setup turns Plans off and keeps their definitions. Rule details in the API gain
+  `can_start` and `rule_limit`. Migration 33 adds the `plans` table and the Plan columns; rolling
+  back to an earlier release works with the same database, which ignores them and limits nobody,
+  and after upgrading again, Plans are as the administrator left them.
 - Instant Sync: with a public HTTPS address in `CALENDAR_SYNC_PUBLIC_URL` that Google and Microsoft
   reach at `/api/v1/watch-notices/`, a rule runs soon after its provider reports a change in its
   Source Calendar instead of waiting for the next five-minute sync. Scheduled syncs and the daily
@@ -28,6 +44,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- **Replace calendars…** creates the new draft rule in the same step that begins the previous
+  rule's removal, once that rule's run ends, instead of before it. A duplicate relationship found
+  meanwhile, or a calendar account that is gone, now leaves the previous rule as it was and
+  creates no draft, and a removal that fails after it began keeps the new draft. With Plans on,
+  the new draft keeps the previous rule's place when that rule counted, so it can start whatever
+  the limit.
 - Activity no longer lists a skip that repeats the event's previous entry when the provider sent a
   new version of the event and Calendar Ghost detected no change in what it tracks. A bulk change
   to responses or reminders used to add hundreds of identical entries. The run log counts these as

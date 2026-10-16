@@ -691,6 +691,40 @@ sends email. Until then that page says who can set email up, and every incident 
   incidents about the installation itself, such as a stalled scheduler. Each person receives their
   own rule incidents at their email.
 
+## Start syncing is unavailable: your plan's rule limit
+
+Start syncing is unavailable on a rule's preview page, or starting it answers that your plan's
+limit is reached, when an administrator turned Plans on and the rules that count toward your Plan
+already reach its rule limit. **Settings → Your account → Your plan** shows how many rules count
+and how many your Plan allows.
+
+- Rules that count are enabled rules and rules stopped only because an account's access lapsed.
+  Draft, previewed, and paused rules do not count, and creating or previewing a rule is never
+  limited.
+- Pause or remove a rule you no longer need, then start this one.
+- A rule stopped by any other error, or paused by a change to its policy, gave up its place. Its
+  restart is checked like any Start, so it may be refused while other rules fill your Plan. When
+  more rules count than your Plan allows, Calendar Ghost warns "Your plan may not let this rule
+  start again." before such a change.
+- **Replace calendars…** on a rule that counts (enabled, or stopped only because an account's
+  access lapsed) gives the new draft that rule's place, so the new rule can start whatever the
+  limit. Replacing a paused rule, or one stopped by any other error, keeps no place.
+- A rule that stopped because an account's access lapsed already counts, so it resumes after
+  Reauthorization whatever the limit.
+- A lower limit stops nothing: rules beyond it keep syncing, but no rule can start until fewer
+  count. Ask your administrator for a larger Plan; administrators are never limited.
+
+An API client receives `409` with the code `plan_limit_reached` and the reason `rules`.
+
+## Issue token is unavailable: your plan's token limit
+
+Under **Settings → Connections → Integrations**, **Issue token** is unavailable when your
+unrevoked Integration Tokens reach your Plan's token limit; a Plan may offer none. Revoke a token
+you no longer use, then issue the new one: revoked tokens do not count. Tokens you already have
+keep working when a limit is lowered, so no monitor stops on its own. A token that reads
+Installation Health is for administrators, who are never limited. An API client receives `409`
+with the code `plan_limit_reached` and the reason `integration_tokens`.
+
 ## Getting more help
 
 If this guide does not solve the problem, ask in

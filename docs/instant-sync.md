@@ -168,9 +168,13 @@ minutes, and nothing is lost.
 
 ### Not in your plan
 
-Plans arrive in a later release. Once an administrator turns them on, each person's Plan decides
-whether it includes Instant Sync and how often Scheduled Sync runs, and only an administrator can
-change your Plan. With Plans off, which is the default, everyone has Instant Sync.
+Your Plan does not include Instant Sync. An administrator turned Plans on and gave you, or everyone
+without a Plan of their own, a Plan whose rules sync on a schedule instead; on the Hosted Service,
+billing will set your Plan too. Your rules still sync on schedule, and Calendar Ghost keeps your
+own **Instant sync** choice, so Instant Sync returns by itself if your Plan includes it again.
+**Settings → Your account → Your plan** shows what your Plan allows, and only an administrator can
+change it. Administrators always have Instant Sync, and so does everyone while Plans are off, which
+is the default.
 
 ### No public HTTPS address
 
@@ -294,8 +298,14 @@ mailbox across every application.
 
 ## Plans
 
-Instant Sync asks one question of the installation: does this person's Sync Cadence allow it? With
-Plans off, the default, every person's does, and Scheduled Sync runs every five minutes. When Plans
-arrive, each Plan's shortest sync interval decides it, and its shortest value is "instant". There
-is no separate administrator switch: each person can turn Instant Sync off for themselves
+Instant Sync asks one question of the installation: does this person's Sync Cadence allow it?
+Their Allowance answers ([ADR 0038](adr/0038-plans-allowances-and-limits.md)). With Plans off, the
+default, and for every administrator, it does, and Scheduled Sync runs every five minutes. With
+Plans on, the person's own Plan, or the default plan when they have none, decides through its sync
+interval. This release offers two: **Instant sync, and a check every 5 minutes**, and **Every 5
+minutes**, which has no Instant Sync. When a person's Plan stops including Instant Sync, their
+pending Instant Sync Requests are dropped, the next watch upkeep retires their watches, and their
+rules show [Not in your plan](#not-in-your-plan). A fault in reading Plans never takes Instant Sync
+away: the installation then treats the person as having it. There is no separate administrator
+switch: each person can turn Instant Sync off for themselves
 ([ADR 0036](adr/0036-instant-sync-through-provider-notices.md)).

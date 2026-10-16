@@ -28,9 +28,12 @@ overview will be public code in this repository, so anyone can read what the hos
 Plan limits apply only when an installation's own administrator turns Plans on, and billing
 only when Commercial Mode is also on; both are off by default. Unless its administrator chooses
 otherwise, every user of a self-hosted installation has every feature, and no billing code contacts
-a payment provider ([ADR 0028](adr/0028-plans-apart-from-commercial-mode.md)). The hosted service charges for operating Calendar Ghost, not for features: the Community
-Edition will not have features removed, limited, or held back to push people toward it. See
-[ADR 0023](adr/0023-hosted-service-runs-the-open-codebase.md).
+a payment provider ([ADR 0028](adr/0028-plans-apart-from-commercial-mode.md)). The hosted service
+runs this same code with Plans on. Its Plans may differ in how many rules, calendar accounts, and
+Integration Tokens you have and how soon your calendars sync, including Instant Sync. They never
+limit how a rule protects your privacy, or the tools to see and recover from a problem, and no Plan
+limits an installation's administrators ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
+See [ADR 0023](adr/0023-hosted-service-runs-the-open-codebase.md).
 
 ## Contributions
 

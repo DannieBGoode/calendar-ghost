@@ -95,10 +95,21 @@ to Enabled without a preview and continues from the same preserved positions (AD
 Rule Change, a pause, a removal, or disconnecting one of its accounts while it is stopped clears
 that cause, so its recovery needs a preview again.
 
+A rule counts toward its User's Plan (`counts_toward_plan`) when it is Enabled, when it is Degraded
+only by Lapsed Authorization (`holdable`), or when it keeps a place (`keeps_place`, ADR 0038).
+Only a Rule Replacement's new draft keeps a place: `take_place_of` gives it one when the previous
+rule counted, in the transaction that begins the previous rule's removal, and only a Draft or
+Previewed rule may keep one. Previewing it again and a Material Rule Change keep the place;
+enabling it turns the place into an Enabled rule's count; a degrade, disconnecting one of its
+accounts, a required recovery preview, and Rule Removal clear it. A rule that keeps a place may
+always start, because its Start does not change how many rules count. Otherwise Draft, Previewed,
+and Paused rules do not count, so a rule a provider failure stops, or a Material Rule Change
+pauses, gives up its place, and its restart is checked like any Start.
+
 `SyncRule` decides these itself, so use cases ask the rule instead of comparing states: whether it
 synchronizes (only when Enabled), whether a preview may validate it (Draft, Paused, or Degraded),
-whether it is stopped only by Lapsed Authorization, and what disconnecting one of its accounts
-makes of it.
+whether it is stopped only by Lapsed Authorization, whether it counts toward its User's Plan, and
+what disconnecting one of its accounts makes of it.
 
 Permanent deletion is available only after a Connected Account is disconnected. Deletion removes
 the account and every Directional Sync Rule that references it, including those rules' Event

@@ -26,11 +26,34 @@ to operate it themselves, with Commercial Mode on. It sells managed upgrades, ba
 availability. It runs the same open code, with no closed components (ADR 0023).
 
 **Plan**:
-A named set of limits, such as how many rules a User may have or how often they synchronize, that
-an Installation Administrator defines and assigns to Users. A Plan limits only how much a User
-uses, never how a rule projects events or how a User sees and recovers from a problem. Plans are an installation setting that
-is off by default; when off, every User has every feature with no limits (ADR 0028).
+A named set of limits that an Installation Administrator defines and assigns to Users: how many
+Directional Sync Rules may count toward it, how many Connected Accounts and Integration Tokens a
+User may have, and how soon their rules sync. Each Plan has a stable key, chosen when it is defined
+and never changed, and a name that can change; each count is a number or unlimited. The rules that
+count are enabled rules, rules stopped only by Lapsed Authorization, and a Rule Replacement's new
+draft that keeps its previous rule's place; drafts, previewed rules, and paused rules do not. Every
+Connected Account counts, Disconnected Accounts included, and every Integration Token not revoked.
+A Plan limits only how much a User uses, never how a rule projects events or how a User sees and
+recovers from a problem. Plans are an installation setting that is off by default; when off, every
+User has every feature with no limits (ADR 0028). An Installation Administrator is never limited.
+A User's own Plan is set by an Installation Administrator, and later also by billing under
+Commercial Mode, through one assignment that records who set it and when (ADR 0038).
 _Avoid_: Tier, subscription, quota
+
+**Default Plan**:
+The Plan an Installation Administrator marks as the default. Every User without a Plan of their
+own has it, including Users who join later, so changing the default changes their limits at once.
+Plans cannot be turned on until a default exists, and the default cannot be removed while it is
+the default. Billing will return a User to it when a payment ends.
+_Avoid_: Base plan, fallback plan
+
+**Allowance**:
+What one User may use now, decided in this order: no limits while Plans are off, none for an
+Installation Administrator, otherwise their own Plan, or the Default Plan when they have none. It
+decides every limit check and the User's Sync Cadence. A limit check that cannot read it refuses,
+as for any database error; every other reader falls back to no limits, so a fault in Plans never
+stops synchronization or sign-in (ADR 0038).
+_Avoid_: Entitlement
 
 **Plan Hold**:
 The pause of a User's Directional Sync Rules beyond their Plan's rule limit, applied after a 7-day
@@ -238,8 +261,12 @@ _Avoid_: Real-time sync, push sync, live sync
 
 **Sync Cadence**:
 How a User's rules may synchronize: whether Instant Sync is allowed, and how often Scheduled Sync
-runs. With Plans off, every User has Instant Sync and a five-minute Scheduled Sync; once Plans
-exist, a Plan's shortest sync interval decides it, whose shortest value is "instant".
+runs. The User's Allowance decides it from their Plan's sync interval, one of a fixed list:
+instant, 5, 10, 15, 30, or 60 minutes, where instant means Instant Sync plus a five-minute
+Scheduled Sync. With Plans off, and for an Installation Administrator, it is instant. An
+administrator can choose instant or 5 minutes for now; until the longer intervals are offered,
+every interval other than instant syncs every five minutes without Instant Sync. The User keeps
+only their own choice to turn Instant Sync off.
 _Avoid_: Sync frequency, polling interval
 
 **Calendar Watch**:
@@ -354,7 +381,7 @@ A User who holds the role that operates the installation. The first User holds i
 _Avoid_: Owner, superuser, admin user
 
 **Operator Overview**:
-The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, and Resource Use. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content. What it shows and never shows is documented, so every User can know it; Settings does not repeat it to them (ADR 0030, amended).
+The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, Resource Use, and, once any Plan exists, their Plan. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content. What it shows and never shows is documented, so every User can know it; Settings does not repeat it to them (ADR 0030, amended).
 _Avoid_: Admin dashboard, user management, support view
 
 **Resource Use**:
@@ -476,6 +503,9 @@ diagnostics keep the glossary terms above.
 | Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the User's step when one exists, otherwise that Calendar Ghost checks again daily |
 | Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
 | Operator Overview | "People", with a "Sync" status per person and "Installation health" above them |
+| Plan | "plan" in lower case: "Your plan" under Settings → Your account, "Plans" under Administration, "Change plan" on a person's page. Counts read "3 of 5 rules counted", "2 of 3 calendar accounts", "1 of 2 tokens". A refusal names the limit and one way to make room, with "See your plan" |
+| Default Plan | "Default plan"; a person who has it reads "Free (default)", with the Plan's name |
+| Allowance | never named: Your plan says which Plan limits the person, or "You administer this installation, so no plan limits you." |
 | Cause | "Likely cause:" and the cause in plain words, naming the provider that raised it, such as "the Google Calendar API is turned off for this installation" or "Microsoft no longer accepts this installation's OAuth client"; neutral words ("the calendar provider") when the server names none. To the User, an administrator's Cause says only "Temporarily unavailable", naming neither the cause nor the administrator, with Check access to try again when the account lapsed; their own Cause offers its one step ("Reauthorize account", or "Open the rule" to choose another calendar or remove it), or says it fixes itself with when it was last and will next be tried. To an administrator, a User's Cause says "{name} can fix this from their dashboard" ("{name} can try again from their dashboard" when `unknown`) and offers no action |
 | Installation Hint, on People | the pattern in one sentence with how many people it affects, then "How to fix", linking to its troubleshooting section |
 | Installation Status verdict, on People | "Not running" (stalled), "Stopped", "Needs a look" (review), "Waiting for the provider", "Paused", "Not set up" (setup), "Healthy" |
