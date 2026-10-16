@@ -301,7 +301,7 @@ mailbox across every application.
 Instant Sync asks one question of the installation: does this person's Sync Cadence allow it?
 Their Allowance answers ([ADR 0038](adr/0038-plans-allowances-and-limits.md)). With Plans off, the
 default, and for every administrator, it does, and Scheduled Sync runs every five minutes. With
-Plans on, the person's own Plan, or the default plan when they have none, decides through its sync
+Plans on, the person's own Plan, or the Default Plan when they have none, decides through its sync
 interval. This release offers two: **Instant sync, and a check every 5 minutes**, and **Every 5
 minutes**, which has no Instant Sync. When a person's Plan stops including Instant Sync, their
 pending Instant Sync Requests are dropped, the next watch upkeep retires their watches, and their
