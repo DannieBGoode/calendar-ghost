@@ -1742,6 +1742,12 @@ p {
   margin: 0;
 }
 
+/* While the plan allows no new token, the name field reads as unavailable as Issue token does. */
+.integration-issue-field input[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* The one moment the token is visible gets the quiet surface, so it reads as the next step. */
 .settings-group .token-reveal {
   margin: 0 -1.25rem;
@@ -1986,6 +1992,30 @@ p {
 /* The row's current state, under what the preference does: read before the explanation. */
 .setting-row .setting-state {
   color: var(--foreground);
+}
+
+/* Your plan: a limit's count reads first under its title. Past the limit it takes Attention
+   Ochre, beside a sentence with an icon, so the tone is never the only sign. */
+.own-plan-row .setting-state {
+  font-weight: 550;
+}
+
+.own-plan-row .setting-state[data-tone="attention"] {
+  color: var(--warning-foreground);
+}
+
+/* The one way to change a plan closes the group, quieter than its rows. */
+.own-plan-close {
+  padding: 0.875rem 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* "See your plan" moves focus to the heading; the page's own focus ring would read as a control. */
+#your-plan-title:focus {
+  outline: none;
 }
 
 /* What the Operator Overview shows about one User: in People's person page, and in Settings for

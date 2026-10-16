@@ -16,6 +16,7 @@ import {
 } from "@/components/rule-commands"
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { Button } from "@/components/ui/button"
+import { YourPlanLink } from "@/components/your-plan-link"
 import { RuleBuilder } from "@/features/rule-builder"
 import { useI18n } from "@/i18n/provider"
 import { rich } from "@/i18n/rich"
@@ -35,7 +36,7 @@ import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
 import { busyCommand, ruleWork, workRefreshInterval, type RuleWork } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
-import { usePreviewedStartRefusal } from "@/lib/use-own-plan"
+import { usePreviewedStartRefusal, useRuleLimitNote } from "@/lib/use-own-plan"
 import { useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 
@@ -170,6 +171,10 @@ function RulesHeading({
 }) {
   const { t } = useI18n()
   const saving = useRuleDraftSaving()
+  // Read here, outside the condition below, as the rules of hooks require.
+  const ruleLimit = useRuleLimitNote()
+  // Until an account is connected, connecting one is the only next step.
+  const planNote = noAccounts ? undefined : ruleLimit
   return (
     <div className="page-heading-row">
       <div>
@@ -184,7 +189,7 @@ function RulesHeading({
           onClick={onToggleBuilder}
           aria-expanded={showBuilder}
           aria-controls="rule-builder"
-          aria-describedby={noAccounts ? "create-rule-hint" : undefined}
+          aria-describedby={noAccounts ? "create-rule-hint" : planNote ? "create-rule-plan" : undefined}
         >
           {showBuilder ? t("rules.list.closeBuilder") : <><Plus aria-hidden="true" /> {t("rules.list.createButton")}</>}
         </Button>
@@ -204,6 +209,11 @@ function RulesHeading({
                 </a>
               ),
             })}
+          </p>
+        )}
+        {planNote && (
+          <p id="create-rule-plan" className="action-hint">
+            {planNote} <YourPlanLink />
           </p>
         )}
       </div>

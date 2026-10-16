@@ -7,8 +7,8 @@ import {
   intervalLabel,
   limitedPeople,
   limitsNothing,
+  ownPlanRows,
   ownPlanShown,
-  ownPlanSummary,
   personPlanFact,
   planChoiceLabel,
   planLimitsSummary,
@@ -249,42 +249,49 @@ describe("limitedPeople", () => {
   })
 })
 
-describe("ownPlanSummary", () => {
-  it("counts what the User has against each limit, with Instant Sync", () => {
-    expect(ownPlanSummary(i18n, family)).toBe(
-      "Family: 3 of 5 rules counted, 2 of 3 calendar accounts, 1 of 2 tokens, instant sync included",
-    )
+describe("ownPlanRows", () => {
+  const RULES_HINT = "Paused rules and drafts don't count."
+  const ACCOUNTS_HINT = "Disconnected accounts count. Reconnecting an account is never refused."
+  const TOKENS_HINT = "Revoked tokens don't count."
+
+  it("gives one row per limit, each with how much of it is in use, then how soon calendars sync", () => {
+    expect(ownPlanRows(i18n, family)).toEqual([
+      { limit: "rules", title: "Rules that can sync", value: "3 of 5 in use", hint: RULES_HINT, over: null },
+      { limit: "accounts", title: "Calendar accounts you can connect", value: "2 of 3 in use", hint: ACCOUNTS_HINT, over: null },
+      { limit: "tokens", title: "Integration Tokens you can have", value: "1 of 2 in use", hint: TOKENS_HINT, over: null },
+      { limit: "sync", title: "How soon calendars sync", value: "Instant sync, and a check every 5 minutes", hint: null, over: null },
+    ])
   })
 
-  it("names the Default Plan and its slower syncs", () => {
-    const free: OwnPlan = {
-      ...family,
-      plan: { key: "free", name: "Free", on_default: true },
-      limits: FREE_LIMITS,
-      rules_counted: 1,
-      connected_accounts: 1,
-      integration_tokens: 0,
-      instant: false,
-      poll_every_minutes: 5,
-    }
-    expect(ownPlanSummary(i18n, free)).toBe(
-      "Free (default): 1 of 1 rule counted, 1 of 1 calendar account, no Integration Tokens, syncs about every 5 minutes",
-    )
+  it("says No limit where the Plan sets none, with how many are in use", () => {
+    const rows = ownPlanRows(i18n, { ...family, limits: UNLIMITED, rules_counted: 1, connected_accounts: 4, integration_tokens: 0 })
+    expect(rows.map((row) => row.value)).toEqual([
+      "No limit, 1 in use",
+      "No limit, 4 in use",
+      "No limit, 0 in use",
+      "Instant sync, and a check every 5 minutes",
+    ])
+    expect(rows.every((row) => row.over === null)).toBe(true)
   })
 
-  it("counts without a limit where the Plan sets none", () => {
-    expect(ownPlanSummary(i18n, { ...family, limits: UNLIMITED, rules_counted: 1, connected_accounts: 4, integration_tokens: 0 })).toBe(
-      "Family: 1 rule counted, 4 calendar accounts, 0 tokens, instant sync included",
-    )
+  it("says a Plan with no tokens does not include them, and how soon its calendars sync", () => {
+    const free: OwnPlan = { ...family, limits: FREE_LIMITS, rules_counted: 1, connected_accounts: 1, integration_tokens: 0 }
+    expect(ownPlanRows(i18n, free).map((row) => row.value)).toEqual([
+      "1 of 1 in use",
+      "1 of 1 in use",
+      "Not included",
+      "Every 5 minutes",
+    ])
   })
 
-  it("still counts tokens kept from before a Plan that offers none", () => {
-    expect(ownPlanSummary(i18n, { ...family, limits: { ...FAMILY_LIMITS, integration_tokens: 0 }, integration_tokens: 2 })).toBe(
-      "Family: 3 of 5 rules counted, 2 of 3 calendar accounts, 2 tokens (0 allowed), instant sync included",
-    )
+  it("counts at a limit against it, which is not past it", () => {
+    const at: OwnPlan = { ...family, limits: { ...FAMILY_LIMITS, rules: 1, connected_accounts: 1, integration_tokens: 1 }, rules_counted: 1, connected_accounts: 0, integration_tokens: 1 }
+    const rows = ownPlanRows(i18n, at)
+    expect(rows.map((row) => row.value).slice(0, 3)).toEqual(["1 of 1 in use", "0 of 1 in use", "1 of 1 in use"])
+    expect(rows.every((row) => row.over === null)).toBe(true)
   })
 
-  it("counts past a limit by what is in use, and names the limit apart", () => {
+  it("counts past a lowered limit by what is in use, and says what keeps working and how to make room", () => {
     const over: OwnPlan = {
       ...family,
       limits: { ...FAMILY_LIMITS, rules: 1, connected_accounts: 2, integration_tokens: 1 },
@@ -292,27 +299,49 @@ describe("ownPlanSummary", () => {
       connected_accounts: 3,
       integration_tokens: 2,
     }
-    expect(ownPlanSummary(i18n, over)).toBe(
-      "Family: 2 rules counted (1 allowed), 3 calendar accounts (2 allowed), 2 tokens (1 allowed), instant sync included",
+    expect(ownPlanRows(i18n, over).slice(0, 3)).toEqual([
+      {
+        limit: "rules",
+        title: "Rules that can sync",
+        value: "2 in use, 1 allowed",
+        hint: RULES_HINT,
+        over: "You have more rules in use than your plan allows. They keep syncing, but you cannot start another until you pause or remove one.",
+      },
+      {
+        limit: "accounts",
+        title: "Calendar accounts you can connect",
+        value: "3 in use, 2 allowed",
+        hint: ACCOUNTS_HINT,
+        over: "You have more calendar accounts than your plan allows. They keep working, but you cannot connect another until you delete one.",
+      },
+      {
+        limit: "tokens",
+        title: "Integration Tokens you can have",
+        value: "2 in use, 1 allowed",
+        hint: TOKENS_HINT,
+        over: "You have more Integration Tokens than your plan allows. They keep working, but you cannot issue another until you revoke one.",
+      },
+    ])
+  })
+
+  it("still counts tokens kept from before a Plan that includes none, as past its limit", () => {
+    const kept = ownPlanRows(i18n, { ...family, limits: { ...FAMILY_LIMITS, integration_tokens: 0 }, integration_tokens: 2 })[2]
+    expect(kept?.value).toBe("Not included, 2 in use")
+    expect(kept?.over).toBe(
+      "You have more Integration Tokens than your plan allows. They keep working, but you cannot issue another until you revoke one.",
     )
   })
 
-  it("counts at a limit and under it against the limit", () => {
-    const at: OwnPlan = {
-      ...family,
-      limits: { ...FAMILY_LIMITS, rules: 1, connected_accounts: 1, integration_tokens: 1 },
-      rules_counted: 1,
-      connected_accounts: 0,
-      integration_tokens: 1,
-    }
-    expect(ownPlanSummary(i18n, at)).toBe(
-      "Family: 1 of 1 rule counted, 0 of 1 calendar account, 1 of 1 token, instant sync included",
-    )
+  it.each<[SyncInterval, string]>([
+    ["10_minutes", "Every 10 minutes"],
+    ["60_minutes", "Every hour"],
+  ])("words a sync interval of %s as the Plan's editor does", (interval, label) => {
+    expect(ownPlanRows(i18n, { ...family, limits: { ...FAMILY_LIMITS, sync_interval: interval } })[3]?.value).toBe(label)
   })
 
-  it("has nothing to say when no Plan limits the User", () => {
-    expect(ownPlanSummary(i18n, plansOff)).toBeNull()
-    expect(ownPlanSummary(i18n, administering)).toBeNull()
+  it("has no rows when no Plan limits the User", () => {
+    expect(ownPlanRows(i18n, plansOff)).toEqual([])
+    expect(ownPlanRows(i18n, administering)).toEqual([])
   })
 })
 

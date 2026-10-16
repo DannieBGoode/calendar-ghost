@@ -17,8 +17,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   while they are off nothing changes. Administrators are never limited, and under **Only me**
   Plans stay hidden. Once Plans are on, starting a rule, connecting a new calendar account, and
   issuing a token respect the person's Plan: each control says so at the limit and links to
-  **Settings → Your account → Your plan**, which shows what the Plan allows and how much of it is
-  in use. Reauthorization is never refused. A lowered rule limit refuses new Starts and stops
+  **Settings → Your account → Your plan**, which gives one row per limit with how much of it is in
+  use, marks any count past its limit, and says to ask the administrator for a change. **Create
+  sync rule** says how many rules the Plan lets sync at once. Reauthorization is never refused. A lowered rule limit refuses new Starts and stops
   nothing: rules beyond it keep syncing, and existing calendar accounts and tokens keep working.
   Returning to setup turns Plans off and keeps their definitions. Rule details in the API gain
   `can_start` and `rule_limit`, and rules and rule details gain `keeps_place`. Migration 33 adds

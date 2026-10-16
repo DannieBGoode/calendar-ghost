@@ -55,11 +55,28 @@ function lengthLimit(params: ServerParams): MessageParams {
   return typeof limit === "number" ? { count: limit } : {}
 }
 
+/**
+ * A refusal's message for its reason. A limit of none has its own message where one exists, such
+ * as "Your plan does not include Integration Tokens", so no refusal reads "0".
+ */
+function reasonMessage(
+  i18n: I18n,
+  key: string,
+  limit: ServerParams[string] | undefined,
+  params: MessageParams,
+): string | null {
+  const none = limit === 0 ? coded(i18n, `${key}_none`, params) : null
+  return none ?? coded(i18n, key, params)
+}
+
 function serverMessage(i18n: I18n, error: ApiError): string | null {
   if (!error.code) return null
   const params = { ...messageParams(i18n, error.params), ...lengthLimit(error.params) }
   const reason = error.params.reason
-  const specific = typeof reason === "string" ? coded(i18n, `common.apiError.${error.code}_${reason}`, params) : null
+  const specific =
+    typeof reason === "string"
+      ? reasonMessage(i18n, `common.apiError.${error.code}_${reason}`, error.params.limit, params)
+      : null
   return specific ?? coded(i18n, `common.apiError.${error.code}`, params)
 }
 

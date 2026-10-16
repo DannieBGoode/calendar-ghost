@@ -133,58 +133,71 @@ export function defaultPlanChoice({ t }: I18n, plans: readonly PlanSummary[]): s
   return current ? t("people.plan.default", { name: current.name }) : t("people.plan.defaultUnnamed")
 }
 
-/** How Your plan words one count: with no limit, within the limit, and past it. */
-type UseWords = { unlimited: MessageKey; within: MessageKey; over: MessageKey }
+/** Which limit a row of Your plan shows. */
+type OwnPlanLimit = "rules" | "accounts" | "tokens" | "sync"
 
-const RULE_USE: UseWords = {
-  unlimited: "settings.ownPlan.rulesUnlimited",
-  within: "settings.ownPlan.rules",
-  over: "settings.ownPlan.rulesOver",
-}
-const ACCOUNT_USE: UseWords = {
-  unlimited: "settings.ownPlan.accountsUnlimited",
-  within: "settings.ownPlan.accounts",
-  over: "settings.ownPlan.accountsOver",
-}
-const TOKEN_USE: UseWords = {
-  unlimited: "settings.ownPlan.tokensUnlimited",
-  within: "settings.ownPlan.tokens",
-  over: "settings.ownPlan.tokensOver",
+/** One row of Your plan: a limit, how much of it is in use, what counts toward it, and past it, what that means. */
+export type OwnPlanRow = {
+  limit: OwnPlanLimit
+  title: string
+  /** How much is in use against the limit, such as "3 of 5 in use"; for the sync row, how soon calendars sync. */
+  value: string
+  /** What counts toward the limit, in the words of the Plan's editor; null for the sync row. */
+  hint: string | null
+  /** Past the limit, as after it was lowered: what keeps working and how to make room. Null within it. */
+  over: string | null
 }
 
-/**
- * One count against its limit: "3 of 5 rules counted", whose noun follows the limit, reads right
- * only within it. Past it, as after a limit is lowered, "6 rules counted (5 allowed)" follows the
- * count in use.
- */
-function limitUse({ t }: I18n, words: UseWords, used: number, limit: number | null): string {
-  if (limit === null) return t(words.unlimited, { count: used })
-  return used > limit ? t(words.over, { count: used, limit }) : t(words.within, { used, count: limit })
-}
+type CountWords = { title: MessageKey; hint: MessageKey; over: MessageKey }
 
-function tokenUse(i18n: I18n, used: number, limit: number | null): string {
-  // A Plan may offer no tokens; one lowered to none still counts the tokens kept from before.
-  if (limit === 0 && used === 0) return i18n.t("settings.ownPlan.noTokens")
-  return limitUse(i18n, TOKEN_USE, used, limit)
+const COUNT_WORDS: Record<Exclude<OwnPlanLimit, "sync">, CountWords> = {
+  rules: { title: "settings.ownPlan.rules", hint: "settings.ownPlan.rulesHint", over: "settings.ownPlan.over.rules" },
+  accounts: {
+    title: "settings.ownPlan.accounts",
+    hint: "settings.ownPlan.accountsHint",
+    over: "settings.ownPlan.over.accounts",
+  },
+  tokens: { title: "settings.ownPlan.tokens", hint: "settings.ownPlan.tokensHint", over: "settings.ownPlan.over.tokens" },
 }
 
 /**
- * Your plan's one line, such as "Family: 3 of 5 rules counted, 2 of 3 calendar accounts, 1 of 2
- * tokens, instant sync included". Null when no Plan limits the User, so there is none to name.
+ * How much of one limit is in use: "No limit, 3 in use" where the Plan sets none, "Not included"
+ * where it allows none, "3 of 5 in use" within it, and past it, as after it was lowered, by the
+ * count in use: "6 in use, 5 allowed".
  */
-export function ownPlanSummary(i18n: I18n, plan: OwnPlan): string | null {
-  const { plan: applied, limits } = plan
-  if (applied === null || limits === null) return null
+function inUse({ t }: I18n, used: number, limit: number | null): string {
+  if (limit === null) return t("settings.ownPlan.use.unlimited", { used })
+  // A Plan may include no tokens; one lowered to none still counts the tokens kept from before.
+  if (limit === 0) return used === 0 ? t("settings.ownPlan.use.none") : t("settings.ownPlan.use.noneOver", { used })
+  return used > limit ? t("settings.ownPlan.use.over", { used, limit }) : t("settings.ownPlan.use.within", { used, limit })
+}
+
+function countRow(i18n: I18n, limit: keyof typeof COUNT_WORDS, used: number, allowed: number | null): OwnPlanRow {
   const { t } = i18n
-  return t("settings.ownPlan.summary", {
-    plan: t(applied.on_default ? "settings.ownPlan.nameDefault" : "settings.ownPlan.name", { name: applied.name }),
-    rules: limitUse(i18n, RULE_USE, plan.rules_counted, limits.rules),
-    accounts: limitUse(i18n, ACCOUNT_USE, plan.connected_accounts, limits.connected_accounts),
-    tokens: tokenUse(i18n, plan.integration_tokens, limits.integration_tokens),
-    cadence: plan.instant
-      ? t("settings.ownPlan.cadence.instant")
-      : t("settings.ownPlan.cadence.every", { count: plan.poll_every_minutes }),
-  })
+  const words = COUNT_WORDS[limit]
+  const over = allowed !== null && used > allowed
+  return { limit, title: t(words.title), value: inUse(i18n, used, allowed), hint: t(words.hint), over: over ? t(words.over) : null }
+}
+
+/**
+ * Your plan's rows: rules, calendar accounts, and Integration Tokens, each against its limit, then
+ * how soon calendars sync. None when no Plan limits the User.
+ */
+export function ownPlanRows(i18n: I18n, plan: OwnPlan): OwnPlanRow[] {
+  const { limits } = plan
+  if (plan.basis !== "plan" || !limits) return []
+  return [
+    countRow(i18n, "rules", plan.rules_counted, limits.rules),
+    countRow(i18n, "accounts", plan.connected_accounts, limits.connected_accounts),
+    countRow(i18n, "tokens", plan.integration_tokens, limits.integration_tokens),
+    {
+      limit: "sync",
+      title: i18n.t("settings.ownPlan.interval"),
+      value: intervalLabel(i18n, limits.sync_interval),
+      hint: null,
+      over: null,
+    },
+  ]
 }
 
 /**

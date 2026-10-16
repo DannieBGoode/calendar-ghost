@@ -823,7 +823,7 @@ describe("Settings tabs", () => {
   it("shows Your plan between the account section and Appearance once a plan limits you", async () => {
     await renderSettings(testI18n(), { tab: "account", ownPlan: jsonResponse(familyPlan) })
     expect(sections()).toEqual(["own-account-title", "your-plan-title", "appearance-title"])
-    expect(container.querySelector("#your-plan")?.textContent).toContain("Family: 3 of 5 rules counted")
+    expect(container.querySelector("#your-plan")?.textContent).toContain("You have Family, chosen by your administrator.")
   })
 
   it("keeps the rest of Your account working when Your plan cannot load", async () => {
@@ -1007,29 +1007,68 @@ describe("IntegrationsSection", () => {
     expect(api.issueIntegrationToken).toHaveBeenCalledWith("Claude Code", ["status:read"])
   })
 
-  it("keeps Issue token unavailable at the plan's token limit, saying why", async () => {
+  it("keeps the token form in place but unusable when the plan includes no tokens, saying why without at most 0", async () => {
     vi.mocked(api.ownPlan).mockResolvedValue(atEveryLimit)
     await renderSection()
     await openGroup()
     await tick()
     await tick()
 
-    // With a name typed, only the limit keeps Issue token from being pressed.
     const input = container.querySelector<HTMLInputElement>("#integration-name")!
-    act(() => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "Claude Code")
-      input.dispatchEvent(new Event("input", { bubbles: true }))
-    })
-    expect(labelledButton("Issue token").disabled).toBe(true)
+    const submit = labelledButton("Issue token")
+    // Both stay focusable, so keyboard and screen reader users reach the reason.
+    expect(input.getAttribute("aria-disabled")).toBe("true")
+    expect(input.readOnly).toBe(true)
+    expect(input.disabled).toBe(false)
+    expect(submit.getAttribute("aria-disabled")).toBe("true")
+    expect(submit.disabled).toBe(false)
     const reason = container.querySelector("#integration-limit")
-    expect(reason?.textContent).toBe("Your plan allows at most 0 Integration Tokens. Revoked tokens do not count. See your plan")
-    expect(reason?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
-    expect(container.querySelector("#integration-name")?.getAttribute("aria-describedby")).toBe(
-      "integration-name-hint integration-limit",
+    expect(reason?.textContent).toBe(
+      "Your plan does not include Integration Tokens. To get one, ask your administrator. See your plan",
     )
-    // Enter in the field sends nothing either.
+    expect(reason?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+    expect(input.getAttribute("aria-describedby")).toBe("integration-name-hint integration-limit")
+    expect(submit.getAttribute("aria-describedby")).toBe("integration-limit")
+    expect(container.textContent).not.toContain("at most")
+
+    // Pressing Issue token keeps focus there and sends nothing; nor does Enter in the field.
+    act(() => submit.focus())
+    press(submit)
+    await tick()
+    expect(document.activeElement).toBe(submit)
     await issueToken("Claude Code")
     expect(api.issueIntegrationToken).not.toHaveBeenCalled()
+  })
+
+  it("says a plan's tokens are all in use, and how to make room", async () => {
+    vi.mocked(api.ownPlan).mockResolvedValue({
+      ...atEveryLimit,
+      limits: { rules: 1, connected_accounts: 1, integration_tokens: 2, sync_interval: "5_minutes" },
+      integration_tokens: 2,
+    })
+    await renderSection()
+    await openGroup()
+    await tick()
+    await tick()
+
+    expect(labelledButton("Issue token").getAttribute("aria-disabled")).toBe("true")
+    expect(container.querySelector("#integration-limit")?.textContent).toBe(
+      "Your plan allows 2 Integration Tokens, and all are in use. Revoke one to issue another. See your plan",
+    )
+  })
+
+  it("offers Issue token as usual when the plan cannot be read, since the server still checks", async () => {
+    vi.mocked(api.ownPlan).mockRejectedValue(new Error("database is locked"))
+    await renderSection()
+    await openGroup()
+    await tick()
+    await tick()
+
+    expect(container.querySelector("#integration-limit")).toBeNull()
+    expect(container.querySelector("#integration-name")?.getAttribute("aria-disabled")).toBeNull()
+    expect(labelledButton("Issue token").getAttribute("aria-disabled")).toBeNull()
+    await issueToken("Claude Code")
+    expect(api.issueIntegrationToken).toHaveBeenCalledWith("Claude Code", ["status:read"])
   })
 
   it("offers Issue token as usual while Plans are off", async () => {

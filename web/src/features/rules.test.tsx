@@ -432,11 +432,52 @@ describe("RulesView", () => {
     expect(onViewChange).toHaveBeenCalledWith("settings", { search: "?account=b", settingsTab: "connections" })
   })
 
+  function createButton(): HTMLButtonElement {
+    return [...container.querySelectorAll("button")].find((item) => item.textContent.includes("Create sync rule"))!
+  }
+
   it("keeps Create sync rule available at the plan's rule limit, since creating is never limited", async () => {
     await renderRulesList(testI18n(), { ownPlan: jsonResponse(overTheLimit) })
-    const create = [...container.querySelectorAll("button")].find((item) => item.textContent.includes("Create sync rule"))!
-    expect(create.disabled).toBe(false)
-    expect(create.getAttribute("aria-disabled")).toBeNull()
+    expect(createButton().disabled).toBe(false)
+    expect(createButton().getAttribute("aria-disabled")).toBeNull()
+  })
+
+  it("says beside Create sync rule how many rules the plan lets sync, before a rule is built", async () => {
+    await renderRulesList(testI18n(), { ownPlan: jsonResponse(overTheLimit) })
+    const note = document.getElementById(createButton().getAttribute("aria-describedby") ?? "")
+    expect(note?.textContent).toBe("Your plan lets 1 rule sync at once. See your plan")
+    expect(note?.className).toBe("action-hint")
+    expect(note?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+  })
+
+  it("counts several rules in the note beside Create sync rule", async () => {
+    await renderRulesList(testI18n(), {
+      ownPlan: jsonResponse({ ...overTheLimit, limits: { ...overTheLimit.limits, rules: 5 }, rules_counted: 2, over_rule_limit: false }),
+    })
+    expect(container.querySelector(".heading-action .action-hint")?.textContent).toBe(
+      "Your plan lets 5 rules sync at once. See your plan",
+    )
+  })
+
+  it.each([
+    ["names no plan", jsonResponse({})],
+    ["cannot be read", planUnreadable],
+    ["sets no rule limit", jsonResponse({ ...overTheLimit, limits: { ...overTheLimit.limits, rules: null }, over_rule_limit: false })],
+  ])("adds no note beside Create sync rule when the own plan %s", async (_case, ownPlan) => {
+    await renderRulesList(testI18n(), { ownPlan })
+    expect(container.querySelector(".heading-action .action-hint")).toBeNull()
+    expect(createButton().getAttribute("aria-describedby")).toBeNull()
+  })
+
+  it("keeps only the way to connect an account beside Create sync rule while none is connected", async () => {
+    await renderRulesList(testI18n(), { accounts: [], rows: [], ownPlan: jsonResponse(overTheLimit) })
+    expect([...container.querySelectorAll(".heading-action .action-hint")].map((hint) => hint.id)).toEqual(["create-rule-hint"])
+  })
+
+  it("has no untranslated text in the note beside Create sync rule", async () => {
+    await renderRulesList(pseudoI18n(), { ownPlan: jsonResponse(overTheLimit) })
+    expect(container.querySelector(".heading-action .action-hint")).not.toBeNull()
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
   })
 
   it("warns in Pause that the plan may not let a rule that counts start again", async () => {

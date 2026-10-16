@@ -96,9 +96,10 @@
     "plan_key_taken": "Another plan already uses this key. Choose a different key.",
     "plan_limit_reached": "Your plan's limit is reached. Settings, Your account, Your plan shows what it allows.",
     "plan_limit_reached_integration_tokens": {
-      "one": "Your plan allows at most {count} Integration Token. Revoked tokens do not count.",
-      "other": "Your plan allows at most {count} Integration Tokens. Revoked tokens do not count."
+      "one": "Your plan allows {count} Integration Token, and it is in use. Revoke it to issue another.",
+      "other": "Your plan allows {count} Integration Tokens, and all are in use. Revoke one to issue another."
     },
+    "plan_limit_reached_integration_tokens_none": "Your plan does not include Integration Tokens. To get one, ask your administrator.",
     "plan_limit_reached_rules": {
       "one": "Your plan lets {count} rule sync. Pause or remove it to start this rule.",
       "other": "Your plan lets {count} rules sync. Pause or remove one to start this rule."

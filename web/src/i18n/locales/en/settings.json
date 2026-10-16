@@ -79,56 +79,29 @@
   },
   "ownPlan": {
     "title": "Your plan",
+    "intro": "You have {name}, chosen by your administrator.",
     "administrator": "You administer this installation, so no plan limits you.",
     "loadError": "Your plan could not load.",
-    "overRules": "More rules count than your plan allows. Nothing stops, but no rule can start until fewer count.",
-    "name": "{name}",
-    "nameDefault": "{name} (default)",
-    "summary": "{plan}: {rules}, {accounts}, {tokens}, {cadence}",
-    "rules": {
-      "one": "{used} of {count} rule counted",
-      "other": "{used} of {count} rules counted"
+    "rules": "Rules that can sync",
+    "rulesHint": "Paused rules and drafts don't count.",
+    "accounts": "Calendar accounts you can connect",
+    "accountsHint": "Disconnected accounts count. Reconnecting an account is never refused.",
+    "tokens": "Integration Tokens you can have",
+    "tokensHint": "Revoked tokens don't count.",
+    "interval": "How soon calendars sync",
+    "use": {
+      "within": "{used} of {limit} in use",
+      "over": "{used} in use, {limit} allowed",
+      "unlimited": "No limit, {used} in use",
+      "none": "Not included",
+      "noneOver": "Not included, {used} in use"
     },
-    "rulesOver": {
-      "one": "{count} rule counted ({limit} allowed)",
-      "other": "{count} rules counted ({limit} allowed)"
+    "over": {
+      "rules": "You have more rules in use than your plan allows. They keep syncing, but you cannot start another until you pause or remove one.",
+      "accounts": "You have more calendar accounts than your plan allows. They keep working, but you cannot connect another until you delete one.",
+      "tokens": "You have more Integration Tokens than your plan allows. They keep working, but you cannot issue another until you revoke one."
     },
-    "rulesUnlimited": {
-      "one": "{count} rule counted",
-      "other": "{count} rules counted"
-    },
-    "accounts": {
-      "one": "{used} of {count} calendar account",
-      "other": "{used} of {count} calendar accounts"
-    },
-    "accountsOver": {
-      "one": "{count} calendar account ({limit} allowed)",
-      "other": "{count} calendar accounts ({limit} allowed)"
-    },
-    "accountsUnlimited": {
-      "one": "{count} calendar account",
-      "other": "{count} calendar accounts"
-    },
-    "tokens": {
-      "one": "{used} of {count} token",
-      "other": "{used} of {count} tokens"
-    },
-    "tokensOver": {
-      "one": "{count} token ({limit} allowed)",
-      "other": "{count} tokens ({limit} allowed)"
-    },
-    "tokensUnlimited": {
-      "one": "{count} token",
-      "other": "{count} tokens"
-    },
-    "noTokens": "no Integration Tokens",
-    "cadence": {
-      "instant": "instant sync included",
-      "every": {
-        "one": "syncs about every minute",
-        "other": "syncs about every {count} minutes"
-      }
-    }
+    "close": "To change your plan, ask your administrator."
   },
   "registration": {
     "title": "Who can join",

@@ -15,6 +15,7 @@ import {
   useAccountLimitReason,
   useOwnPlan,
   usePlanWarning,
+  useRuleLimitNote,
   useTokenLimitReason,
 } from "@/lib/use-own-plan"
 import { RULE_CHANGE_QUERIES } from "@/lib/use-rule-commands"
@@ -40,10 +41,19 @@ function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
 }
 
-type Hints = { loaded: boolean; warning: boolean; account: string | undefined; token: string | undefined }
+type Hints = {
+  loaded: boolean
+  warning: boolean
+  account: string | undefined
+  token: string | undefined
+  rules: string | undefined
+}
+
+/** What every hint reads when the Plan gives none: nothing limits, or the Plan is unknown. */
+const NO_HINTS: Hints = { loaded: true, warning: false, account: undefined, token: undefined, rules: undefined }
 
 let root: Root | null = null
-let hints: Hints = { loaded: false, warning: false, account: undefined, token: undefined }
+let hints: Hints = { ...NO_HINTS, loaded: false }
 let queryClient: QueryClient
 
 function Probe({ onHints }: { onHints: (next: Hints) => void }) {
@@ -51,8 +61,9 @@ function Probe({ onHints }: { onHints: (next: Hints) => void }) {
   const warning = usePlanWarning()
   const account = useAccountLimitReason()
   const token = useTokenLimitReason()
+  const rules = useRuleLimitNote()
   useEffect(() => {
-    onHints({ loaded, warning, account, token })
+    onHints({ loaded, warning, account, token, rules })
   })
   return null
 }
@@ -106,15 +117,45 @@ describe("own plan hints", () => {
       loaded: true,
       warning: true,
       account: "Your plan allows 2 calendar accounts, and disconnected accounts count too.",
-      token: "Your plan allows at most 0 Integration Tokens. Revoked tokens do not count.",
+      token: "Your plan does not include Integration Tokens. To get one, ask your administrator.",
+      rules: "Your plan lets 1 rule sync at once.",
     })
   })
 
-  it("says nothing while the Plan has room", async () => {
+  it.each([
+    [1, "Your plan allows 1 Integration Token, and it is in use. Revoke it to issue another."],
+    [3, "Your plan allows 3 Integration Tokens, and all are in use. Revoke one to issue another."],
+  ])("says a limit of %i tokens is in use, and how to make room", async (limit, reason) => {
+    await render(
+      jsonResponse({ ...atEveryLimit, limits: { ...atEveryLimit.limits, integration_tokens: limit }, integration_tokens: limit }),
+    )
+    expect(hints.token).toBe(reason)
+  })
+
+  it("names the Plan's rule limit while the Plan has room, as a note beside Create sync rule", async () => {
+    await render(
+      jsonResponse({
+        ...atEveryLimit,
+        limits: { ...atEveryLimit.limits, rules: 3 },
+        rules_counted: 0,
+        may_connect_account: true,
+        may_issue_token: true,
+        over_rule_limit: false,
+      }),
+    )
+    expect(hints).toEqual({ ...NO_HINTS, rules: "Your plan lets 3 rules sync at once." })
+  })
+
+  it("names no rule limit for a Plan that sets none", async () => {
+    await render(jsonResponse({ ...atEveryLimit, limits: { ...atEveryLimit.limits, rules: null }, over_rule_limit: false }))
+    expect(hints.rules).toBeUndefined()
+  })
+
+  it("says nothing but the rule limit while the Plan has room", async () => {
     await render(
       jsonResponse({ ...atEveryLimit, may_connect_account: true, may_issue_token: true, over_rule_limit: false }),
     )
-    expect(hints).toEqual({ loaded: true, warning: false, account: undefined, token: undefined })
+    expect(hints).toEqual({ ...NO_HINTS, rules: "Your plan lets 1 rule sync at once." })
   })
 
   it("says nothing for an administrator or while Plans are off", async () => {
@@ -129,17 +170,17 @@ describe("own plan hints", () => {
         over_rule_limit: false,
       }),
     )
-    expect(hints).toEqual({ loaded: true, warning: false, account: undefined, token: undefined })
+    expect(hints).toEqual(NO_HINTS)
   })
 
   it("gives no hint and no warning for an empty answer", async () => {
     await render(jsonResponse({}))
-    expect(hints).toEqual({ loaded: true, warning: false, account: undefined, token: undefined })
+    expect(hints).toEqual(NO_HINTS)
   })
 
-  it("gives no hint and no warning when the Plan cannot be read, so every control stays enabled", async () => {
+  it("gives no hint, no warning, and no rule limit when the Plan cannot be read, so every control stays enabled", async () => {
     await render(jsonResponse({ detail: "Internal Server Error" }, 500))
-    expect(hints).toEqual({ loaded: true, warning: false, account: undefined, token: undefined })
+    expect(hints).toEqual(NO_HINTS)
   })
 
   it("drops the hints read before once the Plan cannot be read again, so a place freed since is not kept closed", async () => {
@@ -147,7 +188,7 @@ describe("own plan hints", () => {
     // The failed refresh keeps the earlier answer in the cache; the hints must not follow it.
     expect(queryClient.getQueryState(OWN_PLAN_QUERY)?.status).toBe("error")
     expect(queryClient.getQueryData(OWN_PLAN_QUERY)).toEqual(atEveryLimit)
-    expect(hints).toEqual({ loaded: true, warning: false, account: undefined, token: undefined })
+    expect(hints).toEqual(NO_HINTS)
   })
 })
 

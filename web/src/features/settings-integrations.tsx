@@ -138,14 +138,16 @@ function IssueTokenForm({
   const i18n = useI18n()
   const { t } = i18n
   const { name, setName, issue } = integrations
-  // At the plan's token limit nothing can be issued; the server still checks.
+  // When the plan includes no tokens, or all are in use, nothing can be issued; the server still
+  // checks. The form stays focusable, with why, so keyboard and screen reader users reach it.
   const limit = useTokenLimitReason()
+  const unavailable = limit !== undefined
   return (
     <form
       className="setting-row integration-issue"
       onSubmit={(event) => {
         event.preventDefault()
-        if (limit === undefined) issue.mutate()
+        if (!unavailable) issue.mutate()
       }}
     >
       <div className="integration-issue-field">
@@ -157,10 +159,12 @@ function IssueTokenForm({
           value={name}
           maxLength={80}
           placeholder={t("settings.integrations.issue.placeholder")}
-          aria-describedby={limit === undefined ? "integration-name-hint" : "integration-name-hint integration-limit"}
+          readOnly={unavailable}
+          aria-disabled={unavailable || undefined}
+          aria-describedby={unavailable ? "integration-name-hint integration-limit" : "integration-name-hint"}
           onChange={(event) => setName(event.target.value)}
         />
-        {limit !== undefined && (
+        {unavailable && (
           <p id="integration-limit" className="field-hint">
             {limit} <YourPlanLink />
           </p>
@@ -172,10 +176,26 @@ function IssueTokenForm({
           </p>
         )}
       </div>
-      <Button type="submit" disabled={!name.trim() || issue.isPending || limit !== undefined}>
-        {issue.isPending ? t("settings.integrations.issue.pending") : t("settings.integrations.issue.submit")}
-      </Button>
+      <IssueTokenButton ready={Boolean(name.trim())} pending={issue.isPending} unavailable={unavailable} />
     </form>
+  )
+}
+
+/**
+ * Issue token. While the plan allows no new token it stays focusable, described by why, and the
+ * form sends nothing; otherwise it waits for a name, and for a token on its way.
+ */
+function IssueTokenButton({ ready, pending, unavailable }: { ready: boolean; pending: boolean; unavailable: boolean }) {
+  const { t } = useI18n()
+  return (
+    <Button
+      type="submit"
+      disabled={!unavailable && (!ready || pending)}
+      aria-disabled={unavailable || undefined}
+      aria-describedby={unavailable ? "integration-limit" : undefined}
+    >
+      {pending ? t("settings.integrations.issue.pending") : t("settings.integrations.issue.submit")}
+    </Button>
   )
 }
 

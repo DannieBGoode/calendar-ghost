@@ -156,6 +156,19 @@ async function click(target: HTMLElement) {
   await settle()
 }
 
+/** Each limit's row as a person reads it: its title, how much is in use, and what it says past the limit. */
+function rows() {
+  return [...(section()?.querySelectorAll<HTMLElement>(".own-plan-row") ?? [])].map((row) => ({
+    title: row.querySelector("h3")?.textContent,
+    value: row.querySelector(".setting-state")?.textContent,
+    over: row.querySelector(".field-hint[data-tone='attention']")?.textContent ?? null,
+  }))
+}
+
+function intro(): string | undefined {
+  return section()?.querySelector(".section-heading p")?.textContent
+}
+
 describe("OwnPlanSection", () => {
   it("stays hidden while plans are off", async () => {
     await renderSection(testI18n(), { ownPlan: jsonResponse(plansOff) })
@@ -177,7 +190,9 @@ describe("OwnPlanSection", () => {
     await renderSection(testI18n(), { ownPlan: jsonResponse(administering), registration: invitationOnly, administrator: true })
     expect(section()?.querySelector("h2")?.textContent).toBe("Your plan")
     expect(section()?.getAttribute("aria-labelledby")).toBe("your-plan-title")
-    expect(section()?.querySelector("p")?.textContent).toBe("You administer this installation, so no plan limits you.")
+    expect(intro()).toBe("You administer this installation, so no plan limits you.")
+    expect(rows()).toEqual([])
+    expect(section()?.textContent).not.toContain("ask your administrator")
   })
 
   it("asks for the Registration Policy only as an administrator, since nobody else may read it", async () => {
@@ -190,41 +205,88 @@ describe("OwnPlanSection", () => {
     expect(calls.map((call) => call.path)).toContain("/api/v1/registration")
   })
 
-  it("shows a limited person their plan in one line: counts, limits, and how soon it syncs", async () => {
+  it("names the plan, then gives one row per limit with how much is in use, then how to change it", async () => {
     await renderSection(testI18n(), { ownPlan: jsonResponse(family) })
-    expect([...section()!.querySelectorAll("p")].map((line) => line.textContent)).toEqual([
-      "Family: 3 of 5 rules counted, 2 of 3 calendar accounts, 0 of 2 tokens, instant sync included",
+    expect(intro()).toBe("You have Family, chosen by your administrator.")
+    expect(rows()).toEqual([
+      { title: "Rules that can sync", value: "3 of 5 in use", over: null },
+      { title: "Calendar accounts you can connect", value: "2 of 3 in use", over: null },
+      { title: "Integration Tokens you can have", value: "0 of 2 in use", over: null },
+      { title: "How soon calendars sync", value: "Instant sync, and a check every 5 minutes", over: null },
     ])
+    // What counts toward each limit, in the words of the plan's editor.
+    expect(section()?.querySelector(".own-plan-row p:not(.setting-state)")?.textContent).toBe("Paused rules and drafts don't count.")
+    const rowsAndClose = [...section()!.querySelectorAll(".own-plan-row, .own-plan-close")]
+    expect(rowsAndClose.at(-1)?.textContent).toBe("To change your plan, ask your administrator.")
   })
 
-  it("names the default plan, a plan with no tokens, and a slower sync", async () => {
-    await renderSection(testI18n(), { ownPlan: jsonResponse(freeOverLimit) })
-    // The first line is the summary; the over-limit note follows it.
-    expect(section()?.querySelector("p")?.textContent).toBe(
-      "Free (default): 3 rules counted (2 allowed), 1 of 1 calendar account, no Integration Tokens, syncs about every 5 minutes",
-    )
+  it("names the default plan by its name alone, with a plan that includes no tokens and a slower sync", async () => {
+    await renderSection(testI18n(), { ownPlan: jsonResponse({ ...freeOverLimit, rules_counted: 2, over_rule_limit: false }) })
+    expect(intro()).toBe("You have Free, chosen by your administrator.")
+    expect(rows().map((row) => row.value)).toEqual(["2 of 2 in use", "1 of 1 in use", "Not included", "Every 5 minutes"])
   })
 
-  it("says plainly what an unlimited plan allows", async () => {
+  it("says No limit where the plan sets none", async () => {
     const unlimited: OwnPlan = {
       ...family,
       limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" },
     }
     await renderSection(testI18n(), { ownPlan: jsonResponse(unlimited) })
-    expect(section()?.querySelector("p")?.textContent).toBe(
-      "Family: 3 rules counted, 2 calendar accounts, 0 tokens, instant sync included",
-    )
+    expect(rows().map((row) => row.value)).toEqual([
+      "No limit, 3 in use",
+      "No limit, 2 in use",
+      "No limit, 0 in use",
+      "Instant sync, and a check every 5 minutes",
+    ])
   })
 
-  it("says when more rules count than the plan allows, as after an administrator is demoted, and that nothing stops", async () => {
-    await renderSection(testI18n(), { ownPlan: jsonResponse(freeOverLimit) })
-    const over = section()?.querySelector(".field-hint[data-tone='attention']")
-    expect(over?.textContent).toBe("More rules count than your plan allows. Nothing stops, but no rule can start until fewer count.")
+  it("marks a limit in use past what the plan allows with words, an icon, and its tone, never color alone", async () => {
+    await renderSection(testI18n(), { ownPlan: jsonResponse({ ...freeOverLimit, connected_accounts: 3 }) })
+    const [rulesRow, accountsRow, tokensRow] = [...section()!.querySelectorAll<HTMLElement>(".own-plan-row")]
+    expect(rows().slice(0, 2)).toEqual([
+      {
+        title: "Rules that can sync",
+        value: "3 in use, 2 allowed",
+        over: "You have more rules in use than your plan allows. They keep syncing, but you cannot start another until you pause or remove one.",
+      },
+      {
+        title: "Calendar accounts you can connect",
+        value: "3 in use, 1 allowed",
+        over: "You have more calendar accounts than your plan allows. They keep working, but you cannot connect another until you delete one.",
+      },
+    ])
+    for (const row of [rulesRow, accountsRow]) {
+      expect(row?.querySelector(".setting-state")?.getAttribute("data-tone")).toBe("attention")
+      expect(row?.querySelector(".field-hint[data-tone='attention'] svg")?.getAttribute("aria-hidden")).toBe("true")
+    }
+    expect(tokensRow?.querySelector("[data-tone]")).toBeNull()
   })
 
-  it("says nothing about the limit while the rules counted fit", async () => {
+  it("marks nothing while every count fits", async () => {
     await renderSection(testI18n(), { ownPlan: jsonResponse(family) })
-    expect(section()?.querySelector(".field-hint")).toBeNull()
+    expect(section()?.querySelector("[data-tone]")).toBeNull()
+  })
+
+  it("moves focus to its heading when the address names it, as See your plan does", async () => {
+    window.history.replaceState(null, "", "/settings/account#your-plan")
+    vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
+    await renderSection(testI18n(), { ownPlan: jsonResponse(family) })
+    const heading = section()?.querySelector("h2")
+    expect(heading?.getAttribute("tabindex")).toBe("-1")
+    expect(document.activeElement).toBe(heading)
+  })
+
+  it("moves focus to its heading on arrival even when it cannot load, so the error is read next", async () => {
+    window.history.replaceState(null, "", "/settings/account#your-plan")
+    vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
+    await renderSection(testI18n(), { ownPlan: jsonResponse(UNREADABLE, 500) })
+    expect(document.activeElement).toBe(section()?.querySelector("h2"))
+  })
+
+  it("leaves focus alone when the address names something else", async () => {
+    window.history.replaceState(null, "", "/settings/account")
+    await renderSection(testI18n(), { ownPlan: jsonResponse(family) })
+    expect(document.activeElement).not.toBe(section()?.querySelector("h2"))
   })
 
   it("scrolls itself into view once when the address names it, as a link beside a limit does", async () => {
@@ -253,7 +315,7 @@ describe("OwnPlanSection", () => {
     answers["GET /api/v1/account/plan"] = jsonResponse(family)
     await click(button("Try again"))
     expect(section()?.querySelector("[role='alert']")).toBeNull()
-    expect(section()?.querySelector("p")?.textContent).toContain("Family: 3 of 5 rules counted")
+    expect(intro()).toBe("You have Family, chosen by your administrator.")
   })
 
   it("hides a failed load from an administrator under Only Me, where plans have no effect", async () => {

@@ -47,11 +47,26 @@ export function useAccountLimitReason(): string | undefined {
   return t("common.plan.accountLimit", { count: limit })
 }
 
-/** Why a new Integration Token cannot be issued: the Plan's tokens are all in use. */
+/**
+ * Why a new Integration Token cannot be issued: the Plan includes none, or its tokens are all in
+ * use. It reads as the server's refusal does.
+ */
 export function useTokenLimitReason(): string | undefined {
   const { t } = useI18n()
   const plan = usePlanHints()
   const limit = plan?.limits?.integration_tokens
   if (plan?.may_issue_token !== false || typeof limit !== "number") return undefined
-  return t("common.apiError.plan_limit_reached_integration_tokens", { count: limit })
+  return limit === 0
+    ? t("common.apiError.plan_limit_reached_integration_tokens_none")
+    : t("common.apiError.plan_limit_reached_integration_tokens", { count: limit })
+}
+
+/**
+ * How many rules the Plan lets sync at once, for a note beside Create sync rule, so the limit is
+ * known before a rule is built and previewed. None while nothing limits rules or the Plan is unknown.
+ */
+export function useRuleLimitNote(): string | undefined {
+  const { t } = useI18n()
+  const limit = usePlanHints()?.limits?.rules
+  return typeof limit === "number" ? t("rules.list.planLimit", { count: limit }) : undefined
 }

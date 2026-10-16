@@ -710,15 +710,25 @@ Indicator rule.
   follows the default while any other Plan stays. The result names the Plan ("robin@example.test
   now has Family.") in a status a screen reader announces. While the change is on its way, every
   control keeps focus with `aria-disabled`; a refusal shows under the select, which takes focus.
-- **Settings, Your account, Your plan** (`#your-plan`): for example "Family: 3 of 5 rules counted,
-  2 of 3 calendar accounts, 1 of 2 tokens, syncs about every 15 minutes". An administrator reads
-  "You administer this installation, so no plan limits you." Hidden while Plans are off and under
-  Only Me. Slice 4 adds the grace line ("On {date}, {n} rules will be held: your plan lets {limit}
+- **Settings, Your account, Your plan** (`#your-plan`): "You have Family, chosen by your
+  administrator.", then one row per limit with what counts toward it: "Rules that can sync",
+  "Calendar accounts you can connect", "Integration Tokens you can have", each "3 of 5 in use",
+  "No limit, 3 in use", or "Not included", and "How soon calendars sync" in the editor's words.
+  A count past its limit reads "6 in use, 5 allowed" in Attention Ochre, with an icon and a
+  sentence on what keeps working and how to make room, never color alone. The group closes with
+  "To change your plan, ask your administrator." Arriving by "See your plan" moves focus to its
+  heading. An administrator reads "You administer this installation, so no plan limits you."
+  Hidden while Plans are off and under Only Me. Slice 4 adds the grace line ("On {date}, {n} rules will be held: your plan lets {limit}
   sync."), with the step "Choose which keep syncing" and an inline checkbox list.
 - **Limits:** Start is disabled when `can_start` is false, with the refusal message and a link to
   Your plan. The preview footer shows the coded message, not "Try again in a moment". "Create sync
-  rule" stays enabled. Connect is disabled at the account limit, and Reauthorize stays enabled.
-  Issuing a token is disabled at the token limit. When the User has held rules or is over the limit,
+  rule" stays enabled; while a rule limit applies, a note beside it says "Your plan lets 5 rules
+  sync at once." with "See your plan". Connect is disabled at the account limit, and Reauthorize
+  stays enabled. At the token limit the token form stays focusable with `aria-disabled` and says
+  why: "Your plan allows 2 Integration Tokens, and all are in use. Revoke one to issue another.",
+  or, for a Plan with none, "Your plan does not include Integration Tokens. To get one, ask your
+  administrator." When Your plan cannot be read, every hint is left out and every control works;
+  the server still checks. When the User has held rules or is over the limit,
   a note before a privacy edit, a Pause, or a Disconnect says "Your plan may not let this rule start
   again."
 - **Held rule** (slice 4): a neutral badge "Held by your plan", the note "Resumes by itself when
