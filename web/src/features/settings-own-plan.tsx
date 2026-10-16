@@ -63,7 +63,7 @@ function OwnPlanLines({ plan }: { plan: OwnPlan }) {
       <p>{ownPlanSummary(i18n, plan)}</p>
       {plan.over_rule_limit && (
         <p className="field-hint" data-tone="attention">
-          {t("settings.ownPlan.overRules", { count: plan.limits?.rules ?? 0 })}
+          {t("settings.ownPlan.overRules")}
         </p>
       )}
     </>

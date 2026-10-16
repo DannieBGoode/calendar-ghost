@@ -81,16 +81,17 @@
     "title": "Your plan",
     "administrator": "You administer this installation, so no plan limits you.",
     "loadError": "Your plan could not load.",
-    "overRules": {
-      "one": "More rules count than your plan's {count}. Nothing stops, but no rule can start until fewer count.",
-      "other": "More rules count than your plan's {count}. Nothing stops, but no rule can start until fewer count."
-    },
+    "overRules": "More rules count than your plan allows. Nothing stops, but no rule can start until fewer count.",
     "name": "{name}",
     "nameDefault": "{name} (default)",
     "summary": "{plan}: {rules}, {accounts}, {tokens}, {cadence}",
     "rules": {
       "one": "{used} of {count} rule counted",
       "other": "{used} of {count} rules counted"
+    },
+    "rulesOver": {
+      "one": "{count} rule counted ({limit} allowed)",
+      "other": "{count} rules counted ({limit} allowed)"
     },
     "rulesUnlimited": {
       "one": "{count} rule counted",
@@ -100,6 +101,10 @@
       "one": "{used} of {count} calendar account",
       "other": "{used} of {count} calendar accounts"
     },
+    "accountsOver": {
+      "one": "{count} calendar account ({limit} allowed)",
+      "other": "{count} calendar accounts ({limit} allowed)"
+    },
     "accountsUnlimited": {
       "one": "{count} calendar account",
       "other": "{count} calendar accounts"
@@ -107,6 +112,10 @@
     "tokens": {
       "one": "{used} of {count} token",
       "other": "{used} of {count} tokens"
+    },
+    "tokensOver": {
+      "one": "{count} token ({limit} allowed)",
+      "other": "{count} tokens ({limit} allowed)"
     },
     "tokensUnlimited": {
       "one": "{count} token",

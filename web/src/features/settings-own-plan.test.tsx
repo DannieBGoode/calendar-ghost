@@ -201,7 +201,7 @@ describe("OwnPlanSection", () => {
     await renderSection(testI18n(), { ownPlan: jsonResponse(freeOverLimit) })
     // The first line is the summary; the over-limit note follows it.
     expect(section()?.querySelector("p")?.textContent).toBe(
-      "Free (default): 3 of 2 rules counted, 1 of 1 calendar account, no Integration Tokens, syncs about every 5 minutes",
+      "Free (default): 3 rules counted (2 allowed), 1 of 1 calendar account, no Integration Tokens, syncs about every 5 minutes",
     )
   })
 
@@ -219,7 +219,7 @@ describe("OwnPlanSection", () => {
   it("says when more rules count than the plan allows, as after an administrator is demoted, and that nothing stops", async () => {
     await renderSection(testI18n(), { ownPlan: jsonResponse(freeOverLimit) })
     const over = section()?.querySelector(".field-hint[data-tone='attention']")
-    expect(over?.textContent).toBe("More rules count than your plan's 2. Nothing stops, but no rule can start until fewer count.")
+    expect(over?.textContent).toBe("More rules count than your plan allows. Nothing stops, but no rule can start until fewer count.")
   })
 
   it("says nothing about the limit while the rules counted fit", async () => {

@@ -1,4 +1,5 @@
 import type { I18n } from "@/i18n/translator"
+import type { MessageKey } from "@/i18n/types"
 import type { OwnPlan, PersonPlan, PlanLimits, RegistrationPolicy, RuleDetail, SyncInterval } from "@/lib/api"
 
 /**
@@ -55,23 +56,39 @@ export function planLimitsSummary(i18n: I18n, { rules, connected_accounts, integ
   ])
 }
 
-function ruleUse({ t }: I18n, used: number, limit: number | null): string {
-  return limit === null
-    ? t("settings.ownPlan.rulesUnlimited", { count: used })
-    : t("settings.ownPlan.rules", { used, count: limit })
+/** How Your plan words one count: with no limit, within the limit, and past it. */
+type UseWords = { unlimited: MessageKey; within: MessageKey; over: MessageKey }
+
+const RULE_USE: UseWords = {
+  unlimited: "settings.ownPlan.rulesUnlimited",
+  within: "settings.ownPlan.rules",
+  over: "settings.ownPlan.rulesOver",
+}
+const ACCOUNT_USE: UseWords = {
+  unlimited: "settings.ownPlan.accountsUnlimited",
+  within: "settings.ownPlan.accounts",
+  over: "settings.ownPlan.accountsOver",
+}
+const TOKEN_USE: UseWords = {
+  unlimited: "settings.ownPlan.tokensUnlimited",
+  within: "settings.ownPlan.tokens",
+  over: "settings.ownPlan.tokensOver",
 }
 
-function accountUse({ t }: I18n, used: number, limit: number | null): string {
-  return limit === null
-    ? t("settings.ownPlan.accountsUnlimited", { count: used })
-    : t("settings.ownPlan.accounts", { used, count: limit })
+/**
+ * One count against its limit: "3 of 5 rules counted", whose noun follows the limit, reads right
+ * only within it. Past it, as after a limit is lowered, "6 rules counted (5 allowed)" follows the
+ * count in use.
+ */
+function limitUse({ t }: I18n, words: UseWords, used: number, limit: number | null): string {
+  if (limit === null) return t(words.unlimited, { count: used })
+  return used > limit ? t(words.over, { count: used, limit }) : t(words.within, { used, count: limit })
 }
 
-function tokenUse({ t }: I18n, used: number, limit: number | null): string {
-  if (limit === null) return t("settings.ownPlan.tokensUnlimited", { count: used })
+function tokenUse(i18n: I18n, used: number, limit: number | null): string {
   // A Plan may offer no tokens; one lowered to none still counts the tokens kept from before.
-  if (limit === 0 && used === 0) return t("settings.ownPlan.noTokens")
-  return t("settings.ownPlan.tokens", { used, count: limit })
+  if (limit === 0 && used === 0) return i18n.t("settings.ownPlan.noTokens")
+  return limitUse(i18n, TOKEN_USE, used, limit)
 }
 
 /**
@@ -84,8 +101,8 @@ export function ownPlanSummary(i18n: I18n, plan: OwnPlan): string | null {
   const { t } = i18n
   return t("settings.ownPlan.summary", {
     plan: t(applied.on_default ? "settings.ownPlan.nameDefault" : "settings.ownPlan.name", { name: applied.name }),
-    rules: ruleUse(i18n, plan.rules_counted, limits.rules),
-    accounts: accountUse(i18n, plan.connected_accounts, limits.connected_accounts),
+    rules: limitUse(i18n, RULE_USE, plan.rules_counted, limits.rules),
+    accounts: limitUse(i18n, ACCOUNT_USE, plan.connected_accounts, limits.connected_accounts),
     tokens: tokenUse(i18n, plan.integration_tokens, limits.integration_tokens),
     cadence: plan.instant
       ? t("settings.ownPlan.cadence.instant")

@@ -150,7 +150,33 @@ describe("ownPlanSummary", () => {
 
   it("still counts tokens kept from before a Plan that offers none", () => {
     expect(ownPlanSummary(i18n, { ...family, limits: { ...FAMILY_LIMITS, integration_tokens: 0 }, integration_tokens: 2 })).toBe(
-      "Family: 3 of 5 rules counted, 2 of 3 calendar accounts, 2 of 0 tokens, instant sync included",
+      "Family: 3 of 5 rules counted, 2 of 3 calendar accounts, 2 tokens (0 allowed), instant sync included",
+    )
+  })
+
+  it("counts past a limit by what is in use, and names the limit apart", () => {
+    const over: OwnPlan = {
+      ...family,
+      limits: { ...FAMILY_LIMITS, rules: 1, connected_accounts: 2, integration_tokens: 1 },
+      rules_counted: 2,
+      connected_accounts: 3,
+      integration_tokens: 2,
+    }
+    expect(ownPlanSummary(i18n, over)).toBe(
+      "Family: 2 rules counted (1 allowed), 3 calendar accounts (2 allowed), 2 tokens (1 allowed), instant sync included",
+    )
+  })
+
+  it("counts at a limit and under it against the limit", () => {
+    const at: OwnPlan = {
+      ...family,
+      limits: { ...FAMILY_LIMITS, rules: 1, connected_accounts: 1, integration_tokens: 1 },
+      rules_counted: 1,
+      connected_accounts: 0,
+      integration_tokens: 1,
+    }
+    expect(ownPlanSummary(i18n, at)).toBe(
+      "Family: 1 of 1 rule counted, 0 of 1 calendar account, 1 of 1 token, instant sync included",
     )
   })
 
