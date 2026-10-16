@@ -57,12 +57,14 @@ function Probe({ onHints }: { onHints: (next: Hints) => void }) {
   return null
 }
 
-async function render(answer: Response) {
+/** Renders the hints with `answer` to every read; `cached` is a Plan read before, such as on another page. */
+async function render(answer: Response, cached?: OwnPlan) {
   vi.stubGlobal(
     "fetch",
     vi.fn(() => Promise.resolve(answer)),
   )
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  if (cached) queryClient.setQueryData(OWN_PLAN_QUERY, cached)
   root = createRoot(document.createElement("div"))
   act(() => {
     root?.render(
@@ -137,6 +139,14 @@ describe("own plan hints", () => {
 
   it("gives no hint and no warning when the Plan cannot be read, so every control stays enabled", async () => {
     await render(jsonResponse({ detail: "Internal Server Error" }, 500))
+    expect(hints).toEqual({ loaded: true, warning: false, account: undefined, token: undefined })
+  })
+
+  it("drops the hints read before once the Plan cannot be read again, so a place freed since is not kept closed", async () => {
+    await render(jsonResponse({ detail: "Internal Server Error" }, 500), atEveryLimit)
+    // The failed refresh keeps the earlier answer in the cache; the hints must not follow it.
+    expect(queryClient.getQueryState(OWN_PLAN_QUERY)?.status).toBe("error")
+    expect(queryClient.getQueryData(OWN_PLAN_QUERY)).toEqual(atEveryLimit)
     expect(hints).toEqual({ loaded: true, warning: false, account: undefined, token: undefined })
   })
 })
