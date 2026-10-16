@@ -373,6 +373,7 @@
       },
       "onNobody": "On. Nobody is limited yet.",
       "off": "Off. Nobody is limited.",
+      "offChosen": "Off. Nobody is limited. Turning this on also makes {name} the default plan.",
       "offNoDefault": "Off. Nobody is limited. With no default plan, turning this on adds one named No limits, which limits nobody."
     },
     "default": {

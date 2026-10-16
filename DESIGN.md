@@ -358,8 +358,10 @@ a Fraunces title with one sentence and "Invite someone" as the page's one primar
 tabs (Everyone first, then Invitations with a count of those waiting, hidden at zero, then Plans).
 Plans sit beside the people they limit, so Settings keeps only each person's own Your plan. The
 Plans tab runs in the order setting up needs: each Plan with whom it limits, then Add a plan, then
-the Default plan, saved only with Save default, then Limit people with plans, which says whether
-Plans are on and whom they limit; with no Plan it is one empty state whose action is Add a plan.
+the Default plan, saved with Save default, then Limit people with plans, which says whether
+Plans are on and whom they limit. The box sends the plan the Default plan select shows, saved or
+not, and says before what turning on does with it, so a choice not saved yet is never ignored;
+with no Plan it is one empty state whose action is Add a plan.
 The default Plan has no Remove; where Remove would be, it says to choose another default first. On
 a Plan someone has, Remove says at once how many people have it, instead of a confirmation the
 server would refuse. The Plan form asks for a name and the limits, never a key. While a Plan

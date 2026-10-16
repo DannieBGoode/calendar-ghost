@@ -687,10 +687,12 @@ Indicator rule.
   "Default plan. Choose another default to remove it."; Remove on a Plan someone has says at once
   "2 people have Family. Give them another plan to remove it." instead of a confirmation the
   server would refuse; on any other Plan it confirms inline. Then a select for the default, which
-  saves only with "Save default", shown while the choice differs from the saved one. Last, the
+  saves with "Save default", shown while the choice differs from the saved one. Last, the
   checkbox "Limit people with plans", never disabled, which says its state and whom it limits
-  ("On. 3 people are limited.", "Off. Nobody is limited."); with no default it adds that turning it
-  on adds a Plan named No limits, which limits nobody. While a setting change is on its way, both
+  ("On. 3 people are limited.", "Off. Nobody is limited."). It sends the default the select shows,
+  saved or not, so a choice not saved yet is never ignored, and says before what that does: with
+  none, that turning it on adds a Plan named No limits, which limits nobody; with a choice not saved
+  yet, "Turning this on also makes Free the default plan." While a setting change is on its way, both
   controls keep focus with `aria-disabled`; a refusal shows under the control that sent it, which
   takes focus. The form asks for a name and no key (the server makes it from the name, and the UI
   never shows it). Under "Limits for each person" each limit is "No limit" or a whole number, with

@@ -396,6 +396,60 @@ describe("People's Plans tab", () => {
     expect(element("plans-enabled-hint").textContent).toBe("On. 5 people are limited.")
   })
 
+  it("turns plans on with the default chosen but not saved yet, and says so before", async () => {
+    await renderPlans(testI18n(), {
+      answers: { "PUT /api/v1/plan-settings": jsonResponse(overview({ enabled: true, defaultPlan: "free" })) },
+    })
+    await choose(select("plans-default"), "free")
+    expect(element("plans-enabled-hint").textContent).toBe(
+      "Off. Nobody is limited. Turning this on also makes Free the default plan.",
+    )
+
+    await click(field("plans-enabled"))
+    expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: true, default_plan: "free" })
+    expect(status()).toBe("Plans now limit 5 people.")
+    expect(select("plans-default").value).toBe("free")
+    expect(buttonOrNull("Save default")).toBeNull()
+    expect(element("plans-enabled-hint").textContent).toBe("On. 5 people are limited.")
+  })
+
+  it("turns plans on with No default chosen but not saved yet, which adds No limits, and says so before", async () => {
+    await renderPlans(testI18n(), { plans: overview({ defaultPlan: "free" }) })
+    await choose(select("plans-default"), "")
+    expect(element("plans-enabled-hint").textContent).toBe(
+      "Off. Nobody is limited. With no default plan, turning this on adds one named No limits, which limits nobody.",
+    )
+    await click(field("plans-enabled"))
+    expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: true, default_plan: null })
+  })
+
+  it("turns plans off with the default the select shows, so no unsaved choice is left behind", async () => {
+    await renderPlans(testI18n(), {
+      plans: overview({ enabled: true, defaultPlan: "free" }),
+      answers: { "PUT /api/v1/plan-settings": jsonResponse(overview({ defaultPlan: "family" })) },
+    })
+    await choose(select("plans-default"), "family")
+    await click(field("plans-enabled"))
+    expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: false, default_plan: "family" })
+    expect(status()).toBe("Plans no longer limit anyone.")
+    expect(select("plans-default").value).toBe("family")
+    expect(buttonOrNull("Save default")).toBeNull()
+  })
+
+  it("keeps the unsaved default chosen when turning plans on is refused", async () => {
+    await renderPlans(testI18n(), {
+      answers: { "PUT /api/v1/plan-settings": refusal(404, "plan_not_found") },
+    })
+    await choose(select("plans-default"), "free")
+    await click(field("plans-enabled"))
+    expect(element("plans-enabled-error").textContent).toBe(
+      "This plan no longer exists. Reload to see the current plans.",
+    )
+    expect(document.activeElement).toBe(field("plans-enabled"))
+    expect(select("plans-default").value).toBe("free")
+    expect(buttonOrNull("Save default")).not.toBeNull()
+  })
+
   it("keeps the box ticked and focused while turning plans on is on its way, ignoring another click", async () => {
     const neverAnswered = new Promise<Response>(() => undefined)
     await renderPlans(testI18n(), {

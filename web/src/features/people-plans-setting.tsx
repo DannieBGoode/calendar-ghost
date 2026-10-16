@@ -20,31 +20,42 @@ function sentByBox(setting: Setting, overview: PlansOverview): boolean {
   return setting.variables !== undefined && setting.variables.enabled !== overview.enabled
 }
 
-/** Whether Plans are on, and whom they limit: what the on/off box says beside it. */
-function enabledState({ t }: I18n, { enabled, default_plan, plans }: PlansOverview): string {
-  if (!enabled) return t(default_plan === null ? "people.plans.enabled.offNoDefault" : "people.plans.enabled.off")
+/**
+ * Whether Plans are on, and whom they limit: what the on/off box says beside it. While off, it says
+ * what turning them on does with the default the select shows (`shown`, a Plan's key or "" for
+ * none), saved or not.
+ */
+function enabledState({ t }: I18n, { enabled, default_plan, plans }: PlansOverview, shown: string): string {
+  if (!enabled) {
+    if (!shown) return t("people.plans.enabled.offNoDefault")
+    const chosen = shown === default_plan ? undefined : plans.find((plan) => plan.key === shown)
+    return chosen ? t("people.plans.enabled.offChosen", { name: chosen.name }) : t("people.plans.enabled.off")
+  }
   const count = limitedPeople(plans)
   return count > 0 ? t("people.plans.enabled.on", { count }) : t("people.plans.enabled.onNobody")
 }
 
 /**
  * The installation's Plans setting, after the Plans it needs: the Default Plan, then whether Plans
- * limit people. While a change is on its way both controls keep focus but ignore input; a refusal
- * shows under the control that sent it, which takes focus.
+ * limit people. Both send the default the select shows, so a choice not saved yet is never left
+ * behind. While a change is on its way both controls keep focus but ignore input; a refusal shows
+ * under the control that sent it, which takes focus.
  */
 export function PlansSetting({ overview, commands }: { overview: PlansOverview; commands: PlanCommands }) {
+  const choice = useDefaultChoice(overview, commands.setting)
   return (
     <div className="settings-list">
-      <DefaultItem overview={overview} commands={commands} />
-      <EnabledItem overview={overview} commands={commands} />
+      <DefaultItem overview={overview} commands={commands} choice={choice} />
+      <EnabledItem overview={overview} commands={commands} choice={choice} />
     </div>
   )
 }
 
 /**
  * The Default Plan as chosen here: the choice, which follows the saved default until another is
- * chosen, and its refusal, which takes focus as it arrives. Saving it sends nothing new while the
- * choice is the saved default or a change is on its way, and returns focus to the choice once saved.
+ * chosen or a change saves it, and its refusal, which takes focus as it arrives. Saving it sends
+ * nothing new while the choice is the saved default or a change is on its way, and returns focus to
+ * the choice once saved.
  */
 function useDefaultChoice(overview: PlansOverview, setting: Setting) {
   const select = useRef<HTMLSelectElement>(null)
@@ -76,19 +87,24 @@ function useDefaultChoice(overview: PlansOverview, setting: Setting) {
       },
     )
   }
-  return { select, value, changed: value !== saved, refused, choose, save }
+  // The on/off box saves the choice too, so it goes once the box's change is saved.
+  const settle = () => setChoice(null)
+  return { select, value, changed: value !== saved, refused, choose, save, settle }
 }
+
+type DefaultChoice = ReturnType<typeof useDefaultChoice>
+type ItemProps = { overview: PlansOverview; commands: PlanCommands; choice: DefaultChoice }
 
 /**
  * The Default Plan. Choosing one saves nothing until Save default, which shows only while the
- * choice differs from the saved default. It cannot be cleared while Plans limit people.
+ * choice differs from the saved default, or until the on/off box sends it. It cannot be cleared
+ * while Plans limit people.
  */
-function DefaultItem({ overview, commands }: { overview: PlansOverview; commands: PlanCommands }) {
+function DefaultItem({ overview, commands, choice }: ItemProps) {
   const i18n = useI18n()
   const { t } = i18n
-  const { setting } = commands
-  const pending = setting.isPending || undefined
-  const { select, value, changed, refused, choose, save } = useDefaultChoice(overview, setting)
+  const pending = commands.setting.isPending || undefined
+  const { select, value, changed, refused, choose, save } = choice
 
   return (
     <div className="setting-item">
@@ -136,10 +152,11 @@ function DefaultItem({ overview, commands }: { overview: PlansOverview; commands
 }
 
 /**
- * Whether Plans limit people, last, since it needs a Plan to have. With no default, turning it on
- * makes the server add a No limits Plan as the default, so it says so before.
+ * Whether Plans limit people, last, since it needs a Plan to have. It sends the default the select
+ * shows, saved or not, and says before what that does: with none, the server adds a No limits Plan
+ * as the default.
  */
-function EnabledItem({ overview, commands }: { overview: PlansOverview; commands: PlanCommands }) {
+function EnabledItem({ overview, commands, choice }: ItemProps) {
   const i18n = useI18n()
   const { t } = i18n
   const { setting } = commands
@@ -166,12 +183,16 @@ function EnabledItem({ overview, commands }: { overview: PlansOverview; commands
             aria-invalid={refused ? true : undefined}
             aria-disabled={pending || undefined}
             onChange={(event) =>
-              !pending && setting.mutate({ enabled: event.target.checked, defaultPlan: overview.default_plan })
+              !pending &&
+              setting.mutate(
+                { enabled: event.target.checked, defaultPlan: choice.value || null },
+                { onSuccess: choice.settle },
+              )
             }
           />
           <span>
             <strong id="plans-enabled-label">{t("people.plans.enabled.label")}</strong>
-            <small id="plans-enabled-hint">{enabledState(i18n, overview)}</small>
+            <small id="plans-enabled-hint">{enabledState(i18n, overview, choice.value)}</small>
           </span>
         </label>
       </div>
