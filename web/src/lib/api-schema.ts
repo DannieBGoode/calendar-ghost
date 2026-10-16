@@ -2108,6 +2108,8 @@ export interface components {
             id: string;
             /** Initial Lookback Days */
             initial_lookback_days: number;
+            /** Keeps Place */
+            keeps_place: boolean;
             last_reconciliation: components["schemas"]["RunOutcomeResponse"] | null;
             last_sync: components["schemas"]["RunOutcomeResponse"] | null;
             latest_preview: components["schemas"]["PreviewSummaryResponse"] | null;
@@ -2208,6 +2210,8 @@ export interface components {
             effective_cadence: "instant" | "not_watchable" | "waiting_for_provider" | "off_by_user" | "not_in_plan" | "no_public_address" | "not_reaching";
             /** Id */
             id: string;
+            /** Keeps Place */
+            keeps_place: boolean;
             last_sync: components["schemas"]["RunOutcomeResponse"] | null;
             latest_preview: components["schemas"]["PreviewSummaryResponse"] | null;
             /** Poll Every Minutes */

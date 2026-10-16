@@ -3050,6 +3050,10 @@
             "title": "Initial Lookback Days",
             "type": "integer"
           },
+          "keeps_place": {
+            "title": "Keeps Place",
+            "type": "boolean"
+          },
           "last_reconciliation": {
             "anyOf": [
               {
@@ -3174,7 +3178,8 @@
           "latest_preview",
           "running",
           "can_start",
-          "rule_limit"
+          "rule_limit",
+          "keeps_place"
         ],
         "title": "RuleDetailResponse",
         "type": "object"
@@ -3338,6 +3343,10 @@
             "title": "Id",
             "type": "string"
           },
+          "keeps_place": {
+            "title": "Keeps Place",
+            "type": "boolean"
+          },
           "last_sync": {
             "anyOf": [
               {
@@ -3432,7 +3441,8 @@
           "poll_every_minutes",
           "last_sync",
           "latest_preview",
-          "running"
+          "running",
+          "keeps_place"
         ],
         "title": "RuleSummaryResponse",
         "type": "object"

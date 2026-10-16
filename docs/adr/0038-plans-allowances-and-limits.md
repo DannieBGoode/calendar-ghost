@@ -69,7 +69,10 @@ limits, and Instant Sync or a five-minute sync per Plan. Later slices add their 
   otherwise a User could disconnect one account, connect another, and reauthorize the first.
   `installation:read` tokens are for administrators only, who are never limited, so health
   monitoring is never blocked. The rule page answers `can_start` and `rule_limit`, so the Web UI
-  disables Start with the message a refused Start shows and computes nothing itself.
+  disables Start with the message a refused Start shows and computes nothing itself. Rules and
+  rule details also answer `keeps_place`, so a list that has no `can_start` can tell from Your
+  plan that a previewed rule would be refused, and say so with the same message; while Your plan
+  cannot be read, it says nothing, and Start still checks.
 - **Only Rule Replacement keeps a place.** A rule's place under the rule limit is its counting
   toward it. Drafts, previewed rules, and paused rules do not count. A rule stopped by a provider
   error, or paused by a Material Rule Change, gives up its place, and its restart is checked like
@@ -152,7 +155,8 @@ With Plans off nothing changes, and every existing test keeps its expected behav
 The Web API gains the administrator's Plans routes (`GET` and `POST /api/v1/plans`, `PUT` and
 `DELETE /api/v1/plans/{plan_key}`, `PUT /api/v1/plan-settings`, and
 `PUT /api/v1/users/{user_id}/plan`), and `GET /api/v1/account/plan` for Your plan. Rule details
-gain `can_start` and `rule_limit`, and the person's overview gains `plan`. The new problem codes
+gain `can_start` and `rule_limit`, rules and rule details gain `keeps_place`, and the person's
+overview gains `plan`. The new problem codes
 are `plan_limit_reached`, `plans_need_default`, `plan_not_found`, `plan_key_taken`, `plan_in_use`,
 `plan_is_default`, and `invalid_plan`. A malformed Plan key in a path, the default, or an
 assignment names no Plan, so it answers 404 `plan_not_found`; a malformed new key answers 422

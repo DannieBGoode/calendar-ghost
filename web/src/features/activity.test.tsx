@@ -61,6 +61,7 @@ const rule: RuleSummary = {
   last_sync: null,
   latest_preview: null,
   running: null,
+  keeps_place: false,
 }
 
 function recorded(title: string, overrides: Partial<RecordedEvent> = {}): RecordedEvent {

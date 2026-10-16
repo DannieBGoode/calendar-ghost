@@ -296,6 +296,9 @@ class RuleSummaryResponse(RuleResponse):
     last_sync: RunOutcomeResponse | None
     latest_preview: PreviewSummaryResponse | None
     running: RuleWorkResponse | None
+    keeps_place: bool
+    """A Rule Replacement draft that keeps the previous rule's place under its User's rule limit,
+    so starting it adds no rule to the count (ADR 0038)."""
 
 
 class RuleDetailResponse(RuleResponse):
@@ -314,6 +317,9 @@ class RuleDetailResponse(RuleResponse):
     """Whether the rule may start now under its User's rule limit; Start checks again."""
     rule_limit: int | None
     """The rule limit that applies to the User; null when none does."""
+    keeps_place: bool
+    """A Rule Replacement draft that keeps the previous rule's place under its User's rule limit,
+    so starting it adds no rule to the count (ADR 0038)."""
 
 
 class UpdateRulePolicyRequest(BaseModel):

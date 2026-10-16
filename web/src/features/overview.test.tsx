@@ -71,6 +71,7 @@ const rule: RuleSummary = {
   },
   latest_preview: null,
   running: null,
+  keeps_place: false,
 }
 
 // A problem an Incident explains carries its message, which the Overview translates; its stored
@@ -246,6 +247,21 @@ async function renderOverview(i18n: I18n, scenario: Scenario) {
   return { container }
 }
 
+/** One rule counts and the plan lets one sync, so no other rule may start. */
+const atRuleLimit: OwnPlan = {
+  basis: "plan",
+  plan: { key: "free", name: "Free", on_default: true },
+  limits: { rules: 1, connected_accounts: 2, integration_tokens: 0, sync_interval: "5_minutes" },
+  rules_counted: 1,
+  connected_accounts: 2,
+  integration_tokens: 0,
+  instant: false,
+  poll_every_minutes: 5,
+  may_connect_account: false,
+  may_issue_token: false,
+  over_rule_limit: false,
+}
+
 describe("OverviewView", () => {
   it("puts what an open Incident says in the rule's problem sentence", async () => {
     const { container } = await renderOverview(testI18n(), {
@@ -347,6 +363,29 @@ describe("OverviewView", () => {
     expect(document.getElementById(connect.getAttribute("aria-describedby") ?? "")?.textContent).toBe(
       "Your plan allows 1 calendar account, and disconnected accounts count too. See your plan",
     )
+  })
+
+  it.each<[string, OwnPlan | undefined, string]>([
+    ["will not let it start", { ...atRuleLimit }, "Previewed"],
+    ["has room for it", { ...atRuleLimit, rules_counted: 0 }, "Ready to start"],
+    ["names no plan", undefined, "Ready to start"],
+  ])("badges a previewed rule by whether it may start when the plan %s", async (_case, ownPlan, badge) => {
+    const previewed: RuleSummary = {
+      ...rule,
+      id: "rule-2",
+      state: "dry_run_validated",
+      source: { ...rule.destination },
+      destination: { ...rule.source },
+      last_sync: null,
+    }
+    const { container } = await renderOverview(testI18n(), {
+      dashboard: attentionDashboard,
+      rules: [rule, previewed],
+      recentChanges: [],
+      ...(ownPlan ? { ownPlan } : {}),
+    })
+    const row = container.querySelector<HTMLElement>(".overview-rules a[href='/rules/rule-2']")?.closest("li")
+    expect(row?.lastElementChild?.textContent.trim()).toBe(badge)
   })
 
   it("has no untranslated text for a rule with an open incident and a repeated change", async () => {

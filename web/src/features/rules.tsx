@@ -35,6 +35,7 @@ import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
 import { busyCommand, ruleWork, workRefreshInterval, type RuleWork } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
+import { usePreviewedStartRefusal } from "@/lib/use-own-plan"
 import { useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 
@@ -287,6 +288,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
   })
   const pending = busyCommand(commands.pending[rule.id], work)
   const state = removing ? "removing" : rule.state
+  const refusal = usePreviewedStartRefusal()({ state, keeps_place: rule.keeps_place })
   const headingId = `rule-${rule.id}-name`
   const previewId = `rule-${rule.id}-preview`
   const run = (command: Parameters<typeof commands.run>[1]) =>
@@ -305,7 +307,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
       <div className="rule-main">
         <RuleSummaryLine rule={rule} endpoints={endpoints} headingId={headingId} now={now} />
         <div className="rule-actions">
-          <RuleStatusBadge state={state} stopped={stopped} working={work?.kind} />
+          <RuleStatusBadge state={state} stopped={stopped} working={work?.kind} refused={refusal !== null} />
           <RuleNextAction
             ruleId={rule.id}
             state={state}
@@ -346,6 +348,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
         work={work}
         feedback={commands.feedback[rule.id]}
         previewId={previewId}
+        refusal={refusal}
       />
     </li>
   )
@@ -404,6 +407,7 @@ function RuleNotes({
   work,
   feedback,
   previewId,
+  refusal,
 }: {
   rule: RuleSummary
   endpoints: RuleEndpoints
@@ -412,6 +416,8 @@ function RuleNotes({
   work: RuleWork | null
   feedback: RuleFeedback | undefined
   previewId: string
+  /** Why the User's Plan would refuse a previewed rule's Start; null when it may start. */
+  refusal: string | null
 }) {
   const { t, format } = useI18n()
   const { source, destination, unauthorized } = endpoints
@@ -428,7 +434,7 @@ function RuleNotes({
         </p>
       )}
       {state === "dry_run_validated" && (
-        <PreviewReadyNote id={previewId} preview={rule.latest_preview} destination={destination.name} />
+        <PreviewReadyNote id={previewId} preview={rule.latest_preview} destination={destination.name} refusal={refusal} />
       )}
       {work ? (
         <RuleWorkNote work={work} source={source.name} destination={destination.name} />

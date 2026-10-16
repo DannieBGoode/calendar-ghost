@@ -296,6 +296,7 @@ function ruleSummary(id: string, overrides: Partial<RuleSummary>): RuleSummary {
     last_sync: lastSync,
     latest_preview: null,
     running: null,
+    keeps_place: false,
     ...overrides,
   }
 }
@@ -469,6 +470,51 @@ describe("RulesView", () => {
     expect(pauseDescription("More actions for Work A to Work B1")).toBe(
       "Stop writing to Work B1. Existing events stay; resuming needs a new preview.",
     )
+  })
+
+  describe("a previewed rule the plan will not let start", () => {
+    /** At the rule limit, but not past it: one more rule may not start. */
+    const atTheLimit: OwnPlan = { ...overTheLimit, rules_counted: 1, over_rule_limit: false }
+    const REFUSAL = "Your plan lets 1 rule sync. Pause or remove it to start this rule."
+
+    function previewedRow(): HTMLElement {
+      return container.querySelector<HTMLElement>("#rule-previewed-name")!.closest("li")!
+    }
+
+    it("says why it cannot start, with a link to Your plan, instead of Ready to start", async () => {
+      await renderRulesList(testI18n(), { ownPlan: jsonResponse(atTheLimit) })
+      const row = previewedRow()
+      expect(row.querySelector(".rule-actions")?.textContent).toContain("PreviewedReview and start")
+      expect(row.textContent).not.toContain("Ready to start")
+      const note = row.querySelector<HTMLElement>("#rule-previewed-preview")!
+      expect(note.textContent).toBe(`${REFUSAL} See your plan`)
+      expect(note.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+      // Review and start still leads to the preview, and says why first.
+      const review = [...row.querySelectorAll("a")].find((anchor) => anchor.textContent === "Review and start")!
+      expect(review.getAttribute("aria-describedby")).toBe("rule-previewed-name rule-previewed-preview")
+    })
+
+    it("reads Ready to start when it keeps a replaced rule's place, which starts whatever the limit", async () => {
+      const rows = RULE_ROWS.map((row) => (row.id === "previewed" ? { ...row, keeps_place: true } : row))
+      await renderRulesList(testI18n(), { rows, ownPlan: jsonResponse(atTheLimit) })
+      expect(previewedRow().textContent).toContain("Ready to startReview and start")
+      expect(previewedRow().textContent).not.toContain(REFUSAL)
+    })
+
+    it.each([
+      ["has room", jsonResponse({ ...atTheLimit, rules_counted: 0 })],
+      ["names no plan", jsonResponse({})],
+      ["cannot be read", planUnreadable],
+    ])("reads Ready to start when the own plan %s", async (_case, ownPlan) => {
+      await renderRulesList(testI18n(), { ownPlan })
+      expect(previewedRow().textContent).toContain("Ready to startReview and start")
+      expect(previewedRow().textContent).toContain("Previewed just now: 3 events will appear in Work D1, 1 excluded.")
+    })
+
+    it("has no untranslated text", async () => {
+      await renderRulesList(pseudoI18n(), { ownPlan: jsonResponse(atTheLimit) })
+      expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+    })
   })
 
   it("has no untranslated text in Pause's plan note", async () => {

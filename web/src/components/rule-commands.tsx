@@ -3,6 +3,7 @@ import { CheckCircle2, CircleAlert, CircleDot, CirclePause, LoaderCircle, Shield
 import { OverflowMenu, type OverflowMenuItem } from "@/components/overflow-menu"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { YourPlanLink } from "@/components/your-plan-link"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { PreviewSummary } from "@/lib/api"
@@ -18,16 +19,19 @@ const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
 /**
  * `removing` is a display state for a running Rule Removal, not a stored one. `working` names
- * other work running now, which says more than the stored state while it lasts.
+ * other work running now, which says more than the stored state while it lasts. A previewed rule
+ * whose Start the User's Plan would refuse reads "Previewed", not "Ready to start".
  */
 export function RuleStatusBadge({
   state,
   stopped,
   working,
+  refused,
 }: {
   state: string
   stopped: boolean
   working?: RuleWorkKind | undefined
+  refused?: boolean
 }) {
   const i18n = useI18n()
   if (state === "removing" || working) {
@@ -55,9 +59,14 @@ export function RuleStatusBadge({
   return (
     <Badge variant="neutral">
       {state === "paused" ? <CirclePause aria-hidden="true" /> : <CircleDot aria-hidden="true" />}{" "}
-      {ruleStateLabel(i18n, state)}
+      {restingLabel(i18n, state, refused === true)}
     </Badge>
   )
+}
+
+/** A rule's state while it neither runs nor stopped; "Previewed" when its Plan would refuse Start. */
+function restingLabel(i18n: I18n, state: string, refused: boolean): string {
+  return state === "dry_run_validated" && refused ? i18n.t("ruleDetails.state.previewed") : ruleStateLabel(i18n, state)
 }
 
 /** The one visible next step for a rule; routine commands live in the overflow menu. */
@@ -207,18 +216,30 @@ function pauseDescription({ t }: I18n, destination: string, mayNotRestart: boole
   return mayNotRestart ? `${description} ${t("common.plan.mayNotRestart")}` : description
 }
 
-/** What the latest preview found, which Review and start leads back to. */
+/**
+ * What the latest preview found, which Review and start leads back to; or, when the User's Plan
+ * would refuse Start, why, in the words the preview page uses, with a link to Your plan.
+ */
 export function PreviewReadyNote({
   id,
   preview,
   destination,
+  refusal = null,
 }: {
   id: string
   preview: PreviewSummary | null | undefined
   destination: string
+  refusal?: string | null
 }) {
   const i18n = useI18n()
   const now = useNow()
+  if (refusal !== null) {
+    return (
+      <p id={id} className="rule-note">
+        {refusal} <YourPlanLink />
+      </p>
+    )
+  }
   return (
     <p id={id} className="rule-note">
       {previewReadyLabel(i18n, preview, destination, now)}

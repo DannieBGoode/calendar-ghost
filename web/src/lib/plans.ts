@@ -1,6 +1,6 @@
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
-import type { OwnPlan, PersonPlan, PlanLimits, RegistrationPolicy, RuleDetail, SyncInterval } from "@/lib/api"
+import type { OwnPlan, PersonPlan, PlanLimits, RegistrationPolicy, RuleDetail, RuleSummary, SyncInterval } from "@/lib/api"
 
 /**
  * Whether Your plan shows: only when a Plan limits the User, or for an administrator while other
@@ -32,6 +32,22 @@ export function startRefusal(
   return rule_limit === null
     ? t("common.apiError.plan_limit_reached")
     : t("common.apiError.plan_limit_reached_rules", { count: rule_limit })
+}
+
+/**
+ * The refusal Start would meet for a previewed rule, read from Your plan where a page has no
+ * `can_start`, such as the Rules list: once the rules counted reach the rule limit, a previewed
+ * rule cannot start unless it keeps a replaced rule's place. Null when it may start, and while
+ * the Plan is unknown, since Start still checks.
+ */
+export function previewedStartRefusal(
+  i18n: I18n,
+  plan: OwnPlan | undefined,
+  { state, keeps_place }: Pick<RuleSummary, "state" | "keeps_place">,
+): string | null {
+  const limit = plan?.limits?.rules
+  if (state !== "dry_run_validated" || keeps_place || plan === undefined || typeof limit !== "number") return null
+  return startRefusal(i18n, { can_start: plan.rules_counted < limit, rule_limit: limit })
 }
 
 /** How soon a Plan's rules sync, as an administrator chooses it. */

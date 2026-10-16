@@ -33,6 +33,7 @@ import { REMOVAL_REFRESH_MS, reportedRemoval, useActiveRemoval, type ActiveRemov
 import { recoveryExplanation } from "@/lib/rule-run"
 import { busyCommand, ruleWork, workRefreshInterval, type RuleWork } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
+import { usePreviewedStartRefusal } from "@/lib/use-own-plan"
 import { useRuleCalendars, type CalendarsByAccount } from "@/lib/use-rule-calendars"
 import { useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
 
@@ -214,6 +215,8 @@ function RuleDetailsPage({
     calendarsByAccount.get(detail.destination.connected_account_id),
   ).calendar
   const displayState = removal ? "removing" : detail.state
+  // Read from Your plan, as the Rules list does, since a change to another rule moves it.
+  const refusal = usePreviewedStartRefusal()({ state: displayState, keeps_place: detail.keeps_place })
   const work = ruleWork({
     pending: commands.pending[detail.id],
     pendingSince: commands.pendingSince[detail.id],
@@ -244,6 +247,7 @@ function RuleDetailsPage({
             state={displayState}
             stopped={detail.state === "degraded" || unauthorized !== undefined}
             working={work?.kind}
+            refused={refusal !== null}
           />
           <RuleNextAction
             ruleId={detail.id}
@@ -267,6 +271,7 @@ function RuleDetailsPage({
       <RuleNotes
         detail={detail}
         displayState={displayState}
+        refusal={refusal}
         unauthorized={unauthorized}
         work={work}
         feedback={commands.feedback[detail.id]}
@@ -348,6 +353,7 @@ function RuleHeading({
 function RuleNotes({
   detail,
   displayState,
+  refusal,
   unauthorized,
   work,
   feedback,
@@ -357,6 +363,8 @@ function RuleNotes({
 }: {
   detail: RuleDetail
   displayState: string
+  /** Why the User's Plan would refuse a previewed rule's Start; null when it may start. */
+  refusal: string | null
   unauthorized: ConnectedAccount | undefined
   work: RuleWork | null
   feedback: RuleFeedback | undefined
@@ -381,7 +389,12 @@ function RuleNotes({
         </div>
       )}
       {displayState === "dry_run_validated" && (
-        <PreviewReadyNote id="rule-preview-ready" preview={detail.latest_preview} destination={destinationName} />
+        <PreviewReadyNote
+          id="rule-preview-ready"
+          preview={detail.latest_preview}
+          destination={destinationName}
+          refusal={refusal}
+        />
       )}
       {/* Removal shows its own progress in the removal section. */}
       {work && work.kind !== "removal" ? (

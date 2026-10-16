@@ -48,6 +48,7 @@ const previewedRule: RuleDetail = {
   running: null,
   can_start: true,
   rule_limit: null,
+  keeps_place: false,
 }
 
 const today = new Date()

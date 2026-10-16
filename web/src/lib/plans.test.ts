@@ -9,6 +9,7 @@ import {
   personPlanFact,
   planLimitsSummary,
   planWarning,
+  previewedStartRefusal,
   startRefusal,
 } from "@/lib/plans"
 
@@ -89,6 +90,31 @@ describe("startRefusal", () => {
     expect(startRefusal(i18n, { can_start: false, rule_limit: null })).toBe(
       "Your plan's limit is reached. Settings, Your account, Your plan shows what it allows.",
     )
+  })
+})
+
+describe("previewedStartRefusal", () => {
+  const previewed = { state: "dry_run_validated", keeps_place: false }
+  const atFamilyLimit: OwnPlan = { ...family, rules_counted: 5 }
+  const refusal = "Your plan lets 5 rules sync. Pause or remove one to start this rule."
+
+  it.each<[string, OwnPlan, string | null]>([
+    ["room under the limit", family, null],
+    ["the limit reached", atFamilyLimit, refusal],
+    ["more counted than the limit", { ...atFamilyLimit, rules_counted: 6, over_rule_limit: true }, refusal],
+    ["no rule limit", { ...atFamilyLimit, limits: UNLIMITED }, null],
+    ["Plans off", plansOff, null],
+  ])("answers for a previewed rule with %s", (_case, plan, expected) => {
+    expect(previewedStartRefusal(i18n, plan, previewed)).toBe(expected)
+  })
+
+  it("lets a rule that keeps a replaced rule's place start whatever the limit", () => {
+    expect(previewedStartRefusal(i18n, atFamilyLimit, { ...previewed, keeps_place: true })).toBeNull()
+  })
+
+  it("says nothing of a rule that is not waiting to start, or while the Plan is unknown", () => {
+    expect(previewedStartRefusal(i18n, atFamilyLimit, { ...previewed, state: "draft" })).toBeNull()
+    expect(previewedStartRefusal(i18n, undefined, previewed)).toBeNull()
   })
 })
 

@@ -99,6 +99,7 @@ const enabledRule: RuleDetail = {
   poll_every_minutes: 5,
   can_start: true,
   rule_limit: null,
+  keeps_place: false,
 }
 
 /** Someone whose rules count past their plan's limit, so a rule they stop may not start again. */
@@ -364,6 +365,35 @@ describe("RuleDetailsView", () => {
     click(container.querySelector('[aria-controls="policy-form"]'))
     expect(container.querySelector("#policy-form")).not.toBeNull()
     expect(container.querySelector("#policy-form")?.textContent).not.toContain("Your plan")
+  })
+
+  describe("a previewed rule the plan will not let start", () => {
+    const previewed: RuleDetail = {
+      ...enabledRule,
+      state: "dry_run_validated",
+      latest_preview: { completed_at: justNow, eligible_events: 3, excluded_events: 0, recurring_series: 0, occurrence_changes: 0 },
+    }
+    /** At the rule limit, but not past it: one more rule may not start. */
+    const atTheLimit: OwnPlan = { ...overTheLimit, rules_counted: 1, over_rule_limit: false }
+
+    it("says why it cannot start, with a link to Your plan, instead of Ready to start", async () => {
+      await renderDetails(testI18n(), previewed, null, jsonResponse(atTheLimit))
+      expect(container.querySelector(".rule-actions")?.textContent).toContain("PreviewedReview and start")
+      expect(container.textContent).not.toContain("Ready to start")
+      const note = container.querySelector<HTMLElement>("#rule-preview-ready")!
+      expect(note.textContent).toBe("Your plan lets 1 rule sync. Pause or remove it to start this rule. See your plan")
+      expect(note.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+    })
+
+    it.each([
+      ["keeps a replaced rule's place", { ...previewed, keeps_place: true }, jsonResponse(atTheLimit)],
+      ["has room under the plan", previewed, jsonResponse({ ...atTheLimit, rules_counted: 0 })],
+      ["cannot read the plan", previewed, jsonResponse({ detail: "database is locked" }, 500)],
+    ])("reads Ready to start when it %s", async (_case, rule, ownPlan) => {
+      await renderDetails(testI18n(), rule, null, ownPlan)
+      expect(container.querySelector(".rule-actions")?.textContent).toContain("Ready to startReview and start")
+      expect(container.querySelector("#rule-preview-ready")?.textContent).toContain("3 events will appear in Work")
+    })
   })
 
   it("has no untranslated text with the plan's note before a privacy edit", async () => {

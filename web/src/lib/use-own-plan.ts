@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useI18n } from "@/i18n/provider"
-import { api, type OwnPlan } from "@/lib/api"
-import { planWarning } from "@/lib/plans"
+import { api, type OwnPlan, type RuleSummary } from "@/lib/api"
+import { planWarning, previewedStartRefusal } from "@/lib/plans"
 
 /** The signed-in User's own Plan; a change to their rules, accounts, or tokens refreshes it. */
 export const OWN_PLAN_QUERY = ["own-plan"] as const
@@ -26,6 +26,16 @@ function usePlanHints(): OwnPlan | undefined {
 /** Whether a note should say that a change may keep a rule from starting again. */
 export function usePlanWarning(): boolean {
   return planWarning(usePlanHints())
+}
+
+/**
+ * Why Start would refuse each previewed rule a page shows, from Your plan; null for a rule that
+ * may start, and for every rule while the Plan is unknown.
+ */
+export function usePreviewedStartRefusal(): (rule: Pick<RuleSummary, "state" | "keeps_place">) => string | null {
+  const i18n = useI18n()
+  const plan = usePlanHints()
+  return (rule) => previewedStartRefusal(i18n, plan, rule)
 }
 
 /** Why Connect is unavailable: every calendar account place of the Plan is in use. */

@@ -700,3 +700,35 @@ def test_a_lower_default_refuses_new_starts_and_stops_nothing(installation: Inst
         ("rule-2", "enabled"),
         ("rule-3", "dry_run_validated"),
     ]
+
+
+def test_the_rules_api_says_which_previewed_rule_keeps_a_replaced_rules_place(
+    installation: Installation,
+) -> None:
+    """So the Rules list and the rule page can tell, as Start does, which previewed rule starts
+    at the limit."""
+    _member_rules(installation)
+    replacement = replace(
+        rule(state=SyncRuleState.PREVIEWED),
+        id=SyncRuleId("rule-4"),
+        source=endpoint("personal-account", "third-calendar"),
+        keeps_place=True,
+    )
+    with sqlite_units(installation.database, user=installation.member)() as uow:
+        uow.rules.add(replacement)
+        uow.commit()
+    installation.as_member()
+    client = installation.client
+    rules = client.get("/api/v1/rules").json()
+    details = [client.get(f"/api/v1/rules/{each}").json() for each in ("rule-3", "rule-4")]
+
+    assert [(each["id"], each["keeps_place"]) for each in rules] == [
+        ("rule-1", False),
+        ("rule-2", False),
+        ("rule-3", False),
+        ("rule-4", True),
+    ]
+    assert [(each["id"], each["keeps_place"]) for each in details] == [
+        ("rule-3", False),
+        ("rule-4", True),
+    ]

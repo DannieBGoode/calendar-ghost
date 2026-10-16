@@ -19,7 +19,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   in use. Reauthorization is never refused. A lowered rule limit refuses new Starts and stops
   nothing: rules beyond it keep syncing, and existing calendar accounts and tokens keep working.
   Returning to setup turns Plans off and keeps their definitions. Rule details in the API gain
-  `can_start` and `rule_limit`. Migration 33 adds the `plans` table and the Plan columns; rolling
+  `can_start` and `rule_limit`, and rules and rule details gain `keeps_place`. Migration 33 adds the `plans` table and the Plan columns; rolling
   back to an earlier release works with the same database, which ignores them and limits nobody,
   and after upgrading again, Plans are as the administrator left them.
 - Instant Sync: with a public HTTPS address in `CALENDAR_SYNC_PUBLIC_URL` that Google and Microsoft

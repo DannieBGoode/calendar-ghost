@@ -132,6 +132,7 @@ def list_rules(services: Services) -> list[RuleSummaryResponse]:
             last_sync=_outcome_response(summary.last_sync),
             latest_preview=_preview_response(summary.latest_preview),
             running=_work_response(summary.running),
+            keeps_place=summary.rule.keeps_place,
         )
         for summary in services.list_sync_rules.execute()
     ]
@@ -332,6 +333,7 @@ def rule_details(rule_id: str, services: Services) -> RuleDetailResponse:
         running=_work_response(details.running),
         can_start=details.can_start,
         rule_limit=details.rule_limit,
+        keeps_place=details.rule.keeps_place,
     )
 
 
