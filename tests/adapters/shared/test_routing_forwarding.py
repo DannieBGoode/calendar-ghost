@@ -53,7 +53,7 @@ CASES: list[tuple[str, tuple[object, ...]]] = [
     ("managed_events", (ROUTED, RULE_ID, NOW)),
     ("get_occurrence", (EVENT, NOW)),
     ("list_occurrences", (EVENT, (NOW,))),
-    ("has_live_occurrences", (EVENT, TransformationPolicy())),
+    ("has_live_occurrences", (EVENT, TransformationPolicy(), NOW)),
     ("occurrence_exceptions", (EVENT, NOW)),
     ("create_projection", (ROUTED, SOURCE, RULE_ID, PROJECTION, "key")),
     ("update_projection", (EVENT, SOURCE, RULE_ID, PROJECTION, "key")),

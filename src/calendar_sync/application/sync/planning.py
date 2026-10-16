@@ -7,9 +7,9 @@ the next run does; only the run then writes.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol
 
 from calendar_sync.application.sync.ports import CalendarReader
 from calendar_sync.domain.model import (
@@ -26,8 +26,12 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.domain.services import ProjectionFingerprinter, SyncDecisionService
 
-LiveOccurrences = Callable[[EventRef], bool]
-"""Whether a source series still has an occurrence the rule projects, asked once per series."""
+
+class LiveOccurrences(Protocol):
+    """Whether a source series still has an occurrence the rule projects, asked once per series
+    and instant; with `not_ended_before`, only one that ends at or after it counts."""
+
+    def __call__(self, series: EventRef, *, not_ended_before: datetime | None = None) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +57,10 @@ class EventPlanner:
         decision = self.decisions.decide(
             rule, source_event, mapping, actual, window_start=window_start
         )
+        if decision.action is SyncAction.CREATE and source_event.recurrence is not None:
+            mapping, actual, decision = self._decide_series(
+                rule, source_event, mapping, actual, decision, window_start=window_start, live=live
+            )
         if decision.reason is SyncReason.BEFORE_SYNC_WINDOW and self.provider.find_projection(
             rule.destination,
             event_operation_key(
@@ -62,18 +70,45 @@ class EventPlanner:
             # The provider acknowledged this create before an interrupted run could record its
             # mapping; complete it idempotently instead of orphaning the projection.
             decision = self.decisions.decide(rule, source_event, mapping, actual)
-        if (
-            decision.action is SyncAction.CREATE
-            and source_event.recurrence is not None
-            and not live(source_event.reference)
-        ):
-            # Creating it would only be cancelled again by its occurrences, on every run.
-            if mapping is None:
-                mapping, actual = self._acknowledged_series(rule, source_event)
-            decision = self.decisions.decide(
-                rule, source_event, mapping, actual, has_live_occurrences=False
-            )
         return mapping, decision
+
+    def _decide_series(
+        self,
+        rule: SyncRule,
+        source_series: CalendarEvent,
+        mapping: EventMapping | None,
+        actual: CalendarEvent | None,
+        decision: SyncDecision,
+        *,
+        window_start: datetime,
+        live: LiveOccurrences,
+    ) -> tuple[EventMapping | None, CalendarEvent | None, SyncDecision]:
+        """Decide a series to create from its occurrences: one with none the rule projects would
+        only be cancelled again by them, on every run, and one the rule never projected is
+        created only while one of them ends in the sync window or later.
+
+        A series with an occurrence in the window is live, so it needs no second lookup.
+        """
+        reference = source_series.reference
+        if mapping is None and live(reference, not_ended_before=window_start):
+            return mapping, actual, decision
+        if not live(reference):
+            if mapping is None:
+                mapping, actual = self._acknowledged_series(rule, source_series)
+            decision = self.decisions.decide(
+                rule, source_series, mapping, actual, has_live_occurrences=False
+            )
+        elif mapping is None:
+            # Live, but every occurrence the rule projects ended before the window.
+            decision = self.decisions.decide(
+                rule,
+                source_series,
+                mapping,
+                actual,
+                window_start=window_start,
+                live_in_window=False,
+            )
+        return mapping, actual, decision
 
     def _acknowledged_series(
         self, rule: SyncRule, source_event: CalendarEvent

@@ -398,6 +398,45 @@ class CalendarProviderContract:
 
         assert harness.provider.has_live_occurrences(series, POLICY) is False
 
+    def test_a_series_has_live_occurrences_since_an_instant_only_while_one_ends_after_it(
+        self, harness: ProviderHarness
+    ) -> None:
+        series = _series(harness, "key-series")
+        last_end = SERIES_STARTS[-1] + timedelta(hours=1)
+
+        assert harness.provider.has_live_occurrences(series, POLICY, WINDOW_START) is True
+        assert (
+            harness.provider.has_live_occurrences(series, POLICY, last_end - timedelta(minutes=1))
+            is True
+        )
+        # Every occurrence ended before it: the series is past, though live at all.
+        assert (
+            harness.provider.has_live_occurrences(series, POLICY, last_end + timedelta(days=1))
+            is False
+        )
+        assert harness.provider.has_live_occurrences(series, POLICY) is True
+
+    def test_an_occurrence_moved_after_an_instant_is_live_since_it(
+        self, harness: ProviderHarness
+    ) -> None:
+        series = _series(harness, "key-series")
+        later = SERIES_STARTS[-1] + timedelta(days=5)
+        assert harness.provider.has_live_occurrences(series, POLICY, later) is False
+        harness.provider.write_occurrence(
+            series,
+            SERIES_STARTS[-1],
+            SOURCE_SERIES.reference,
+            RULE_ID,
+            _occurrence_projection(later, "Moved"),
+            "key-move",
+        )
+
+        assert harness.provider.has_live_occurrences(series, POLICY, later) is True
+        assert (
+            harness.provider.has_live_occurrences(series, POLICY, later + timedelta(hours=2))
+            is False
+        )
+
     def test_exceptions_are_the_occurrences_written_or_cancelled(
         self, harness: ProviderHarness
     ) -> None:

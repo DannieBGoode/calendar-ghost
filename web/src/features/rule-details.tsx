@@ -274,7 +274,7 @@ function RuleDetailsPage({
         destinationName={destinationName}
         now={now}
       />
-      <RuleFacts detail={detail} destinationName={destinationName} />
+      <RuleFacts detail={detail} />
       <RuleRuns
         detail={detail}
         sourceName={sourceName}

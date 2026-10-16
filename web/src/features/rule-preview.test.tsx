@@ -102,6 +102,22 @@ const preview: RulePreview = {
   ],
 }
 
+/**
+ * A weekly series with one moved date, one cancelled, and one changed back to its regular time:
+ * created by the run when `series` is "create", already in the destination when it is "ignore".
+ */
+function seriesItems(series: "create" | "ignore"): RulePreview["items"] {
+  const [dentist] = preview.items
+  if (!dentist) throw new Error("no fixture")
+  const base = { ...dentist, title: "Swim", series_event_id: "swim", kind: "occurrence" as const }
+  return [
+    { ...dentist, source_event_id: "swim", kind: "series", title: "Swim", recurrence: ["RRULE:FREQ=WEEKLY"], planned_action: series, reason: series === "create" ? "source_created" : "projection_current", projection: { title: "Busy", carries_details: false, recurrence: ["RRULE:FREQ=WEEKLY"] } },
+    { ...base, source_event_id: "swim_1", starts_at: at(11), ends_at: at(12), original_start: at(9), planned_action: "update", reason: "occurrence_changed" },
+    { ...base, source_event_id: "swim_2", starts_at: null, ends_at: null, original_start: at(13), cancelled: true, planned_action: "delete", reason: "occurrence_cancelled", projection: null },
+    { ...base, source_event_id: "swim_3", starts_at: at(15), ends_at: at(16), original_start: at(15), planned_action: "ignore", reason: "occurrence_current" },
+  ]
+}
+
 /** Calendar and event names come from the server; dates, times, and the time zone from locale data. */
 const zone = new Intl.DateTimeFormat("en-US", { timeZoneName: "shortGeneric" }).formatToParts(today).find((part) => part.type === "timeZoneName")?.value ?? ""
 // An address may break after its "@", so each half is server text too.
@@ -189,13 +205,21 @@ describe("RulePreviewView", () => {
     expect(text).toContain("Busy only: titles, descriptions, and locations stay private.")
     // The accounts name their provider, and the rule's choices are on the page, folded.
     expect([...container.querySelectorAll(".rule-preview-account")].map((each) => each.textContent)).toEqual(["Google accountdana@example.test"])
-    expect(text).toContain("What this rule syncs")
+    expect(container.querySelector(".rule-preview-facts")?.getAttribute("aria-label")).toBe("What this rule syncs:")
     // The title names the calendars; the header does not name them again.
     const underTitle = [...container.querySelectorAll(".rule-preview-header > :not(h1)")].map((node) => node.textContent)
     expect(underTitle.join(" ")).not.toMatch(/Family|Work/)
-    expect(container.querySelector(".rule-preview-settings")?.textContent).toBe(
-      "What this rule syncs: From the past 30 days · All-day events · No birthdays · Maybe events as “Busy (tentative)” · Invitations sync once answered · No declined eventsChange",
-    )
+    // Each choice is its own list item with an icon; those that leave events out read quieter.
+    const facts = [...container.querySelectorAll(".rule-preview-fact")]
+    expect(facts.map((fact) => [fact.textContent, fact.getAttribute("data-tone"), fact.querySelectorAll("svg[aria-hidden=true]").length])).toEqual([
+      ["Maybe events as “Busy (tentative)”", "on", 1],
+      ["Invitations sync once answered", "on", 1],
+      ["No declined events", "off", 1],
+      ["All-day events", "on", 1],
+      ["No birthdays", "off", 1],
+      ["From the past 30 days", "on", 1],
+    ])
+    expect(container.querySelector(".rule-preview-settings > a")?.textContent).toBe("Change")
     expect(text).toContain("new or changed events sync on their own")
     const rows = [...container.querySelectorAll(".rule-preview-row")].map((row) => row.textContent)
     expect(rows).toEqual([
@@ -401,6 +425,107 @@ describe("RulePreviewView", () => {
 
     const toggle = container.querySelector(".rule-preview-earlier-toggle")
     expect(toggle?.getAttribute("aria-label")).toMatch(/^Earlier, from .+: 1 event, 1 to add$/)
+  })
+
+  it("shows that it is reading, in the results, with a line that moves on as seconds pass", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] })
+    mockFetch({ status: 200, body: preview })
+    const answer = vi.mocked(fetch).getMockImplementation()
+    let finish: (response: Response) => void = () => undefined
+    vi.mocked(fetch).mockImplementation((input, init) =>
+      (input instanceof Request ? input.url : input.toString()).endsWith("/preview")
+        ? new Promise<Response>((resolve) => (finish = resolve))
+        : (answer?.(input, init) ?? Promise.reject(new Error("no answer"))),
+    )
+    await renderPreview(testI18n())
+
+    const status = () => container.querySelector(".rule-preview-reading")
+    expect(status()?.textContent).toBe("Reading Family…Checking each event against this rule.")
+    // Not a live region: the seconds would be read out one by one.
+    expect(status()?.closest("[aria-live], [role=status]")).toBeNull()
+    expect(container.querySelector(".rule-preview-skeleton")).not.toBeNull()
+    expect(container.querySelector(".rule-preview-lead")?.textContent).toBe("A preview: nothing is written until you start syncing.Refresh")
+    expect(button("Refresh").getAttribute("aria-disabled")).toBe("true")
+
+    act(() => {
+      vi.advanceTimersByTime(5_000)
+    })
+    expect(status()?.textContent).toBe("Reading Family…5 seconds so far.")
+    act(() => {
+      vi.advanceTimersByTime(10_000)
+    })
+    expect(status()?.textContent).toBe("Reading Family…15 seconds so far. Large calendars can take up to a minute.")
+
+    finish(jsonResponse({ status: 200, body: preview }))
+    await settle()
+    expect(status()).toBeNull()
+    vi.useRealTimers()
+  })
+
+  // Regression: a retry of a failed first read hid its panel behind the placeholder rows, and a
+  // press of the panel's waiting Refresh left focus on a button that then went away.
+  // Found by /qa on 2026-10-15
+  it("keeps a failed first read's panel while Refresh retries it", async () => {
+    mockFetch({ status: 503, body: { detail: "down", code: "provider_failed", params: { kind: "unavailable", provider: "google" } } })
+    await renderPreview(testI18n())
+    const answer = vi.mocked(fetch).getMockImplementation()
+    vi.mocked(fetch).mockImplementation((input, init) =>
+      (input instanceof Request ? input.url : input.toString()).endsWith("/preview") ? new Promise<Response>(() => undefined) : (answer?.(input, init) ?? Promise.reject(new Error("no answer"))),
+    )
+    const panelRefresh = () => container.querySelector<HTMLButtonElement>("[role=alert] button")
+
+    act(() => panelRefresh()?.click())
+    await settle()
+
+    expect(container.querySelector(".rule-preview-reading")?.textContent).toContain("Reading Family…")
+    expect(panelRefresh()?.getAttribute("aria-disabled")).toBe("true")
+    expect(container.querySelector(".rule-preview-skeleton")).toBeNull()
+
+    act(() => panelRefresh()?.focus())
+    act(() => panelRefresh()?.click())
+    expect(document.activeElement).toBe(button("Refresh"))
+  })
+
+  it("says it is reading above the last results while Refresh reads", async () => {
+    mockFetch({ status: 200, body: preview })
+    await renderPreview(testI18n())
+    const answer = vi.mocked(fetch).getMockImplementation()
+    vi.mocked(fetch).mockImplementation((input, init) =>
+      (input instanceof Request ? input.url : input.toString()).endsWith("/preview") ? new Promise<Response>(() => undefined) : (answer?.(input, init) ?? Promise.reject(new Error("no answer"))),
+    )
+
+    act(() => button("Refresh").click())
+    await settle()
+
+    const status = container.querySelector(".rule-preview-reading")
+    expect(status?.textContent).toContain("Reading Family…")
+    // Beside the dimmed results, not inside them, so it is not dimmed or made inert with them.
+    expect(status?.nextElementSibling?.className).toBe("rule-preview-results")
+    expect(container.querySelector(".rule-preview-results")?.getAttribute("aria-busy")).toBe("true")
+    expect(document.activeElement).toBe(button("Refresh"))
+  })
+
+  it("counts every date of a series a new rule adds as added or not synced", async () => {
+    // Regression: a new rule's preview said it would update, remove, and leave up to date events
+    // it had never written, because a run fixes a new series' changed dates after writing it.
+    mockFetch({ status: 200, body: { ...preview, items: [...preview.items, ...seriesItems("create")] } })
+    await renderPreview(testI18n())
+
+    const footer = container.querySelector(".rule-preview-counts")?.textContent ?? ""
+    expect(footer).toBe("What starting this rule writes to Work:4 to add2 not synced")
+    const outcomes = [...container.querySelectorAll(".rule-preview-row .activity-effect")].map((each) => each.textContent)
+    expect(outcomes).toEqual(expect.arrayContaining(["Add", "Not synced: cancelled"]))
+    expect(outcomes).not.toEqual(expect.arrayContaining(["Update", "Already up to date"]))
+    expect(outcomes.some((each) => each.startsWith("Remove"))).toBe(false)
+    expect(container.textContent).toContain("This date only: moved from")
+  })
+
+  it("keeps updates, removals, and current dates for a series the destination already has", async () => {
+    mockFetch({ status: 200, body: { ...preview, items: [...preview.items, ...seriesItems("ignore")] } })
+    await renderPreview(testI18n())
+
+    const footer = container.querySelector(".rule-preview-counts")?.textContent ?? ""
+    expect(footer).toBe("What starting this rule writes to Work:1 to add1 to update1 to remove2 already up to date1 not synced")
   })
 
   it("leaves no text untranslated", async () => {

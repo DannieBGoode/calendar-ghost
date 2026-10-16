@@ -221,6 +221,7 @@ class FakeGoogleCalendarApi:
         original_start: str | None,
         show_deleted: bool,
         time_max: str | None,
+        time_min: str | None = None,
     ) -> EventJson:
         master = self._existing(key, series_id)
         if master["status"] == "cancelled":
@@ -234,6 +235,10 @@ class FakeGoogleCalendarApi:
             if instance["status"] == "cancelled" and not show_deleted:
                 continue
             if time_max is not None and _instant(starts) >= _instant(time_max):
+                continue
+            # As Google does, timeMin bounds where an instance ends now, exclusively.
+            ends = instance["end"]["dateTime"]
+            if time_min is not None and _instant(ends) <= _instant(time_min):
                 continue
             items.append(copy.deepcopy(instance))
         return {"items": items}
@@ -347,6 +352,7 @@ class FakeEvents:
         showDeleted: bool = False,
         maxResults: int = 250,
         timeMax: str | None = None,
+        timeMin: str | None = None,
         fields: str | None = None,
         pageToken: str | None = None,
     ) -> FakeRequest:
@@ -357,6 +363,7 @@ class FakeEvents:
                 original_start=originalStart,
                 show_deleted=showDeleted,
                 time_max=timeMax,
+                time_min=timeMin,
             )
         )
 

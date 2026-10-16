@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -89,6 +89,7 @@ def decide(
     destination_series: CalendarEvent | None = DESTINATION,
     destination_reported: bool = False,
     has_live_occurrences: bool = True,
+    window_start: datetime | None = None,
 ) -> SyncDecision:
     return service().decide_occurrence(
         sync_rule or rule(),
@@ -103,6 +104,7 @@ def decide(
             destination_reported=destination_reported,
             has_live_occurrences=has_live_occurrences,
         ),
+        window_start=window_start,
     )
 
 
@@ -254,6 +256,41 @@ def test_occurrence_of_an_unsynchronized_series_is_ignored() -> None:
 
     assert decision.action is SyncAction.IGNORE
     assert decision.reason is SyncReason.SERIES_NOT_SYNCHRONIZED
+
+
+def test_past_occurrence_of_a_series_never_projected_is_before_the_window() -> None:
+    # As its series is, once every occurrence ended before the window: nothing to explain.
+    decision = decide(
+        occurrence(SOURCE, 1, moved_by=timedelta(hours=3)),
+        None,
+        series_mapping=None,
+        destination_series=None,
+        window_start=week_start(2),
+    )
+
+    assert decision.action is SyncAction.IGNORE
+    assert decision.reason is SyncReason.BEFORE_SYNC_WINDOW
+
+
+def test_occurrence_moved_into_the_window_of_a_series_never_projected_says_why() -> None:
+    decision = decide(
+        occurrence(SOURCE, 1, moved_by=timedelta(weeks=2)),
+        None,
+        series_mapping=None,
+        destination_series=None,
+        window_start=week_start(2),
+    )
+
+    assert decision.reason is SyncReason.SERIES_NOT_SYNCHRONIZED
+
+
+def test_past_occurrence_of_a_projected_series_stays_current() -> None:
+    moved = occurrence(SOURCE, 1, moved_by=timedelta(hours=2))
+
+    decision = decide(moved, busy_instance(), window_start=week_start(2))
+
+    assert decision.action is SyncAction.UPDATE
+    assert decision.reason is SyncReason.OCCURRENCE_CHANGED
 
 
 def test_occurrence_of_a_cancelled_mapped_series_is_no_decision_of_its_own() -> None:

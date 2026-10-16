@@ -264,14 +264,43 @@ describe("RuleDetailsView", () => {
     await renderDetails(testI18n(), enabledRule)
 
     expect(container.querySelector("h1")?.textContent).toContain("Family")
-    expect(container.querySelector(".rule-facts")?.textContent).toContain("3 projections this rule manages in Work")
+    const runs = container.querySelector("[aria-labelledby='rule-runs-title']")
+    expect(runs?.textContent).toContain("Projections3 in WorkThe events this rule wrote to Work, each kept matching its source in Family.")
     expect(container.textContent).toContain("Includes events from the past 30 days onward")
-    expect(container.querySelector(".rule-facts")?.textContent).toContain("Birthdays from contactsNot synced")
+    expect(container.querySelector(".rule-facts-groups")?.textContent).toContain("Birthdays from contactsNot synced")
     expect(container.textContent).toContain("Succeeded: 1 created, 2 updated, 0 deleted, 1 conflict")
     expect(container.textContent).toContain(
       "Checked 3 projections: 2 differences found; none were changed. 1 conflict blocked",
     )
     expect(container.querySelector('[aria-label="More actions for Family to Work"]')).not.toBeNull()
+  })
+
+  it("groups the rule's choices as its policy form does, each with the icon Rule Preview shows", async () => {
+    await renderDetails(testI18n(), enabledRule)
+
+    const groups = [...container.querySelectorAll(".rule-facts-groups > dl")]
+    const labels = groups.map((group) =>
+      [...group.querySelectorAll("dt")].map((label) => [label.textContent, label.querySelector("svg[aria-hidden=true]")?.classList[1]]),
+    )
+    expect(labels).toEqual([
+      [
+        ["Event information", "lucide-file-text"],
+        ["Events you answered Maybe", "lucide-circle-question-mark"],
+        ["Invitations you haven't answered", "lucide-mail-question-mark"],
+        ["Declined events", "lucide-circle-x"],
+      ],
+      [
+        ["All-day events", "lucide-calendar-days"],
+        ["Birthdays from contacts", "lucide-cake"],
+        ["Starting point", "lucide-rotate-ccw-clock"],
+      ],
+    ])
+  })
+
+  it("says when the rule keeps no projections, whether or not it wrote any before", async () => {
+    await renderDetails(testI18n(), { ...enabledRule, mapping_count: 0 })
+
+    expect(container.querySelector("[aria-labelledby='rule-runs-title']")?.textContent).toContain("ProjectionsNone in Work")
   })
 
   it("says how soon the rule syncs, and why it waits for its schedule", async () => {

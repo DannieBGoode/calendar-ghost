@@ -148,8 +148,13 @@ class RoutingCalendarProvider:
     ) -> Mapping[OccurrenceStart, CalendarEvent]:
         return self._for(series.calendar).list_occurrences(series, original_starts)
 
-    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
-        return self._for(series.calendar).has_live_occurrences(series, policy)
+    def has_live_occurrences(
+        self,
+        series: EventRef,
+        policy: TransformationPolicy,
+        not_ended_before: datetime | None = None,
+    ) -> bool:
+        return self._for(series.calendar).has_live_occurrences(series, policy, not_ended_before)
 
     def occurrence_exceptions(
         self, series: EventRef, not_ended_before: datetime

@@ -1,7 +1,7 @@
-import { ArrowRight, SlidersHorizontal } from "lucide-react"
-import { Fragment } from "react"
+import { ArrowRight, type LucideIcon } from "lucide-react"
 
 import { AccountAvatar } from "@/components/account-avatar"
+import { RULE_SETTING_ICONS } from "@/components/rule-setting-icons"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
@@ -75,62 +75,86 @@ export function PreviewAccounts({ detail, accounts }: { detail: RuleDetail; acco
   )
 }
 
+/**
+ * One choice the preview follows, with an icon for what it is about. `off` marks a choice that
+ * leaves events out, so it reads quieter than one that brings them in.
+ */
+type SettingFact = { text: string; icon: LucideIcon; off: boolean }
+
 /** How the rule treats Maybe events and unanswered invitations, in a few words each. */
-function invitationFacts(i18n: I18n, detail: RuleDetail): string[] {
+function invitationFacts(i18n: I18n, detail: RuleDetail): SettingFact[] {
   const { t } = i18n
   const mark = tentativeMark(detail.privacy_policy)
-  const maybe = {
-    mark: "title" in mark ? t("rulePreview.rule.maybeAs", mark) : t("rulePreview.rule.maybePrefixed", mark),
-    sync: t("rulePreview.rule.maybeSync"),
-    skip: t("rulePreview.rule.maybeOff"),
-  }[detail.tentative_events]
-  if (detail.unanswered_invitations === "wait") return [maybe, t("rulePreview.rule.unansweredWait")]
-  return [maybe, detail.tentative_events === "skip" ? t("rulePreview.rule.unansweredOff") : t("rulePreview.rule.unansweredAs")]
-}
-
-/** The rule's choices in a few words each, in the order Rule Details lists them. */
-function settingsFacts(i18n: I18n, detail: RuleDetail): string[] {
-  const { t } = i18n
+  const skipMaybe = detail.tentative_events === "skip"
+  const maybe: SettingFact = {
+    text: {
+      mark: "title" in mark ? t("rulePreview.rule.maybeAs", mark) : t("rulePreview.rule.maybePrefixed", mark),
+      sync: t("rulePreview.rule.maybeSync"),
+      skip: t("rulePreview.rule.maybeOff"),
+    }[detail.tentative_events],
+    icon: RULE_SETTING_ICONS.tentative,
+    off: skipMaybe,
+  }
+  const icon = RULE_SETTING_ICONS.unanswered
+  if (detail.unanswered_invitations === "wait") return [maybe, { text: t("rulePreview.rule.unansweredWait"), icon, off: false }]
   return [
-    t("rulePreview.rule.since", { count: detail.initial_lookback_days }),
-    detail.sync_all_day_events ? t("rulePreview.rule.allDayOn") : t("rulePreview.rule.allDayOff"),
-    detail.sync_birthdays ? t("rulePreview.rule.birthdaysOn") : t("rulePreview.rule.birthdaysOff"),
-    ...invitationFacts(i18n, detail),
-    t("rulePreview.rule.declinedOff"),
+    maybe,
+    { text: skipMaybe ? t("rulePreview.rule.unansweredOff") : t("rulePreview.rule.unansweredAs"), icon, off: skipMaybe },
   ]
 }
 
 /**
- * The choices this preview follows, on one quiet line under the privacy line, with the way to change
- * them at its end.
+ * The rule's choices in a few words each, in the order Rule Details lists them: how events look,
+ * then which events it includes. The privacy line above already says what the destination sees.
+ */
+function settingsFacts(i18n: I18n, detail: RuleDetail): SettingFact[] {
+  const { t } = i18n
+  return [
+    ...invitationFacts(i18n, detail),
+    { text: t("rulePreview.rule.declinedOff"), icon: RULE_SETTING_ICONS.declined, off: true },
+    {
+      text: detail.sync_all_day_events ? t("rulePreview.rule.allDayOn") : t("rulePreview.rule.allDayOff"),
+      icon: RULE_SETTING_ICONS.allDay,
+      off: !detail.sync_all_day_events,
+    },
+    {
+      text: detail.sync_birthdays ? t("rulePreview.rule.birthdaysOn") : t("rulePreview.rule.birthdaysOff"),
+      icon: RULE_SETTING_ICONS.birthdays,
+      off: !detail.sync_birthdays,
+    },
+    { text: t("rulePreview.rule.since", { count: detail.initial_lookback_days }), icon: RULE_SETTING_ICONS.startingPoint, off: false },
+  ]
+}
+
+/**
+ * The choices this preview follows, as a quiet wrapping list under the privacy line, each with its
+ * own icon, and the way to change them at its end.
  */
 export function PreviewSettings({ detail, onChange }: { detail: RuleDetail; onChange: () => void }) {
   const i18n = useI18n()
   const { t } = i18n
   return (
-    <p className="rule-preview-settings">
-      <SlidersHorizontal aria-hidden="true" />
-      <span>
-        <span className="sr-only">{t("rulePreview.rule.settings")} </span>
-        {settingsFacts(i18n, detail).map((fact, index) => (
-          <Fragment key={fact}>
-            {index > 0 && " · "}
-            <span className="rule-preview-fact">{fact}</span>
-          </Fragment>
+    <div className="rule-preview-settings">
+      <ul role="list" className="rule-preview-facts" aria-label={t("rulePreview.rule.settings")}>
+        {settingsFacts(i18n, detail).map(({ text, icon: Icon, off }) => (
+          <li key={text} className="rule-preview-fact" data-tone={off ? "off" : "on"}>
+            <Icon aria-hidden="true" />
+            {text}
+          </li>
         ))}
-        <Button variant="ghost" size="sm" className="rule-preview-inline-action" asChild>
-          <a
-            href={appPathForRule(detail.id)}
-            onClick={(event) => {
-              if (!isPlainLeftClick(event)) return
-              event.preventDefault()
-              onChange()
-            }}
-          >
-            {t("rulePreview.rule.change")}
-          </a>
-        </Button>
-      </span>
-    </p>
+      </ul>
+      <Button variant="ghost" size="sm" className="rule-preview-inline-action" asChild>
+        <a
+          href={appPathForRule(detail.id)}
+          onClick={(event) => {
+            if (!isPlainLeftClick(event)) return
+            event.preventDefault()
+            onChange()
+          }}
+        >
+          {t("rulePreview.rule.change")}
+        </a>
+      </Button>
+    </div>
   )
 }

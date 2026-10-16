@@ -1,6 +1,8 @@
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, type LucideIcon } from "lucide-react"
+import type { ReactNode } from "react"
 
 import { LearnWhyLink } from "@/components/learn-why-link"
+import { RULE_SETTING_ICONS } from "@/components/rule-setting-icons"
 import { useI18n } from "@/i18n/provider"
 import type { RuleDetail, RunOutcome } from "@/lib/api"
 import { ruleCadence } from "@/lib/instant-sync"
@@ -8,48 +10,57 @@ import { tentativeFact, unansweredFact } from "@/lib/invitation-responses"
 import { activitySearch, appPathForView, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
 import { runOutcomeSummary } from "@/lib/rule-change"
 
-export function RuleFacts({ detail, destinationName }: { detail: RuleDetail; destinationName: string }) {
+/** One choice of the rule, beside the icon Rule Preview shows for the same choice. */
+function SettingFact({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt>
+        <Icon aria-hidden="true" />
+        {label}
+      </dt>
+      <dd>{children}</dd>
+    </div>
+  )
+}
+
+/**
+ * The rule's choices in two groups, as its policy form groups them: how events look, then which
+ * events it includes. Rule Preview lists them in the same order.
+ */
+export function RuleFacts({ detail }: { detail: RuleDetail }) {
   const i18n = useI18n()
   const { t } = i18n
+  const icons = RULE_SETTING_ICONS
   return (
     <section className="rule-section page-card" aria-labelledby="rule-facts-title">
       <h2 id="rule-facts-title">{t("ruleDetails.facts.title")}</h2>
-      <dl className="rule-facts">
-        <div>
-          <dt>{t("ruleDetails.facts.eventInformation")}</dt>
-          <dd>
+      <div className="rule-facts-groups">
+        <dl className="rule-facts rule-facts-iconed">
+          <SettingFact icon={icons.eventInformation} label={t("ruleDetails.facts.eventInformation")}>
             {detail.privacy_policy === "busy_only" ? t("ruleDetails.facts.busyOnly") : t("ruleDetails.facts.copyDetails")}
-          </dd>
-        </div>
-        <div>
-          <dt>{t("ruleDetails.facts.allDay")}</dt>
-          <dd>{detail.sync_all_day_events ? t("ruleDetails.facts.allDayIncluded") : t("ruleDetails.facts.allDayExcluded")}</dd>
-        </div>
-        <div>
-          <dt>{t("ruleDetails.facts.birthdays")}</dt>
-          <dd>{detail.sync_birthdays ? t("ruleDetails.facts.birthdaysIncluded") : t("ruleDetails.facts.birthdaysExcluded")}</dd>
-        </div>
-        <div>
-          <dt>{t("ruleDetails.facts.tentative")}</dt>
-          <dd>{tentativeFact(i18n, detail)}</dd>
-        </div>
-        <div>
-          <dt>{t("ruleDetails.facts.unanswered")}</dt>
-          <dd>{unansweredFact(i18n, detail)}</dd>
-        </div>
-        <div>
-          <dt>{t("ruleDetails.facts.declined")}</dt>
-          <dd>{t("ruleDetails.facts.declinedValue")}</dd>
-        </div>
-        <div>
-          <dt>{t("ruleDetails.facts.startingPoint")}</dt>
-          <dd>{t("ruleDetails.facts.startingPointValue", { count: detail.initial_lookback_days })}</dd>
-        </div>
-        <div>
-          <dt>{t("ruleDetails.facts.projections")}</dt>
-          <dd>{t("ruleDetails.facts.projectionsValue", { count: detail.mapping_count, destination: destinationName })}</dd>
-        </div>
-      </dl>
+          </SettingFact>
+          <SettingFact icon={icons.tentative} label={t("ruleDetails.facts.tentative")}>
+            {tentativeFact(i18n, detail)}
+          </SettingFact>
+          <SettingFact icon={icons.unanswered} label={t("ruleDetails.facts.unanswered")}>
+            {unansweredFact(i18n, detail)}
+          </SettingFact>
+          <SettingFact icon={icons.declined} label={t("ruleDetails.facts.declined")}>
+            {t("ruleDetails.facts.declinedValue")}
+          </SettingFact>
+        </dl>
+        <dl className="rule-facts rule-facts-iconed">
+          <SettingFact icon={icons.allDay} label={t("ruleDetails.facts.allDay")}>
+            {detail.sync_all_day_events ? t("ruleDetails.facts.allDayIncluded") : t("ruleDetails.facts.allDayExcluded")}
+          </SettingFact>
+          <SettingFact icon={icons.birthdays} label={t("ruleDetails.facts.birthdays")}>
+            {detail.sync_birthdays ? t("ruleDetails.facts.birthdaysIncluded") : t("ruleDetails.facts.birthdaysExcluded")}
+          </SettingFact>
+          <SettingFact icon={icons.startingPoint} label={t("ruleDetails.facts.startingPoint")}>
+            {t("ruleDetails.facts.startingPointValue", { count: detail.initial_lookback_days })}
+          </SettingFact>
+        </dl>
+      </div>
     </section>
   )
 }
@@ -103,8 +114,32 @@ export function RuleRuns({
           kind="reconciliation"
           now={now}
         />
+        <ProjectionsFact detail={detail} sourceName={sourceName} destinationName={destinationName} />
       </dl>
     </section>
+  )
+}
+
+/** How many events the rule keeps in its destination, the ones every run and check looks after. */
+function ProjectionsFact({
+  detail,
+  sourceName,
+  destinationName,
+}: {
+  detail: RuleDetail
+  sourceName: string
+  destinationName: string
+}) {
+  const { t } = useI18n()
+  const words = { count: detail.mapping_count, source: sourceName, destination: destinationName }
+  return (
+    <div>
+      <dt>{t("ruleDetails.runs.projections")}</dt>
+      <dd>
+        {detail.mapping_count === 0 ? t("ruleDetails.runs.projectionsNone", words) : t("ruleDetails.runs.projectionsValue", words)}
+        <span className="rule-fact-explanation">{t("ruleDetails.runs.projectionsExplanation", words)}</span>
+      </dd>
+    </div>
   )
 }
 

@@ -185,8 +185,9 @@ class SyncRunContext:
     """Source series already repaired this run, so a repair never recurses."""
     rebuilt: set[EventRef] = field(default_factory=set)
     """Source series whose destination series this run rebuilt, so each is rebuilt once."""
-    live_series: dict[EventRef, bool] = field(default_factory=dict)
-    """Whether each source series looked up this run still has an occurrence this rule projects."""
+    live_series: dict[tuple[EventRef, datetime | None], bool] = field(default_factory=dict)
+    """Whether each source series looked up this run still has an occurrence this rule projects,
+    at all or ending at or after an instant."""
     blocked: set[EventRef] = field(default_factory=set)
     """Source events and occurrences this run blocked as a Conflict."""
     listed_occurrences: dict[EventRef, dict[OccurrenceStart, CalendarEvent]] = field(
@@ -258,11 +259,21 @@ class SyncRunContext:
             )
 
 
-def has_live_occurrences(run: SyncRunContext, provider: CalendarReader, series: EventRef) -> bool:
-    """Ask once per run whether a source series still has an occurrence this rule projects."""
-    if series not in run.live_series:
-        run.live_series[series] = provider.has_live_occurrences(series, run.rule.transformation)
-    return run.live_series[series]
+def has_live_occurrences(
+    run: SyncRunContext,
+    provider: CalendarReader,
+    series: EventRef,
+    *,
+    not_ended_before: datetime | None = None,
+) -> bool:
+    """Ask once per run whether a source series still has an occurrence this rule projects;
+    with `not_ended_before`, one that ends at or after it."""
+    key = (series, not_ended_before)
+    if key not in run.live_series:
+        run.live_series[key] = provider.has_live_occurrences(
+            series, run.rule.transformation, not_ended_before
+        )
+    return run.live_series[key]
 
 
 def read_destination_series(

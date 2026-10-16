@@ -105,7 +105,12 @@ class CalendarReader(Protocol):
         """
         ...
 
-    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
+    def has_live_occurrences(
+        self,
+        series: EventRef,
+        policy: TransformationPolicy,
+        not_ended_before: datetime | None = None,
+    ) -> bool:
         """Whether a series has an occurrence that is not cancelled and that `policy` projects.
 
         An occurrence the policy excludes, such as an all-day one or one the Source Calendar
@@ -113,6 +118,10 @@ class CalendarReader(Protocol):
         lookup may return `False`, because it stops a projection from being created or restored
         and can remove one left by an interrupted create; a series whose occurrences cannot be
         listed counts as live.
+
+        With `not_ended_before`, only an occurrence that ends at or after it counts, wherever it
+        has moved to: a series the rule never projected is created only while one reaches the
+        sync window.
         """
         ...
 

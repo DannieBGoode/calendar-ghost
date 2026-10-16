@@ -249,6 +249,28 @@ def test_an_endless_series_is_never_proven_empty() -> None:
     assert provider.has_live_occurrences(_ref(endless), TransformationPolicy())
 
 
+def test_a_series_is_live_since_an_instant_only_while_an_occurrence_ends_after_it() -> None:
+    provider, graph = outlook()
+    # Mondays 12 and 19 October, 07:00 to 07:30 UTC.
+    series = _weekly_series(graph, type="numbered", numberOfOccurrences=2)
+    last_end = MONDAY + timedelta(days=7, minutes=30)
+    policy = TransformationPolicy()
+
+    assert provider.has_live_occurrences(_ref(series), policy, WINDOW)
+    assert provider.has_live_occurrences(_ref(series), policy, last_end - timedelta(minutes=1))
+    assert not provider.has_live_occurrences(_ref(series), policy, last_end + timedelta(days=1))
+    # Listed from shortly before the instant, not from the first date Outlook keeps.
+    listed = [r for r in graph.requests if r.url.path.endswith("/instances")]
+    assert listed[-1].url.params["startDateTime"].startswith("2026-10")
+
+
+def test_an_endless_series_is_live_since_an_instant_it_still_repeats_after() -> None:
+    provider, graph = outlook()
+    endless = _weekly_series(graph)
+
+    assert provider.has_live_occurrences(_ref(endless), TransformationPolicy(), WINDOW)
+
+
 def _series_projection(
     lines: tuple[str, ...] = ("RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=MO",),
 ) -> EventProjection:

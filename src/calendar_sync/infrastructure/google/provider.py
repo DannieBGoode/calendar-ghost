@@ -390,7 +390,12 @@ class GoogleCalendarProvider:
             raise self._failure(error, series.calendar.connected_account_id) from error
         return found
 
-    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
+    def has_live_occurrences(
+        self,
+        series: EventRef,
+        policy: TransformationPolicy,
+        not_ended_before: datetime | None = None,
+    ) -> bool:
         parameters: dict[str, Any] = {
             "calendarId": series.calendar.calendar_id.value,
             "eventId": series.event_id.value,
@@ -398,15 +403,24 @@ class GoogleCalendarProvider:
             "maxResults": LIVE_OCCURRENCE_PAGE_SIZE,
             "fields": LIVE_OCCURRENCE_FIELDS,
         }
+        if not_ended_before is not None:
+            # timeMin filters by where an instance ends now, so one moved into the window counts.
+            # It is exclusive and dates all-day instances in the calendar's zone, so the lookup
+            # asks from earlier and keeps only the instances the sync window keeps.
+            parameters["timeMin"] = (not_ended_before - LIVE_WINDOW_MARGIN).isoformat()
         try:
             events_api = self._service(series.calendar.connected_account_id).events()
             for _ in range(OCCURRENCE_PAGE_LIMIT):
                 response = self._call("events.instances", events_api.instances(**parameters))
                 # showDeleted=False should omit cancelled instances; the status is checked anyway,
                 # because counting one as live would recreate a series that can only be cancelled.
+                instances = (
+                    to_domain_event(item, series.calendar) for item in response.get("items", [])
+                )
                 if any(
-                    policy.projects(to_domain_event(item, series.calendar))
-                    for item in response.get("items", [])
+                    policy.projects(instance)
+                    and (not_ended_before is None or not instance.ended_before(not_ended_before))
+                    for instance in instances
                 ):
                     return True
                 # A filtered page may be empty while later pages still hold live instances.
@@ -679,6 +693,8 @@ def _provider_failure(error: Exception, now: datetime, event_scoped: bool) -> Pr
 
 # Instances are read only for their status and start, so one page covers most series.
 LIVE_OCCURRENCE_PAGE_SIZE = 250
+# Further than any calendar zone's offset and timeMin's exclusive bound reach.
+LIVE_WINDOW_MARGIN = timedelta(days=2)
 # Instance listings run under the rule's write lock, so a long expansion is read only this far.
 OCCURRENCE_PAGE_LIMIT = 20
 # Only what translation reads. Guests and conferencing are never projected; they are read so a

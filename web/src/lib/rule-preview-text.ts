@@ -6,6 +6,7 @@ import {
   itemStart,
   localDay,
   previewOutcome,
+  type NewSeries,
   type PlacedItem,
   type PreviewItem,
   type PreviewOutcome,
@@ -68,8 +69,8 @@ const RESPONSE_REASONS = new Set([
 ])
 
 /** "Add", or "Not synced: birthday" when the outcome has a reason worth naming. */
-export function outcomeText(i18n: I18n, item: PreviewItem): string {
-  const outcome = i18n.t(OUTCOME_WORDS[previewOutcome(item)])
+export function outcomeText(i18n: I18n, item: PreviewItem, added: NewSeries): string {
+  const outcome = i18n.t(OUTCOME_WORDS[previewOutcome(item, added)])
   const reason = REASON_WORDS[item.reason]
   return reason ? i18n.t("rulePreview.outcome.withReason", { outcome, reason: i18n.t(reason) }) : outcome
 }

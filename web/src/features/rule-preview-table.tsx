@@ -10,6 +10,7 @@ import {
   isTomorrow,
   outcomeCounts,
   previewOutcome,
+  type NewSeries,
   type PlacedItem,
   type PreviewDay,
   type PreviewLayout,
@@ -58,10 +59,10 @@ function Notes({ notes }: { notes: string[] }) {
 }
 
 /** Kept while filters change, since narrowing reuses the same placed rows. */
-const PreviewRow = memo(function PreviewRow({ placed, now }: { placed: PlacedItem; now: Date }) {
+const PreviewRow = memo(function PreviewRow({ placed, now, added }: { placed: PlacedItem; now: Date; added: NewSeries }) {
   const i18n = useI18n()
   const { item } = placed
-  const outcome = previewOutcome(item)
+  const outcome = previewOutcome(item, added)
   return (
     <tr role="row" className="rule-preview-row" data-written={item.projection ? "true" : "false"}>
       <td role="cell" className="rule-preview-col-when">{whenText(i18n, placed, now)}</td>
@@ -86,31 +87,31 @@ const PreviewRow = memo(function PreviewRow({ placed, now }: { placed: PlacedIte
           <span className="activity-sign" data-mark={OUTCOME_MARKS[outcome]}>
             <ChangeSign mark={OUTCOME_MARKS[outcome]} />
           </span>
-          <span className="activity-effect">{outcomeText(i18n, item)}</span>
+          <span className="activity-effect">{outcomeText(i18n, item, added)}</span>
         </span>
       </td>
     </tr>
   )
 })
 
-function DayRows({ day, heading, now }: { day: PreviewDay; heading: string; now: Date }) {
+function DayRows({ day, heading, now, added }: { day: PreviewDay; heading: string; now: Date; added: NewSeries }) {
   return (
     <tbody role="rowgroup" className="rule-preview-day">
       <tr role="row">
         <th scope="rowgroup" role="rowheader" colSpan={COLUMNS}>{heading}</th>
       </tr>
       {day.items.map((placed) => (
-        <PreviewRow key={`${placed.item.source_event_id}-${placed.item.original_start ?? ""}`} placed={placed} now={now} />
+        <PreviewRow key={`${placed.item.source_event_id}-${placed.item.original_start ?? ""}`} placed={placed} now={now} added={added} />
       ))}
     </tbody>
   )
 }
 
 /** The past part of the window, folded into one row that says what it holds; a removal opens it. */
-function EarlierRows({ days, now }: { days: PreviewDay[]; now: Date }) {
+function EarlierRows({ days, now, added }: { days: PreviewDay[]; now: Date; added: NewSeries }) {
   const i18n = useI18n()
   const items = days.flatMap((day) => day.items.map((placed) => placed.item))
-  const counts = outcomeCounts(items)
+  const counts = outcomeCounts(items, added)
   const [open, setOpen] = useState(() => counts.has("remove") || counts.has("blocked"))
   const first = days[0]
   if (!first) return null
@@ -145,7 +146,7 @@ function EarlierRows({ days, now }: { days: PreviewDay[]; now: Date }) {
               <th scope="rowgroup" role="rowheader" colSpan={COLUMNS}>{i18n.format.date(day.date, withYear(day.date, now, DAY))}</th>
             </tr>,
             ...day.items.map((placed) => (
-              <PreviewRow key={`${placed.item.source_event_id}-${placed.item.original_start ?? ""}`} placed={placed} now={now} />
+              <PreviewRow key={`${placed.item.source_event_id}-${placed.item.original_start ?? ""}`} placed={placed} now={now} added={added} />
             )),
           ])}
         </tbody>
@@ -161,6 +162,7 @@ export function PreviewTable({
   now,
   zone,
   complete,
+  added,
 }: {
   layout: PreviewLayout
   source: string
@@ -170,6 +172,8 @@ export function PreviewTable({
   zone: string
   /** Whether the table holds every event, so it may say so; a filtered one does not. */
   complete: boolean
+  /** The series this preview adds, from all of its events, so their dates read as added too. */
+  added: NewSeries
 }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -198,11 +202,12 @@ export function PreviewTable({
             day={{ key: "undated", date: now, items: layout.undated }}
             heading={t("rulePreview.table.undated", { source })}
             now={now}
+            added={added}
           />
         )}
-        {layout.earlier.length > 0 && <EarlierRows days={layout.earlier} now={now} />}
+        {layout.earlier.length > 0 && <EarlierRows days={layout.earlier} now={now} added={added} />}
         {layout.upcoming.map((day) => (
-          <DayRows key={day.key} day={day} heading={dayHeading(i18n, day, now)} now={now} />
+          <DayRows key={day.key} day={day} heading={dayHeading(i18n, day, now)} now={now} added={added} />
         ))}
         {complete && (
           <tbody role="rowgroup" className="rule-preview-later">

@@ -171,7 +171,12 @@ class FakeCalendarProvider:
     ) -> dict[OccurrenceStart, CalendarEvent]:
         return {}
 
-    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
+    def has_live_occurrences(
+        self,
+        series: EventRef,
+        policy: TransformationPolicy,
+        not_ended_before: datetime | None = None,
+    ) -> bool:
         return True
 
     def write_occurrence(

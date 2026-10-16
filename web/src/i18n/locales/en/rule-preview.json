@@ -17,6 +17,14 @@
     "changedSincePreview": "This rule changed since the preview.",
     "pauseAnyTime": "You can pause or remove the rule at any time."
   },
+  "reading": {
+    "checking": "Checking each event against this rule.",
+    "elapsed": {
+      "one": "{count} second so far.",
+      "other": "{count} seconds so far."
+    },
+    "large": "Large calendars can take up to a minute."
+  },
   "counts": {
     "add": "{count} to add",
     "update": "{count} to update",
