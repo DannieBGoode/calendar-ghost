@@ -472,8 +472,10 @@ describe("RulesView", () => {
   })
 
   it("has no untranslated text in Pause's plan note", async () => {
-    await renderRulesList(pseudoI18n(), { ownPlan: jsonResponse(overTheLimit) })
+    const i18n = pseudoI18n()
+    await renderRulesList(i18n, { ownPlan: jsonResponse(overTheLimit) })
     for (const menu of container.querySelectorAll('[aria-haspopup="menu"]')) click(menu)
+    expect(container.textContent).toContain(i18n.t("common.plan.mayNotRestart"))
     expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
   })
 

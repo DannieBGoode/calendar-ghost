@@ -288,7 +288,7 @@ function DisconnectConfirmation({
           {account.rule_count > 0
             ? t("settings.accounts.disconnect.bodyWithRules", { count: account.rule_count })
             : t("settings.accounts.disconnect.bodyWithoutRules")}
-          {mayNotRestart && ` ${t("common.plan.mayNotRestart")}`}
+          {mayNotRestart && ` ${t("common.plan.mayNotRestartRules", { count: account.rule_count })}`}
         </p>
       </div>
       <div className="confirmation-actions">

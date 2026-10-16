@@ -192,6 +192,10 @@
   "opensInNewTab": " (opens in a new tab)",
   "plan": {
     "mayNotRestart": "Your plan may not let this rule start again.",
+    "mayNotRestartRules": {
+      "one": "Your plan may not let this rule start again.",
+      "other": "Your plan may not let these rules start again."
+    },
     "seeYourPlan": "See your plan",
     "accountLimit": {
       "one": "Your plan allows {count} calendar account, and disconnected accounts count too.",

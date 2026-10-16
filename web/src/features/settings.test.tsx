@@ -710,7 +710,19 @@ describe("SettingsPage", () => {
     )!
     await click(disconnect)
     expect(container.querySelector("#disconnect-acct-a p")?.textContent).toBe(
-      "Its stored credentials will be removed. 2 affected rules will require reauthorization before they can run. Your plan may not let this rule start again.",
+      "Its stored credentials will be removed. 2 affected rules will require reauthorization before they can run. Your plan may not let these rules start again.",
+    )
+  })
+
+  it("warns before a disconnect that the plan may not let its one rule start again", async () => {
+    await renderSettings(testI18n(), { accounts: [{ ...connected, rule_count: 1 }, disconnected], ownPlan: jsonResponse(atEveryLimit) })
+    await click(container.querySelector<HTMLButtonElement>("#account-acct-a [aria-haspopup='menu']")!)
+    const disconnect = [...container.querySelectorAll<HTMLButtonElement>("[role='menuitem']")].find(
+      (item) => item.querySelector(".overflow-menu-label")?.textContent === "Disconnect account",
+    )!
+    await click(disconnect)
+    expect(container.querySelector("#disconnect-acct-a p")?.textContent).toBe(
+      "Its stored credentials will be removed. 1 affected rule will require reauthorization before it can run. Your plan may not let this rule start again.",
     )
   })
 
