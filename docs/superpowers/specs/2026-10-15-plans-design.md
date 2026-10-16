@@ -792,8 +792,8 @@ Domain `plans.py`; `User.plan`; `SyncRule.keeps_place`; `Allowances`, `SqlitePla
 `PlanCadence` with `instant` and `5_minutes` offered; the identity Plan use cases;
 `IssueIntegrationToken`; `ShowOwnPlan`; the Operator Overview Plan; the Start check, the atomic
 place move, the account limit with its OAuth outcome, and the token limit; routes, schemas, and
-codes; the Administration, People, and Your plan UI with every limit hint; ADR 0038 and the slice-1
-doc changes.
+codes; People's Plans tab, the person page's Plan, and Your plan, with every limit hint; ADR 0038
+and the slice-1 doc changes.
 
 Releases: administrators define Plans, choose a default, turn Plans on, and assign Plans. New
 Starts, accounts, and tokens respect limits. Instant Sync can be kept for some Plans. A lowered rule

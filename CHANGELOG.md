@@ -8,24 +8,29 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - Plans let an administrator limit how much each person uses
   ([ADR 0038](docs/adr/0038-plans-allowances-and-limits.md)). Under **People → Plans**, an
-  administrator adds Plans, each with how many rules may sync, how many calendar
-  accounts and Integration Tokens a person may have, and whether their calendars sync instantly or
-  every 5 minutes; chooses the Default Plan; and turns Plans on with **Limit people with plans**,
-  which says how many people Plans limit. Turning Plans on with no default adds a Plan named No
-  limits, which limits nobody, as the default. **Change plan** on a person's page gives them a Plan
-  of their own, listing what each Plan allows. Plans are off by default, and
-  while they are off nothing changes. Administrators are never limited, and under **Only me**
-  Plans stay hidden. Once Plans are on, starting a rule, connecting a new calendar account, and
-  issuing a token respect the person's Plan: each control says so at the limit and links to
-  **Settings → Your account → Your plan**, which gives one row per limit with how much of it is in
-  use, marks any count past its limit, and says to ask the administrator for a change. **Create
-  sync rule** says how many rules the Plan lets sync at once. Reauthorization is never refused. A lowered rule limit refuses new Starts and stops
-  nothing: rules beyond it keep syncing, and existing calendar accounts and tokens keep working.
-  Returning to setup turns Plans off and keeps their definitions. Rule details in the API gain
-  `can_start` and `rule_limit`, and rules and rule details gain `keeps_place`. Migration 33 adds
-  the `plans` table and the Plan columns; rolling back to an earlier release works with the same
-  database, which ignores them and limits nobody, and after upgrading again, Plans are as the
-  administrator left them.
+  administrator adds Plans by name, each with how many rules may sync, how many calendar accounts
+  and Integration Tokens a person may have, and whether their calendars sync instantly or every 5
+  minutes. The form says what counts toward each limit, and warns before a lower limit is saved
+  for a Plan that limits people. Each Plan says whom it limits, and Remove says why a Plan cannot
+  go while it is the default or someone has it. The administrator chooses the Default Plan with
+  **Save default**, and turns Plans on with **Limit people with plans**, which says how many
+  people Plans limit. Turning Plans on with no default adds a Plan named No limits, which limits
+  nobody, as the default, so nothing changes until someone has a smaller Plan; it can be renamed
+  and changed like any Plan. **Change plan** on a person's page gives them a Plan of their own,
+  listing what each Plan allows. Plans are off by default, and while they are off nothing changes.
+  Administrators are never limited, and under **Only me** Plans stay hidden. Once Plans are on,
+  starting a rule, connecting a new calendar account, and issuing a token respect the person's
+  Plan: each control says so at the limit and links to **Settings → Your account → Your plan**,
+  which gives one row per limit with how much of it is in use, marks any count past its limit, and
+  says to ask the administrator for a change. **Create sync rule** says how many rules the Plan
+  lets sync at once. Reauthorization is never refused. A lowered rule limit refuses new Starts and
+  stops nothing: rules beyond it keep syncing, and existing calendar accounts and tokens keep
+  working. Returning to setup turns Plans off and keeps their definitions. In the API, a Plan's
+  key is made from its name unless `POST /api/v1/plans` names one, rule details gain `can_start`
+  and `rule_limit`, and rules and rule details gain `keeps_place`. Migration 33 adds the `plans`
+  table and the Plan columns; rolling back to an earlier release works with the same database,
+  which ignores them and limits nobody, and after upgrading again, Plans are as the administrator
+  left them.
 - Instant Sync: with a public HTTPS address in `CALENDAR_SYNC_PUBLIC_URL` that Google and Microsoft
   reach at `/api/v1/watch-notices/`, a rule runs soon after its provider reports a change in its
   Source Calendar instead of waiting for the next five-minute sync. Scheduled syncs and the daily

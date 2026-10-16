@@ -696,8 +696,9 @@ sends email. Until then that page says who can set email up, and every incident 
 
 Start syncing is unavailable on a rule's preview page, or starting it answers that your plan's
 limit is reached, when an administrator turned Plans on and the rules that count toward your Plan
-already reach its rule limit. **Settings → Your account → Your plan** shows how many rules count
-and how many your Plan allows.
+already reach its rule limit. Under **Settings → Your account → Your plan**, **Rules that can
+sync** shows how many rules count and how many your Plan allows, and beside **Create sync rule**
+on Rules a note says how many your Plan lets sync at once.
 
 - Rules that count are enabled rules and rules stopped only because an account's access lapsed.
   Draft, previewed, and paused rules do not count, and creating or previewing a rule is never
@@ -720,11 +721,14 @@ An API client receives `409` with the code `plan_limit_reached` and the reason `
 ## Issue token is unavailable: your plan's token limit
 
 Under **Settings → Connections → Integrations**, **Issue token** is unavailable when your
-unrevoked Integration Tokens reach your Plan's token limit; a Plan may offer none. Revoke a token
-you no longer use, then issue the new one: revoked tokens do not count. Tokens you already have
-keep working when a limit is lowered, so no monitor stops on its own. A token that reads
-Installation Health is for administrators, who are never limited. An API client receives `409`
-with the code `plan_limit_reached` and the reason `integration_tokens`.
+unrevoked Integration Tokens reach your Plan's token limit, and the form says why: "Your plan
+allows 2 Integration Tokens, and all are in use. Revoke one to issue another." Revoke a token you
+no longer use, then issue the new one: revoked tokens do not count. A Plan may include no
+Integration Tokens at all; the form then says "Your plan does not include Integration Tokens. To
+get one, ask your administrator." Tokens you already have keep working when a limit is lowered,
+so no monitor stops on its own. A token that reads Installation Health is for administrators, who
+are never limited. An API client receives `409` with the code `plan_limit_reached` and the reason
+`integration_tokens`.
 
 ## Getting more help
 

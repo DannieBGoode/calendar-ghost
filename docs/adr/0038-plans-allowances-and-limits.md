@@ -207,7 +207,7 @@ limit.
   `BEGIN IMMEDIATE`, so two Plans added at once with one name get different keys. A key the
   request names is kept as it is, and refused with 409 `plan_key_taken` when another Plan has
   it. The key still never changes, so billing can map prices to it; renaming a Plan changes only
-  its name. The Web UI no longer needs to show it.
+  its name. The Web UI neither asks for it nor shows it.
 - **Turning Plans on with no default makes a "No limits" default.** When neither the request nor
   the installation names a default, `change_settings` adds an ordinary Plan named "No limits",
   with every count unlimited and Instant and its key made from its name, and makes it the

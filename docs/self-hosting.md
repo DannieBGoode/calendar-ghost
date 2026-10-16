@@ -280,17 +280,20 @@ administrator, as on a new installation, and the OAuth settings and master key i
 stay as they were. Plans, if you turned them on, turn off and keep their definitions.
 
 To keep one person from using up what everyone shares, open **People → Plans**. Choose
-**Add a plan** for each set of limits you want: how many rules may sync, how many
+**Add a plan** for each set of limits you want: its name, how many rules may sync, how many
 calendar accounts and Integration Tokens a person may have, and whether their calendars sync
-instantly or every 5 minutes. To limit everyone, choose a **Default plan**, which everyone without
-a Plan of their own has, including people who join later, and **Save default**. To limit only some
-people, give them a Plan with **Change plan** on their page under **People**. Then tick **Limit
-people with plans**; with no default, this adds a Plan named No limits, which limits nobody, as the
-default. Administrators are never limited, and while Plans are off, which is the default, nobody
-is. A lower limit stops nothing: rules beyond it
-keep syncing, and accounts and tokens keep working, but nobody can start a rule, connect a new
-calendar account, or issue a token past it. Each person sees what their Plan allows under
-**Settings → Your account → Your plan**
+instantly or every 5 minutes. Calendar Ghost makes the Plan's key, which names it in the API,
+from its name. To limit everyone, choose a **Default plan**, which everyone without a Plan of
+their own has, including people who join later, and **Save default**. To limit only some people,
+give them a Plan with **Change plan** on their page under **People**. Then tick **Limit people
+with plans**, which says how many people are limited. With no default, turning Plans on adds a
+Plan named No limits, which limits nobody, as the default, so nothing changes until someone has a
+smaller Plan; you can rename and change it like any Plan. The default, and a Plan someone has,
+cannot be removed: choose another default, or give those people another Plan, first.
+Administrators are never limited, and while Plans are off, which is the default, nobody is. A
+lower limit stops nothing: rules beyond it keep syncing, and accounts and tokens keep working, but
+nobody can start a rule, connect a new calendar account, or issue a token past it. Each person
+sees what their Plan allows under **Settings → Your account → Your plan**
 ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 
 ## 5. Use a LAN host or HTTPS
