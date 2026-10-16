@@ -495,6 +495,8 @@ def build_preview_container(
                 adapters.activity(user), units, cast(CalendarProvider, PreviewCalendar(moment))
             ),
             list_connected_accounts=ListConnectedAccounts(units, accounts),
+            # Your plan counts the same accounts, so Connect stops at a Plan's account limit.
+            show_own_plan=replace(services.show_own_plan, accounts=accounts),
             discover_calendars=DiscoverCalendars(
                 cast(AccountCalendars, providers),
                 units,

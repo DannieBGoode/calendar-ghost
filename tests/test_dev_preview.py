@@ -325,3 +325,27 @@ def test_preview_previews_a_paused_rule_from_its_synthetic_calendar(tmp_path: Pa
     gym = [item for item in response.json()["items"] if item["title"] == "Gym with Alex"]
     assert sorted(item["kind"] for item in gym) == ["occurrence", "occurrence", "series"]
     assert sorted(item["cancelled"] for item in gym) == [False, False, True]
+
+
+def test_your_plan_counts_each_preview_users_calendar_accounts(tmp_path: Path) -> None:
+    # Regression: ISSUE-001, Your plan counted no calendar accounts in the preview, so Connect
+    # never stopped at a Plan's account limit there.
+    # Found by /qa on 2026-10-16
+    container = build_preview_container(tmp_path / "dev-preview.db", NOW)
+    limits = {"rules": None, "integration_tokens": None, "sync_interval": "5_minutes"}
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
+        sams = client.get("/api/v1/account/plan").json()
+        client.post(
+            "/api/v1/plans",
+            json={"key": "two", "name": "Two", "limits": {**limits, "connected_accounts": 2}},
+        )
+        client.put("/api/v1/plan-settings", json={"enabled": True, "default_plan": "two"})
+        client.post("/api/v1/session", json={"email": ROBIN_EMAIL, "password": PREVIEW_PASSWORD})
+        robins = client.get("/api/v1/account/plan").json()
+        listed = len(client.get("/api/v1/accounts").json())
+
+    assert sams["connected_accounts"] == 3
+    assert robins["connected_accounts"] == listed == 2
+    assert robins["may_connect_account"] is False
