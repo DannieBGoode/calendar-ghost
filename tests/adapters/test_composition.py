@@ -15,7 +15,7 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose
 from calendar_sync.domain.plans import Allowance, AllowanceBasis
 from calendar_sync.infrastructure.security import CredentialCipher
-from tests.plans import FAMILY
+from tests.plans import FAMILY, as_new
 from tests.users import OTHER_USER, USER, administrator, limited_user
 
 # Holders the walk must reach, so a change in how the container nests them cannot make it pass
@@ -96,7 +96,7 @@ def test_the_plan_use_cases_share_the_installations_one_plans_store(tmp_path: Pa
     admin = administrator(adapters)
     member = limited_user(settings.database_path)
 
-    container.plans.define_plan.execute(admin, FAMILY)
+    container.plans.define_plan.execute(admin, as_new(FAMILY))
     assigned = container.administration.assign_plan.execute(admin, member, FAMILY.key)
     overview = container.plans.set_plans_setting.execute(admin, True, FAMILY.key)
 

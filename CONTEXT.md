@@ -28,8 +28,8 @@ availability. It runs the same open code, with no closed components (ADR 0023).
 **Plan**:
 A named set of limits that an Installation Administrator defines and assigns to Users: how many
 Directional Sync Rules may count toward it, how many Connected Accounts and Integration Tokens a
-User may have, and how soon their rules sync. Each Plan has a stable key, chosen when it is defined
-and never changed, and a name that can change; each count is a number or unlimited. The rules that
+User may have, and how soon their rules sync. Each Plan has a stable key, made from its name and
+never changed, and a name that can change; each count is a number or unlimited. The rules that
 count are enabled rules, rules stopped only by Lapsed Authorization, and a Rule Replacement's new
 draft that keeps its previous rule's place; drafts, previewed rules, and paused rules do not. Every
 Connected Account counts, Disconnected Accounts included, and every Integration Token not revoked.
@@ -43,8 +43,10 @@ _Avoid_: Tier, subscription, quota
 **Default Plan**:
 The Plan an Installation Administrator marks as the default. Every User without a Plan of their
 own has it, including Users who join later, so changing the default changes their limits at once.
-Plans cannot be turned on until a default exists, and the default cannot be removed while it is
-the default. Billing will return a User to it when a payment ends.
+Turning Plans on with no default makes an ordinary Plan named "No limits", which limits nobody,
+the default, so turning Plans on changes nothing until an administrator gives someone a smaller
+Plan. Plans are never on without a default: it cannot be cleared while they are on, nor removed
+while it is the default. Billing will return a User to it when a payment ends.
 _Avoid_: Base plan, fallback plan
 
 **Allowance**:

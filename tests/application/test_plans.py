@@ -28,6 +28,7 @@ from calendar_sync.domain.plans import (
     AssignmentSource,
     InvalidPlan,
     InvalidPlanReason,
+    NewPlan,
     Plan,
     PlanInUse,
     PlanIsDefault,
@@ -38,7 +39,7 @@ from calendar_sync.domain.plans import (
 )
 from tests.helpers import NOW
 from tests.identity_fakes import MemoryPlans, MemoryUsers
-from tests.plans import FAMILY, FREE, plans_on
+from tests.plans import FAMILY, FREE, as_new, plans_on
 
 PLANS_LOGGER = "calendar_sync.application.identity.plans"
 ADMIN = User(
@@ -58,6 +59,7 @@ SOLO = Plan(PlanKey("solo"), "Solo", PlanLimits(2, 2, 1, SyncInterval.INSTANT))
 HOURLY = Plan(
     PlanKey("hourly"), "Hourly", PlanLimits(None, None, None, SyncInterval.EVERY_60_MINUTES)
 )
+NO_LIMITS_PLAN = Plan(PlanKey("no-limits"), "No limits", NO_LIMITS)
 
 
 @dataclass(frozen=True)
@@ -97,7 +99,7 @@ def _remove(plans: MemoryPlans) -> RemovePlan:
 
 
 def _setting(plans: MemoryPlans) -> SetPlansSetting:
-    return SetPlansSetting(plans.users, plans)
+    return SetPlansSetting(plans.users, plans, CLOCK)
 
 
 def _assign(plans: MemoryPlans) -> AssignPlan:
@@ -123,7 +125,7 @@ def _snapshot(plans: MemoryPlans) -> tuple[object, ...]:
 # Each would succeed for an active administrator, on Plans turned on with FREE and FAMILY.
 ATTEMPTS: dict[str, Callable[[MemoryPlans, UserId], object]] = {
     "show plans": lambda plans, actor: ShowPlans(plans.users, plans).execute(actor),
-    "define a plan": lambda plans, actor: _define(plans).execute(actor, SOLO),
+    "define a plan": lambda plans, actor: _define(plans).execute(actor, as_new(SOLO)),
     "change a plan": lambda plans, actor: _change(plans).execute(
         actor, replace(FREE, name="Starter")
     ),
@@ -186,17 +188,27 @@ def test_a_new_installation_shows_no_plans_and_plans_off() -> None:
 def test_an_administrator_defines_a_plan_with_an_offered_interval() -> None:
     plans = _plans()
 
-    listing = _define(plans).execute(ADMIN.id, SOLO)
+    listing = _define(plans).execute(ADMIN.id, as_new(SOLO))
 
     assert listing == PlanListing(SOLO, False, 0, 0)
     assert plans.get(SOLO.key) == SOLO
+
+
+def test_a_new_plan_without_a_key_gets_one_made_from_its_name() -> None:
+    plans = _plans()
+
+    first = _define(plans).execute(ADMIN.id, NewPlan("Solo", SOLO.limits))
+    second = _define(plans).execute(ADMIN.id, NewPlan("Solo", FAMILY.limits))
+
+    assert first == PlanListing(SOLO, False, 0, 0)
+    assert second == PlanListing(Plan(PlanKey("solo-2"), "Solo", FAMILY.limits), False, 0, 0)
 
 
 def test_a_new_plan_whose_interval_is_not_offered_is_refused() -> None:
     plans = _plans()
 
     with pytest.raises(InvalidPlan) as refused:
-        _define(plans).execute(ADMIN.id, HOURLY)
+        _define(plans).execute(ADMIN.id, as_new(HOURLY))
 
     assert refused.value.reason is InvalidPlanReason.INTERVAL
     assert plans.any_plans() is False
@@ -204,10 +216,10 @@ def test_a_new_plan_whose_interval_is_not_offered_is_refused() -> None:
 
 def test_a_taken_key_is_refused_and_the_plan_with_it_is_kept() -> None:
     plans = _plans()
-    plans.add(FREE, NOW)
+    plans.add(as_new(FREE), NOW)
 
     with pytest.raises(PlanKeyTaken):
-        _define(plans).execute(ADMIN.id, replace(FREE, name="Another free plan"))
+        _define(plans).execute(ADMIN.id, NewPlan("Another free plan", FREE.limits, FREE.key))
 
     assert plans.get(FREE.key) == FREE
 
@@ -226,7 +238,7 @@ def test_changing_a_plan_keeps_its_key_and_its_new_limits_apply_at_once() -> Non
 
 def test_a_newly_chosen_interval_must_be_offered() -> None:
     plans = _plans()
-    plans.add(FREE, NOW)
+    plans.add(as_new(FREE), NOW)
     hourly = replace(FREE, limits=replace(FREE.limits, sync_interval=SyncInterval.EVERY_60_MINUTES))
 
     with pytest.raises(InvalidPlan) as refused:
@@ -298,7 +310,7 @@ def test_removing_a_plan_that_does_not_exist_is_plan_not_found() -> None:
 
 def test_turning_plans_on_with_a_default_answers_the_overview_and_limits_members() -> None:
     plans = _plans()
-    plans.add(FREE, NOW)
+    plans.add(as_new(FREE), NOW)
 
     overview = _setting(plans).execute(ADMIN.id, True, FREE.key)
 
@@ -308,19 +320,36 @@ def test_turning_plans_on_with_a_default_answers_the_overview_and_limits_members
     assert plans.of(MEMBER.id) == Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True)
 
 
-def test_plans_turn_on_only_with_a_default() -> None:
+def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_the_default() -> None:
     plans = _plans()
-    plans.add(FREE, NOW)
+    plans.add(as_new(FREE), NOW)
+
+    overview = _setting(plans).execute(ADMIN.id, True, None)
+
+    assert overview == PlansOverview(
+        PlansSetting(True, NO_LIMITS_PLAN.key),
+        (PlanListing(FREE, False, 0, 0), PlanListing(NO_LIMITS_PLAN, True, 2, 1)),
+        OFFERED_INTERVALS,
+    )
+    # Turning Plans on this way limits nobody until someone has a smaller Plan.
+    assert plans.of(MEMBER.id).limits == NO_LIMITS
+
+
+def test_turning_plans_on_never_clears_a_default_already_chosen() -> None:
+    plans = _plans()
+    plans.add(as_new(FREE), NOW)
+    _setting(plans).execute(ADMIN.id, False, FREE.key)
 
     with pytest.raises(PlansNeedDefault):
         _setting(plans).execute(ADMIN.id, True, None)
 
-    assert plans.settings() == PlansSetting(False, None)
+    assert plans.settings() == PlansSetting(False, FREE.key)
+    assert list(plans.catalog) == [FREE.key]
 
 
 def test_a_default_that_names_no_plan_is_plan_not_found() -> None:
     plans = _plans()
-    plans.add(FREE, NOW)
+    plans.add(as_new(FREE), NOW)
 
     with pytest.raises(PlanNotFound):
         _setting(plans).execute(ADMIN.id, True, PlanKey("missing"))
@@ -388,8 +417,8 @@ def test_assigning_a_plan_records_the_administrator_and_when() -> None:
 
 def test_a_plan_assigned_while_plans_are_off_applies_once_they_are_on() -> None:
     plans = _plans()
-    plans.add(FREE, NOW)
-    plans.add(FAMILY, NOW)
+    plans.add(as_new(FREE), NOW)
+    plans.add(as_new(FAMILY), NOW)
 
     allowance = _assign(plans).execute(ADMIN.id, MEMBER.id, FAMILY.key)
     _setting(plans).execute(ADMIN.id, True, FREE.key)
@@ -459,14 +488,16 @@ def test_assigning_an_unknown_plan_is_plan_not_found_and_changes_nothing() -> No
 def test_each_change_logs_one_line_naming_only_ids(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO, logger=PLANS_LOGGER)
     plans = _plans()
-    plans.add(FREE, NOW)
+    plans.add(as_new(FREE), NOW)
 
-    _define(plans).execute(ADMIN.id, SOLO)
+    _define(plans).execute(ADMIN.id, NewPlan("Solo", SOLO.limits))
     _change(plans).execute(ADMIN.id, replace(SOLO, name="Solo, renamed"))
     _assign(plans).execute(ADMIN.id, MEMBER.id, SOLO.key)
     _setting(plans).execute(ADMIN.id, True, FREE.key)
     _assign(plans).execute(ADMIN.id, MEMBER.id, None)
     _remove(plans).execute(ADMIN.id, SOLO.key)
+    _setting(plans).execute(ADMIN.id, False, None)
+    _setting(plans).execute(ADMIN.id, True, None)
     ShowPlans(plans.users, plans).execute(ADMIN.id)
 
     lines = [record.getMessage() for record in caplog.records if record.name == PLANS_LOGGER]
@@ -477,6 +508,9 @@ def test_each_change_logs_one_line_naming_only_ids(caplog: pytest.LogCaptureFixt
         "plans setting changed enabled=True default=free by=admin",
         "plan assigned user=member plan=None by=admin",
         "plan removed key=solo by=admin",
+        "plans setting changed enabled=False default=None by=admin",
+        # The default the change made, not the none it asked for.
+        "plans setting changed enabled=True default=no-limits by=admin",
     ]
     logged = "\n".join(lines)
     assert "Solo" not in logged

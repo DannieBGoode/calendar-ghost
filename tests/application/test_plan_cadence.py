@@ -39,7 +39,7 @@ def _plans(*, on: bool) -> MemoryPlans:
     change = AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN, NOW)
     plans.assign(MEMBER, FAMILY.key, change)
     if not on:
-        plans.change_settings(False, FREE.key)
+        plans.change_settings(False, FREE.key, NOW)
     return plans
 
 

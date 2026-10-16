@@ -852,8 +852,10 @@ class PlanLimitsRequest(BaseModel):
 
 
 class DefinePlanRequest(BaseModel):
-    key: str = Field(max_length=200)
-    """1 to 32 lower-case letters, digits, and hyphens; it never changes."""
+    key: str | None = Field(default=None, max_length=200)
+    """Optional: 1 to 32 lower-case letters, digits, and hyphens, which another Plan must not
+    have. Without one, the server makes the key from the name: lower-case letters, digits, and
+    hyphens, with "-2", "-3", and so on when another Plan has it. It never changes."""
     name: str = Field(max_length=200)
     limits: PlanLimitsRequest
 

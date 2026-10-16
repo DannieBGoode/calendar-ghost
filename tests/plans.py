@@ -1,7 +1,7 @@
 """Plans for tests: a small free Plan and a larger family Plan (ADR 0038)."""
 
 from calendar_sync.application.identity.ports import PlanCatalog
-from calendar_sync.domain.plans import Plan, PlanKey, PlanLimits, SyncInterval
+from calendar_sync.domain.plans import NewPlan, Plan, PlanKey, PlanLimits, SyncInterval
 from tests.helpers import NOW
 
 FREE = Plan(PlanKey("free"), "Free", PlanLimits(1, 1, 0, SyncInterval.EVERY_5_MINUTES))
@@ -10,8 +10,13 @@ FAMILY = Plan(PlanKey("family"), "Family", PlanLimits(5, 3, 2, SyncInterval.INST
 """Five rules, three calendar accounts, two Integration Tokens, and Instant Sync."""
 
 
+def as_new(plan: Plan) -> NewPlan:
+    """`plan` as an administrator adds it, asking for its key."""
+    return NewPlan(plan.name, plan.limits, plan.key)
+
+
 def plans_on(catalog: PlanCatalog, default: Plan = FREE, *others: Plan) -> None:
     """Define `default` and `others`, and turn Plans on with `default` as the Default Plan."""
     for plan in (default, *others):
-        catalog.add(plan, NOW)
-    catalog.change_settings(True, default.key)
+        catalog.add(as_new(plan), NOW)
+    catalog.change_settings(True, default.key, NOW)

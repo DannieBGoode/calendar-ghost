@@ -24,6 +24,7 @@ from calendar_sync.application.operations.own_plan import ShowOwnPlan
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.plans import (
     InvalidPlan,
+    NewPlan,
     Plan,
     PlanInUse,
     PlanIsDefault,
@@ -92,8 +93,9 @@ def list_plans(services: Services, actor: Administrator) -> PlansResponse:
 def set_plans_setting(
     payload: PlansSettingRequest, services: Services, actor: Administrator
 ) -> PlansResponse:
-    """Turn Plans on or off, and choose the Default Plan. Plans turn on only with a default;
-    turning them off is always allowed and keeps every Plan and assignment."""
+    """Turn Plans on or off, and choose the Default Plan. Turning Plans on with no default makes
+    a Plan named "No limits" the default; the default cannot be cleared while Plans are on.
+    Turning them off is always allowed and keeps every Plan and assignment."""
     default = named_plan(payload.default_plan) if payload.default_plan is not None else None
     try:
         overview = services.plans.set_plans_setting.execute(actor, payload.enabled, default)
@@ -110,9 +112,11 @@ def set_plans_setting(
 def define_plan(
     payload: DefinePlanRequest, services: Services, actor: Administrator
 ) -> PlanResponse:
-    """Add a Plan. Its key never changes, so billing can name it later."""
+    """Add a Plan. Its key is the one asked for, or one made from its name; it never changes,
+    so billing can name it later."""
     try:
-        plan = _plan(PlanKey(payload.key), payload.name, payload.limits)
+        key = PlanKey(payload.key) if payload.key is not None else None
+        plan = NewPlan(payload.name.strip(), plan_limits(payload.limits), key)
         listing = services.plans.define_plan.execute(actor, plan)
     except InvalidPlan as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error

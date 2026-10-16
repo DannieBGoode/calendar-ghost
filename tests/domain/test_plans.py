@@ -8,6 +8,7 @@ from calendar_sync.domain.cadence import DEFAULT_CADENCE, SCHEDULED_EVERY, SyncC
 from calendar_sync.domain.errors import DomainError, DomainValidationError
 from calendar_sync.domain.plans import (
     NO_LIMITS,
+    NO_LIMITS_PLAN,
     OFFERED_INTERVALS,
     UNLIMITED,
     Allowance,
@@ -16,6 +17,7 @@ from calendar_sync.domain.plans import (
     InvalidPlan,
     InvalidPlanReason,
     LimitedResource,
+    NewPlan,
     Plan,
     PlanInUse,
     PlanIsDefault,
@@ -27,8 +29,9 @@ from calendar_sync.domain.plans import (
     allowance_for,
     exceeds,
     has_room,
+    needs_no_limits_plan,
+    plan_key_from,
     require_offered,
-    require_plans_setting,
     require_removable,
     require_room,
 )
@@ -208,9 +211,18 @@ def test_a_plan_name_is_one_to_sixty_printable_characters(name: str) -> None:
         pytest.param("x" * 61, id="61 characters"),
     ],
 )
-def test_any_other_plan_name_is_refused_with_its_reason(name: str) -> None:
+@pytest.mark.parametrize(
+    "build",
+    [
+        pytest.param(lambda name: Plan(PlanKey("family"), name, FAMILY.limits), id="plan"),
+        pytest.param(lambda name: NewPlan(name, FAMILY.limits), id="new plan"),
+    ],
+)
+def test_any_other_plan_name_is_refused_with_its_reason(
+    name: str, build: Callable[[str], object]
+) -> None:
     with pytest.raises(InvalidPlan) as refused:
-        Plan(PlanKey("family"), name, FAMILY.limits)
+        build(name)
 
     assert refused.value.reason is InvalidPlanReason.NAME
 
@@ -304,16 +316,87 @@ def test_assignments_come_from_an_administrator_or_billing() -> None:
     assert [source.value for source in AssignmentSource] == ["administrator", "billing"]
 
 
-def test_plans_turn_on_only_with_a_default_plan() -> None:
-    with pytest.raises(PlansNeedDefault, match="choose a default plan"):
-        require_plans_setting(True, None)
+@pytest.mark.parametrize(
+    ("enabled", "default", "chosen", "needed"),
+    [
+        pytest.param(True, None, None, True, id="turning on with no default"),
+        pytest.param(True, FREE.key, None, False, id="turning on with a default named"),
+        pytest.param(True, FREE.key, FAMILY.key, False, id="choosing another default"),
+        pytest.param(True, FREE.key, FREE.key, False, id="keeping the default"),
+        pytest.param(False, None, None, False, id="off with no default"),
+        pytest.param(False, None, FREE.key, False, id="clearing the default while off"),
+        pytest.param(False, FREE.key, None, False, id="choosing a default while off"),
+    ],
+)
+def test_plans_turned_on_with_no_default_need_the_no_limits_plan(
+    enabled: bool, default: PlanKey | None, chosen: PlanKey | None, needed: bool
+) -> None:
+    assert needs_no_limits_plan(enabled, default, chosen) is needed
 
-    assert refusal(lambda: require_plans_setting(True, FREE.key)) is None
+
+def test_a_chosen_default_is_never_cleared_while_plans_are_on() -> None:
+    with pytest.raises(PlansNeedDefault, match="plans cannot be on without a default plan"):
+        needs_no_limits_plan(True, None, FREE.key)
 
 
-@pytest.mark.parametrize("default", [None, FREE.key])
-def test_plans_turn_off_whatever_the_default(default: PlanKey | None) -> None:
-    assert refusal(lambda: require_plans_setting(False, default)) is None
+def test_the_no_limits_plan_limits_nobody_and_syncs_instantly() -> None:
+    # Its key is made from its name when it is stored.
+    assert NO_LIMITS_PLAN.key is None
+    assert NO_LIMITS_PLAN.keyed(()) == Plan(
+        PlanKey("no-limits"), "No limits", PlanLimits(None, None, None, SyncInterval.INSTANT)
+    )
+
+
+# A new Plan's key
+
+
+@pytest.mark.parametrize(
+    ("name", "key"),
+    [
+        pytest.param("Free", "free", id="one word"),
+        pytest.param("Family Plan", "family-plan", id="words"),
+        pytest.param("Free + Family (2026)", "free-family-2026", id="other characters"),
+        pytest.param("Família Grande", "familia-grande", id="accents"),
+        pytest.param("FREE", "free", id="upper case"),
+        pytest.param("x" * 40, "x" * 32, id="at most 32 characters"),
+        pytest.param("a" * 31 + " b", "a" * 31, id="no hyphen at the end"),
+        pytest.param("日本", "plan", id="no usable character"),
+        pytest.param("!!!", "plan", id="punctuation only"),
+    ],
+)
+def test_a_new_plans_key_is_made_from_its_name(name: str, key: str) -> None:
+    assert plan_key_from(name, ()) == PlanKey(key)
+
+
+@pytest.mark.parametrize(
+    ("name", "taken", "key"),
+    [
+        pytest.param("Free", {"free"}, "free-2", id="taken"),
+        pytest.param("Free", {"free", "free-2"}, "free-3", id="taken twice"),
+        pytest.param("Free", {"free-2", "family"}, "free", id="others taken"),
+        pytest.param("日本", {"plan"}, "plan-2", id="plan taken"),
+        pytest.param("x" * 40, {"x" * 32}, "x" * 30 + "-2", id="at most 32 with the number"),
+        pytest.param(
+            "x" * 40,
+            {"x" * 32, *(f"{'x' * 30}-{number}" for number in range(2, 10))},
+            "x" * 29 + "-10",
+            id="a longer number",
+        ),
+        pytest.param("a" * 30 + " b", {"a" * 30 + "-b"}, "a" * 30 + "-2", id="no double hyphen"),
+    ],
+)
+def test_a_key_another_plan_has_gets_the_first_free_number(
+    name: str, taken: set[str], key: str
+) -> None:
+    assert plan_key_from(name, taken) == PlanKey(key)
+
+
+def test_a_new_plan_keeps_the_key_asked_for_or_gets_one_from_its_name() -> None:
+    asked = NewPlan("Free", FREE.limits, PlanKey("starter"))
+    made = NewPlan("Free", FREE.limits)
+
+    assert asked.keyed({"free"}) == Plan(PlanKey("starter"), "Free", FREE.limits)
+    assert made.keyed({"free"}) == Plan(PlanKey("free-2"), "Free", FREE.limits)
 
 
 def test_the_default_plan_is_refused_before_counting_who_has_it() -> None:

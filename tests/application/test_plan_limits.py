@@ -72,7 +72,7 @@ def _plans(role: Role = Role.USER, plan: Plan | None = None) -> MemoryPlans:
 def _plans_off() -> MemoryPlans:
     """Plans defined, with Free the default, but off: nobody is limited."""
     plans = _plans()
-    plans.change_settings(False, FREE.key)
+    plans.change_settings(False, FREE.key, NOW)
     return plans
 
 

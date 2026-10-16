@@ -10,6 +10,9 @@ Builds on [ADR 0028](0028-plans-apart-from-commercial-mode.md),
 [ADR 0030](0030-users-administrators-and-registration.md), and
 [ADR 0036](0036-instant-sync-through-provider-notices.md).
 
+Amended 2026-10-16: a Plan's key is made from its name, and turning Plans on with no default makes
+a Plan named "No limits" the default; see the amendment at the end.
+
 ## Context
 
 ADR 0028 settled that an Installation Administrator may turn Plans on to limit how much each User
@@ -187,3 +190,32 @@ multi-user design rebuilds `installation_settings` and must carry `plans_enabled
   good, while a refused request can simply be tried again.
 - **Disconnected Accounts outside the count.** Rejected: a User could disconnect one account,
   connect another, and then reauthorize the first, which is never refused.
+
+## Amendment: keys from names, and the No limits default (2026-10-16)
+
+A design review of the first Web UI for Plans found two setup steps that asked an administrator
+for something they could not judge yet: a key, in the first field of the form, and a default
+chosen before Plans could turn on.
+
+- **A Plan's key is made from its name.** `DefinePlan` takes a `NewPlan`, whose key may be
+  missing, and `POST /api/v1/plans` takes an optional `key`. Without one, `PlanCatalog.add` makes
+  it from the name with `plan_key_from` in `domain/plans.py`: lower case, accents dropped, one
+  hyphen for each run of other characters, at most 32 characters, or `plan` when nothing is left;
+  when another Plan has it, `-2`, `-3`, and so on. `SqlitePlans.add` reads the stored keys after
+  `BEGIN IMMEDIATE`, so two Plans added at once with one name get different keys. A key the
+  request names is kept as it is, and refused with 409 `plan_key_taken` when another Plan has
+  it. The key still never changes, so billing can map prices to it; renaming a Plan changes only
+  its name. The Web UI no longer needs to show it.
+- **Turning Plans on with no default makes a "No limits" default.** When neither the request nor
+  the installation names a default, `change_settings` adds an ordinary Plan named "No limits",
+  with every count unlimited and Instant and its key made from its name, and makes it the
+  default in the same transaction. Turning Plans on then changes nothing until the administrator
+  adds a smaller Plan and gives it to someone, which is how a household limits one person. The
+  Plan can be renamed and changed, and, like any default, cannot be removed while it is the
+  default. `plans_need_default` now answers only a request that would clear the default with
+  Plans on, or as they turn on, so a default an administrator chose is never replaced. Plans are
+  still never on without a default, and the Allowance order above does not change.
+
+Rejected: keeping the key in the form, which asked for a billing identifier before billing exists
+as an irreversible first choice; and keeping "choose a default first", which made an administrator
+who wanted to limit one person first define an unlimited Plan for everyone else by hand.

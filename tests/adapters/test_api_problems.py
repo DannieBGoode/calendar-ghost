@@ -32,7 +32,7 @@ from calendar_sync.domain.plans import (
     PlanInUse,
     PlanKey,
     PlanLimitReached,
-    require_plans_setting,
+    needs_no_limits_plan,
     require_removable,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
@@ -203,7 +203,11 @@ FAMILY_KEY = PlanKey("family")
             "invalid_plan",
             {"reason": "interval"},
         ),
-        (_refusal(lambda: require_plans_setting(True, None)), "plans_need_default", {}),
+        (
+            _refusal(lambda: needs_no_limits_plan(True, None, FAMILY_KEY)),
+            "plans_need_default",
+            {},
+        ),
         (_refusal(lambda: require_removable(FAMILY_KEY, FAMILY_KEY, 0)), "plan_is_default", {}),
         (PlanNotFound("plan family does not exist"), "plan_not_found", {}),
         (PlanKeyTaken("a plan with the key family already exists"), "plan_key_taken", {}),

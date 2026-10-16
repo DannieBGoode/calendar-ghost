@@ -29,12 +29,14 @@ from calendar_sync.domain.access import (
     require_registration_change,
 )
 from calendar_sync.domain.plans import (
+    NO_LIMITS_PLAN,
     UNLIMITED,
     Allowance,
+    NewPlan,
     Plan,
     PlanKey,
     allowance_for,
-    require_plans_setting,
+    needs_no_limits_plan,
     require_removable,
 )
 
@@ -371,10 +373,11 @@ class MemoryPlans:
     def settings(self) -> PlansSetting:
         return PlansSetting(self.enabled, self.default)
 
-    def change_settings(self, enabled: bool, default: PlanKey | None) -> PlansSetting:
+    def change_settings(self, enabled: bool, default: PlanKey | None, at: datetime) -> PlansSetting:
         if default is not None:
             self._require(default)
-        require_plans_setting(enabled, default)
+        if needs_no_limits_plan(enabled, default, self.default):
+            default = self.add(NO_LIMITS_PLAN, at).key
         self.enabled, self.default = enabled, default
         return self.settings()
 
@@ -388,10 +391,13 @@ class MemoryPlans:
     def get(self, key: PlanKey) -> Plan | None:
         return self.catalog.get(key)
 
-    def add(self, plan: Plan, at: datetime) -> None:
-        if plan.key in self.catalog:
+    def add(self, plan: NewPlan, at: datetime) -> Plan:
+        taken = {key.value for key in self.catalog}
+        if plan.key is not None and plan.key.value in taken:
             raise PlanKeyTaken(f"a plan with the key {plan.key.value} already exists")
-        self.catalog[plan.key] = plan
+        stored = plan.keyed(taken)
+        self.catalog[stored.key] = stored
+        return stored
 
     def change(self, plan: Plan, at: datetime) -> None:
         self._require(plan.key)

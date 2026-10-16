@@ -8,6 +8,7 @@ does meanwhile.
 
 from __future__ import annotations
 
+import sqlite3
 import time
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field, replace
@@ -28,6 +29,7 @@ from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
 from calendar_sync.domain.plans import (
     Allowance,
     LimitedResource,
+    NewPlan,
     Plan,
     PlanKey,
     PlanLimitReached,
@@ -37,6 +39,7 @@ from calendar_sync.domain.plans import (
 from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
+from calendar_sync.infrastructure.persistence import plans as plans_store
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
@@ -368,7 +371,7 @@ def test_a_start_that_waits_for_plans_to_turn_on_reads_the_limit(tmp_path: Path)
     database = tmp_path / "calendar-sync.db"
     enabled = replace(_previewed_rule(LATER_RULE), state=SyncRuleState.ENABLED)
     plans, units = _member_with_rules(database, rule(), enabled, _previewed_rule(NEXT_RULE))
-    plans.change_settings(False, TWO_RULES.key)
+    plans.change_settings(False, TWO_RULES.key, NOW)
 
     waited, outcome = _start_behind(
         database,
@@ -424,3 +427,39 @@ def test_two_connects_for_the_last_account_place_store_exactly_one(tmp_path: Pat
         "second@example.test": "refused at 1",
     }
     assert [account.email for account in store.for_user(member).list()] == ["first@example.test"]
+
+
+def test_two_plans_added_at_once_with_one_name_get_different_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An add reads the keys once it holds the write lock, so a second add with the same name
+    waits for it, then sees its key and makes another."""
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    plans = SqlitePlans(database)
+    reading, release = Event(), Event()
+    read_keys = plans_store._keys
+
+    def held(connection: sqlite3.Connection) -> set[str]:
+        keys = read_keys(connection)
+        if not reading.is_set():
+            reading.set()
+            assert release.wait(5)
+        return keys
+
+    monkeypatch.setattr(plans_store, "_keys", held)
+    added: list[Plan] = []
+    first = Thread(target=lambda: added.append(plans.add(NewPlan("Free", FREE.limits), NOW)))
+    first.start()
+    assert reading.wait(5)
+    second = Thread(target=lambda: added.append(plans.add(NewPlan("Free", FAMILY.limits), NOW)))
+    second.start()
+    second.join(WAIT)
+    waited = second.is_alive()
+    release.set()
+    first.join(5)
+    second.join(5)
+
+    assert waited
+    assert sorted(plan.key.value for plan in added) == ["free", "free-2"]
+    assert [listing.plan.key.value for listing in plans.plans()] == ["free", "free-2"]

@@ -9,7 +9,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId, UserState
-from calendar_sync.domain.plans import AssignmentSource, Plan, PlanKey
+from calendar_sync.domain.plans import AssignmentSource, NewPlan, Plan, PlanKey
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,9 +317,10 @@ class PlanCatalog(Protocol):
 
     def settings(self) -> PlansSetting: ...
 
-    def change_settings(self, enabled: bool, default: PlanKey | None) -> PlansSetting:
-        """One step: raises PlanNotFound when `default` names no Plan, PlansNeedDefault when
-        turning Plans on without a default."""
+    def change_settings(self, enabled: bool, default: PlanKey | None, at: datetime) -> PlansSetting:
+        """One step: raises PlanNotFound when `default` names no Plan, and PlansNeedDefault when
+        it would clear a chosen default with Plans on. Turning Plans on when neither `default`
+        nor the installation names one first adds NO_LIMITS_PLAN, at `at`, as the default."""
         ...
 
     def plans(self) -> Sequence[PlanListing]:
@@ -330,8 +331,10 @@ class PlanCatalog(Protocol):
 
     def get(self, key: PlanKey) -> Plan | None: ...
 
-    def add(self, plan: Plan, at: datetime) -> None:
-        """Raises PlanKeyTaken."""
+    def add(self, plan: NewPlan, at: datetime) -> Plan:
+        """Store the Plan under the key it asks for, or under the first key made from its name
+        that no Plan has, and answer it as stored. Raises PlanKeyTaken when another Plan has the
+        key it asks for."""
         ...
 
     def change(self, plan: Plan, at: datetime) -> None:

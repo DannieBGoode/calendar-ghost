@@ -317,7 +317,7 @@ def test_every_person_shows_their_own_plan_while_plans_are_off() -> None:
     """An administrator can prepare Plans before turning them on."""
     overview = _installation()
     _bob_on_family(overview)
-    _plans(overview).change_settings(False, FREE.key)
+    _plans(overview).change_settings(False, FREE.key, NOW)
 
     assert _allowances(overview) == {
         ADMIN.id: Allowance(AllowanceBasis.PLANS_OFF),

@@ -40,7 +40,7 @@ from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
 from tests.adapters.microsoft.test_calendar_provider_contract import outlook
 from tests.adapters.test_notifications import RecordingSmtp
 from tests.fake_microsoft_graph_api import Refusal
-from tests.helpers import endpoint, rule
+from tests.helpers import NOW, endpoint, rule
 from tests.plans import FAMILY, FREE, plans_on
 from tests.users import OTHER_USER, add_user, administrator, session_for, sqlite_units
 
@@ -431,7 +431,7 @@ def test_the_person_page_shows_the_plan_that_limits_them_and_their_own(
 
     member_while_on = plan_of(installation.member.user)
     admin_while_on = plan_of(admin)
-    plans.change_settings(False, FREE.key)
+    plans.change_settings(False, FREE.key, NOW)
     member_while_off = plan_of(installation.member.user)
     people = client.get("/api/v1/users").json()["users"]
 

@@ -800,7 +800,7 @@ def _plan_services(adapters: Adapters) -> PlanServices:
         define_plan=DefinePlan(users, catalog, clock),
         change_plan=ChangePlan(users, catalog, clock),
         remove_plan=RemovePlan(users, catalog),
-        set_plans_setting=SetPlansSetting(users, catalog),
+        set_plans_setting=SetPlansSetting(users, catalog, clock),
     )
 
 

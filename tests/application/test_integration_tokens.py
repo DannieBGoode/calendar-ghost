@@ -28,7 +28,7 @@ from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
 from tests.helpers import NOW
 from tests.identity_fakes import BrokenAllowances
-from tests.plans import FAMILY, FREE, plans_on
+from tests.plans import FAMILY, FREE, as_new, plans_on
 from tests.users import OTHER_USER, USER, add_user, limited_user
 
 VALID = "cgs_" + "A" * 43
@@ -169,7 +169,7 @@ def test_administrators_are_never_limited(tmp_path: Path) -> None:
 
 def test_with_plans_off_nobody_is_limited_even_with_a_plan_of_their_own(tmp_path: Path) -> None:
     installation = _installation(tmp_path)
-    installation.plans.add(FREE, NOW)
+    installation.plans.add(as_new(FREE), NOW)
     member = limited_user(installation.database, plan=FREE.key.value)
 
     for name in ("Uptime Kuma", "Homepage", "Claude Code"):

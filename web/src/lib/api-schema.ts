@@ -564,8 +564,9 @@ export interface paths {
         get?: never;
         /**
          * Set Plans Setting
-         * @description Turn Plans on or off, and choose the Default Plan. Plans turn on only with a default;
-         *     turning them off is always allowed and keeps every Plan and assignment.
+         * @description Turn Plans on or off, and choose the Default Plan. Turning Plans on with no default makes
+         *     a Plan named "No limits" the default; the default cannot be cleared while Plans are on.
+         *     Turning them off is always allowed and keeps every Plan and assignment.
          */
         put: operations["set_plans_setting_api_v1_plan_settings_put"];
         post?: never;
@@ -590,7 +591,8 @@ export interface paths {
         put?: never;
         /**
          * Define Plan
-         * @description Add a Plan. Its key never changes, so billing can name it later.
+         * @description Add a Plan. Its key is the one asked for, or one made from its name; it never changes,
+         *     so billing can name it later.
          */
         post: operations["define_plan_api_v1_plans_post"];
         delete?: never;
@@ -1351,7 +1353,7 @@ export interface components {
         /** DefinePlanRequest */
         DefinePlanRequest: {
             /** Key */
-            key: string;
+            key?: string | null;
             limits: components["schemas"]["PlanLimitsRequest"];
             /** Name */
             name: string;

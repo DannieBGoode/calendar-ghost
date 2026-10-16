@@ -22,10 +22,12 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.plans import (
+    NO_LIMITS,
     UNLIMITED,
     Allowance,
     AllowanceBasis,
     AssignmentSource,
+    NewPlan,
     Plan,
     PlanInUse,
     PlanIsDefault,
@@ -41,7 +43,7 @@ from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
 from tests.helpers import NOW
 from tests.identity_fakes import MemoryPlans, MemoryUsers
-from tests.plans import FAMILY, FREE, plans_on
+from tests.plans import FAMILY, FREE, as_new, plans_on
 from tests.users import limited_user
 
 ADMIN = User(
@@ -52,6 +54,7 @@ NEWCOMER = User(UserId("newcomer"), "newcomer@example.test", Role.USER, UserStat
 AWAY = User(UserId("away"), "away@example.test", Role.USER, UserState.DISABLED, NOW)
 NOBODY = UserId("nobody")
 LATER = NOW + timedelta(hours=1)
+NO_LIMITS_PLAN = Plan(PlanKey("no-limits"), "No limits", NO_LIMITS)
 BY_ADMIN = AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
 
 
@@ -116,7 +119,7 @@ def test_plans_are_defined_changed_and_listed_by_name_then_key(store: PlansStore
     team_b = Plan(PlanKey("team-b"), "Team", PlanLimits(10, 5, 5, SyncInterval.INSTANT))
     team_a = replace(team_b, key=PlanKey("team-a"))
     for plan in (FREE, team_b, FAMILY, team_a):
-        store.plans.add(plan, NOW)
+        store.plans.add(as_new(plan), NOW)
     starter = replace(FREE, name="Starter", limits=PlanLimits(2, None, None, SyncInterval.INSTANT))
 
     store.plans.change(starter, LATER)
@@ -133,12 +136,37 @@ def test_plans_are_defined_changed_and_listed_by_name_then_key(store: PlansStore
 
 
 def test_a_key_another_plan_has_is_refused(store: PlansStore) -> None:
-    store.plans.add(FREE, NOW)
+    store.plans.add(as_new(FREE), NOW)
 
     with pytest.raises(PlanKeyTaken):
-        store.plans.add(replace(FREE, name="Another free plan"), LATER)
+        store.plans.add(NewPlan("Another free plan", FAMILY.limits, FREE.key), LATER)
 
     assert store.plans.get(FREE.key) == FREE
+    assert [listing.plan for listing in store.plans.plans()] == [FREE]
+
+
+def test_a_new_plan_keeps_the_key_asked_for(store: PlansStore) -> None:
+    added = store.plans.add(NewPlan("Free", FREE.limits, PlanKey("starter")), NOW)
+
+    assert added == replace(FREE, key=PlanKey("starter"))
+    assert store.plans.get(PlanKey("starter")) == added
+
+
+def test_a_new_plan_without_a_key_gets_one_from_its_name_that_no_plan_has(
+    store: PlansStore,
+) -> None:
+    first = store.plans.add(NewPlan("Free", FREE.limits), NOW)
+    second = store.plans.add(NewPlan("Free", FAMILY.limits), NOW)
+    unnamed = store.plans.add(NewPlan("日本", FAMILY.limits), NOW)
+
+    assert first == FREE
+    assert second == Plan(PlanKey("free-2"), "Free", FAMILY.limits)
+    assert unnamed == Plan(PlanKey("plan"), "日本", FAMILY.limits)
+    assert [listing.plan.key for listing in store.plans.plans()] == [
+        FREE.key,
+        PlanKey("free-2"),
+        PlanKey("plan"),
+    ]
 
 
 def test_changing_a_plan_that_does_not_exist_is_refused(store: PlansStore) -> None:
@@ -148,27 +176,71 @@ def test_changing_a_plan_that_does_not_exist_is_refused(store: PlansStore) -> No
     assert not store.plans.any_plans()
 
 
-def test_plans_turn_on_only_with_a_default_that_exists_and_turn_off_at_any_time(
+def test_the_default_must_exist_and_is_never_cleared_while_plans_are_on(
     store: PlansStore,
 ) -> None:
-    store.plans.add(FREE, NOW)
+    store.plans.add(as_new(FREE), NOW)
 
-    with pytest.raises(PlansNeedDefault):
-        store.plans.change_settings(True, None)
     with pytest.raises(PlanNotFound):
-        store.plans.change_settings(True, FAMILY.key)
-    refused = store.plans.settings()
-    turned_on = store.plans.change_settings(True, FREE.key)
+        store.plans.change_settings(True, FAMILY.key, NOW)
+    unknown_refused = store.plans.settings()
+    chosen = store.plans.change_settings(False, FREE.key, NOW)
+    # Turning Plans on while clearing the default the administrator chose.
     with pytest.raises(PlansNeedDefault):
-        store.plans.change_settings(True, None)
-    turned_off = store.plans.change_settings(False, FREE.key)
-    cleared = store.plans.change_settings(False, None)
+        store.plans.change_settings(True, None, NOW)
+    turned_on = store.plans.change_settings(True, FREE.key, NOW)
+    with pytest.raises(PlansNeedDefault):
+        store.plans.change_settings(True, None, NOW)
+    turned_off = store.plans.change_settings(False, FREE.key, NOW)
+    cleared = store.plans.change_settings(False, None, NOW)
 
-    assert refused == PlansSetting(enabled=False, default=None)
+    assert unknown_refused == PlansSetting(enabled=False, default=None)
+    assert chosen == PlansSetting(enabled=False, default=FREE.key)
     assert turned_on == PlansSetting(enabled=True, default=FREE.key)
     assert turned_off == PlansSetting(enabled=False, default=FREE.key)
     assert cleared == PlansSetting(enabled=False, default=None)
     assert store.plans.settings() == cleared
+    # No refusal made a Plan.
+    assert [listing.plan for listing in store.plans.plans()] == [FREE]
+
+
+def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_the_default(
+    store: PlansStore,
+) -> None:
+    store.people(ADMIN, MEMBER)
+    store.plans.add(as_new(FREE), NOW)
+
+    turned_on = store.plans.change_settings(True, None, NOW)
+
+    assert turned_on == PlansSetting(enabled=True, default=NO_LIMITS_PLAN.key)
+    assert store.plans.settings() == turned_on
+    assert store.plans.plans() == (
+        PlanListing(FREE, is_default=False, people=0, limited_people=0),
+        PlanListing(NO_LIMITS_PLAN, is_default=True, people=2, limited_people=1),
+    )
+    # Plans are on, and still nothing limits anyone.
+    assert store.plans.of(MEMBER.id) == Allowance(
+        AllowanceBasis.PLAN, plan=NO_LIMITS_PLAN, on_default=True
+    )
+    assert store.plans.of(MEMBER.id).limits == NO_LIMITS
+
+
+def test_the_no_limits_plan_gets_a_key_no_plan_has_and_can_change_but_not_go(
+    store: PlansStore,
+) -> None:
+    store.people(ADMIN, MEMBER)
+    earlier = store.plans.add(NewPlan("No limits", FREE.limits), NOW)
+
+    turned_on = store.plans.change_settings(True, None, NOW)
+    made = replace(NO_LIMITS_PLAN, key=PlanKey("no-limits-2"))
+    renamed = replace(made, name="Everyone", limits=FAMILY.limits)
+    store.plans.change(renamed, LATER)
+
+    assert earlier.key == NO_LIMITS_PLAN.key
+    assert turned_on == PlansSetting(enabled=True, default=made.key)
+    assert store.plans.get(made.key) == renamed
+    with pytest.raises(PlanIsDefault):
+        store.plans.remove(made.key)
 
 
 def test_a_plan_is_removed_only_when_it_is_not_the_default_and_nobody_has_it(
@@ -177,7 +249,7 @@ def test_a_plan_is_removed_only_when_it_is_not_the_default_and_nobody_has_it(
     store.people(ADMIN, MEMBER)
     plans_on(store.plans, FREE, FAMILY)
     starter = replace(FREE, key=PlanKey("starter"), name="Starter")
-    store.plans.add(starter, NOW)
+    store.plans.add(as_new(starter), NOW)
     store.plans.assign(MEMBER.id, FAMILY.key, BY_ADMIN)
 
     # The default is refused first, even though ADMIN has it too.
@@ -195,7 +267,7 @@ def test_a_plan_is_removed_only_when_it_is_not_the_default_and_nobody_has_it(
 
 def test_assigning_a_plan_records_how_who_and_when(store: PlansStore) -> None:
     store.people(ADMIN, MEMBER)
-    store.plans.add(FAMILY, NOW)
+    store.plans.add(as_new(FAMILY), NOW)
     by_billing = AssignmentChange(AssignmentSource.BILLING, None, LATER)
 
     assigned = store.plans.assign(MEMBER.id, FAMILY.key, BY_ADMIN)
@@ -223,7 +295,7 @@ def test_each_users_allowance_follows_the_setting_their_role_and_their_own_plan(
     everyone = [ADMIN.id, MEMBER.id, NEWCOMER.id, NOBODY]
 
     on = store.plans.of_users(everyone)
-    store.plans.change_settings(False, FREE.key)
+    store.plans.change_settings(False, FREE.key, NOW)
     off = store.plans.of_users(everyone)
 
     assert on == {
@@ -250,7 +322,7 @@ def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
     plans_on(store.plans, FREE, FAMILY)
     store.plans.assign(MEMBER.id, FREE.key, BY_ADMIN)
 
-    store.plans.change_settings(True, FAMILY.key)
+    store.plans.change_settings(True, FAMILY.key, LATER)
     joined_later = User(UserId("joined"), "joined@example.test", Role.USER, UserState.ACTIVE, LATER)
     store.people(joined_later)
 
@@ -267,14 +339,14 @@ def test_a_plan_counts_everyone_who_has_it_and_the_people_it_limits(store: Plans
     other_admin = replace(ADMIN, id=UserId("other-admin"), email="other-admin@example.test")
     store.people(ADMIN, other_admin, MEMBER, NEWCOMER, AWAY)
     for plan in (FREE, FAMILY):
-        store.plans.add(plan, NOW)
+        store.plans.add(as_new(plan), NOW)
     for user in (MEMBER, other_admin):
         store.plans.assign(user.id, FAMILY.key, BY_ADMIN)
 
     without_default = store.plans.plans()
-    store.plans.change_settings(False, FREE.key)
+    store.plans.change_settings(False, FREE.key, NOW)
     while_off = store.plans.plans()
-    store.plans.change_settings(True, FREE.key)
+    store.plans.change_settings(True, FREE.key, NOW)
     while_on = store.plans.plans()
 
     assert without_default == (
@@ -295,6 +367,25 @@ def _sqlite(tmp_path: Path) -> tuple[Path, SqlitePlans]:
     database = tmp_path / "test.db"
     initialize_database(database)
     return database, SqlitePlans(database)
+
+
+def test_the_no_limits_plan_is_made_only_if_the_setting_it_is_for_is_saved(
+    tmp_path: Path,
+) -> None:
+    database, plans = _sqlite(tmp_path)
+    with transaction(database) as connection:
+        connection.execute(
+            """
+            CREATE TRIGGER refuse_setting BEFORE UPDATE ON installation_settings
+            BEGIN SELECT RAISE(ABORT, 'refused'); END
+            """
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="refused"):
+        plans.change_settings(True, None, NOW)
+
+    assert plans.settings() == PlansSetting(enabled=False, default=None)
+    assert not plans.any_plans()
 
 
 def test_the_allowances_of_many_users_are_read_in_chunks(

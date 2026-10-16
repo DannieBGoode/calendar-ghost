@@ -721,9 +721,16 @@
       "DefinePlanRequest": {
         "properties": {
           "key": {
-            "maxLength": 200,
-            "title": "Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
           },
           "limits": {
             "$ref": "#/components/schemas/PlanLimitsRequest"
@@ -735,7 +742,6 @@
           }
         },
         "required": [
-          "key",
           "name",
           "limits"
         ],
@@ -6269,7 +6275,7 @@
     },
     "/api/v1/plan-settings": {
       "put": {
-        "description": "Turn Plans on or off, and choose the Default Plan. Plans turn on only with a default;\nturning them off is always allowed and keeps every Plan and assignment.",
+        "description": "Turn Plans on or off, and choose the Default Plan. Turning Plans on with no default makes\na Plan named \"No limits\" the default; the default cannot be cleared while Plans are on.\nTurning them off is always allowed and keeps every Plan and assignment.",
         "operationId": "set_plans_setting_api_v1_plan_settings_put",
         "parameters": [
           {
@@ -6371,7 +6377,7 @@
         "summary": "List Plans"
       },
       "post": {
-        "description": "Add a Plan. Its key never changes, so billing can name it later.",
+        "description": "Add a Plan. Its key is the one asked for, or one made from its name; it never changes,\nso billing can name it later.",
         "operationId": "define_plan_api_v1_plans_post",
         "parameters": [
           {

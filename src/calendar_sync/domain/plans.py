@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Container
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -27,6 +28,9 @@ COUNT_LIMIT = 10_000
 """The largest number any limit of a Plan may be."""
 # 1 to 32 lower-case letters, digits, and hyphens, starting with a letter or digit.
 _PLAN_KEY = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
+# What a key made from a name turns into one hyphen: every run of anything but a letter or digit.
+_NOT_IN_KEY = re.compile(r"[^a-z0-9]+")
+_FALLBACK_KEY = "plan"
 # Control and format characters, and the line and paragraph separators that break a line, refused
 # as an Integration Token's name refuses them.
 _REFUSED_CATEGORIES = ("C", "Zl", "Zp")
@@ -51,8 +55,8 @@ class InvalidPlan(DomainValidationError):
 
 @dataclass(frozen=True, slots=True)
 class PlanKey:
-    """A Plan's stable key: chosen when the Plan is defined and never renamed, so billing can
-    name it later."""
+    """A Plan's stable key: set when the Plan is defined, from its name unless one is asked for,
+    and never renamed, so billing can name it later."""
 
     value: str
 
@@ -63,6 +67,22 @@ class PlanKey:
                 "a plan key is 1 to 32 lower-case letters, digits, and hyphens, "
                 "starting with a letter or digit",
             )
+
+
+def plan_key_from(name: str, taken: Container[str]) -> PlanKey:
+    """The key a new Plan named `name` gets: its letters and digits in lower case, accents
+    dropped, with one hyphen for each run of anything else, at most 32 characters, or "plan" when
+    nothing is left. When a Plan in `taken` has it, "-2", "-3", and so on is added, shortening
+    the rest so the key still fits."""
+    plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    made = _NOT_IN_KEY.sub("-", plain.lower()).strip("-")
+    base = made[:PLAN_KEY_LIMIT].rstrip("-") or _FALLBACK_KEY
+    key, number = base, 1
+    while key in taken:
+        number += 1
+        suffix = f"-{number}"
+        key = base[: PLAN_KEY_LIMIT - len(suffix)].rstrip("-") + suffix
+    return PlanKey(key)
 
 
 # Until the scheduler lists each rule once per window of its interval, it lists every enabled
@@ -151,8 +171,32 @@ class Plan:
     limits: PlanLimits
 
     def __post_init__(self) -> None:
-        if not _printable(self.name):
-            raise InvalidPlan(InvalidPlanReason.NAME, "a plan name is 1 to 60 printable characters")
+        _require_name(self.name)
+
+
+@dataclass(frozen=True, slots=True)
+class NewPlan:
+    """A Plan an administrator adds, before it has its key: the key asked for, if any, or one the
+    store makes from the name, so no other Plan has it."""
+
+    name: str
+    limits: PlanLimits
+    key: PlanKey | None = None
+    """The key asked for; None makes one from the name."""
+
+    def __post_init__(self) -> None:
+        _require_name(self.name)
+
+    def keyed(self, taken: Container[str]) -> Plan:
+        """The Plan to store: with the key asked for, or else with one made from the name that
+        no key in `taken` is."""
+        key = self.key if self.key is not None else plan_key_from(self.name, taken)
+        return Plan(key, self.name, self.limits)
+
+
+def _require_name(name: str) -> None:
+    if not _printable(name):
+        raise InvalidPlan(InvalidPlanReason.NAME, "a plan name is 1 to 60 printable characters")
 
 
 def _printable(name: str) -> bool:
@@ -235,7 +279,8 @@ def allowance_for(
 
 
 class PlansNeedDefault(DomainError):
-    """Plans turn on only once a Default Plan exists, so every User has a Plan."""
+    """Plans are never on without a Default Plan, so every User has a Plan: the default cannot be
+    cleared while Plans are on, or as they turn on."""
 
 
 class PlanIsDefault(DomainError):
@@ -263,10 +308,26 @@ class PlanLimitReached(DomainError):
         self.limit = limit
 
 
-def require_plans_setting(enabled: bool, default: PlanKey | None) -> None:
-    """Refuse turning Plans on without a Default Plan; turning them off is always allowed."""
-    if enabled and default is None:
-        raise PlansNeedDefault("choose a default plan before turning plans on")
+NO_LIMITS_PLAN = NewPlan("No limits", NO_LIMITS)
+"""The Plan made the Default Plan when Plans turn on with none. It limits nobody, so turning
+Plans on changes nothing until an administrator gives someone a smaller Plan. It is an ordinary
+Plan: it can be renamed and changed."""
+
+
+def needs_no_limits_plan(enabled: bool, default: PlanKey | None, chosen: PlanKey | None) -> bool:
+    """Whether setting Plans to `enabled` with `default` first makes NO_LIMITS_PLAN the default:
+    Plans turn on, and neither the change nor the installation (`chosen`) names a default.
+
+    Raises PlansNeedDefault when the change would clear the `chosen` default with Plans on.
+    Turning Plans off is always allowed, with or without a default.
+    """
+    if not enabled or default is not None:
+        return False
+    if chosen is not None:
+        raise PlansNeedDefault(
+            "plans cannot be on without a default plan; choose another default instead"
+        )
+    return True
 
 
 def require_removable(key: PlanKey, default: PlanKey | None, people: int) -> None:

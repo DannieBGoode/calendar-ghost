@@ -14,7 +14,7 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRuleId, SyncRuleState
-from calendar_sync.domain.plans import Plan
+from calendar_sync.domain.plans import NewPlan, Plan
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.infrastructure.security import CredentialCipher
@@ -53,6 +53,17 @@ FAMILY_BODY: dict[str, Any] = {
         "sync_interval": "instant",
     },
 }
+NO_LIMITS_BODY: dict[str, Any] = {
+    "key": "no-limits",
+    "name": "No limits",
+    "limits": {
+        "rules": None,
+        "connected_accounts": None,
+        "integration_tokens": None,
+        "sync_interval": "instant",
+    },
+}
+"""The Plan turning Plans on with no default makes the default."""
 CHANGE_FREE = {"name": "Free", "limits": FREE_BODY["limits"]}
 CHANGE_FAMILY = {"name": "Family", "limits": FAMILY_BODY["limits"]}
 OFFERED = ["instant", "5_minutes"]
@@ -190,7 +201,73 @@ def test_an_administrator_defines_lists_changes_and_removes_plans(
     assert [plan["key"] for plan in after] == ["free"]
 
 
-def test_plans_turn_on_only_with_a_default_and_turning_them_off_keeps_every_plan(
+def test_a_new_plan_without_a_key_gets_one_made_from_its_name(
+    installation: Installation,
+) -> None:
+    client = installation.client
+    unkeyed = {key: value for key, value in FREE_BODY.items() if key != "key"}
+
+    first = client.post("/api/v1/plans", json=unkeyed)
+    second = client.post("/api/v1/plans", json={**FAMILY_BODY, "key": None, "name": "Free"})
+    unnamed = client.post("/api/v1/plans", json={**unkeyed, "name": "日本"})
+    taken = client.post("/api/v1/plans", json={**FAMILY_BODY, "key": "free-2"})
+    listed = client.get("/api/v1/plans").json()["plans"]
+
+    assert first.status_code == 201
+    assert first.json() == {**FREE_BODY, "is_default": False, "people": 0, "limited_people": 0}
+    assert (second.status_code, second.json()["key"]) == (201, "free-2")
+    assert (unnamed.status_code, unnamed.json()["key"]) == (201, "plan")
+    # A key asked for is never changed to fit: another Plan has it, so it is refused.
+    assert _problem(taken) == (409, "plan_key_taken", {})
+    assert [(plan["key"], plan["name"]) for plan in listed] == [
+        ("free", "Free"),
+        ("free-2", "Free"),
+        ("plan", "日本"),
+    ]
+
+
+def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_that_limits_nobody(
+    installation: Installation,
+) -> None:
+    client = installation.client
+    installation.define(FREE_BODY)
+
+    turned_on = client.put("/api/v1/plan-settings", json={"enabled": True, "default_plan": None})
+    renamed = client.put(
+        "/api/v1/plans/no-limits", json={"name": "Everyone", "limits": NO_LIMITS_BODY["limits"]}
+    )
+    removed = client.delete("/api/v1/plans/no-limits")
+    cleared = client.put("/api/v1/plan-settings", json={"enabled": True, "default_plan": None})
+    installation.as_member()
+    own = client.get("/api/v1/account/plan").json()
+
+    assert turned_on.status_code == 200
+    assert turned_on.json() == {
+        "enabled": True,
+        "default_plan": "no-limits",
+        "sync_intervals": OFFERED,
+        "plans": [
+            {**FREE_BODY, "is_default": False, "people": 0, "limited_people": 0},
+            # Everyone has it, and it limits the member, by nothing.
+            {**NO_LIMITS_BODY, "is_default": True, "people": 2, "limited_people": 1},
+        ],
+    }
+    # An ordinary Plan: it can be renamed, but not removed while it is the default.
+    assert (renamed.status_code, renamed.json()["name"]) == (200, "Everyone")
+    assert _problem(removed) == (409, "plan_is_default", {})
+    assert _problem(cleared) == (409, "plans_need_default", {})
+    assert own == {
+        **UNLIMITED,
+        "basis": "plan",
+        "plan": {"key": "no-limits", "name": "Everyone", "on_default": True},
+        "limits": NO_LIMITS_BODY["limits"],
+        "rules_counted": 0,
+        "connected_accounts": 0,
+        "integration_tokens": 0,
+    }
+
+
+def test_the_default_is_never_cleared_while_plans_are_on_and_turning_them_off_keeps_every_plan(
     installation: Installation,
 ) -> None:
     client = installation.client
@@ -201,15 +278,16 @@ def test_plans_turn_on_only_with_a_default_and_turning_them_off_keeps_every_plan
             "/api/v1/plan-settings", json={"enabled": enabled, "default_plan": default}
         )
 
-    without_default = setting(True, None)
     chosen = setting(False, "free")
+    cleared_turning_on = setting(True, None)
     turned_on = setting(True, "free")
     cleared_while_on = setting(True, None)
     turned_off = setting(False, "free")
     cleared_while_off = setting(False, None)
     removed = client.delete("/api/v1/plans/free")
 
-    assert _problem(without_default) == (409, "plans_need_default", {})
+    # Turning Plans on never clears a default the administrator chose.
+    assert _problem(cleared_turning_on) == (409, "plans_need_default", {})
     assert chosen.json() == {
         "enabled": False,
         "default_plan": "free",
@@ -347,9 +425,10 @@ def test_a_new_plan_another_administrator_removed_at_once_is_answered_as_not_fou
     """The Plan is stored, then removed before its listing is read back: 404, never 500."""
     original_add = SqlitePlans.add
 
-    def add_then_removed(self: SqlitePlans, plan: Plan, at: datetime) -> None:
-        original_add(self, plan, at)
-        SqlitePlans(installation.database).remove(plan.key)
+    def add_then_removed(self: SqlitePlans, plan: NewPlan, at: datetime) -> Plan:
+        stored = original_add(self, plan, at)
+        SqlitePlans(installation.database).remove(stored.key)
+        return stored
 
     monkeypatch.setattr(SqlitePlans, "add", add_then_removed)
     response = installation.client.post("/api/v1/plans", json=FREE_BODY)

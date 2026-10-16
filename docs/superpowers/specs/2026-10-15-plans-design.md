@@ -29,7 +29,11 @@ default, and with Plans off nothing in this design limits or changes anything.
    If the User has held rules, a held rule may take the freed place, and the restart may be
    refused. A held rule has no place, so replacing it keeps none.
 5. **Default Plan.** The administrator marks one Plan as the default. A User with no Plan of
-   their own has it. Plans cannot turn on until a default exists. Billing falls back to it.
+   their own has it. Turning Plans on with no default makes an ordinary Plan named "No limits"
+   (every count unlimited, Instant) the default, so turning Plans on changes nothing until the
+   administrator adds a smaller Plan and gives it to someone. Plans are never on without a
+   default: clearing it while they are on is refused. Billing falls back to it. (Amended
+   2026-10-16; before, Plans could not turn on until the administrator chose a default.)
 6. **Installation Administrators are never limited.** Under Only Me the only User administers, so
    Plans have no effect there, and the Web UI hides them.
 7. **Sync intervals.** A fixed server list: Instant, 5, 10, 15, 30, and 60 minutes. Instant means
@@ -70,8 +74,9 @@ default, and with Plans off nothing in this design limits or changes anything.
 
 It imports only `domain/cadence.py`. `domain/access.py` imports `PlanKey` from it.
 
-- `PlanKey`: lower-case letters, digits, and hyphens, at most 32 characters. Chosen at creation,
-  never renamed. Billing will map prices to it.
+- `PlanKey`: lower-case letters, digits, and hyphens, at most 32 characters. Set at creation,
+  never renamed. Billing will map prices to it. `plan_key_from(name, taken)` makes one from a
+  name (section 9).
 - `SyncInterval` (`StrEnum`): `instant`, `5_minutes`, `10_minutes`, `15_minutes`, `30_minutes`,
   `60_minutes`. Its `cadence` maps `instant` to today's `DEFAULT_CADENCE` (Instant Sync plus a
   5-minute poll), and N minutes to `SyncCadence(instant=False, poll_every=N minutes)`.
@@ -83,6 +88,8 @@ It imports only `domain/cadence.py`. `domain/access.py` imports `PlanKey` from i
   number or `None` for unlimited. Rules and accounts allow 1 to 10000. Tokens allow 0 to 10000,
   so a Plan may offer none.
 - `Plan(key, name, limits)`. The name is 1 to 60 printable characters and can change.
+  `NewPlan(name, limits, key)` is a Plan being added, whose key may be None; `keyed(taken)` gives
+  the Plan to store.
 - `AssignmentSource` (`StrEnum`): `administrator`, `billing`. Only the phase-5 billing adapter
   writes `billing`.
 - `Allowance(basis, plan, on_default, assigned)`. `limits` is the Plan's limits when the basis is
@@ -100,7 +107,8 @@ It imports only `domain/cadence.py`. `domain/access.py` imports `PlanKey` from i
 | Otherwise | `plan`, the Default Plan, with `on_default` |
 | Plans on and no Plan found | No limits, and the adapter logs a warning. It cannot happen (section 3), but a fault in Plans must never limit anything. |
 
-Pure policies beside it: `require_plans_setting` (decision 5: no default, no Plans),
+Pure policies beside it: `needs_no_limits_plan` (decision 5: Plans turned on with no default
+get the `NO_LIMITS_PLAN` default, and a chosen default is never cleared while they are on),
 `require_removable` (not the default, nobody has it), `require_room` (raises
 `PlanLimitReached(resource, limit)`), and `may_start(before, counting_after, limit)`, which is true
 when there is no limit, when the rule keeps a place, or when the count after the Start is within
@@ -333,7 +341,8 @@ them.
 - **Settling** with a failed read settles nobody that pass, because "no limit" there would release
   every hold.
 - Writes (`change_settings`, `add`, `change`, `remove`, `assign`) run under `BEGIN IMMEDIATE`, as
-  `SqliteRegistrationSettings` does.
+  `SqliteRegistrationSettings` does. `add` reads the stored keys under it, so two Plans added at
+  once with one name get different keys.
 - `plans()` returns each Plan with `people` (everyone who has it, which `plan_in_use` uses) and
   `limited_people` (active Users who do not administer, whom it limits now).
 
@@ -616,10 +625,10 @@ Today `SyncScheduler` runs a pass, sleeps 300 seconds, and runs every enabled ru
 | Use case | Effect and refusals |
 |---|---|
 | `ShowPlans` | Every Plan with `people` and `limited_people`, the setting, the default, and the offered intervals |
-| `DefinePlan` | 409 `plan_key_taken`; 422 `invalid_plan` with the reason |
+| `DefinePlan` | The key is the one the request names, or one made from the name: lower case, accents dropped, each run of other characters one hyphen, at most 32 characters, or `plan` when nothing is left, with `-2`, `-3`, and so on when another Plan has it. `PlanCatalog.add` makes it after it takes the write lock, so it is unique. 409 `plan_key_taken` only for a named key another Plan has; 422 `invalid_plan` with the reason |
 | `ChangePlan` | The key never changes. New limits apply at once to new resources. The form warns how many people the Plan limits, and that rules beyond a lower limit keep syncing for 7 days, then are held (before slice 4: that no new rule can start). |
 | `RemovePlan` | 409 `plan_is_default`, or 409 `plan_in_use` with `people`. The administrator moves those Users first, which is also safe for billing. |
-| `SetPlansSetting` | 409 `plans_need_default` when turning Plans on without a default. Turning them off is always allowed and keeps everything. |
+| `SetPlansSetting` | Turning Plans on when neither the request nor the installation names a default adds "No limits" (every count unlimited, Instant, its key made from its name) and makes it the default, in the same transaction. It is an ordinary Plan: it can be renamed and changed, and not removed while it is the default. 409 `plans_need_default` when the request would clear the default with Plans on, or as they turn on. Turning them off is always allowed and keeps everything. |
 | `AssignPlan` | `PlanAssignments.assign(user, plan, AssignmentChange(administrator, actor, now))`. `None` returns the User to the default. Allowed while Plans are off, so an administrator can prepare. |
 
 - **Billing seam.** Billing will call the same port with `AssignmentChange(billing, None, at)`,

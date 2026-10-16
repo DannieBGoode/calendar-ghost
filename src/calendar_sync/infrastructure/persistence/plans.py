@@ -12,16 +12,18 @@ from calendar_sync.application.identity.errors import PlanKeyTaken, PlanNotFound
 from calendar_sync.application.identity.ports import AssignmentChange, PlanListing, PlansSetting
 from calendar_sync.domain.access import Role, UserId
 from calendar_sync.domain.plans import (
+    NO_LIMITS_PLAN,
     UNLIMITED,
     Allowance,
     InvalidPlan,
+    NewPlan,
     Plan,
     PlanInUse,
     PlanKey,
     PlanLimits,
     SyncInterval,
     allowance_for,
-    require_plans_setting,
+    needs_no_limits_plan,
     require_removable,
 )
 from calendar_sync.infrastructure.persistence.connections import USERS_PER_QUERY, transaction
@@ -61,12 +63,14 @@ class SqlitePlans:
         with transaction(self._database_path) as connection:
             return _setting(connection)
 
-    def change_settings(self, enabled: bool, default: PlanKey | None) -> PlansSetting:
+    def change_settings(self, enabled: bool, default: PlanKey | None, at: datetime) -> PlansSetting:
         with transaction(self._database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
             if default is not None:
                 _require_plan(connection, default)
-            require_plans_setting(enabled, default)
+            if needs_no_limits_plan(enabled, default, _setting(connection).default):
+                # Made in this transaction, so it exists only if the setting is saved.
+                default = _insert(connection, NO_LIMITS_PLAN, at).key
             # Migration 22 creates the one row.
             connection.execute(
                 """
@@ -105,23 +109,11 @@ class SqlitePlans:
             row = connection.execute("SELECT * FROM plans WHERE key = ?", (key.value,)).fetchone()
         return _plan(row) if row is not None else None
 
-    def add(self, plan: Plan, at: datetime) -> None:
-        try:
-            with transaction(self._database_path) as connection:
-                connection.execute("BEGIN IMMEDIATE")
-                connection.execute(
-                    """
-                    INSERT INTO plans (
-                        key, name, rule_limit, account_limit, token_limit, sync_interval,
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (*_plan_values(plan), at.isoformat(), at.isoformat()),
-                )
-        except sqlite3.IntegrityError as error:
-            if "plans.key" not in str(error):
-                raise
-            raise PlanKeyTaken(f"a plan with the key {plan.key.value} already exists") from error
+    def add(self, plan: NewPlan, at: datetime) -> Plan:
+        with transaction(self._database_path) as connection:
+            # Held from reading the keys to the insert, so no other Plan takes the key meanwhile.
+            connection.execute("BEGIN IMMEDIATE")
+            return _insert(connection, plan, at)
 
     def change(self, plan: Plan, at: datetime) -> None:
         with transaction(self._database_path) as connection:
@@ -178,6 +170,30 @@ class SqlitePlans:
         return assigned == 1
 
 
+def _insert(connection: sqlite3.Connection, new: NewPlan, at: datetime) -> Plan:
+    """Store `new` under the key it asks for, or under one made from its name that no Plan has;
+    raises PlanKeyTaken when another Plan has the key it asks for."""
+    taken = _keys(connection)
+    if new.key is not None and new.key.value in taken:
+        raise PlanKeyTaken(f"a plan with the key {new.key.value} already exists")
+    plan = new.keyed(taken)
+    connection.execute(
+        """
+        INSERT INTO plans (
+            key, name, rule_limit, account_limit, token_limit, sync_interval,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (*_plan_values(plan), at.isoformat(), at.isoformat()),
+    )
+    return plan
+
+
+def _keys(connection: sqlite3.Connection) -> set[str]:
+    """Every stored Plan key, including one a later release wrote that this one cannot read."""
+    return {str(row["key"]) for row in connection.execute("SELECT key FROM plans")}
+
+
 def _allowance_rows(connection: sqlite3.Connection, users: Sequence[str]) -> list[sqlite3.Row]:
     """Each of `users` with the setting, their own Plan, and the Default Plan, in one row."""
     marks = ", ".join("?" * len(users))
@@ -208,7 +224,8 @@ def _allowance(row: sqlite3.Row) -> Allowance:
     administers = row["role"] == Role.INSTALLATION_ADMINISTRATOR.value
     own, default = _plan(row, "own_"), _plan(row, "default_")
     if plans_on and not administers and own is None and default is None:
-        # Turning Plans on needs a default, so this cannot happen; a fault never limits anyone.
+        # Plans are never on without a default, so this cannot happen; a fault never limits
+        # anyone.
         logger.warning("Plans are on, but User %s has no Plan; nothing limits them", row["id"])
     return allowance_for(plans_on=plans_on, administers=administers, own=own, default=default)
 

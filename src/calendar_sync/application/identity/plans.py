@@ -27,6 +27,7 @@ from calendar_sync.domain.plans import (
     OFFERED_INTERVALS,
     Allowance,
     AssignmentSource,
+    NewPlan,
     Plan,
     PlanKey,
     SyncInterval,
@@ -76,19 +77,20 @@ class ShowPlans:
 
 @dataclass(slots=True)
 class DefinePlan:
-    """Add a Plan. Its key is chosen now and never changes."""
+    """Add a Plan. Its key is the one asked for, or else one made from its name that no other
+    Plan has; it never changes."""
 
     users: UserDirectory
     catalog: PlanCatalog
     clock: Clock
 
-    def execute(self, actor: UserId, plan: Plan) -> PlanListing:
+    def execute(self, actor: UserId, plan: NewPlan) -> PlanListing:
         require_administrator(self.users, actor)
         require_offered(plan.limits.sync_interval)
-        # Raises PlanKeyTaken.
-        self.catalog.add(plan, self.clock.now())
-        logger.info("plan defined key=%s by=%s", plan.key.value, actor.value)
-        return _listing(self.catalog, plan.key)
+        # Raises PlanKeyTaken for a key asked for that another Plan has.
+        stored = self.catalog.add(plan, self.clock.now())
+        logger.info("plan defined key=%s by=%s", stored.key.value, actor.value)
+        return _listing(self.catalog, stored.key)
 
 
 @dataclass(slots=True)
@@ -130,21 +132,23 @@ class RemovePlan:
 
 @dataclass(slots=True)
 class SetPlansSetting:
-    """Turn Plans on or off and choose the Default Plan. Turning Plans off is always allowed and
-    keeps every Plan and every User's own Plan."""
+    """Turn Plans on or off and choose the Default Plan. Turning Plans on with no default makes a
+    Plan named "No limits" the default, so it changes nothing until someone has a smaller Plan.
+    Turning Plans off is always allowed and keeps every Plan and every User's own Plan."""
 
     users: UserDirectory
     catalog: PlanCatalog
+    clock: Clock
 
     def execute(self, actor: UserId, enabled: bool, default: PlanKey | None) -> PlansOverview:
         require_administrator(self.users, actor)
         # Raises PlanNotFound for a default that names no Plan, and PlansNeedDefault when
-        # turning Plans on without one.
-        setting = self.catalog.change_settings(enabled, default)
+        # clearing the default with Plans on.
+        setting = self.catalog.change_settings(enabled, default, self.clock.now())
         logger.info(
             "plans setting changed enabled=%s default=%s by=%s",
-            enabled,
-            _logged(default),
+            setting.enabled,
+            _logged(setting.default),
             actor.value,
         )
         return _overview(self.catalog, setting)
