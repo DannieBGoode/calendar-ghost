@@ -9,7 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { PersonPlan, PlansOverview, SessionStatus, UserOverview } from "@/lib/api"
+import type { PersonPlanOverview, PlansOverview, SessionStatus, UserOverview } from "@/lib/api"
 
 import { PersonView } from "./person-page"
 
@@ -78,18 +78,25 @@ const session: SessionStatus = {
   user: { id: "user-dana", email: "dana@example.test", role: "installation_administrator", notify_by_email: true, instant_sync: true, instant_sync_availability: "on", instant_sync_help: null, language: null },
 }
 
-/** Robin's own Plan, which limits them while Plans are on. */
-const onFamily: PersonPlan = {
+const hasFamily = { key: "family", name: "Family", on_default: false }
+const hasFree = { key: "free", name: "Free", on_default: true }
+
+/** Robin's own Plan, which limits them while Plans are on, within each of its limits. */
+const onFamily: PersonPlanOverview = {
   basis: "plan",
-  plan: { key: "family", name: "Family", on_default: false },
+  plan: hasFamily,
   assigned: { key: "family", name: "Family" },
+  has: hasFamily,
+  over: [],
 }
 
-/** What assigning Robin the Default Plan answers. */
-const onFree: PersonPlan = {
+/** Robin on the Default Plan, as assigning it answers and their page then shows it. */
+const onFree: PersonPlanOverview = {
   basis: "plan",
-  plan: { key: "free", name: "Free", on_default: true },
+  plan: hasFree,
   assigned: null,
+  has: hasFree,
+  over: [],
 }
 
 /** The Plans an administrator chooses from, by name then key, as the server lists them. */
@@ -549,7 +556,7 @@ describe("A person's page", () => {
   })
 
   describe("their plan", () => {
-    const withPlan = (plan: PersonPlan, extra: Record<string, Answer> = {}) => ({
+    const withPlan = (plan: PersonPlanOverview, extra: Record<string, Answer> = {}) => ({
       "GET /api/v1/users/user-robin/overview": jsonResponse({ ...robin, plan }),
       "GET /api/v1/plans": jsonResponse(plans),
       ...extra,
@@ -562,24 +569,29 @@ describe("A person's page", () => {
       expect(menuLabels()).toEqual(["Make administrator", "Disable", "Create password reset link", "Delete"])
     })
 
-    const CASES: [string, PersonPlan, string][] = [
+    const CASES: [string, PersonPlanOverview, string][] = [
       ["their own plan", onFamily, "Plan: Family"],
       ["the default plan, which they have without one of their own", onFree, "Plan: Free (default)"],
-      [
-        "their own plan while plans are off",
-        { basis: "plans_off", plan: null, assigned: { key: "family", name: "Family" } },
-        "Plan: Family, once plans are on",
-      ],
+      ["their own plan while plans are off", { ...onFamily, basis: "plans_off", plan: null }, "Plan: Family, once plans are on"],
       [
         "the default plan while plans are off",
-        { basis: "plans_off", plan: null, assigned: null },
+        { ...onFree, basis: "plans_off", plan: null },
+        "Plan: Free (default), once plans are on",
+      ],
+      [
+        "that they have no plan yet while plans are off",
+        { ...onFree, basis: "plans_off", plan: null, has: null },
         "Plan: the default, once plans are on",
       ],
-      ["that no plan limits an administrator", { basis: "administrator", plan: null, assigned: null }, "No plan limits administrators"],
+      [
+        "that no plan limits an administrator",
+        { ...onFree, basis: "administrator", plan: null, has: null },
+        "No plan limits administrators",
+      ],
       [
         "a plan kept for an administrator, which limits nothing",
-        { basis: "administrator", plan: null, assigned: { key: "family", name: "Family" } },
-        "No plan limits administrators (assigned: Family)",
+        { ...onFamily, basis: "administrator", plan: null },
+        "Plan: Family. No plan limits administrators",
       ],
     ]
 
@@ -588,14 +600,27 @@ describe("A person's page", () => {
       expect(facts()).toEqual(["User", fact, "Joined just now", "Never signed in"])
     })
 
-    const ADMINISTRATOR_CASES: [string, PersonPlan, string][] = [
-      ["while plans are off", { basis: "plans_off", plan: null, assigned: null }, "No plan limits administrators"],
+    const ADMINISTRATOR_CASES: [string, PersonPlanOverview, string][] = [
+      [
+        "while plans are off",
+        { ...onFree, basis: "plans_off", plan: null },
+        "Plan: Free (default). No plan limits administrators",
+      ],
       [
         "with a plan of their own while plans are off",
-        { basis: "plans_off", plan: null, assigned: { key: "free", name: "Free" } },
-        "No plan limits administrators (assigned: Free)",
+        { ...onFamily, basis: "plans_off", plan: null },
+        "Plan: Family. No plan limits administrators",
       ],
-      ["while plans are on", { basis: "administrator", plan: null, assigned: null }, "No plan limits administrators"],
+      [
+        "while plans are on, as one of the people the default plan's row counts",
+        { ...onFree, basis: "administrator", plan: null },
+        "Plan: Free (default). No plan limits administrators",
+      ],
+      [
+        "with no plan at all",
+        { ...onFree, basis: "plans_off", plan: null, has: null },
+        "No plan limits administrators",
+      ],
     ]
 
     it.each(ADMINISTRATOR_CASES)("says no plan limits an administrator %s", async (_case, plan, fact) => {
@@ -605,6 +630,24 @@ describe("A person's page", () => {
         "GET /api/v1/plans": jsonResponse(plans),
       })
       expect(facts()).toEqual(["Administrator", fact, "Joined just now", "Never signed in"])
+    })
+
+    it("marks a limit they are over in words, with the attention icon and tone", async () => {
+      const over: PersonPlanOverview = {
+        ...onFamily,
+        over: [{ limit: "connected_accounts", in_use: 2, allowed: 1 }],
+      }
+      await renderPerson(testI18n(), "user-robin", withPlan(over))
+      expect(facts()).toEqual(["User", "Plan: Family. 2 calendar accounts, 1 allowed", "Joined just now", "Never signed in"])
+      const fact = container.querySelectorAll(".person-facts li")[1]!
+      expect(fact.getAttribute("data-tone")).toBe("attention")
+      expect(fact.querySelector("svg[aria-hidden='true']")).not.toBeNull()
+    })
+
+    it("marks nothing while they are within every limit", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily))
+      expect(container.querySelector(".person-facts [data-tone]")).toBeNull()
+      expect(container.querySelector(".person-facts svg")).toBeNull()
     })
 
     it("offers Change plan beside their other actions once a plan exists", async () => {
@@ -713,10 +756,13 @@ describe("A person's page", () => {
     })
 
     it("states a plan named like another fact without confusing the two", async () => {
-      const onUser: PersonPlan = {
+      const hasUser = { key: "user", name: "User", on_default: false }
+      const onUser: PersonPlanOverview = {
         basis: "plan",
-        plan: { key: "user", name: "User", on_default: false },
+        plan: hasUser,
         assigned: { key: "user", name: "User" },
+        has: hasUser,
+        over: [],
       }
       const errors = vi.spyOn(console, "error")
       await renderPerson(testI18n(), "user-robin", withPlan(onUser))
@@ -854,7 +900,8 @@ describe("A person's page", () => {
     })
 
     it("has no untranslated text with the plan fact and the plan choice open", async () => {
-      await renderPerson(pseudoI18n(), "user-robin", withPlan(onFamily))
+      const over: PersonPlanOverview = { ...onFamily, over: [{ limit: "rules", in_use: 6, allowed: 5 }] }
+      await renderPerson(pseudoI18n(), "user-robin", withPlan(over))
       await click(container.querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
       // The item's description id ends with its action, "plan"; its label is pseudo-translated.
       const change = [...container.querySelectorAll<HTMLButtonElement>("[role='menuitem']")].find((item) =>

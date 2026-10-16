@@ -1,8 +1,9 @@
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
 import type {
+  OverLimit,
   OwnPlan,
-  PersonPlan,
+  PersonPlanOverview,
   PlanLimits,
   PlanSummary,
   RegistrationPolicy,
@@ -200,21 +201,50 @@ export function ownPlanRows(i18n: I18n, plan: OwnPlan): OwnPlanRow[] {
   ]
 }
 
+/** How each limit a person is over reads, by the count in use: "2 calendar accounts, 1 allowed". */
+const OVER_WORDS: Readonly<Record<OverLimit["limit"], MessageKey>> = {
+  rules: "people.plan.over.rules",
+  connected_accounts: "people.plan.over.accounts",
+  integration_tokens: "people.plan.over.tokens",
+}
+
+function overLimitText({ t }: I18n, { limit, in_use, allowed }: OverLimit): string {
+  // A Plan may include no Integration Tokens; one lowered to none still counts those kept.
+  if (limit === "integration_tokens" && allowed === 0) return t("people.plan.over.tokensNone", { count: in_use })
+  return t(OVER_WORDS[limit], { count: in_use, allowed })
+}
+
+type HeldPlan = NonNullable<PersonPlanOverview["has"]>
+
+/** The Plan a person has, by name, "(default)" when it is theirs as the default. */
+function heldPlanText({ t }: I18n, { name, on_default }: HeldPlan, later: boolean): string {
+  if (later) return on_default ? t("people.plan.fact.laterDefault", { name }) : t("people.plan.fact.later", { name })
+  return on_default ? t("people.plan.fact.default", { name }) : t("people.plan.fact.own", { name })
+}
+
+/** Whether no Plan limits this person because they administer, whether or not Plans are on. */
+function administers({ basis }: PersonPlanOverview, administrator: boolean): boolean {
+  return administrator || basis === "administrator"
+}
+
 /**
- * The Plan fact on a person's page: the Plan that limits them, the one that will once Plans are
- * on, or that no Plan limits an administrator, with the Plan they were given if any. An
- * administrator reads so whether Plans are on or off, since no Plan ever limits them.
+ * The Plan fact on a person's page: the Plan they have, as the Plans tab counts who has it, "once
+ * plans are on" while Plans are off, and each limit they have more of than it allows. An
+ * administrator has a Plan as anyone does, but no Plan limits them, whether Plans are on or off.
  */
-export function personPlanFact({ t }: I18n, { basis, plan, assigned }: PersonPlan, administrator: boolean): string {
-  if (administrator || basis === "administrator") {
-    return assigned
-      ? t("people.plan.fact.administratorAssigned", { name: assigned.name })
+export function personPlanFact(i18n: I18n, plan: PersonPlanOverview, administrator: boolean): string {
+  const { t } = i18n
+  const held = plan.has ?? plan.plan
+  if (administers(plan, administrator)) {
+    return held
+      ? t("people.plan.fact.administratorHas", { plan: heldPlanText(i18n, held, false) })
       : t("people.plan.fact.administrator")
   }
-  if (basis === "plan" && plan) {
-    return plan.on_default
-      ? t("people.plan.fact.default", { name: plan.name })
-      : t("people.plan.fact.own", { name: plan.name })
-  }
-  return assigned ? t("people.plan.fact.later", { name: assigned.name }) : t("people.plan.fact.laterDefault")
+  const fact = held ? heldPlanText(i18n, held, plan.basis !== "plan") : t("people.plan.fact.laterNone")
+  return plan.over.reduce((text, over) => t("people.plan.fact.over", { fact: text, over: overLimitText(i18n, over) }), fact)
+}
+
+/** Whether a person's Plan fact names a limit they are over, and so takes the attention tone. */
+export function personPlanOver(plan: PersonPlanOverview, administrator: boolean): boolean {
+  return !administers(plan, administrator) && plan.over.length > 0
 }

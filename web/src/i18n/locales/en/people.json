@@ -337,9 +337,29 @@
       "own": "Plan: {name}",
       "default": "Plan: {name} (default)",
       "later": "Plan: {name}, once plans are on",
-      "laterDefault": "Plan: the default, once plans are on",
+      "laterDefault": "Plan: {name} (default), once plans are on",
+      "laterNone": "Plan: the default, once plans are on",
       "administrator": "No plan limits administrators",
-      "administratorAssigned": "No plan limits administrators (assigned: {name})"
+      "administratorHas": "{plan}. No plan limits administrators",
+      "over": "{fact}. {over}"
+    },
+    "over": {
+      "rules": {
+        "one": "{count} rule, {allowed} allowed",
+        "other": "{count} rules, {allowed} allowed"
+      },
+      "accounts": {
+        "one": "{count} calendar account, {allowed} allowed",
+        "other": "{count} calendar accounts, {allowed} allowed"
+      },
+      "tokens": {
+        "one": "{count} Integration Token, {allowed} allowed",
+        "other": "{count} Integration Tokens, {allowed} allowed"
+      },
+      "tokensNone": {
+        "one": "{count} Integration Token, none allowed",
+        "other": "{count} Integration Tokens, none allowed"
+      }
     }
   },
   "tabs": {
@@ -368,13 +388,13 @@
     "enabled": {
       "label": "Limit people with plans",
       "on": {
-        "one": "On. {count} person is limited.",
-        "other": "On. {count} people are limited."
+        "one": "On. Limits {count} person.",
+        "other": "On. Limits {count} people."
       },
-      "onNobody": "On. Nobody is limited yet.",
-      "off": "Off. Nobody is limited.",
-      "offChosen": "Off. Nobody is limited. Turning this on also makes {name} the default plan.",
-      "offNoDefault": "Off. Nobody is limited. With no default plan, turning this on adds one named No limits, which limits nobody."
+      "onNobody": "On. Limits nobody yet.",
+      "off": "Off. Limits nobody.",
+      "offChosen": "Off. Limits nobody. Turning this on also makes {name} the default plan.",
+      "offNoDefault": "Off. Limits nobody. There is no default plan yet, so turning this on adds a plan named No limits as the default. It limits nobody until you give someone a smaller plan."
     },
     "default": {
       "label": "Default plan",
@@ -382,15 +402,24 @@
       "none": "No default",
       "save": "Save default"
     },
-    "people": {
-      "one": "Limits {count} person",
-      "other": "Limits {count} people"
+    "holders": {
+      "one": "{count} person has it.",
+      "other": "{count} people have it."
     },
-    "peopleLater": {
-      "one": "Limits {count} person once plans are on",
-      "other": "Limits {count} people once plans are on"
+    "holdersNone": "Nobody has it.",
+    "limited": {
+      "one": "{holders} Limits {count} person.",
+      "other": "{holders} Limits {count} people."
     },
-    "peopleNone": "Limits nobody",
+    "limitedLater": {
+      "one": "{holders} Limits {count} person once plans are on.",
+      "other": "{holders} Limits {count} people once plans are on."
+    },
+    "limitedNone": "{holders} Limits nobody.",
+    "over": {
+      "one": "{count} has more than this plan allows.",
+      "other": "{count} have more than this plan allows."
+    },
     "isDefault": "Default",
     "limits": {
       "rules": {
@@ -451,16 +480,30 @@
       },
       "lowered": {
         "rules": {
-          "one": "This plan limits {count} person. A lower limit stops none of their rules, but while more sync than it allows, they cannot start another.",
-          "other": "This plan limits {count} people. A lower limit stops none of their rules, but anyone with more syncing than it allows cannot start another."
+          "one": "{count} person on this plan has more rules syncing than this. Their rules keep syncing, but they cannot start another.",
+          "other": "{count} people on this plan have more rules syncing than this. Their rules keep syncing, but they cannot start another."
         },
         "accounts": {
-          "one": "This plan limits {count} person. A lower limit removes none of their calendar accounts, but while they have more than it allows, they cannot connect another.",
-          "other": "This plan limits {count} people. A lower limit removes none of their calendar accounts, but anyone with more than it allows cannot connect another."
+          "one": "{count} person on this plan has more calendar accounts than this. They keep them, but cannot connect another.",
+          "other": "{count} people on this plan have more calendar accounts than this. They keep them, but cannot connect another."
         },
         "tokens": {
-          "one": "This plan limits {count} person. A lower limit revokes none of their Integration Tokens, but while they have more than it allows, they cannot issue another.",
-          "other": "This plan limits {count} people. A lower limit revokes none of their Integration Tokens, but anyone with more than it allows cannot issue another."
+          "one": "{count} person on this plan has more Integration Tokens than this. They keep them, but cannot issue another.",
+          "other": "{count} people on this plan have more Integration Tokens than this. They keep them, but cannot issue another."
+        }
+      },
+      "loweredLater": {
+        "rules": {
+          "one": "{count} person on this plan has more rules syncing than this. Once plans are on, their rules keep syncing, but they cannot start another.",
+          "other": "{count} people on this plan have more rules syncing than this. Once plans are on, their rules keep syncing, but they cannot start another."
+        },
+        "accounts": {
+          "one": "{count} person on this plan has more calendar accounts than this. Once plans are on, they keep them, but cannot connect another.",
+          "other": "{count} people on this plan have more calendar accounts than this. Once plans are on, they keep them, but cannot connect another."
+        },
+        "tokens": {
+          "one": "{count} person on this plan has more Integration Tokens than this. Once plans are on, they keep them, but cannot issue another.",
+          "other": "{count} people on this plan have more Integration Tokens than this. Once plans are on, they keep them, but cannot issue another."
         }
       }
     },

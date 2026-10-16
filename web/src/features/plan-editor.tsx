@@ -14,9 +14,9 @@ import {
   LIMIT_MINIMUM,
   LIMIT_NAMES,
   draftOf,
-  lowers,
   missingField,
   payloadOf,
+  peopleOver,
   refusedField,
   type DraftField,
   type LimitDraft,
@@ -25,27 +25,33 @@ import {
 } from "@/lib/plan-draft"
 import { intervalLabel } from "@/lib/plans"
 
-/** How the editor words each limit: its label, what counts, why Save waits for it, and a lowering. */
+/**
+ * How the editor words each limit: its label, what counts, why Save waits for it, and what a lower
+ * limit does, now or once Plans are on.
+ */
 const LIMIT_WORDS: Readonly<
-  Record<LimitName, { label: MessageKey; hint: MessageKey; missing: MessageKey; lowered: MessageKey }>
+  Record<LimitName, { label: MessageKey; hint: MessageKey; missing: MessageKey; lowered: MessageKey; loweredLater: MessageKey }>
 > = {
   rules: {
     label: "people.plans.editor.rules",
     hint: "people.plans.editor.rulesHint",
     missing: "people.plans.editor.missing.rules",
     lowered: "people.plans.editor.lowered.rules",
+    loweredLater: "people.plans.editor.loweredLater.rules",
   },
   accounts: {
     label: "people.plans.editor.accounts",
     hint: "people.plans.editor.accountsHint",
     missing: "people.plans.editor.missing.accounts",
     lowered: "people.plans.editor.lowered.accounts",
+    loweredLater: "people.plans.editor.loweredLater.accounts",
   },
   tokens: {
     label: "people.plans.editor.tokens",
     hint: "people.plans.editor.tokensHint",
     missing: "people.plans.editor.missing.tokens",
     lowered: "people.plans.editor.lowered.tokens",
+    loweredLater: "people.plans.editor.loweredLater.tokens",
   },
 }
 
@@ -89,10 +95,12 @@ function useRefusal(error: unknown, draft: PlanDraft, form: RefObject<HTMLFormEl
  * each a whole number or No limit, and how soon calendars sync. It asks for no key: the server
  * makes a new Plan's from its name. `intervals` are the offered ones, plus the Plan's own when a
  * later release saved one this release does not offer. While a save is on its way, every control
- * keeps its focus but ignores changes; a refusal moves focus to the field it names.
+ * keeps its focus but ignores changes; a refusal moves focus to the field it names. A limit typed
+ * lower than the Plan's says how many of the people it limits would have more than it allows.
  */
 export function PlanEditor({
   plan,
+  enabled,
   intervals,
   pending,
   error,
@@ -100,6 +108,8 @@ export function PlanEditor({
   onCancel,
 }: {
   plan: PlanSummary | null
+  /** Plans limit people now, so a lower limit's warning says what it does now, not once they are on. */
+  enabled: boolean
   intervals: SyncInterval[]
   pending: boolean
   error: unknown
@@ -115,6 +125,11 @@ export function PlanEditor({
   }, [])
   const id = plan ? `plan-${plan.key}` : "plan-new"
   const errorOf = (field: DraftField) => (refusal.field === field ? refusal.message : null)
+  const warningOf = (name: LimitName) => {
+    const count = peopleOver(plan, draft, name)
+    const words = LIMIT_WORDS[name]
+    return count > 0 ? t(enabled ? words.lowered : words.loweredLater, { count }) : ""
+  }
 
   function change(next: Partial<PlanDraft>) {
     if (pending) return
@@ -149,7 +164,7 @@ export function PlanEditor({
             limit={draft[name]}
             pending={pending}
             error={errorOf(name)}
-            limitedPeople={lowers(plan, draft, name) ? (plan?.limited_people ?? 0) : 0}
+            warning={warningOf(name)}
             onChange={(limit) => change({ [name]: limit })}
           />
         ))}
@@ -219,8 +234,8 @@ function NameField({
 
 /**
  * One limit for each person: No limit, or the whole number it hides while ticked. No limit comes
- * first, so the number it shows is the next stop. Lowering the limit of a Plan that limits people
- * warns in a status that is always present, so a screen reader announces it as it appears.
+ * first, so the number it shows is the next stop. A lower limit that leaves people with more than
+ * it allows warns in a status that is always present, so a screen reader announces it as it appears.
  */
 function LimitField({
   id,
@@ -228,7 +243,7 @@ function LimitField({
   limit,
   pending,
   error,
-  limitedPeople,
+  warning,
   onChange,
 }: {
   id: string
@@ -236,14 +251,13 @@ function LimitField({
   limit: LimitDraft
   pending: boolean
   error: string | null
-  /** How many people the Plan limits, when this limit is lowered; 0 when there is nothing to warn. */
-  limitedPeople: number
+  /** What a lower limit means for the people it leaves with more than it allows; empty when nobody. */
+  warning: string
   onChange: (next: LimitDraft) => void
 }) {
   const { t } = useI18n()
   const words = LIMIT_WORDS[name]
   const fieldId = `${id}-${name}`
-  const warning = limitedPeople > 0 ? t(words.lowered, { count: limitedPeople }) : ""
   return (
     <div role="group" aria-labelledby={`${fieldId}-label`} aria-describedby={`${fieldId}-hint`} className="field-stack">
       <Label id={`${fieldId}-label`} htmlFor={limit.unlimited ? undefined : fieldId}>

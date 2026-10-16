@@ -10,9 +10,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   ([ADR 0038](docs/adr/0038-plans-allowances-and-limits.md)). Under **People → Plans**, an
   administrator adds Plans by name, each with how many rules may sync, how many calendar accounts
   and Integration Tokens a person may have, and whether their calendars sync instantly or every 5
-  minutes. The form says what counts toward each limit, and warns before a lower limit is saved
-  for a Plan that limits people. Each Plan says whom it limits. The default has no Remove and says
-  to choose another default first, and Remove on a Plan someone has says how many people have it.
+  minutes. The form says what counts toward each limit, and before a lower limit is saved, how many
+  people it would leave with more than it allows. Each Plan says how many people have it, how many
+  it limits, and how many of those have more than it allows, and a person's page names each limit
+  they are over. The default has no Remove and says to choose another default first, and Remove on
+  a Plan someone has says how many people have it.
   The administrator chooses the Default Plan with **Save default**, and turns Plans on with
   **Limit people with plans**, which says how many people Plans limit. Turning Plans on with no
   default adds a Plan named No limits, which limits nobody, as the default, so nothing changes until

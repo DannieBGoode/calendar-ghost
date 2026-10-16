@@ -286,7 +286,9 @@ instantly or every 5 minutes. Calendar Ghost makes the Plan's key, which names i
 from its name. To limit everyone, choose a **Default plan**, which everyone without a Plan of
 their own has, including people who join later, and **Save default**. To limit only some people,
 give them a Plan with **Change plan** on their page under **People**. Then tick **Limit people
-with plans**, which says how many people are limited. With no default, turning Plans on adds a
+with plans**, which says how many people Plans limit. Each Plan says how many people have it, how
+many it limits, and how many of those have more than it allows, as after a limit was lowered; a
+person's page names each limit they are over. With no default, turning Plans on adds a
 Plan named No limits, which limits nobody, as the default, so nothing changes until someone has a
 smaller Plan; you can rename and change it like any Plan. The default, and a Plan someone has,
 cannot be removed: choose another default, or give those people another Plan, first.

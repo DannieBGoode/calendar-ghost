@@ -20,7 +20,7 @@ export const COUNT_LIMIT = 10_000
 /** The least each count takes, as `PlanLimits` checks: a Plan may offer no Integration Tokens. */
 export const LIMIT_MINIMUM: Readonly<Record<LimitName, number>> = { rules: 1, accounts: 1, tokens: 0 }
 
-/** Where each count is in a saved Plan's limits. */
+/** Where each count is in a saved Plan's limits, and in how much the people it limits use. */
 const SAVED: Readonly<Record<LimitName, Exclude<keyof PlanLimits, "sync_interval">>> = {
   rules: "rules",
   accounts: "connected_accounts",
@@ -75,12 +75,16 @@ export function payloadOf(draft: PlanDraft): PlanChange | null {
   }
 }
 
-/** Whether a limit typed is lower than the Plan's saved one, so people it limits may have more. */
-export function lowers(plan: PlanSummary | null, draft: PlanDraft, name: LimitName): boolean {
-  if (plan === null || plan.limited_people === 0) return false
+/**
+ * How many of the people a Plan limits have more than a limit typed lower than its saved one, from
+ * how much each of them uses: 0 when the limit is not lower, or nobody has more.
+ */
+export function peopleOver(plan: PlanSummary | null, draft: PlanDraft, name: LimitName): number {
+  if (plan === null) return 0
   const next = limitValue(draft, name)
   const saved = plan.limits[SAVED[name]]
-  return typeof next === "number" && (saved === null || next < saved)
+  if (typeof next !== "number" || (saved !== null && next >= saved)) return 0
+  return plan.use[SAVED[name]].reduce((total, { in_use, people }) => (in_use > next ? total + people : total), 0)
 }
 
 /**

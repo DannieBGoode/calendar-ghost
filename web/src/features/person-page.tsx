@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { useEffect, useRef } from "react"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, TriangleAlert } from "lucide-react"
 
 import { GhostMark } from "@/components/ghost-mark"
 import { LoadFailure } from "@/components/load-failure"
@@ -11,12 +11,12 @@ import { DisabledBadge } from "@/components/verdict-badge"
 import { PersonDetails, PersonMenu } from "@/features/person-actions"
 import { UserOverviewDetails, type OwnPage } from "@/features/user-overview"
 import { useI18n } from "@/i18n/provider"
-import { api, ApiError, type Person, type PersonPlan, type RuleSummary, type UserOverview } from "@/lib/api"
+import { api, ApiError, type Person, type PersonPlanOverview, type RuleSummary, type UserOverview } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
 import { appPathForView, isPlainLeftClick } from "@/lib/navigation"
 import { AS_ADMINISTRATOR } from "@/lib/operator-overview"
 import { isAdministrator, personName } from "@/lib/people"
-import { personPlanFact } from "@/lib/plans"
+import { personPlanFact, personPlanOver } from "@/lib/plans"
 import { useNow } from "@/lib/use-now"
 import { peopleReturnSearch, usePersonCommands } from "@/lib/use-people"
 
@@ -163,29 +163,39 @@ function BackToPeople({ href, onBack }: { href: string; onBack: () => void }) {
   )
 }
 
+/** One fact about a person, keyed by which fact it is, and whether it needs a look. */
+type Fact = { id: string; text: string; attention?: boolean }
+
 /**
- * Their role, the Plan that limits them once any Plan exists (`plan` is null before then), and
- * when they joined and last signed in.
+ * Their role, the Plan they have once any Plan exists (`plan` is null before then), and when they
+ * joined and last signed in. A Plan they have more of a limit than allows takes Attention Ochre and
+ * the attention icon beside the words that say so, so the tone is never the only sign.
  */
-function PersonFacts({ person, plan, now }: { person: Person; plan: PersonPlan | null; now: number }) {
+function PersonFacts({ person, plan, now }: { person: Person; plan: PersonPlanOverview | null; now: number }) {
   const i18n = useI18n()
   const { t } = i18n
+  const administrator = isAdministrator(person)
   // Keyed by which fact each is, since a Plan's name can equal another fact, such as "User".
-  const facts: [id: string, fact: string][] = [
-    ["role", t(`people.roles.${person.role}`)],
-    ...(plan ? [["plan", personPlanFact(i18n, plan, isAdministrator(person))] satisfies [string, string]] : []),
-    ["joined", t("people.person.joined", { relative: i18n.format.relative(person.created_at, now) })],
-    [
-      "last-sign-in",
-      person.last_sign_in_at
+  const facts: Fact[] = [
+    { id: "role", text: t(`people.roles.${person.role}`) },
+    ...(plan
+      ? [{ id: "plan", text: personPlanFact(i18n, plan, administrator), attention: personPlanOver(plan, administrator) }]
+      : []),
+    { id: "joined", text: t("people.person.joined", { relative: i18n.format.relative(person.created_at, now) }) },
+    {
+      id: "last-sign-in",
+      text: person.last_sign_in_at
         ? t("people.person.lastSignIn", { relative: i18n.format.relative(person.last_sign_in_at, now) })
         : t("people.person.neverSignedIn"),
-    ],
+    },
   ]
   return (
-    <ul className="person-facts" data-administrator={isAdministrator(person)}>
-      {facts.map(([id, fact]) => (
-        <li key={id}>{fact}</li>
+    <ul className="person-facts" data-administrator={administrator}>
+      {facts.map(({ id, text, attention }) => (
+        <li key={id} data-tone={attention ? "attention" : undefined}>
+          {attention && <TriangleAlert aria-hidden="true" />}
+          {text}
+        </li>
       ))}
     </ul>
   )

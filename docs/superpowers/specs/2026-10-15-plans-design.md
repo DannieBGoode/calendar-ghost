@@ -687,19 +687,21 @@ Indicator rule.
 - **People, Plans** (`/people/plans`, a tab after Everyone and Invitations, hidden with People under
   Only Me; until 2026-10-16 it sat in Settings, Administration, between Registration and Storage),
   in the order setting up needs. With no Plan it holds only an empty state ("No plans yet") whose
-  one action is "Add a plan". Otherwise, first one row per Plan, with its limits, its interval, and
-  whom it limits ("Limits 3 people", from `limited_people`; "once plans are on" while they are off;
-  "Limits nobody" at zero and for a Plan that limits nothing), an inline edit form, and Remove,
-  then "Add a plan". The default Plan has "Default" beside its name and, instead of Remove,
+  one action is "Add a plan". Otherwise, first one row per Plan, with its limits, its interval, who
+  has it and whom it limits, as two facts worded alike on every surface ("4 people have it. Limits
+  3 people.", from `people` and `limited_people`; "once plans are on" while they are off; "Limits
+  nobody." at zero and for a Plan that limits nothing; "Nobody has it." when nobody does), and,
+  from `over_people`, "1 has more than this plan allows." in Attention Ochre with an icon; then an
+  inline edit form, and Remove, then "Add a plan". The default Plan has "Default" beside its name and, instead of Remove,
   "Default plan. Choose another default to remove it."; Remove on a Plan someone has says at once
   "2 people have Family. Give them another plan to remove it." instead of a confirmation the
   server would refuse; on any other Plan it confirms inline. Then a select for the default, which
   saves with "Save default", shown while the choice differs from the saved one. Last, the
   checkbox "Limit people with plans", never disabled, which says its state and whom it limits
-  ("On. 3 people are limited.", "Off. Nobody is limited."). It sends the default the select shows,
-  saved or not, so a choice not saved yet is never ignored, and says before what that does: with
-  none, that turning it on adds a Plan named No limits, which limits nobody; with a choice not saved
-  yet, "Turning this on also makes Free the default plan." While a setting change is on its way, both
+  ("On. Limits 3 people.", "Off. Limits nobody."). It sends the default the select shows, saved or
+  not, so a choice not saved yet is never ignored, and says before what that does: with none, that
+  turning it on adds a Plan named No limits as the default, which limits nobody until someone has a
+  smaller Plan; with a choice not saved yet, "Turning this on also makes Free the default plan." While a setting change is on its way, both
   controls keep focus with `aria-disabled`; a refusal shows under the control that sent it, which
   takes focus. The form asks for a name and no key (the server makes it from the name, and the UI
   never shows it). Under "Limits for each person" each limit is "No limit" or a whole number, with
@@ -708,12 +710,17 @@ Indicator rule.
   never refused."), and "Integration Tokens they can have" ("Revoked tokens don't count."); then
   "How soon calendars sync", a select of the offered values ("Longer intervals arrive in a later
   release."). Save names the field it waits for; while it saves, every control stays focusable
-  with `aria-disabled`; a refusal shows under the field it names, which takes focus. Lowering a
-  limit of a Plan that limits people warns under that limit, in a status a screen reader
-  announces, naming how many people the Plan limits.
-- **People:** the Plan fact and "Change plan" on the person page. The fact reads "Plan: Family",
-  "Plan: Free (default)", or "Plan: Family, once plans are on"; for an administrator, "No plan
-  limits administrators". Change plan opens an inline select whose options say what each Plan
+  with `aria-disabled`; a refusal shows under the field it names, which takes focus. A limit typed
+  lower than the Plan's warns under that limit, in a status a screen reader announces, with how
+  many of the people it limits would have more, counted from `use`: "1 person on this plan has
+  more calendar accounts than this. They keep them, but cannot connect another." ("Once plans are
+  on, they keep them..." while they are off); nothing when nobody would.
+- **People:** the Plan fact and "Change plan" on the person page. The fact names the Plan they
+  have (`has`), as the Plans tab counts them: "Plan: Family", "Plan: Free (default)", or "Plan:
+  Family, once plans are on"; for an administrator, "Plan: Free (default). No plan limits
+  administrators", or "No plan limits administrators" when they have none. Each limit they are
+  over (`over`) follows in Attention Ochre with the attention icon: "Plan: Family. 2 calendar
+  accounts, 1 allowed". Change plan opens an inline select whose options say what each Plan
   allows ("Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes"), after
   "Default plan (Free)", which names the Plan that is the default now, with the hint that it
   follows the default while any other Plan stays. The result names the Plan ("robin@example.test

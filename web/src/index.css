@@ -2385,6 +2385,24 @@ p {
   content: "·";
 }
 
+/* A Plan they have more of a limit than allows: Attention Ochre, with an icon as well as its
+   colour. The separator after it keeps the quiet tone of the others. */
+.person-facts li[data-tone="attention"] {
+  color: var(--warning-foreground);
+}
+
+.person-facts li[data-tone="attention"]::after {
+  color: var(--muted-foreground);
+}
+
+.person-facts li[data-tone="attention"] > svg {
+  display: inline;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-right: 0.375rem;
+  vertical-align: -0.125em;
+}
+
 /* People: a search and three filters above a table that pages through everyone here. */
 .people-filters {
   display: grid;

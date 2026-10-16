@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest"
 
 import { testI18n } from "@/i18n/testing"
-import type { OwnPlan, PersonPlan, PlanLimits, PlanSummary, RegistrationPolicy, SyncInterval } from "@/lib/api"
+import type {
+  OverLimit,
+  OwnPlan,
+  PersonPlanOverview,
+  PlanLimits,
+  PlanSummary,
+  RegistrationPolicy,
+  SyncInterval,
+} from "@/lib/api"
 import {
   defaultPlanChoice,
   intervalLabel,
@@ -351,42 +359,86 @@ describe("ownPlanRows", () => {
 
 describe("personPlanFact", () => {
   const familyName = { key: "family", name: "Family" }
+  const hasFamily = { ...familyName, on_default: false }
+  const hasFree = { key: "free", name: "Free", on_default: true }
+  /** A person's Plan as their page and their row of People show it, within every limit. */
+  const person = (plan: Partial<PersonPlanOverview>): PersonPlanOverview => ({
+    basis: "plan",
+    plan: null,
+    assigned: null,
+    has: null,
+    over: [],
+    ...plan,
+  })
 
-  it.each<[string, PersonPlan, string]>([
-    ["their own Plan", { basis: "plan", plan: { ...familyName, on_default: false }, assigned: familyName }, "Plan: Family"],
-    [
-      "the Default Plan",
-      { basis: "plan", plan: { key: "free", name: "Free", on_default: true }, assigned: null },
-      "Plan: Free (default)",
-    ],
+  it.each<[string, PersonPlanOverview, string]>([
+    ["their own Plan", person({ plan: hasFamily, assigned: familyName, has: hasFamily }), "Plan: Family"],
+    ["the Default Plan", person({ plan: hasFree, has: hasFree }), "Plan: Free (default)"],
     [
       "their own Plan while Plans are off",
-      { basis: "plans_off", plan: null, assigned: familyName },
+      person({ basis: "plans_off", assigned: familyName, has: hasFamily }),
       "Plan: Family, once plans are on",
     ],
     [
       "the Default Plan while Plans are off",
-      { basis: "plans_off", plan: null, assigned: null },
-      "Plan: the default, once plans are on",
+      person({ basis: "plans_off", has: hasFree }),
+      "Plan: Free (default), once plans are on",
     ],
-    ["an administrator", { basis: "administrator", plan: null, assigned: null }, "No plan limits administrators"],
+    ["no Plan yet while Plans are off", person({ basis: "plans_off" }), "Plan: the default, once plans are on"],
+    ["an administrator who has no Plan", person({ basis: "administrator" }), "No plan limits administrators"],
+    [
+      "an administrator who has the Default Plan",
+      person({ basis: "administrator", has: hasFree }),
+      "Plan: Free (default). No plan limits administrators",
+    ],
     [
       "an administrator given a Plan",
-      { basis: "administrator", plan: null, assigned: familyName },
-      "No plan limits administrators (assigned: Family)",
+      person({ basis: "administrator", assigned: familyName, has: hasFamily }),
+      "Plan: Family. No plan limits administrators",
     ],
-  ])("names %s", (_case, plan, fact) => {
+  ])("names %s, as the Plans tab counts who has it", (_case, plan, fact) => {
     expect(personPlanFact(i18n, plan, plan.basis === "administrator")).toBe(fact)
   })
 
-  it.each<[string, PersonPlan, string]>([
-    ["no Plan of their own", { basis: "plans_off", plan: null, assigned: null }, "No plan limits administrators"],
+  it.each<[string, PersonPlanOverview, string]>([
+    ["no Plan", person({ basis: "plans_off" }), "No plan limits administrators"],
+    ["the Default Plan", person({ basis: "plans_off", has: hasFree }), "Plan: Free (default). No plan limits administrators"],
     [
       "a Plan of their own",
-      { basis: "plans_off", plan: null, assigned: familyName },
-      "No plan limits administrators (assigned: Family)",
+      person({ basis: "plans_off", assigned: familyName, has: hasFamily }),
+      "Plan: Family. No plan limits administrators",
     ],
   ])("says no plan limits an administrator with %s while Plans are off", (_case, plan, fact) => {
     expect(personPlanFact(i18n, plan, true)).toBe(fact)
+  })
+
+  it.each<[string, OverLimit[], string]>([
+    [
+      "one limit",
+      [{ limit: "connected_accounts", in_use: 2, allowed: 1 }],
+      "Plan: Family. 2 calendar accounts, 1 allowed",
+    ],
+    [
+      "each limit, rules first, and tokens a Plan includes none of",
+      [
+        { limit: "rules", in_use: 3, allowed: 2 },
+        { limit: "connected_accounts", in_use: 2, allowed: 1 },
+        { limit: "integration_tokens", in_use: 2, allowed: 0 },
+      ],
+      "Plan: Family. 3 rules, 2 allowed. 2 calendar accounts, 1 allowed. 2 Integration Tokens, none allowed",
+    ],
+    [
+      "one of a count",
+      [{ limit: "integration_tokens", in_use: 1, allowed: 0 }],
+      "Plan: Family. 1 Integration Token, none allowed",
+    ],
+  ])("says how much they have and how much is allowed past %s", (_case, over, fact) => {
+    const plan = person({ plan: hasFamily, assigned: familyName, has: hasFamily, over })
+    expect(personPlanFact(i18n, plan, false)).toBe(fact)
+  })
+
+  it("says what a person has past a limit while Plans are off, as turning them on would find it", () => {
+    const plan = person({ basis: "plans_off", has: hasFree, over: [{ limit: "rules", in_use: 2, allowed: 1 }] })
+    expect(personPlanFact(i18n, plan, false)).toBe("Plan: Free (default), once plans are on. 2 rules, 1 allowed")
   })
 })

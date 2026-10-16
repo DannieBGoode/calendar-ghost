@@ -224,8 +224,15 @@ export type SyncInterval = PlanLimits["sync_interval"]
 export type PlanPayload = Schemas["DefinePlanRequest"]
 /** A Plan's new name and limits; its key never changes. */
 export type PlanChange = Schemas["ChangePlanRequest"]
-/** Which Plan limits one person, as the Operator Overview shows it, and the Plan they were given. */
+/** Which Plan limits one person, as giving them a Plan answers, and the Plan they were given. */
 export type PersonPlan = Schemas["PersonPlanResponse"]
+/**
+ * A person's Plan as the Operator Overview shows it on their page and their row of People: which
+ * Plan limits them, the Plan they have whether or not it limits them, and each limit they are over.
+ */
+export type PersonPlanOverview = Schemas["PersonPlanOverviewResponse"]
+/** One limit a person has more of than their Plan allows, as after it was lowered. */
+export type OverLimit = Schemas["OverLimitResponse"]
 /** What the signed-in User's Plan allows and how much of it they have, for Your plan. */
 export type OwnPlan = Schemas["OwnPlanResponse"]
 /** A User as an Installation Administrator sees them: never their calendars, rules, or events. */

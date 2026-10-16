@@ -21,10 +21,24 @@ const family: PlanSummary = {
   people: 4,
   limited_people: 3,
   over_people: 0,
-  use: { rules: [], connected_accounts: [], integration_tokens: [] },
+  // Of the 3 people it limits: rules 5, 2, 2; calendar accounts 3, 3, 1; tokens 2, 1, none.
+  use: {
+    rules: [
+      { in_use: 5, people: 1 },
+      { in_use: 2, people: 2 },
+    ],
+    connected_accounts: [
+      { in_use: 3, people: 2 },
+      { in_use: 1, people: 1 },
+    ],
+    integration_tokens: [
+      { in_use: 2, people: 1 },
+      { in_use: 1, people: 1 },
+    ],
+  },
 }
 
-type Props = { plan: PlanSummary | null; pending: boolean; error: unknown }
+type Props = { plan: PlanSummary | null; pending: boolean; error: unknown; enabled?: boolean }
 
 let container: HTMLDivElement
 let root: Root | null = null
@@ -49,13 +63,14 @@ afterEach(() => {
 })
 
 /** Renders the editor, or renders it again with new props, keeping what was typed. */
-function show({ plan, pending, error }: Props) {
+function show({ plan, pending, error, enabled = true }: Props) {
   root ??= createRoot(container)
   act(() => {
     root?.render(
       <StaticI18nProvider i18n={i18n}>
         <PlanEditor
           plan={plan}
+          enabled={enabled}
           intervals={["instant", "5_minutes"]}
           pending={pending}
           error={error}
@@ -349,19 +364,29 @@ describe("PlanEditor", () => {
     [
       "rules",
       "2",
-      "This plan limits 3 people. A lower limit stops none of their rules, but anyone with more syncing than it allows cannot start another.",
+      "1 person on this plan has more rules syncing than this. Their rules keep syncing, but they cannot start another.",
+    ],
+    [
+      "rules",
+      "1",
+      "3 people on this plan have more rules syncing than this. Their rules keep syncing, but they cannot start another.",
     ],
     [
       "accounts",
       "1",
-      "This plan limits 3 people. A lower limit removes none of their calendar accounts, but anyone with more than it allows cannot connect another.",
+      "2 people on this plan have more calendar accounts than this. They keep them, but cannot connect another.",
     ],
     [
       "tokens",
       "0",
-      "This plan limits 3 people. A lower limit revokes none of their Integration Tokens, but anyone with more than it allows cannot issue another.",
+      "2 people on this plan have more Integration Tokens than this. They keep them, but cannot issue another.",
     ],
-  ])("warns, and announces, when the %s limit is lowered for the people the plan limits", (limit, lower, warning) => {
+    [
+      "tokens",
+      "1",
+      "1 person on this plan has more Integration Tokens than this. They keep them, but cannot issue another.",
+    ],
+  ])("warns, and announces, how many people a lower %s limit of %s leaves with more", (limit, lower, warning) => {
     edit()
     const status = element(`plan-family-${limit}-warning`)
     expect(status.getAttribute("role")).toBe("status")
@@ -377,17 +402,43 @@ describe("PlanEditor", () => {
     expect(status.textContent).toBe("")
   })
 
+  it("does not warn when a lower limit leaves nobody with more than it allows", () => {
+    edit({ ...family, use: { ...family.use, rules: [{ in_use: 2, people: 3 }] } })
+    type(field("plan-family-rules"), "2")
+    expect(element("plan-family-rules-warning").textContent).toBe("")
+    type(field("plan-family-rules"), "1")
+    expect(element("plan-family-rules-warning").textContent).toBe(
+      "3 people on this plan have more rules syncing than this. Their rules keep syncing, but they cannot start another.",
+    )
+  })
+
   it("warns when a limit replaces No limit, naming one person as one", () => {
-    edit({ ...family, limits: { ...family.limits, rules: null }, limited_people: 1 })
+    edit({ ...family, limits: { ...family.limits, rules: null }, use: { ...family.use, rules: [{ in_use: 9, people: 1 }] } })
     click(field("plan-family-rules-unlimited"))
     type(field("plan-family-rules"), "8")
     expect(element("plan-family-rules-warning").textContent).toBe(
-      "This plan limits 1 person. A lower limit stops none of their rules, but while more sync than it allows, they cannot start another.",
+      "1 person on this plan has more rules syncing than this. Their rules keep syncing, but they cannot start another.",
+    )
+  })
+
+  it("says what a lower limit will do once plans are on, while they are off", () => {
+    show({ plan: family, pending: false, error: null, enabled: false })
+    type(field("plan-family-accounts"), "1")
+    expect(element("plan-family-accounts-warning").textContent).toBe(
+      "2 people on this plan have more calendar accounts than this. Once plans are on, they keep them, but cannot connect another.",
+    )
+    type(field("plan-family-rules"), "1")
+    expect(element("plan-family-rules-warning").textContent).toBe(
+      "3 people on this plan have more rules syncing than this. Once plans are on, their rules keep syncing, but they cannot start another.",
+    )
+    type(field("plan-family-tokens"), "0")
+    expect(element("plan-family-tokens-warning").textContent).toBe(
+      "2 people on this plan have more Integration Tokens than this. Once plans are on, they keep them, but cannot issue another.",
     )
   })
 
   it("does not warn for a plan that limits nobody, or a new plan", () => {
-    edit({ ...family, limited_people: 0 })
+    edit({ ...family, limited_people: 0, use: { rules: [], connected_accounts: [], integration_tokens: [] } })
     type(field("plan-family-rules"), "1")
     expect(element("plan-family-rules-warning").textContent).toBe("")
     act(() => root?.unmount())
@@ -409,6 +460,13 @@ describe("PlanEditor", () => {
     type(field("plan-family-rules"), "1")
     type(field("plan-family-accounts"), "1")
     refuse(refusal("invalid_plan", { reason: "name" }))
+    expect(untranslatedText(container, [family.name])).toEqual([])
+    act(() => root?.unmount())
+    root = null
+    show({ plan: family, pending: false, error: null, enabled: false })
+    type(field("plan-family-rules"), "1")
+    type(field("plan-family-accounts"), "1")
+    type(field("plan-family-tokens"), "0")
     expect(untranslatedText(container, [family.name])).toEqual([])
   })
 })

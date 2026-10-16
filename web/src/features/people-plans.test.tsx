@@ -32,6 +32,10 @@ const session: SessionStatus = {
   },
 }
 
+/** Nobody a Plan limits has anything it counts. */
+const NO_USE: PlanSummary["use"] = { rules: [], connected_accounts: [], integration_tokens: [] }
+
+/** Held by 4 people, one of them an administrator, so it limits 3: one has 4 rules, two have 1. */
 const family: PlanSummary = {
   key: "family",
   name: "Family",
@@ -40,7 +44,14 @@ const family: PlanSummary = {
   people: 4,
   limited_people: 3,
   over_people: 0,
-  use: { rules: [], connected_accounts: [], integration_tokens: [] },
+  use: {
+    rules: [
+      { in_use: 4, people: 1 },
+      { in_use: 1, people: 2 },
+    ],
+    connected_accounts: [],
+    integration_tokens: [],
+  },
 }
 const free: PlanSummary = {
   key: "free",
@@ -80,6 +91,10 @@ function overview({
 }
 
 const INVITATION_ONLY: Registration = { policy: "invitation_only", only_me_available: false }
+
+/** What Limit people with plans says while off with no default plan. */
+const OFF_NO_DEFAULT =
+  "Off. Limits nobody. There is no default plan yet, so turning this on adds a plan named No limits as the default. It limits nobody until you give someone a smaller plan."
 
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
@@ -318,7 +333,7 @@ describe("People's Plans tab", () => {
 
     expect(status()).toBe("Free was added.")
     expect(plansSection().textContent).not.toContain("No plans yet")
-    expect(copyLines("Free")[2]).toBe("Limits nobody")
+    expect(copyLines("Free")).toEqual(["1 rule, 1 calendar account, no Integration Tokens", "Every 5 minutes", "Nobody has it."])
     expect(document.activeElement).toBe(button("Add a plan"))
     expect(inOrder(planRow("Free"), button("Add a plan"), select("plans-default"), field("plans-enabled"))).toBe(true)
   })
@@ -330,43 +345,80 @@ describe("People's Plans tab", () => {
     ).toBe(true)
   })
 
-  it("lists each Plan with its limits, interval, and how many people it limits, marking the default", async () => {
+  it("lists each Plan with its limits, interval, who has it, and whom it limits, marking the default", async () => {
     await renderPlans(testI18n(), { plans: overview({ enabled: true, defaultPlan: "free" }) })
     expect(copyLines("Family")).toEqual([
       "5 rules, 3 calendar accounts, 2 Integration Tokens",
       "Instant sync, and a check every 5 minutes",
-      "Limits 3 people",
+      "4 people have it. Limits 3 people.",
     ])
-    expect(copyLines("Free")).toEqual(["1 rule, 1 calendar account, no Integration Tokens", "Every 5 minutes", "Limits 2 people"])
+    expect(copyLines("Free")).toEqual([
+      "1 rule, 1 calendar account, no Integration Tokens",
+      "Every 5 minutes",
+      "2 people have it. Limits 2 people.",
+    ])
     expect(planRow("Free").querySelector(".plan-title")?.textContent).toBe("FreeDefault")
     expect(planRow("Family").querySelector(".plan-title")?.textContent).toBe("Family")
   })
 
-  it("says whom a plan will limit once plans are on, and that a plan with no limits limits nobody", async () => {
+  it("says who has a plan, and whom it will limit once plans are on", async () => {
     const spare: PlanSummary = { ...family, key: "spare", name: "Spare", people: 1, limited_people: 0 }
+    const unused: PlanSummary = { ...family, key: "unused", name: "Unused", people: 0, limited_people: 0 }
     await renderPlans(testI18n(), {
-      plans: overview({ plans: [family, { ...free, limited_people: 1 }, spare, noLimits] }),
+      plans: overview({ plans: [family, { ...free, limited_people: 1 }, spare, unused] }),
     })
-    expect(copyLines("Family")[2]).toBe("Limits 3 people once plans are on")
-    expect(copyLines("Free")[2]).toBe("Limits 1 person once plans are on")
-    expect(copyLines("Spare")[2]).toBe("Limits nobody")
-    expect(copyLines("No limits")).toEqual([
-      "No limit on rules, calendar accounts, or Integration Tokens",
-      "Instant sync, and a check every 5 minutes",
-      "Limits nobody",
-    ])
+    expect(copyLines("Family")[2]).toBe("4 people have it. Limits 3 people once plans are on.")
+    expect(copyLines("Free")[2]).toBe("2 people have it. Limits 1 person once plans are on.")
+    expect(copyLines("Spare")[2]).toBe("1 person has it. Limits nobody.")
+    expect(copyLines("Unused")[2]).toBe("Nobody has it.")
   })
 
   it.each([
-    ["off with a default", overview({ defaultPlan: "free" }), "Off. Nobody is limited."],
-    [
-      "off with no default",
-      overview(),
-      "Off. Nobody is limited. With no default plan, turning this on adds one named No limits, which limits nobody.",
-    ],
-    ["on", overview({ enabled: true, defaultPlan: "free" }), "On. 5 people are limited."],
-    ["on for one person", overview({ enabled: true, defaultPlan: "free", plans: [{ ...free, limited_people: 1 }] }), "On. 1 person is limited."],
-    ["on with only No limits", overview({ enabled: true, defaultPlan: "no-limits", plans: [noLimits] }), "On. Nobody is limited yet."],
+    ["on", true],
+    ["off", false],
+  ])("says who has a plan that limits nothing, and that it limits nobody, while plans are %s", async (_state, enabled) => {
+    await renderPlans(testI18n(), { plans: overview({ enabled, defaultPlan: "free", plans: [free, noLimits] }) })
+    expect(copyLines("No limits")).toEqual([
+      "No limit on rules, calendar accounts, or Integration Tokens",
+      "Instant sync, and a check every 5 minutes",
+      "3 people have it. Limits nobody.",
+    ])
+  })
+
+  it("answers who has a plan the same way on its row and in its Remove note", async () => {
+    const robinOnly: PlanSummary = { ...noLimits, people: 1, limited_people: 1 }
+    await renderPlans(testI18n(), { plans: overview({ enabled: true, defaultPlan: "free", plans: [free, robinOnly] }) })
+    expect(copyLines("No limits")[2]).toBe("1 person has it. Limits nobody.")
+    await click(button("Remove", planRow("No limits")))
+    expect(element("plan-remove-no-limits").textContent).toBe("1 person has No limits. Give them another plan to remove it.")
+    expect(element("plans-enabled-hint").textContent).toBe("On. Limits 2 people.")
+  })
+
+  it.each([
+    [1, "1 has more than this plan allows."],
+    [2, "2 have more than this plan allows."],
+  ])("says how many people a plan limits have more than it allows (%i), in words and with an icon", async (over, line) => {
+    await renderPlans(testI18n(), {
+      plans: overview({ enabled: true, defaultPlan: "free", plans: [{ ...family, over_people: over }, free] }),
+    })
+    expect(copyLines("Family")).toEqual([
+      "5 rules, 3 calendar accounts, 2 Integration Tokens",
+      "Instant sync, and a check every 5 minutes",
+      "4 people have it. Limits 3 people.",
+      line,
+    ])
+    const marked = planRow("Family").querySelector("[data-tone='attention']")
+    expect(marked?.textContent).toBe(line)
+    expect(marked?.querySelector("svg[aria-hidden='true']")).not.toBeNull()
+    expect(planRow("Free").querySelector("[data-tone='attention']")).toBeNull()
+  })
+
+  it.each([
+    ["off with a default", overview({ defaultPlan: "free" }), "Off. Limits nobody."],
+    ["off with no default", overview(), OFF_NO_DEFAULT],
+    ["on", overview({ enabled: true, defaultPlan: "free" }), "On. Limits 5 people."],
+    ["on for one person", overview({ enabled: true, defaultPlan: "free", plans: [{ ...free, limited_people: 1 }] }), "On. Limits 1 person."],
+    ["on with only No limits", overview({ enabled: true, defaultPlan: "no-limits", plans: [noLimits] }), "On. Limits nobody yet."],
   ])("says whether plans are on and whom they limit: %s", async (_state, plans, hint) => {
     await renderPlans(testI18n(), { plans })
     const box = field("plans-enabled")
@@ -385,7 +437,7 @@ describe("People's Plans tab", () => {
     expect(status()).toBe("Plans are on. No limits is the new default plan, and it limits nothing.")
     expect(field("plans-enabled").checked).toBe(true)
     // Family and Free limit the people who have them; No limits limits nobody.
-    expect(element("plans-enabled-hint").textContent).toBe("On. 5 people are limited.")
+    expect(element("plans-enabled-hint").textContent).toBe("On. Limits 5 people.")
     expect(select("plans-default").value).toBe("no-limits")
     expect(planRow("No limits").querySelector(".plan-title")?.textContent).toBe("No limitsDefault")
   })
@@ -399,7 +451,7 @@ describe("People's Plans tab", () => {
     expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: true, default_plan: "free" })
     expect(status()).toBe("Plans now limit 5 people.")
     expect(field("plans-enabled").checked).toBe(true)
-    expect(element("plans-enabled-hint").textContent).toBe("On. 5 people are limited.")
+    expect(element("plans-enabled-hint").textContent).toBe("On. Limits 5 people.")
   })
 
   it("turns plans on with the default chosen but not saved yet, and says so before", async () => {
@@ -408,7 +460,7 @@ describe("People's Plans tab", () => {
     })
     await choose(select("plans-default"), "free")
     expect(element("plans-enabled-hint").textContent).toBe(
-      "Off. Nobody is limited. Turning this on also makes Free the default plan.",
+      "Off. Limits nobody. Turning this on also makes Free the default plan.",
     )
 
     await click(field("plans-enabled"))
@@ -416,15 +468,13 @@ describe("People's Plans tab", () => {
     expect(status()).toBe("Plans now limit 5 people.")
     expect(select("plans-default").value).toBe("free")
     expect(buttonOrNull("Save default")).toBeNull()
-    expect(element("plans-enabled-hint").textContent).toBe("On. 5 people are limited.")
+    expect(element("plans-enabled-hint").textContent).toBe("On. Limits 5 people.")
   })
 
   it("turns plans on with No default chosen but not saved yet, which adds No limits, and says so before", async () => {
     await renderPlans(testI18n(), { plans: overview({ defaultPlan: "free" }) })
     await choose(select("plans-default"), "")
-    expect(element("plans-enabled-hint").textContent).toBe(
-      "Off. Nobody is limited. With no default plan, turning this on adds one named No limits, which limits nobody.",
-    )
+    expect(element("plans-enabled-hint").textContent).toBe(OFF_NO_DEFAULT)
     await click(field("plans-enabled"))
     expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: true, default_plan: null })
   })
@@ -512,7 +562,7 @@ describe("People's Plans tab", () => {
     expect(status()).toBe("Family is now the default plan.")
     expect(buttonOrNull("Save default")).toBeNull()
     expect(document.activeElement).toBe(select("plans-default"))
-    expect(element("plans-enabled-hint").textContent).toBe("Off. Nobody is limited.")
+    expect(element("plans-enabled-hint").textContent).toBe("Off. Limits nobody.")
   })
 
   it("keeps the default's controls focusable while it saves, showing the plan asked for", async () => {
@@ -637,6 +687,7 @@ describe("People's Plans tab", () => {
 
   it("edits a plan without showing its key, and warns before lowering its rule limit", async () => {
     await renderPlans(testI18n(), {
+      plans: overview({ enabled: true, defaultPlan: "free" }),
       answers: { "PUT /api/v1/plans/family": jsonResponse({ ...family, name: "Family Large" }) },
     })
     await click(button("Edit", planRow("Family")))
@@ -647,7 +698,7 @@ describe("People's Plans tab", () => {
     type(field("plan-family-rules"), "2")
     await settle()
     expect(element("plan-family-rules-warning").textContent).toBe(
-      "This plan limits 3 people. A lower limit stops none of their rules, but anyone with more syncing than it allows cannot start another.",
+      "1 person on this plan has more rules syncing than this. Their rules keep syncing, but they cannot start another.",
     )
     type(field("plan-family-name"), "Family Large")
     await submit(field("plan-family-name").closest("form")!)
@@ -726,8 +777,18 @@ describe("People's Plans tab", () => {
     expect(button("Edit", planRow("Free")).getAttribute("aria-disabled")).toBeNull()
   })
 
+  it("says what a lower limit will do once plans are on, while they are off", async () => {
+    await renderPlans(testI18n(), { plans: overview({ defaultPlan: "free" }) })
+    await click(button("Edit", planRow("Family")))
+    type(field("plan-family-rules"), "2")
+    await settle()
+    expect(element("plan-family-rules-warning").textContent).toBe(
+      "1 person on this plan has more rules syncing than this. Once plans are on, their rules keep syncing, but they cannot start another.",
+    )
+  })
+
   it("does not warn about a lower rule limit when the plan limits nobody", async () => {
-    await renderPlans(testI18n(), { plans: overview({ plans: [{ ...family, limited_people: 0 }] }) })
+    await renderPlans(testI18n(), { plans: overview({ plans: [{ ...family, limited_people: 0, use: NO_USE }] }) })
     await click(button("Edit", planRow("Family")))
     type(field("plan-family-rules"), "2")
     await settle()
@@ -864,7 +925,9 @@ describe("People's Plans tab", () => {
 
   it("has no untranslated text", async () => {
     const spare: PlanSummary = { ...family, key: "spare", name: "Spare", people: 0, limited_people: 0 }
-    await renderPlans(pseudoI18n(), { plans: overview({ enabled: true, defaultPlan: "free", plans: [family, free, spare] }) })
+    await renderPlans(pseudoI18n(), {
+      plans: overview({ enabled: true, defaultPlan: "free", plans: [{ ...family, over_people: 1 }, free, spare] }),
+    })
     const names = [...dateWords(), family.name, free.name, spare.name]
     expect(untranslatedText(container, names)).toEqual([])
     await choose(select("plans-default"), "family")

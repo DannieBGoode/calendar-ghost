@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react"
+import { Plus, TriangleAlert } from "lucide-react"
 import { useRef, useState, type RefObject } from "react"
 
 import { GhostMark } from "@/components/ghost-mark"
@@ -99,6 +99,7 @@ function PlansList({ overview, commands }: { overview: PlansOverview; commands: 
       ))}
       <AddPlanItem
         empty={empty}
+        enabled={overview.enabled}
         intervals={overview.sync_intervals}
         adding={opened?.action === "add"}
         busy={busy}
@@ -129,18 +130,38 @@ function NoPlans() {
 }
 
 /**
- * Whom a Plan limits, from the active people it limits who do not administer: none for a Plan that
- * limits nothing, and only once Plans are on.
+ * Who has a Plan, and whom it limits, as two facts with one wording everywhere: everyone who has
+ * it ("4 people have it."), as Remove and the person page count them, then the active people it
+ * limits who do not administer ("Limits 3 people."), nobody for a Plan that limits nothing, and
+ * only once Plans are on.
  */
 function planReach({ t }: I18n, plan: PlanSummary, enabled: boolean): string {
+  if (plan.people === 0) return t("people.plans.holdersNone")
+  const holders = t("people.plans.holders", { count: plan.people })
   const count = limitsNothing(plan.limits) ? 0 : plan.limited_people
-  if (count === 0) return t("people.plans.peopleNone")
-  return enabled ? t("people.plans.people", { count }) : t("people.plans.peopleLater", { count })
+  if (count === 0) return t("people.plans.limitedNone", { holders })
+  return t(enabled ? "people.plans.limited" : "people.plans.limitedLater", { holders, count })
 }
 
 /**
- * One Plan: its name, limits, interval, and whom it limits, with Edit and Remove. The default has
- * no Remove: it says how to remove it instead.
+ * How many of the people a Plan limits have more than it allows, as after a limit was lowered, in
+ * Attention Ochre with an icon, so the tone is never the only sign. Nothing while nobody does.
+ */
+function PlanOver({ count }: { count: number }) {
+  const { t } = useI18n()
+  if (count === 0) return null
+  return (
+    <p className="field-hint" data-tone="attention">
+      <TriangleAlert aria-hidden="true" />
+      {t("people.plans.over", { count })}
+    </p>
+  )
+}
+
+/**
+ * One Plan: its name, limits, interval, who has it and whom it limits, and how many of them have
+ * more than it allows, with Edit and Remove. The default has no Remove: it says how to remove it
+ * instead.
  */
 function PlanItem({
   plan,
@@ -188,6 +209,7 @@ function PlanItem({
           <p>{planLimitsSummary(i18n, plan.limits)}</p>
           <p>{intervalLabel(i18n, plan.limits.sync_interval)}</p>
           <p>{planReach(i18n, plan, enabled)}</p>
+          <PlanOver count={plan.over_people} />
         </div>
         <PlanActions
           plan={plan}
@@ -203,6 +225,7 @@ function PlanItem({
         <div id={`plan-edit-${plan.key}`}>
           <PlanEditor
             plan={plan}
+            enabled={enabled}
             intervals={intervals}
             pending={change.isPending}
             error={change.error}
@@ -278,6 +301,7 @@ function PlanActions({
 /** "Add a plan", and its inline form once opened. With no Plan yet it closes the empty state above it. */
 function AddPlanItem({
   empty,
+  enabled,
   intervals,
   adding,
   busy,
@@ -287,6 +311,8 @@ function AddPlanItem({
 }: {
   /** No Plan exists yet. */
   empty: boolean
+  /** Plans limit people now. */
+  enabled: boolean
   intervals: SyncInterval[]
   adding: boolean
   /** A Plan command is on its way, so Add a plan waits. It stays focusable: focus returns to it as its form closes. */
@@ -324,6 +350,7 @@ function AddPlanItem({
         <div id="plan-edit-new">
           <PlanEditor
             plan={null}
+            enabled={enabled}
             intervals={intervals}
             pending={define.isPending}
             error={define.error}
