@@ -392,18 +392,37 @@
     "add": "Add a plan",
     "editor": {
       "name": "Name",
-      "key": "Key",
-      "keyHint": "Lower-case letters, digits, and hyphens. The key cannot change later.",
-      "rules": "Rules that sync",
-      "accounts": "Calendar accounts",
-      "tokens": "Integration Tokens",
-      "unlimited": "Unlimited",
+      "limitsLegend": "Limits for each person",
+      "rules": "Rules that can sync",
+      "rulesHint": "Paused rules and drafts don't count.",
+      "accounts": "Calendar accounts they can connect",
+      "accountsHint": "Disconnected accounts count. Reconnecting an account is never refused.",
+      "tokens": "Integration Tokens they can have",
+      "tokensHint": "Revoked tokens don't count.",
+      "noLimit": "No limit",
       "interval": "How soon calendars sync",
+      "intervalHint": "Longer intervals arrive in a later release.",
       "save": "Save plan",
       "cancel": "Cancel",
-      "lowerWarning": {
-        "one": "This plan limits {count} person. Rules beyond a lower limit keep syncing, but no new rule can start until the count is within it.",
-        "other": "This plan limits {count} people. Rules beyond a lower limit keep syncing, but no new rule can start until the count is within it."
+      "missing": {
+        "name": "Enter a name to save this plan.",
+        "rules": "Enter how many rules can sync, from {min} to {max}, or choose No limit.",
+        "accounts": "Enter how many calendar accounts they can connect, from {min} to {max}, or choose No limit.",
+        "tokens": "Enter how many Integration Tokens they can have, from {min} to {max}, or choose No limit."
+      },
+      "lowered": {
+        "rules": {
+          "one": "This plan limits {count} person. A lower limit stops none of their rules, but while more sync than it allows, they cannot start another.",
+          "other": "This plan limits {count} people. A lower limit stops none of their rules, but anyone with more syncing than it allows cannot start another."
+        },
+        "accounts": {
+          "one": "This plan limits {count} person. A lower limit removes none of their calendar accounts, but while they have more than it allows, they cannot connect another.",
+          "other": "This plan limits {count} people. A lower limit removes none of their calendar accounts, but anyone with more than it allows cannot connect another."
+        },
+        "tokens": {
+          "one": "This plan limits {count} person. A lower limit revokes none of their Integration Tokens, but while they have more than it allows, they cannot issue another.",
+          "other": "This plan limits {count} people. A lower limit revokes none of their Integration Tokens, but anyone with more than it allows cannot issue another."
+        }
       }
     },
     "removeConfirm": {

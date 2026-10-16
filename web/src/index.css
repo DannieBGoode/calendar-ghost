@@ -424,11 +424,13 @@ p {
   color: var(--warning-foreground);
 }
 
-/* A field that shows a value nobody can change, such as a Plan's key: filled, so it does not
-   read as one to type in, and in the full text colour, so it stays easy to read. */
-.field-read-only {
-  background: var(--muted);
-  cursor: default;
+/* An attention hint names its state with an icon as well as its colour. */
+.field-hint[data-tone="attention"] > svg {
+  display: inline;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-right: 0.375rem;
+  vertical-align: -0.125em;
 }
 
 .field-error {
@@ -1812,6 +1814,43 @@ p {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+/* A Plan's limits for each person, and how soon calendars sync, under one legend. */
+.plan-limits {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  gap: 1rem;
+  border: 0;
+}
+
+.plan-limits legend {
+  margin-bottom: 0.75rem;
+  padding: 0;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+/* No limit, then the number it hides while ticked, on one line while they fit. */
+.plan-limit-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.plan-limit-entry .checkbox-row {
+  align-items: center;
+}
+
+.plan-limit-entry .checkbox-row input {
+  margin-top: 0;
+}
+
+.plan-limit-entry input[type="number"] {
+  width: 7rem;
 }
 
 .setting-item .disconnect-confirmation {

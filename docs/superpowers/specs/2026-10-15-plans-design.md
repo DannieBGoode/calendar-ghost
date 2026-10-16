@@ -679,9 +679,17 @@ Indicator rule.
 - **People, Plans** (`/people/plans`, a tab after Everyone and Invitations, hidden with People under
   Only Me; until 2026-10-16 it sat in Settings, Administration, between Registration and Storage): a
   checkbox row "Limit people with plans", disabled until a default exists; a select for the default;
-  one row per Plan with an inline edit form, where each limit is a number or "Unlimited" and the
-  interval is a select of the offered values; Remove with an inline confirmation; and an inline "Add
-  a plan" form that warns the key cannot change.
+  one row per Plan with an inline edit form; Remove with an inline confirmation; and an inline "Add
+  a plan" form. The form asks for a name and no key (the server makes it from the name, and the UI
+  never shows it). Under "Limits for each person" each limit is "No limit" or a whole number, with
+  what counts as its hint: "Rules that can sync" ("Paused rules and drafts don't count."),
+  "Calendar accounts they can connect" ("Disconnected accounts count. Reconnecting an account is
+  never refused."), and "Integration Tokens they can have" ("Revoked tokens don't count."); then
+  "How soon calendars sync", a select of the offered values ("Longer intervals arrive in a later
+  release."). Save names the field it waits for; while it saves, every control stays focusable
+  with `aria-disabled`; a refusal shows under the field it names, which takes focus. Lowering a
+  limit of a Plan that limits people warns under that limit, in a status a screen reader
+  announces, naming how many people the Plan limits.
 - **People:** the Plan fact and "Change plan" on the person page.
 - **Settings, Your account, Your plan** (`#your-plan`): for example "Family: 3 of 5 rules counted,
   2 of 3 calendar accounts, 1 of 2 tokens, syncs about every 15 minutes". An administrator reads

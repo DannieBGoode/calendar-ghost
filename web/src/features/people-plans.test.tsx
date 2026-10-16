@@ -332,7 +332,7 @@ describe("People's Plans tab", () => {
     expect(alertText()).toBe("This plan no longer exists. Reload to see the current plans.")
   })
 
-  it("adds a plan, warning that its key cannot change, with Unlimited sent as no limit", async () => {
+  it("adds a plan without a key, which the server makes from its name, with No limit sent as no limit", async () => {
     const added: PlanSummary = {
       key: "family-2",
       name: "Family Plus",
@@ -343,27 +343,23 @@ describe("People's Plans tab", () => {
     }
     await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse(added, 201) } })
     await click(button("Add a plan"))
-    expect(element("plan-new-key-hint").textContent).toBe(
-      "Lower-case letters, digits, and hyphens. The key cannot change later.",
-    )
-    expect(document.activeElement).toBe(field("plan-new-key"))
+    expect(container.querySelector("#plan-new-key")).toBeNull()
+    expect(document.activeElement).toBe(field("plan-new-name"))
     const intervals = select("plan-new-interval")
     expect([...intervals.options].map((option) => [option.value, option.textContent])).toEqual([
       ["instant", "Instant sync, and a check every 5 minutes"],
       ["5_minutes", "Every 5 minutes"],
     ])
 
-    type(field("plan-new-key"), "family-2")
     type(field("plan-new-name"), " Family Plus ")
     await click(field("plan-new-rules-unlimited"))
     type(field("plan-new-rules"), "8")
     await click(field("plan-new-tokens-unlimited"))
     type(field("plan-new-tokens"), "0")
     await choose(intervals, "5_minutes")
-    await submit(field("plan-new-key").closest("form")!)
+    await submit(field("plan-new-name").closest("form")!)
 
-    expect(sent("POST", "/api/v1/plans")).toEqual({
-      key: "family-2",
+    expect(sent("POST", "/api/v1/plans")).toStrictEqual({
       name: "Family Plus",
       limits: { rules: 8, connected_accounts: null, integration_tokens: 0, sync_interval: "5_minutes" },
     })
@@ -372,63 +368,48 @@ describe("People's Plans tab", () => {
     expect(document.activeElement).toBe(button("Add a plan"))
   })
 
-  it("keeps Save unavailable until each limit has a number or Unlimited", async () => {
+  it("keeps Save unavailable until each limit has a number or No limit, and says why", async () => {
     await renderPlans(testI18n())
     await click(button("Add a plan"))
-    type(field("plan-new-key"), "family-2")
     type(field("plan-new-name"), "Family Plus")
     await click(field("plan-new-accounts-unlimited"))
-    expect(button("Save plan").disabled).toBe(true)
+    expect(button("Save plan").getAttribute("aria-disabled")).toBe("true")
+    expect(element("plan-edit-new").textContent).toContain(
+      "Enter how many calendar accounts they can connect, from 1 to 10,000, or choose No limit.",
+    )
     type(field("plan-new-accounts"), "2")
     await settle()
-    expect(button("Save plan").disabled).toBe(false)
+    expect(button("Save plan").getAttribute("aria-disabled")).toBeNull()
   })
 
-  it.each([
-    ["plan-new-rules", "Rules that sync"],
-    ["plan-new-accounts", "Calendar accounts"],
-    ["plan-new-tokens", "Integration Tokens"],
-  ])("labels the %s limit with the shared label, grouping its number and Unlimited", async (id, label) => {
-    await renderPlans(testI18n())
+  it("keeps the new plan's form open with the reason it was refused, under the field it names", async () => {
+    await renderPlans(testI18n(), {
+      answers: { "POST /api/v1/plans": refusal(422, "invalid_plan", { reason: "name" }) },
+    })
     await click(button("Add a plan"))
-    expect(container.querySelector(`label[for='${id}']`)?.textContent).toBe(label)
-    const group = element("plan-edit-new").querySelector(`[role='group'][aria-labelledby='${id}-label']`)
-    expect(group?.querySelector(`#${id}`)).toBe(field(id))
-    expect(group?.querySelector(`#${id}-unlimited`)).toBe(field(`${id}-unlimited`))
-  })
-
-  it.each([
-    [refusal(409, "plan_key_taken"), "Another plan already uses this key. Choose a different key."],
-    [
-      refusal(422, "invalid_plan", { reason: "key" }),
-      "Use 1 to 32 lower-case letters, digits, and hyphens for the key, starting with a letter or digit.",
-    ],
-  ])("keeps the new plan's form open with the reason it was refused", async (answer, reason) => {
-    await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": answer } })
-    await click(button("Add a plan"))
-    type(field("plan-new-key"), "Family")
     type(field("plan-new-name"), "Family")
-    await submit(field("plan-new-key").closest("form")!)
-    expect(element("plan-edit-new").querySelector("[role='alert']")?.textContent).toBe(reason)
+    await submit(field("plan-new-name").closest("form")!)
+    expect(element("plan-edit-new").querySelector("[role='alert']")?.textContent).toBe(
+      "Give the plan a name of 1 to 60 characters, without line breaks or other control characters.",
+    )
+    expect(field("plan-new-name").getAttribute("aria-invalid")).toBe("true")
+    expect(document.activeElement).toBe(field("plan-new-name"))
     expect(status()).toBe("")
   })
 
-  it("edits a plan without changing its key, and warns before lowering its rule limit", async () => {
+  it("edits a plan without showing its key, and warns before lowering its rule limit", async () => {
     await renderPlans(testI18n(), {
       answers: { "PUT /api/v1/plans/family": jsonResponse({ ...family, name: "Family Large" }) },
     })
     await click(button("Edit", planRow("Family")))
-    const key = field("plan-family-key")
-    expect(key.readOnly).toBe(true)
-    expect(key.value).toBe("family")
-    expect(container.querySelector("#plan-family-key-hint")).toBeNull()
+    expect(container.querySelector("#plan-family-key")).toBeNull()
     expect(document.activeElement).toBe(field("plan-family-name"))
-    expect(element("plan-edit-family").querySelector("[data-tone='attention']")).toBeNull()
+    expect(element("plan-edit-family").querySelector("[data-tone='attention']")?.textContent).toBe("")
 
     type(field("plan-family-rules"), "2")
     await settle()
-    expect(element("plan-edit-family").querySelector("[data-tone='attention']")?.textContent).toBe(
-      "This plan limits 3 people. Rules beyond a lower limit keep syncing, but no new rule can start until the count is within it.",
+    expect(element("plan-family-rules-warning").textContent).toBe(
+      "This plan limits 3 people. A lower limit stops none of their rules, but anyone with more syncing than it allows cannot start another.",
     )
     type(field("plan-family-name"), "Family Large")
     await submit(field("plan-family-name").closest("form")!)
@@ -440,16 +421,6 @@ describe("People's Plans tab", () => {
     expect(status()).toBe("Family Large was saved.")
     expect(container.querySelector("#plan-edit-family")).toBeNull()
     expect(document.activeElement).toBe(button("Edit", planRow("Family")))
-  })
-
-  it("shows the key it cannot change as read-only, set apart from the fields that can", async () => {
-    await renderPlans(testI18n())
-    await click(button("Edit", planRow("Family")))
-    const key = field("plan-family-key")
-    expect(key.readOnly).toBe(true)
-    expect(key.disabled).toBe(false)
-    expect(key.classList.contains("field-read-only")).toBe(true)
-    expect(field("plan-family-name").classList.contains("field-read-only")).toBe(false)
   })
 
   it("names the plan each Edit and Remove acts on, for assistive technology", async () => {
@@ -470,8 +441,10 @@ describe("People's Plans tab", () => {
     type(field("plan-family-name"), "Family Large")
     await submit(field("plan-family-name").closest("form")!)
     const form = element("plan-edit-family")
-    expect(button("Save plan", form).disabled).toBe(true)
-    expect(button("Cancel", form).disabled).toBe(true)
+    for (const held of [button("Save plan", form), button("Cancel", form)]) {
+      expect(held.disabled).toBe(false)
+      expect(held.getAttribute("aria-disabled")).toBe("true")
+    }
     for (const waiting of [
       button("Edit", planRow("Family")),
       button("Remove", planRow("Family")),
@@ -486,7 +459,7 @@ describe("People's Plans tab", () => {
     await click(button("Edit", planRow("Family")))
     await click(button("Edit", planRow("Free")))
     expect(container.querySelector("#plan-edit-free")).toBeNull()
-    expect(button("Save plan", element("plan-edit-family")).disabled).toBe(true)
+    expect(button("Save plan", element("plan-edit-family")).getAttribute("aria-disabled")).toBe("true")
 
     await act(async () => {
       answer(refusal(422, "invalid_plan", { reason: "name" }))
@@ -496,7 +469,8 @@ describe("People's Plans tab", () => {
     expect(element("plan-edit-family").querySelector("[role='alert']")?.textContent).toBe(
       "Give the plan a name of 1 to 60 characters, without line breaks or other control characters.",
     )
-    expect(button("Save plan", element("plan-edit-family")).disabled).toBe(false)
+    expect(document.activeElement).toBe(field("plan-family-name"))
+    expect(button("Save plan", element("plan-edit-family")).getAttribute("aria-disabled")).toBeNull()
     expect(button("Edit", planRow("Free")).getAttribute("aria-disabled")).toBeNull()
   })
 
@@ -505,7 +479,7 @@ describe("People's Plans tab", () => {
     await click(button("Edit", planRow("Family")))
     type(field("plan-family-rules"), "2")
     await settle()
-    expect(element("plan-edit-family").querySelector("[data-tone='attention']")).toBeNull()
+    expect(element("plan-family-rules-warning").textContent).toBe("")
   })
 
   it("keeps an interval a later release saved, beside the offered ones", async () => {

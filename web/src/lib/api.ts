@@ -220,7 +220,7 @@ export type PlanSummary = Schemas["PlanResponse"]
 export type PlanLimits = Schemas["PlanLimitsResponse"]
 /** How soon a Plan's rules sync (ADR 0038). */
 export type SyncInterval = PlanLimits["sync_interval"]
-/** A new Plan: its key, chosen once, its name, and its limits. */
+/** A new Plan: its name and limits. Without a key, the server makes one from the name; it never changes. */
 export type PlanPayload = Schemas["DefinePlanRequest"]
 /** A Plan's new name and limits; its key never changes. */
 export type PlanChange = Schemas["ChangePlanRequest"]

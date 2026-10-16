@@ -255,9 +255,7 @@ function PlanItem({
             intervals={intervals}
             pending={change.isPending}
             error={change.error}
-            onSave={({ name, limits }) =>
-              change.mutate({ key: plan.key, payload: { name, limits } }, { onSuccess: () => close(editButton) })
-            }
+            onSave={(payload) => change.mutate({ key: plan.key, payload }, { onSuccess: () => close(editButton) })}
             onCancel={() => close(editButton)}
           />
         </div>
