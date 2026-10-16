@@ -2,6 +2,10 @@
 
 Amended by [ADR 0023](0023-hosted-service-runs-the-open-codebase.md): the hosted service runs this
 open codebase with no closed components, so the separate hosted boundary below no longer applies.
+Amended by [ADR 0038](0038-plans-allowances-and-limits.md), with
+[ADR 0028](0028-plans-apart-from-commercial-mode.md): the Hosted Service may also charge for Plans
+that differ in limits and in how soon calendars sync, while a self-hosted installation keeps every
+feature; see the amendment at the end.
 
 ## Context
 
@@ -59,3 +63,16 @@ against them.
   Open Source and would undermine the trust goal in self-hosting and privacy communities.
 - **Use AGPL with an additional no-compete restriction.** Rejected: that would conflict with the
   open-source claim and the rights AGPL grants.
+
+## Amendment: Plans (2026-10-16)
+
+The last bullet of the decision, that the hosted service charges for operating Calendar Ghost and
+not for features, reads differently now. The Hosted Service runs this same code with Plans on
+([ADR 0028](0028-plans-apart-from-commercial-mode.md), as amended, and
+[ADR 0038](0038-plans-allowances-and-limits.md)). Its Plans may differ in how many rules,
+Connected Accounts, and Integration Tokens a User has and how soon their calendars sync, including
+Instant Sync, so a Plan that costs more may allow more. They never differ in how a rule protects
+privacy or in the tools to see and recover from a problem. The rest of the bullet stands for the
+Community Edition: a self-hosted installation has every feature and no limits unless its own
+administrator turns Plans on, and nothing is removed, limited, or held back from it to push people
+toward the Hosted Service.

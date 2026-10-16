@@ -51,15 +51,18 @@ _Avoid_: Base plan, fallback plan
 What one User may use now, decided in this order: no limits while Plans are off, none for an
 Installation Administrator, otherwise their own Plan, or the Default Plan when they have none. It
 decides every limit check and the User's Sync Cadence. A limit check that cannot read it refuses,
-as for any database error; every other reader falls back to no limits, so a fault in Plans never
-stops synchronization or sign-in (ADR 0038).
+as for any database error, and Your plan says it could not load rather than show limits nobody
+read; every other reader falls back to no limits, so a fault in Plans never stops synchronization
+or sign-in (ADR 0038).
 _Avoid_: Entitlement
 
 **Plan Hold**:
 The pause of a User's Directional Sync Rules beyond their Plan's rule limit, applied after a 7-day
-grace period. The User chooses which rules stay enabled; otherwise the most recently created are
-held. A held rule keeps its mappings and projections, and resumes by itself without a new preview
-once the User's limit allows it again.
+grace period. Plan Hold is planned for a later release: until then a lowered rule limit only
+refuses new Starts and stops nothing, so rules beyond it keep syncing (ADR 0038). Once it ships,
+the User chooses which rules stay enabled; otherwise the most recently created are held. A held
+rule keeps its mappings and projections, and resumes by itself without a new preview once the
+User's limit allows it again.
 _Avoid_: Suspension, plan pause, downgrade deletion
 
 **Commercial Mode**:

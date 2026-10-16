@@ -547,8 +547,9 @@ Declining consent does not create an account or retain any credentials.
 When an administrator has turned Plans on, your Plan may limit how many calendar accounts you
 have. Every account under **Settings → Connections → Connected accounts** counts, Disconnected
 Accounts too: connecting one of them again is Reauthorization, which a Plan never refuses. At the
-limit, **Connect an account** is unavailable and says why, while **Reauthorize account** stays
-available on every account you have. **Settings → Your account → Your plan** shows how many
+limit, **Connect an account** is unavailable and says why, but Reauthorization is never refused
+by the account limit: an account that needs it still offers **Reauthorize account**.
+**Settings → Your account → Your plan** shows how many
 calendar accounts your Plan allows. Installation Administrators are never limited.
 
 Calendar Ghost learns an account's address only after the provider's consent. So when you choose

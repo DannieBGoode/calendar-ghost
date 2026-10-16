@@ -218,9 +218,11 @@ limit, the Connected Account store checks the account limit when it saves a new 
 `build_adapters` passes the same instance as each, so every client depends only on the port it
 uses. Each limit check reads the Allowance after its own transaction holds SQLite's writer lock,
 and `SqlitePlans` writes under `BEGIN IMMEDIATE`, so a check and the limit it read cannot drift
-apart; a read that fails refuses the request. Every other reader falls back to no limits, so a
-fault in Plans never stops synchronization, sign-in, or the rules API. `ShowOwnPlan`
-(`application/operations/own_plan.py`) reads the Allowance and the User's counts for Your plan.
+apart; a read that fails refuses the request. `ShowOwnPlan` (`application/operations/own_plan.py`)
+reads the Allowance and the User's counts for Your plan, and a read that fails there fails
+`GET /api/v1/account/plan` too, rather than show limits nobody read; so does `AssignPlan`, which
+reads back the Allowance it assigned. Every other reader falls back to no limits, so a fault in
+Plans never stops synchronization, sign-in, or the rules API.
 
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
 `application/operations/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral

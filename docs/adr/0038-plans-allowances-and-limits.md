@@ -4,6 +4,7 @@ Builds on [ADR 0028](0028-plans-apart-from-commercial-mode.md),
 [ADR 0029](0029-isolate-users-in-one-sqlite-database.md), and
 [ADR 0032](0032-bounded-contexts-as-application-packages.md). Amends
 [ADR 0010](0010-rule-removal-and-calendar-replacement.md),
+[ADR 0021](0021-community-edition-agpl.md),
 [ADR 0023](0023-hosted-service-runs-the-open-codebase.md),
 [ADR 0028](0028-plans-apart-from-commercial-mode.md),
 [ADR 0030](0030-users-administrators-and-registration.md), and
