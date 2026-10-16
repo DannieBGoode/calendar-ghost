@@ -174,7 +174,8 @@ export function PlanEditor({
         <Button type="submit" disabled={!payload || pending}>
           {t("settings.plans.editor.save")}
         </Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>
+        {/* Waits for Save, as a confirmation's Cancel does, so its answer has a form to show in. */}
+        <Button type="button" variant="ghost" disabled={pending} onClick={onCancel}>
           {t("settings.plans.editor.cancel")}
         </Button>
       </div>
@@ -201,7 +202,7 @@ function KeyField({
     <div className="field-stack">
       <Label htmlFor={`${id}-key`}>{t("settings.plans.editor.key")}</Label>
       {plan ? (
-        <Input id={`${id}-key`} value={plan.key} readOnly />
+        <Input id={`${id}-key`} className="field-read-only" value={plan.key} readOnly />
       ) : (
         <>
           <Input

@@ -424,6 +424,13 @@ p {
   color: var(--warning-foreground);
 }
 
+/* A field that shows a value nobody can change, such as a Plan's key: filled, so it does not
+   read as one to type in, and in the full text colour, so it stays easy to read. */
+.field-read-only {
+  background: var(--muted);
+  cursor: default;
+}
+
 .field-error {
   color: var(--destructive);
 }

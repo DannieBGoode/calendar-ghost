@@ -445,6 +445,64 @@ describe("Plans under Administration", () => {
     expect(document.activeElement).toBe(button("Edit", planRow("Family")))
   })
 
+  it("shows the key it cannot change as read-only, set apart from the fields that can", async () => {
+    await renderAdministration(testI18n())
+    await click(button("Edit", planRow("Family")))
+    const key = field("plan-family-key")
+    expect(key.readOnly).toBe(true)
+    expect(key.disabled).toBe(false)
+    expect(key.classList.contains("field-read-only")).toBe(true)
+    expect(field("plan-family-name").classList.contains("field-read-only")).toBe(false)
+  })
+
+  it("names the plan each Edit and Remove acts on, for assistive technology", async () => {
+    await renderAdministration(testI18n())
+    expect(button("Edit", planRow("Family")).getAttribute("aria-label")).toBe("Edit Family")
+    expect(button("Remove", planRow("Family")).getAttribute("aria-label")).toBe("Remove Family")
+    expect(button("Edit", planRow("Free")).getAttribute("aria-label")).toBe("Edit Free")
+    expect(button("Remove", planRow("Free")).getAttribute("aria-label")).toBe("Remove Free")
+  })
+
+  it("keeps a save on its way, and then its refusal, while the other plan commands wait", async () => {
+    let answer: (response: Response) => void = () => undefined
+    const held = new Promise<Response>((resolve) => {
+      answer = resolve
+    })
+    await renderAdministration(testI18n(), { answers: { "PUT /api/v1/plans/family": held } })
+    await click(button("Edit", planRow("Family")))
+    type(field("plan-family-name"), "Family Large")
+    await submit(field("plan-family-name").closest("form")!)
+    const form = element("plan-edit-family")
+    expect(button("Save plan", form).disabled).toBe(true)
+    expect(button("Cancel", form).disabled).toBe(true)
+    for (const waiting of [
+      button("Edit", planRow("Family")),
+      button("Remove", planRow("Family")),
+      button("Edit", planRow("Free")),
+      button("Remove", planRow("Free")),
+      button("Add a plan"),
+    ]) {
+      expect(waiting.getAttribute("aria-disabled")).toBe("true")
+    }
+
+    // Edit again, and another plan's Edit, change nothing while the save is on its way.
+    await click(button("Edit", planRow("Family")))
+    await click(button("Edit", planRow("Free")))
+    expect(container.querySelector("#plan-edit-free")).toBeNull()
+    expect(button("Save plan", element("plan-edit-family")).disabled).toBe(true)
+
+    await act(async () => {
+      answer(refusal(422, "invalid_plan", { reason: "name" }))
+      await Promise.resolve()
+    })
+    await settle()
+    expect(element("plan-edit-family").querySelector("[role='alert']")?.textContent).toBe(
+      "Give the plan a name of 1 to 60 characters, without line breaks or other control characters.",
+    )
+    expect(button("Save plan", element("plan-edit-family")).disabled).toBe(false)
+    expect(button("Edit", planRow("Free")).getAttribute("aria-disabled")).toBeNull()
+  })
+
   it("does not warn about a lower rule limit when the plan limits nobody", async () => {
     await renderAdministration(testI18n(), { plans: overview({ plans: [{ ...family, limited_people: 0 }] }) })
     await click(button("Edit", planRow("Family")))

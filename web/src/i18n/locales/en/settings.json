@@ -183,7 +183,9 @@
       "60_minutes": "Every hour"
     },
     "edit": "Edit",
+    "editLabel": "Edit {name}",
     "remove": "Remove",
+    "removeLabel": "Remove {name}",
     "add": "Add a plan",
     "editor": {
       "name": "Name",

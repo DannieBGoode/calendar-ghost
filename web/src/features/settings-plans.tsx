@@ -55,6 +55,9 @@ export function PlansSection({ commands }: { commands: PlanCommands }) {
 function PlansList({ overview, commands }: { overview: PlansOverview; commands: PlanCommands }) {
   const [opened, setOpened] = useState<Opened>(null)
   const addButton = useRef<HTMLButtonElement>(null)
+  // While a Plan is saved or removed, no other form or confirmation opens: opening one forgets
+  // the command on its way, and a refusal it met would show nowhere.
+  const busy = commands.define.isPending || commands.change.isPending || commands.remove.isPending
 
   // Opening one form or confirmation closes any other, and forgets their refusals.
   function open(next: Opened) {
@@ -74,6 +77,7 @@ function PlansList({ overview, commands }: { overview: PlansOverview; commands: 
           plan={plan}
           intervals={editorIntervals(overview.sync_intervals, plan)}
           opened={opened}
+          busy={busy}
           onOpen={open}
           commands={commands}
           onRemoved={() => {
@@ -85,6 +89,7 @@ function PlansList({ overview, commands }: { overview: PlansOverview; commands: 
       <AddPlanItem
         intervals={overview.sync_intervals}
         adding={opened?.action === "add"}
+        busy={busy}
         onOpen={open}
         commands={commands}
         addButton={addButton}
@@ -176,6 +181,7 @@ function PlanItem({
   plan,
   intervals,
   opened,
+  busy,
   onOpen,
   commands,
   onRemoved,
@@ -183,6 +189,8 @@ function PlanItem({
   plan: PlanSummary
   intervals: SyncInterval[]
   opened: Opened
+  /** A Plan command is on its way, so Edit and Remove wait. They stay focusable: focus returns to them as its form closes. */
+  busy: boolean
   onOpen: Open
   commands: PlanCommands
   /** Moves focus on once the Plan's row is gone. */
@@ -217,9 +225,11 @@ function PlanItem({
             ref={editButton}
             type="button"
             variant="outline"
+            aria-label={t("settings.plans.editLabel", { name: plan.name })}
             aria-expanded={editing}
             aria-controls={`plan-edit-${plan.key}`}
-            onClick={() => onOpen({ action: "edit", key: plan.key })}
+            aria-disabled={busy || undefined}
+            onClick={() => !busy && onOpen({ action: "edit", key: plan.key })}
           >
             {t("settings.plans.edit")}
           </Button>
@@ -227,9 +237,11 @@ function PlanItem({
             ref={removeButton}
             type="button"
             variant="ghost"
+            aria-label={t("settings.plans.removeLabel", { name: plan.name })}
             aria-expanded={removing}
             aria-controls={`plan-remove-${plan.key}`}
-            onClick={() => onOpen({ action: "remove", key: plan.key })}
+            aria-disabled={busy || undefined}
+            onClick={() => !busy && onOpen({ action: "remove", key: plan.key })}
           >
             {t("settings.plans.remove")}
           </Button>
@@ -297,12 +309,15 @@ function PlanRemoval({
 function AddPlanItem({
   intervals,
   adding,
+  busy,
   onOpen,
   commands,
   addButton,
 }: {
   intervals: SyncInterval[]
   adding: boolean
+  /** A Plan command is on its way, so Add a plan waits. It stays focusable: focus returns to it as its form closes. */
+  busy: boolean
   onOpen: Open
   commands: PlanCommands
   addButton: RefObject<HTMLButtonElement | null>
@@ -324,7 +339,8 @@ function AddPlanItem({
           variant="outline"
           aria-expanded={adding}
           aria-controls="plan-edit-new"
-          onClick={() => onOpen({ action: "add" })}
+          aria-disabled={busy || undefined}
+          onClick={() => !busy && onOpen({ action: "add" })}
         >
           <Plus aria-hidden="true" />
           {t("settings.plans.add")}
