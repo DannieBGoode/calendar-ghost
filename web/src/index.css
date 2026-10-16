@@ -50,6 +50,13 @@
   --panel-padding: 1.5rem;
   --motion-fast: 180ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* A meter past an enforced limit: Attention Ochre with diagonal stripes, so it is never color
+     alone. It reads the root's own warning and background colors, so it follows every appearance. */
+  --meter-over-fill: repeating-linear-gradient(
+    -45deg,
+    var(--warning-foreground) 0 6px,
+    color-mix(in oklch, var(--warning-foreground) 72%, var(--background)) 6px 9px
+  );
   color: var(--foreground);
   background: var(--background);
 }
