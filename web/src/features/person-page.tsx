@@ -173,7 +173,7 @@ function PersonFacts({ person, plan, now }: { person: Person; plan: PersonPlan |
   // Keyed by which fact each is, since a Plan's name can equal another fact, such as "User".
   const facts: [id: string, fact: string][] = [
     ["role", t(`people.roles.${person.role}`)],
-    ...(plan ? [["plan", personPlanFact(i18n, plan)] satisfies [string, string]] : []),
+    ...(plan ? [["plan", personPlanFact(i18n, plan, isAdministrator(person))] satisfies [string, string]] : []),
     ["joined", t("people.person.joined", { relative: i18n.format.relative(person.created_at, now) })],
     [
       "last-sign-in",

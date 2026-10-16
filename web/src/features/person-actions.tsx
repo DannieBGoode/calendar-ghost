@@ -88,7 +88,7 @@ export function PersonDetails({
         </p>
       )}
       {commands.choosingPlan === person.id && (
-        <PersonPlanChoice person={person} current={plan ?? null} commands={commands} />
+        <PersonPlanChoice person={person} name={name} current={plan ?? null} commands={commands} />
       )}
       {commands.deleting === person.id && <PersonDeletion person={person} name={name} commands={commands} />}
       {commands.resetLink?.personId === person.id && (

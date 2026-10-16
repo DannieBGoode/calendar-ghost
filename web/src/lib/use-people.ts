@@ -95,6 +95,10 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
         queryClient.invalidateQueries({ queryKey: PLANS_QUERY }),
       ])
     },
+    // A refused Plan may have been removed meanwhile, so the choice reads the Plans again.
+    onError: async (_error, { action }) => {
+      if (action === "plan") await queryClient.invalidateQueries({ queryKey: PLANS_QUERY })
+    },
   })
 
   function finish({ link, deletion }: Outcome, { person, action }: PersonCommand) {

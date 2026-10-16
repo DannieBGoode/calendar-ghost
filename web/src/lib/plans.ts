@@ -95,10 +95,11 @@ export function ownPlanSummary(i18n: I18n, plan: OwnPlan): string | null {
 
 /**
  * The Plan fact on a person's page: the Plan that limits them, the one that will once Plans are
- * on, or that no Plan limits an administrator, with the Plan they were given if any.
+ * on, or that no Plan limits an administrator, with the Plan they were given if any. An
+ * administrator reads so whether Plans are on or off, since no Plan ever limits them.
  */
-export function personPlanFact({ t }: I18n, { basis, plan, assigned }: PersonPlan): string {
-  if (basis === "administrator") {
+export function personPlanFact({ t }: I18n, { basis, plan, assigned }: PersonPlan, administrator: boolean): string {
+  if (administrator || basis === "administrator") {
     return assigned
       ? t("people.plan.fact.administratorAssigned", { name: assigned.name })
       : t("people.plan.fact.administrator")

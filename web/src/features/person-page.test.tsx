@@ -154,8 +154,11 @@ async function settle(times = 8) {
   }
 }
 
-async function renderPerson(i18n: I18n, personId = "user-robin", answers: Record<string, Response> = {}) {
-  const routes: Record<string, Response> = {
+/** An answer, or one read at each request, for an answer that changes between requests. */
+type Answer = Response | (() => Response)
+
+async function renderPerson(i18n: I18n, personId = "user-robin", answers: Record<string, Answer> = {}) {
+  const routes: Record<string, Answer> = {
     "GET /api/v1/session": jsonResponse(session),
     "GET /api/v1/users/user-robin/overview": jsonResponse(robin),
     "GET /api/v1/users/user-dana/overview": jsonResponse({
@@ -175,7 +178,8 @@ async function renderPerson(i18n: I18n, personId = "user-robin", answers: Record
       const body: unknown = init?.body ? JSON.parse(init.body as string) : undefined
       calls.push({ method, path, body })
       const notFound = { detail: "user nobody does not exist", code: "user_not_found", params: {} }
-      return Promise.resolve(routes[`${method} ${path}`] ?? jsonResponse(notFound, 404))
+      const answer = routes[`${method} ${path}`] ?? jsonResponse(notFound, 404)
+      return Promise.resolve(typeof answer === "function" ? answer() : answer)
     }),
   )
   back = vi.fn<() => void>()
@@ -538,7 +542,7 @@ describe("A person's page", () => {
   })
 
   describe("their plan", () => {
-    const withPlan = (plan: PersonPlan, extra: Record<string, Response> = {}) => ({
+    const withPlan = (plan: PersonPlan, extra: Record<string, Answer> = {}) => ({
       "GET /api/v1/users/user-robin/overview": jsonResponse({ ...robin, plan }),
       "GET /api/v1/plans": jsonResponse(plans),
       ...extra,
@@ -575,6 +579,25 @@ describe("A person's page", () => {
     it.each(CASES)("states %s as a fact beside their role", async (_case, plan, fact) => {
       await renderPerson(testI18n(), "user-robin", withPlan(plan))
       expect(facts()).toEqual(["User", fact, "Joined just now", "Never signed in"])
+    })
+
+    const ADMINISTRATOR_CASES: [string, PersonPlan, string][] = [
+      ["while plans are off", { basis: "plans_off", plan: null, assigned: null }, "No plan limits administrators"],
+      [
+        "with a plan of their own while plans are off",
+        { basis: "plans_off", plan: null, assigned: { key: "free", name: "Free" } },
+        "No plan limits administrators (assigned: Free)",
+      ],
+      ["while plans are on", { basis: "administrator", plan: null, assigned: null }, "No plan limits administrators"],
+    ]
+
+    it.each(ADMINISTRATOR_CASES)("says no plan limits an administrator %s", async (_case, plan, fact) => {
+      const administering = { ...robin, user: { ...robin.user, role: "installation_administrator" as const }, plan }
+      await renderPerson(testI18n(), "user-robin", {
+        "GET /api/v1/users/user-robin/overview": jsonResponse(administering),
+        "GET /api/v1/plans": jsonResponse(plans),
+      })
+      expect(facts()).toEqual(["Administrator", fact, "Joined just now", "Never signed in"])
     })
 
     it("offers Change plan beside their other actions once a plan exists", async () => {
@@ -671,13 +694,50 @@ describe("A person's page", () => {
       expect(container.querySelector("[role='status']")?.textContent).toBe("")
     })
 
-    it("closes the choice on Cancel without saving", async () => {
+    it("reads the plans again after a refusal, so a plan removed meanwhile leaves the choice", async () => {
+      const refusal = { detail: "no plan has this key", code: "plan_not_found", params: {} }
+      const familyOnly: PlansOverview = { ...plans, plans: plans.plans.filter((plan) => plan.key === "family") }
+      let plansRead = 0
+      await renderPerson(
+        testI18n(),
+        "user-robin",
+        withPlan(onFamily, {
+          "GET /api/v1/plans": () => jsonResponse((plansRead += 1) === 1 ? plans : familyOnly),
+          "PUT /api/v1/users/user-robin/plan": jsonResponse(refusal, 404),
+        }),
+      )
+      await choose("Change plan")
+      await pick("free")
+      await click(button("Save plan"))
+
+      expect(plansRead).toBe(2)
+      const select = container.querySelector<HTMLSelectElement>("#person-plan-user-robin")!
+      expect([...select.options].map((option) => option.value)).toEqual(["", "family"])
+      // The plan chosen is gone, so the choice is back on their own.
+      expect(select.value).toBe("family")
+      expect(container.querySelector(".field-error[role='alert']")?.textContent).toBe(
+        "This plan no longer exists. Reload to see the current plans.",
+      )
+    })
+
+    it("closes the choice on Cancel without saving, and returns focus to their actions", async () => {
       await renderPerson(testI18n(), "user-robin", withPlan(onFamily))
       await choose("Change plan")
       await click(button("Cancel"))
 
       expect(container.querySelector("#person-plan-user-robin")).toBeNull()
       expect(calls.some((call) => call.method === "PUT")).toBe(false)
+      expect(document.activeElement).toBe(container.querySelector("[aria-label='Actions for robin@example.test']"))
+    })
+
+    it("returns focus to their actions once the plan is saved and the choice closes", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily, { "PUT /api/v1/users/user-robin/plan": jsonResponse(onFree) }))
+      await choose("Change plan")
+      await pick("")
+      await click(button("Save plan"))
+
+      expect(container.querySelector("#person-plan-user-robin")).toBeNull()
+      expect(document.activeElement).toBe(container.querySelector("[aria-label='Actions for robin@example.test']"))
     })
 
     it("has no untranslated text with the plan fact and the plan choice open", async () => {

@@ -183,6 +183,17 @@ describe("personPlanFact", () => {
       "No plan limits administrators (assigned: Family)",
     ],
   ])("names %s", (_case, plan, fact) => {
-    expect(personPlanFact(i18n, plan)).toBe(fact)
+    expect(personPlanFact(i18n, plan, plan.basis === "administrator")).toBe(fact)
+  })
+
+  it.each<[string, PersonPlan, string]>([
+    ["no Plan of their own", { basis: "plans_off", plan: null, assigned: null }, "No plan limits administrators"],
+    [
+      "a Plan of their own",
+      { basis: "plans_off", plan: null, assigned: familyName },
+      "No plan limits administrators (assigned: Family)",
+    ],
+  ])("says no plan limits an administrator with %s while Plans are off", (_case, plan, fact) => {
+    expect(personPlanFact(i18n, plan, true)).toBe(fact)
   })
 })
