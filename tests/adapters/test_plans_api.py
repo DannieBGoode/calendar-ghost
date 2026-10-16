@@ -3,6 +3,7 @@ and assigns Plans and turns them on, and every User reads their own Plan (ADR 00
 
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,9 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRuleId, SyncRuleState
+from calendar_sync.domain.plans import Plan
 from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
@@ -336,6 +339,22 @@ def test_an_interval_this_release_does_not_know_is_an_invalid_request(
         "invalid_request",
         "sync_interval",
     )
+
+
+def test_a_new_plan_another_administrator_removed_at_once_is_answered_as_not_found(
+    installation: Installation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Plan is stored, then removed before its listing is read back: 404, never 500."""
+    original_add = SqlitePlans.add
+
+    def add_then_removed(self: SqlitePlans, plan: Plan, at: datetime) -> None:
+        original_add(self, plan, at)
+        SqlitePlans(installation.database).remove(plan.key)
+
+    monkeypatch.setattr(SqlitePlans, "add", add_then_removed)
+    response = installation.client.post("/api/v1/plans", json=FREE_BODY)
+
+    assert _problem(response) == (404, "plan_not_found", {})
 
 
 @pytest.mark.parametrize(

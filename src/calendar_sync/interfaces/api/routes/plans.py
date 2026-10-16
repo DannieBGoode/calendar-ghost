@@ -118,6 +118,9 @@ def define_plan(
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     except PlanKeyTaken as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
+    except PlanNotFound as error:
+        # Stored, then removed by another administrator before it was read back.
+        raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except AdministratorRequired as error:
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
     return plan_response(listing)
