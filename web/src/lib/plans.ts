@@ -52,22 +52,22 @@ export function previewedStartRefusal(
 
 /** How soon a Plan's rules sync, as an administrator chooses it. */
 export function intervalLabel({ t }: I18n, interval: SyncInterval): string {
-  return t(`settings.plans.interval.${interval}`)
+  return t(`people.plans.interval.${interval}`)
 }
 
 function tokenLimit({ t }: I18n, tokens: number | null): string {
-  if (tokens === null) return t("settings.plans.limits.unlimitedTokens")
-  return tokens === 0 ? t("settings.plans.limits.noTokens") : t("settings.plans.limits.tokens", { count: tokens })
+  if (tokens === null) return t("people.plans.limits.unlimitedTokens")
+  return tokens === 0 ? t("people.plans.limits.noTokens") : t("people.plans.limits.tokens", { count: tokens })
 }
 
-/** A Plan's counts on its Administration row: rules, calendar accounts, then Integration Tokens. */
+/** A Plan's counts on its row in People's Plans tab: rules, calendar accounts, then Integration Tokens. */
 export function planLimitsSummary(i18n: I18n, { rules, connected_accounts, integration_tokens }: PlanLimits): string {
   const { t } = i18n
   return i18n.format.unitList([
-    rules === null ? t("settings.plans.limits.unlimitedRules") : t("settings.plans.limits.rules", { count: rules }),
+    rules === null ? t("people.plans.limits.unlimitedRules") : t("people.plans.limits.rules", { count: rules }),
     connected_accounts === null
-      ? t("settings.plans.limits.unlimitedAccounts")
-      : t("settings.plans.limits.accounts", { count: connected_accounts }),
+      ? t("people.plans.limits.unlimitedAccounts")
+      : t("people.plans.limits.accounts", { count: connected_accounts }),
     tokenLimit(i18n, integration_tokens),
   ])
 }

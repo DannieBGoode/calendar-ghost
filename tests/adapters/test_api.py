@@ -1590,6 +1590,8 @@ def test_frontend_fallback_cannot_serve_files_outside_static_root(tmp_path: Path
         "/settings/account",
         "/settings/administration",
         "/people",
+        "/people/invitations",
+        "/people/plans",
     ],
 )
 def test_frontend_fallback_serves_each_application_section(tmp_path: Path, path: str) -> None:

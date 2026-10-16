@@ -258,7 +258,8 @@ each at its own URL: **Your account** (`/settings/account`, where `/settings` op
 **Connections** (`/settings/connections`, where Google or Microsoft returns after you connect an account), and,
 for administrators, **Administration** (`/settings/administration`). Administrators who let other
 people join also get **People** at `/people`, with Installation Health above everyone and each
-person's sync status, and each person's page at `/people/{id}`. They never see anyone's calendar
+person's sync status, each person's page at `/people/{id}`, and tabs for Invitations
+(`/people/invitations`) and Plans (`/people/plans`). They never see anyone's calendar
 names, connected account emails, or events ([data ownership](docs/data-ownership.md) lists exactly what
 they see).
 

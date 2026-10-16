@@ -588,16 +588,33 @@ describe("People", () => {
     expect(document.activeElement?.getAttribute("href")).toBe(`/people/${administrator.id}`)
   })
 
+  it("opens Plans at its own address, as a tab of People", async () => {
+    page.happyDOM.setURL("http://localhost:8000/people/plans")
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+    expect(window.location.pathname).toBe("/people/plans")
+    expect(container.querySelector("main h1")?.textContent).toBe("People")
+    expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("People")
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Plans")
+    expect(container.querySelector("#plans-title")?.textContent).toBe("Plans")
+    expect(document.title).toBe("Plans – People – Calendar Ghost")
+    expect(requested).toContain("/api/v1/plans")
+    expect(requested).not.toContain("/api/v1/users/plans/overview")
+  })
+
   it.each([
-    ["someone who is not an administrator", "user", "invitation_only"],
-    ["an administrator under Only me", "installation_administrator", "only_me"],
-  ] as const)("is hidden from %s, and its address falls back to Overview", async (_who, role, policy) => {
-    page.happyDOM.setURL("http://localhost:8000/people")
+    ["someone who is not an administrator", "/people", "user", "invitation_only"],
+    ["an administrator under Only me", "/people", "installation_administrator", "only_me"],
+    ["someone who is not an administrator", "/people/plans", "user", "invitation_only"],
+    ["an administrator under Only me", "/people/plans", "installation_administrator", "only_me"],
+  ] as const)("is hidden from %s, and %s falls back to Overview", async (_who, path, role, policy) => {
+    page.happyDOM.setURL(`http://localhost:8000${path}`)
     serveAs(role, policy)
     const { container } = await renderApp(testI18n())
     expect(navLabels()).toEqual(["Overview", "Rules", "Activity", "Settings"])
     expect(window.location.pathname).toBe("/overview")
     expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("Overview")
     expect(requested).not.toContain("/api/v1/users")
+    expect(requested).not.toContain("/api/v1/plans")
   })
 })

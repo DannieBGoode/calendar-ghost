@@ -65,8 +65,6 @@ function serve({ role = "installation_administrator", registration, answers = {}
       activity_ages: [30, 90, 180, 365],
     }),
     "GET /api/v1/registration": jsonResponse(registration ?? { policy: "invitation_only", only_me_available: false }),
-    // No Plan defined yet, as a new installation starts.
-    "GET /api/v1/plans": jsonResponse({ enabled: false, default_plan: null, sync_intervals: ["instant", "5_minutes"], plans: [] }),
   }
   const routes = { ...defaults, ...answers }
   calls = []
@@ -156,15 +154,16 @@ describe("Administration", () => {
     expect(untranslatedText(container, dateWords())).toEqual([])
   })
 
-  it("holds who can join, plans, and storage, and leaves people and invitations to the People page", async () => {
+  it("holds who can join and storage, and leaves people, invitations, and plans to the People page", async () => {
     await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false } })
     expect(section("registration-title")).not.toBeNull()
-    expect(section("plans-title")).not.toBeNull()
     expect(section("storage-title")).not.toBeNull()
+    expect(section("plans-title")).toBeNull()
     expect(section("people-list-title")).toBeNull()
     expect(section("invitations-title")).toBeNull()
     expect(requested("/api/v1/users")).toBe(false)
     expect(requested("/api/v1/invitations")).toBe(false)
+    expect(requested("/api/v1/plans")).toBe(false)
   })
 
   it("switches to Invitation only", async () => {

@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
+import { appLocationFromPathname } from "@/lib/navigation"
 import type {
   InstallationHealthReport,
   PendingInvitation,
@@ -106,6 +107,7 @@ function serve({ people = () => jsonResponse(onePage([me, robin, sam])), answers
       201,
     ),
     "DELETE /api/v1/users/user-robin": jsonResponse({ rules: 2, deleted: 5, detached: 0, left: 0 }),
+    "GET /api/v1/plans": jsonResponse({ enabled: false, default_plan: null, sync_intervals: ["instant", "5_minutes"], plans: [] }),
   }
   const routes = { ...defaults, ...answers }
   calls = []
@@ -164,7 +166,7 @@ async function wait(milliseconds: number) {
 }
 
 function showPeople(i18n: I18n, queryClient: QueryClient, visit = 0) {
-  const tab = window.location.pathname === "/people/invitations" ? "invitations" : "everyone"
+  const tab = appLocationFromPathname(window.location.pathname).peopleTab ?? "everyone"
   act(() => {
     root?.render(
       <StaticI18nProvider i18n={i18n}>
@@ -764,12 +766,13 @@ describe("People page", () => {
     expect(status()).toBe("robin@example.test was deleted. 5 events their rules wrote were deleted.")
   })
 
-  it("shows People first, with Invitations a tab away that counts those waiting", async () => {
+  it("shows People first, with Invitations a tab away that counts those waiting, then Plans", async () => {
     await renderPeople(testI18n())
     const tabs = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")]
     expect(tabs.map((tab) => [tab.textContent, tab.getAttribute("href")])).toEqual([
       ["Everyone", "/people"],
       ["Invitations11 waiting", "/people/invitations"],
+      ["Plans", "/people/plans"],
     ])
     expect(tabs[0]!.getAttribute("aria-current")).toBe("page")
     expect(rows()).toHaveLength(3)
@@ -781,9 +784,26 @@ describe("People page", () => {
     expect(container.querySelector(".invitation-item h3")?.textContent).toMatch(/^Expires in [67] days$/)
   })
 
-  it("names the browser tab after the tab shown", async () => {
-    await renderPeople(testI18n(), { path: "/people/invitations" })
-    expect(document.title).toBe("Invitations – People – Calendar Ghost")
+  it.each([
+    ["/people/invitations", "Invitations – People – Calendar Ghost"],
+    ["/people/plans", "Plans – People – Calendar Ghost"],
+  ])("names the browser tab after the tab shown at %s", async (path, title) => {
+    await renderPeople(testI18n(), { path })
+    expect(document.title).toBe(title)
+  })
+
+  it("opens Plans in place, and asks for plans only there", async () => {
+    await renderPeople(testI18n())
+    expect(calls.some((call) => call.path === "/api/v1/plans")).toBe(false)
+    const plans = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")].find(
+      (tab) => tab.textContent === "Plans",
+    )!
+    await click(plans)
+    expect(window.location.pathname).toBe("/people/plans")
+    expect(plans.getAttribute("aria-current")).toBe("page")
+    expect(rows()).toHaveLength(0)
+    expect(container.querySelector("#plans-title")?.textContent).toBe("Plans")
+    expect(calls.some((call) => call.method === "GET" && call.path === "/api/v1/plans")).toBe(true)
   })
 
   it("returns to the person you opened when you come back to People", async () => {

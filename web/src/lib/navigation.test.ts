@@ -94,6 +94,15 @@ describe("People tab URLs", () => {
     expect(appPathForLocation({ view: "people", ruleId: null, peopleTab: "invitations" })).toBe("/people/invitations")
     expect(isKnownAppPath("/people/invitations")).toBe(true)
   })
+
+  it("opens Plans at its own address, never as a person named plans", () => {
+    expect(appPathForPeopleTab("plans")).toBe("/people/plans")
+    for (const path of ["/people/plans", "/people/plans/"]) {
+      expect(appLocationFromPathname(path)).toEqual({ view: "people", ruleId: null, peopleTab: "plans" })
+    }
+    expect(appPathForLocation({ view: "people", ruleId: null, peopleTab: "plans" })).toBe("/people/plans")
+    expect(isKnownAppPath("/people/plans")).toBe(true)
+  })
 })
 
 describe("Settings tab URLs", () => {

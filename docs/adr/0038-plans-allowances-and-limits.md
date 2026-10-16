@@ -10,8 +10,9 @@ Builds on [ADR 0028](0028-plans-apart-from-commercial-mode.md),
 [ADR 0030](0030-users-administrators-and-registration.md), and
 [ADR 0036](0036-instant-sync-through-provider-notices.md).
 
-Amended 2026-10-16: a Plan's key is made from its name, and turning Plans on with no default makes
-a Plan named "No limits" the default; see the amendment at the end.
+Amended 2026-10-16: a Plan's key is made from its name, turning Plans on with no default makes a
+Plan named "No limits" the default, and Plans moved to a tab of People; see the amendment at the
+end.
 
 ## Context
 
@@ -195,7 +196,8 @@ multi-user design rebuilds `installation_settings` and must carry `plans_enabled
 
 A design review of the first Web UI for Plans found two setup steps that asked an administrator
 for something they could not judge yet: a key, in the first field of the form, and a default
-chosen before Plans could turn on.
+chosen before Plans could turn on. It also found Plans in Settings, apart from the people they
+limit.
 
 - **A Plan's key is made from its name.** `DefinePlan` takes a `NewPlan`, whose key may be
   missing, and `POST /api/v1/plans` takes an optional `key`. Without one, `PlanCatalog.add` makes
@@ -215,7 +217,15 @@ chosen before Plans could turn on.
   default. `plans_need_default` now answers only a request that would clear the default with
   Plans on, or as they turn on, so a default an administrator chose is never replaced. Plans are
   still never on without a default, and the Allowance order above does not change.
+- **Plans sit in People.** The administrator manages Plans on People's Plans tab
+  (`/people/plans`), after Everyone and Invitations, beside the people they limit and the Change
+  plan action on each person's page. Settings → Administration keeps Who can join and Storage, and
+  Settings → Your account keeps each person's own Your plan. The tab follows People's access rule:
+  only Installation Administrators see it, and it is hidden under Only Me, where no Plan limits
+  anyone. The Web UI reads Plans only once the tab opens.
 
 Rejected: keeping the key in the form, which asked for a billing identifier before billing exists
-as an irreversible first choice; and keeping "choose a default first", which made an administrator
-who wanted to limit one person first define an unlimited Plan for everyone else by hand.
+as an irreversible first choice; keeping "choose a default first", which made an administrator
+who wanted to limit one person first define an unlimited Plan for everyone else by hand; and
+keeping Plans in Settings → Administration, a tab away from the people they limit and from
+Change plan.

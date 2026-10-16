@@ -14,9 +14,9 @@ type SettingChange = { enabled: boolean; defaultPlan: string | null }
 
 /** What a change of the Plans setting did, in the active language; empty when nothing to say. */
 function settingMessage({ t }: I18n, before: PlansOverview | undefined, after: PlansOverview): string {
-  if (before?.enabled !== after.enabled) return t(after.enabled ? "settings.plans.saved.on" : "settings.plans.saved.off")
+  if (before?.enabled !== after.enabled) return t(after.enabled ? "people.plans.saved.on" : "people.plans.saved.off")
   const chosen = after.plans.find((plan) => plan.key === after.default_plan)
-  return chosen ? t("settings.plans.saved.defaultChanged", { name: chosen.name }) : ""
+  return chosen ? t("people.plans.saved.defaultChanged", { name: chosen.name }) : ""
 }
 
 /**
@@ -50,19 +50,19 @@ export function usePlans() {
   const define = useMutation({
     mutationFn: (payload: PlanPayload) => api.definePlan(payload),
     onMutate: () => setMessage(""),
-    onSuccess: (plan) => saved(t("settings.plans.saved.defined", { name: plan.name })),
+    onSuccess: (plan) => saved(t("people.plans.saved.defined", { name: plan.name })),
   })
   const change = useMutation({
     mutationFn: ({ key, payload }: { key: string; payload: PlanChange }) => api.changePlan(key, payload),
     onMutate: () => setMessage(""),
-    onSuccess: (plan) => saved(t("settings.plans.saved.changed", { name: plan.name })),
+    onSuccess: (plan) => saved(t("people.plans.saved.changed", { name: plan.name })),
   })
   const remove = useMutation({
     mutationFn: (key: string) => api.removePlan(key),
     onMutate: () => setMessage(""),
     onSuccess: (_result, key) => {
       const listed = queryClient.getQueryData<PlansOverview>(PLANS_QUERY)?.plans.find((plan) => plan.key === key)
-      return saved(t("settings.plans.saved.removed", { name: listed?.name ?? key }))
+      return saved(t("people.plans.saved.removed", { name: listed?.name ?? key }))
     },
   })
   return { plans, setting, define, change, remove, message }

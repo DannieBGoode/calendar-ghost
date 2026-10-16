@@ -115,7 +115,7 @@ export function PlanEditor({
     <form className="setting-form" onSubmit={submit}>
       <KeyField id={id} plan={plan} value={draft.key} inputRef={first} onChange={(key) => change({ key })} />
       <div className="field-stack">
-        <Label htmlFor={`${id}-name`}>{t("settings.plans.editor.name")}</Label>
+        <Label htmlFor={`${id}-name`}>{t("people.plans.editor.name")}</Label>
         <Input
           ref={plan ? first : undefined}
           id={`${id}-name`}
@@ -127,27 +127,27 @@ export function PlanEditor({
       </div>
       <LimitField
         id={`${id}-rules`}
-        label={t("settings.plans.editor.rules")}
+        label={t("people.plans.editor.rules")}
         limit={draft.rules}
         minimum={1}
         onChange={(rules) => change({ rules })}
       />
       <LimitField
         id={`${id}-accounts`}
-        label={t("settings.plans.editor.accounts")}
+        label={t("people.plans.editor.accounts")}
         limit={draft.accounts}
         minimum={1}
         onChange={(accounts) => change({ accounts })}
       />
       <LimitField
         id={`${id}-tokens`}
-        label={t("settings.plans.editor.tokens")}
+        label={t("people.plans.editor.tokens")}
         limit={draft.tokens}
         minimum={0}
         onChange={(tokens) => change({ tokens })}
       />
       <div className="field-stack">
-        <Label htmlFor={`${id}-interval`}>{t("settings.plans.editor.interval")}</Label>
+        <Label htmlFor={`${id}-interval`}>{t("people.plans.editor.interval")}</Label>
         <NativeSelect
           id={`${id}-interval`}
           value={draft.interval}
@@ -162,7 +162,7 @@ export function PlanEditor({
       </div>
       {plan && lowersRules(plan, draft.rules) && (
         <p className="field-hint" data-tone="attention">
-          {t("settings.plans.editor.lowerWarning", { count: plan.limited_people })}
+          {t("people.plans.editor.lowerWarning", { count: plan.limited_people })}
         </p>
       )}
       {error ? (
@@ -172,11 +172,11 @@ export function PlanEditor({
       ) : null}
       <div className="setting-form-actions">
         <Button type="submit" disabled={!payload || pending}>
-          {t("settings.plans.editor.save")}
+          {t("people.plans.editor.save")}
         </Button>
         {/* Waits for Save, as a confirmation's Cancel does, so its answer has a form to show in. */}
         <Button type="button" variant="ghost" disabled={pending} onClick={onCancel}>
-          {t("settings.plans.editor.cancel")}
+          {t("people.plans.editor.cancel")}
         </Button>
       </div>
     </form>
@@ -200,7 +200,7 @@ function KeyField({
   const { t } = useI18n()
   return (
     <div className="field-stack">
-      <Label htmlFor={`${id}-key`}>{t("settings.plans.editor.key")}</Label>
+      <Label htmlFor={`${id}-key`}>{t("people.plans.editor.key")}</Label>
       {plan ? (
         <Input id={`${id}-key`} className="field-read-only" value={plan.key} readOnly />
       ) : (
@@ -216,7 +216,7 @@ function KeyField({
             onChange={(event) => onChange(event.target.value)}
           />
           <p id={`${id}-key-hint`} className="field-hint">
-            {t("settings.plans.editor.keyHint")}
+            {t("people.plans.editor.keyHint")}
           </p>
         </>
       )}
@@ -262,7 +262,7 @@ function LimitField({
           onChange={(event) => onChange({ ...limit, unlimited: event.target.checked })}
         />
         <span>
-          <strong>{t("settings.plans.editor.unlimited")}</strong>
+          <strong>{t("people.plans.editor.unlimited")}</strong>
         </span>
       </label>
     </div>

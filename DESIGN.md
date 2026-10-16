@@ -355,7 +355,8 @@ Settings sections run from what the installation depends on to what only this br
 
 People is the Installation Administrator's view of everyone here, laid out like Rules and Activity:
 a Fraunces title with one sentence and "Invite someone" as the page's one primary action, then link
-tabs (Everyone first, then Invitations with a count of those waiting, hidden at zero). Everyone
+tabs (Everyone first, then Invitations with a count of those waiting, hidden at zero, then Plans).
+Plans sit beside the people they limit, so Settings keeps only each person's own Your plan. Everyone
 shows Installation Health in a card, then everyone here in one card holding its search, filters,
 table, and pages, sorted by when people joined unless asked otherwise. Installation Health leads with what
 the administrator must do: "Needs you" in Destructive Red with the likely causes only they can fix,

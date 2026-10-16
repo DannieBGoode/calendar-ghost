@@ -279,8 +279,8 @@ their own account, Calendar Ghost returns to setup: the next person to open it c
 administrator, as on a new installation, and the OAuth settings and master key in `.env`
 stay as they were. Plans, if you turned them on, turn off and keep their definitions.
 
-To keep one person from using up what everyone shares, open **Settings → Administration →
-Plans**. Choose **Add a plan** for each set of limits you want: how many rules may sync, how many
+To keep one person from using up what everyone shares, open **People → Plans**. Choose
+**Add a plan** for each set of limits you want: how many rules may sync, how many
 calendar accounts and Integration Tokens a person may have, and whether their calendars sync
 instantly or every 5 minutes. Choose a **Default plan**, which everyone without a Plan of their
 own has, including people who join later, then tick **Limit people with plans**. **Change plan**

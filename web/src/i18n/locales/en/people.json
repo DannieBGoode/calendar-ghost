@@ -329,11 +329,98 @@
     "label": "People sections",
     "everyone": "Everyone",
     "invitations": "Invitations",
+    "plans": "Plans",
     "waiting": {
       "one": "{count} waiting",
       "other": "{count} waiting"
     },
-    "documentTitle": "Invitations – People"
+    "documentTitle": {
+      "invitations": "Invitations – People",
+      "plans": "Plans – People"
+    }
+  },
+  "plans": {
+    "title": "Plans",
+    "intro": "Plans limit how many rules, calendar accounts, and Integration Tokens each person may have, and how soon their calendars sync. Administrators are never limited.",
+    "loadError": "Plans could not load.",
+    "tryAgain": "Try again",
+    "enabled": {
+      "label": "Limit people with plans",
+      "hint": "While this is off, nobody is limited.",
+      "needsDefault": "Choose a default plan first."
+    },
+    "default": {
+      "label": "Default plan",
+      "hint": "People without a plan of their own have it, including people who join later.",
+      "none": "No default"
+    },
+    "people": {
+      "one": "{count} person",
+      "other": "{count} people"
+    },
+    "isDefault": "Default",
+    "limits": {
+      "rules": {
+        "one": "{count} rule",
+        "other": "{count} rules"
+      },
+      "accounts": {
+        "one": "{count} calendar account",
+        "other": "{count} calendar accounts"
+      },
+      "tokens": {
+        "one": "{count} token",
+        "other": "{count} tokens"
+      },
+      "unlimitedRules": "Unlimited rules",
+      "unlimitedAccounts": "unlimited calendar accounts",
+      "unlimitedTokens": "unlimited tokens",
+      "noTokens": "no tokens"
+    },
+    "interval": {
+      "instant": "Instant sync, and a check every 5 minutes",
+      "5_minutes": "Every 5 minutes",
+      "10_minutes": "Every 10 minutes",
+      "15_minutes": "Every 15 minutes",
+      "30_minutes": "Every 30 minutes",
+      "60_minutes": "Every hour"
+    },
+    "edit": "Edit",
+    "editLabel": "Edit {name}",
+    "remove": "Remove",
+    "removeLabel": "Remove {name}",
+    "add": "Add a plan",
+    "editor": {
+      "name": "Name",
+      "key": "Key",
+      "keyHint": "Lower-case letters, digits, and hyphens. The key cannot change later.",
+      "rules": "Rules that sync",
+      "accounts": "Calendar accounts",
+      "tokens": "Integration Tokens",
+      "unlimited": "Unlimited",
+      "interval": "How soon calendars sync",
+      "save": "Save plan",
+      "cancel": "Cancel",
+      "lowerWarning": {
+        "one": "This plan limits {count} person. Rules beyond a lower limit keep syncing, but no new rule can start until the count is within it.",
+        "other": "This plan limits {count} people. Rules beyond a lower limit keep syncing, but no new rule can start until the count is within it."
+      }
+    },
+    "removeConfirm": {
+      "title": "Remove {name}?",
+      "body": "Nobody can have this plan afterwards. Rules, accounts, and tokens stay as they are.",
+      "confirm": "Remove plan",
+      "keep": "Keep plan",
+      "pending": "Removing…"
+    },
+    "saved": {
+      "on": "Plans now limit people.",
+      "off": "Plans no longer limit anyone.",
+      "defaultChanged": "{name} is now the default plan.",
+      "defined": "{name} was added.",
+      "changed": "{name} was saved.",
+      "removed": "{name} was removed."
+    }
   },
   "cause": {
     "label": "Likely cause: {cause}.",

@@ -7,8 +7,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 ### Added
 
 - Plans let an administrator limit how much each person uses
-  ([ADR 0038](docs/adr/0038-plans-allowances-and-limits.md)). Under **Settings → Administration →
-  Plans**, an administrator adds Plans, each with how many rules may sync, how many calendar
+  ([ADR 0038](docs/adr/0038-plans-allowances-and-limits.md)). Under **People → Plans**, an
+  administrator adds Plans, each with how many rules may sync, how many calendar
   accounts and Integration Tokens a person may have, and whether their calendars sync instantly or
   every 5 minutes; chooses the Default Plan; and turns Plans on with **Limit people with plans**.
   **Change plan** on a person's page gives them a Plan of their own. Plans are off by default, and

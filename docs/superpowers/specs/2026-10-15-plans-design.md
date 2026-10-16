@@ -676,11 +676,12 @@ Today `SyncScheduler` runs a pass, sleeps 300 seconds, and runs every enabled ru
 The UI follows DESIGN.md: no modals, inline disclosure, one visible next step, and the Quiet
 Indicator rule.
 
-- **Settings, Administration, Plans** (between Registration and Storage, hidden under Only Me): a
-  checkbox row "Limit people with plans", disabled until a default exists; a select for the
-  default; one row per Plan with an inline edit form, where each limit is a number or "Unlimited"
-  and the interval is a select of the offered values; Remove with an inline confirmation; and an
-  inline "Add a plan" form that warns the key cannot change.
+- **People, Plans** (`/people/plans`, a tab after Everyone and Invitations, hidden with People under
+  Only Me; until 2026-10-16 it sat in Settings, Administration, between Registration and Storage): a
+  checkbox row "Limit people with plans", disabled until a default exists; a select for the default;
+  one row per Plan with an inline edit form, where each limit is a number or "Unlimited" and the
+  interval is a select of the offered values; Remove with an inline confirmation; and an inline "Add
+  a plan" form that warns the key cannot change.
 - **People:** the Plan fact and "Change plan" on the person page.
 - **Settings, Your account, Your plan** (`#your-plan`): for example "Family: 3 of 5 rules counted,
   2 of 3 calendar accounts, 1 of 2 tokens, syncs about every 15 minutes". An administrator reads

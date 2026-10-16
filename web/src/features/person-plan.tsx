@@ -34,7 +34,7 @@ export function PersonPlanChoice({
 }) {
   const i18n = useI18n()
   const { t } = i18n
-  // The Administration Plans section reads the same list under the same key.
+  // People's Plans tab reads the same list under the same key.
   const plans = useQuery({ queryKey: PLANS_QUERY, queryFn: api.plans })
   const listed = plans.data?.plans ?? []
   // Null until the administrator chooses, so the choice opens on their own Plan. A Plan no

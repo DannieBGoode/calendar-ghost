@@ -19,8 +19,8 @@ export function defaultSettingsTab(search: string): SettingsTab {
   return SETTINGS_ARRIVAL_PARAMS.some((name) => params.has(name)) ? "connections" : DEFAULT_SETTINGS_TAB
 }
 
-/** People's tabs: everyone here, then the Invitations still waiting. */
-export type PeopleTab = "everyone" | "invitations"
+/** People's tabs: everyone here, then the Invitations still waiting, then the Plans that limit them. */
+export type PeopleTab = "everyone" | "invitations" | "plans"
 export const DEFAULT_PEOPLE_TAB: PeopleTab = "everyone"
 
 /** Activity's tabs: what the rules did, then the Incidents that needed or need attention. */
@@ -35,7 +35,7 @@ export type AppLocation = {
   settingsTab?: SettingsTab
   /** One person's page under People. */
   personId?: string
-  /** The Invitations tab of People; People opens at everyone here. */
+  /** The Invitations or Plans tab of People; People opens at everyone here. */
   peopleTab?: PeopleTab
   /** The Incidents tab of Activity; Activity opens at its history. */
   activityTab?: ActivityTab
@@ -90,7 +90,12 @@ const PATH_VIEWS = new Map(
 const RULE_PATH = /^\/rules\/([^/]+)$/
 const RULE_PREVIEW_PATH = /^\/rules\/([^/]+)\/preview$/
 const PERSON_PATH = /^\/people\/([^/]+)$/
-const INVITATIONS_PATH = "/people/invitations"
+/** Each People tab's address; one of these is never a person's page. */
+const PEOPLE_TAB_PATHS: Record<PeopleTab, string> = {
+  everyone: APP_VIEW_PATHS.people,
+  invitations: "/people/invitations",
+  plans: "/people/plans",
+}
 const INCIDENTS_PATH = "/activity/incidents"
 const INCIDENT_PATH = /^\/activity\/incidents\/([^/]+)$/
 const SETTINGS_TAB_PATH = /^\/settings\/([^/]+)$/
@@ -114,6 +119,11 @@ function ruleIdFromPath(pathname: string): string | null {
   return idFromPath(RULE_PATH, pathname)
 }
 
+function peopleTabFromPath(pathname: string): PeopleTab | null {
+  const tabs = Object.entries(PEOPLE_TAB_PATHS) as [PeopleTab, string][]
+  return tabs.find(([tab, path]) => tab !== DEFAULT_PEOPLE_TAB && path === pathname)?.[0] ?? null
+}
+
 function settingsTabFromPath(pathname: string): SettingsTab | null {
   const segment = SETTINGS_TAB_PATH.exec(pathname)?.[1]
   return SETTINGS_TABS.find((tab) => tab === segment) ?? null
@@ -125,7 +135,8 @@ export function appLocationFromPathname(pathname: string): AppLocation {
   if (ruleId !== null) return { view: "rules", ruleId }
   const previewedRuleId = idFromPath(RULE_PREVIEW_PATH, normalized)
   if (previewedRuleId !== null) return { view: "rules", ruleId: previewedRuleId, rulePreview: true }
-  if (normalized === INVITATIONS_PATH) return { view: "people", ruleId: null, peopleTab: "invitations" }
+  const peopleTab = peopleTabFromPath(normalized)
+  if (peopleTab !== null) return { view: "people", ruleId: null, peopleTab }
   if (normalized === INCIDENTS_PATH) return { view: "activity", ruleId: null, activityTab: "incidents" }
   const incidentId = idFromPath(INCIDENT_PATH, normalized)
   if (incidentId !== null) return { view: "activity", ruleId: null, activityTab: "incidents", incidentId }
@@ -165,7 +176,7 @@ export function appPathForRulePreview(ruleId: string): string {
 }
 
 export function appPathForPeopleTab(tab: PeopleTab): string {
-  return tab === "invitations" ? INVITATIONS_PATH : APP_VIEW_PATHS.people
+  return PEOPLE_TAB_PATHS[tab]
 }
 
 export function appPathForActivityTab(tab: ActivityTab): string {
@@ -212,6 +223,7 @@ export function isKnownAppPath(pathname: string): boolean {
   const normalized = normalize(pathname)
   return (
     PATH_VIEWS.has(normalized) ||
+    peopleTabFromPath(normalized) !== null ||
     normalized === INCIDENTS_PATH ||
     idFromPath(INCIDENT_PATH, normalized) !== null ||
     ruleIdFromPath(normalized) !== null ||

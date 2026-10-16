@@ -11,35 +11,36 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { PlanSummary, PlansOverview, SyncInterval } from "@/lib/api"
 import { intervalLabel, planLimitsSummary } from "@/lib/plans"
-import type { PlanCommands } from "@/lib/use-plans"
+import { usePlans, type PlanCommands } from "@/lib/use-plans"
 
 /** The one form or confirmation open in the section: a Plan's edit or removal, or a new Plan. */
 type Opened = { action: "edit" | "remove"; key: string } | { action: "add" } | null
 type Open = (next: Opened) => void
 
 /**
- * Plans, between who can join and storage: whether Plans limit people, the Default Plan, and each
- * Plan with its limits, an inline edit, and Remove. Settings shows it only under Invitation only:
- * under Only me the only person administers, and no Plan limits an administrator.
+ * People's Plans tab: whether Plans limit people, the Default Plan, and each Plan with its limits,
+ * an inline edit, and Remove. It shows only while People does, so never under Only me, where the
+ * only person administers and no Plan limits an administrator; Plans are read only once it opens.
  */
-export function PlansSection({ commands }: { commands: PlanCommands }) {
+export function PlansSection() {
   const { t } = useI18n()
+  const commands = usePlans()
   const { plans, message } = commands
   const overview = plans.data
   return (
     <section className="settings-section" aria-labelledby="plans-title">
       <div className="section-heading">
         <div>
-          <h2 id="plans-title">{t("settings.plans.title")}</h2>
-          <p>{t("settings.plans.intro")}</p>
+          <h2 id="plans-title">{t("people.plans.title")}</h2>
+          <p>{t("people.plans.intro")}</p>
         </div>
       </div>
       {plans.isPending && <Skeleton className="h-16 w-full" />}
       {plans.error && (
         <div className="inline-error integration-load-error" role="alert">
-          <span>{t("settings.plans.loadError")}</span>
+          <span>{t("people.plans.loadError")}</span>
           <Button type="button" variant="outline" onClick={() => void plans.refetch()}>
-            {t("settings.plans.tryAgain")}
+            {t("people.plans.tryAgain")}
           </Button>
         </div>
       )}
@@ -124,9 +125,9 @@ function EnabledItem({ overview, commands }: { overview: PlansOverview; commands
             onChange={(event) => setting.mutate({ enabled: event.target.checked, defaultPlan: overview.default_plan })}
           />
           <span>
-            <strong>{t("settings.plans.enabled.label")}</strong>
+            <strong>{t("people.plans.enabled.label")}</strong>
             <small id="plans-enabled-hint">
-              {hasDefault ? t("settings.plans.enabled.hint") : t("settings.plans.enabled.needsDefault")}
+              {hasDefault ? t("people.plans.enabled.hint") : t("people.plans.enabled.needsDefault")}
             </small>
           </span>
         </label>
@@ -144,8 +145,8 @@ function DefaultItem({ overview, commands }: { overview: PlansOverview; commands
     <div className="setting-item">
       <div className="setting-row">
         <div className="setting-copy">
-          <h3 id="plans-default-title">{t("settings.plans.default.label")}</h3>
-          <p id="plans-default-hint">{t("settings.plans.default.hint")}</p>
+          <h3 id="plans-default-title">{t("people.plans.default.label")}</h3>
+          <p id="plans-default-hint">{t("people.plans.default.hint")}</p>
         </div>
         <div className="appearance-control">
           <NativeSelect
@@ -157,7 +158,7 @@ function DefaultItem({ overview, commands }: { overview: PlansOverview; commands
             onChange={(event) => setting.mutate({ enabled: overview.enabled, defaultPlan: event.target.value || null })}
           >
             <option value="" disabled={overview.enabled}>
-              {t("settings.plans.default.none")}
+              {t("people.plans.default.none")}
             </option>
             {overview.plans.map((plan) => (
               <option key={plan.key} value={plan.key}>
@@ -215,35 +216,35 @@ function PlanItem({
       <div className="setting-row">
         <div className="setting-copy">
           <h3>{plan.name}</h3>
-          {plan.is_default && <Badge variant="neutral">{t("settings.plans.isDefault")}</Badge>}
+          {plan.is_default && <Badge variant="neutral">{t("people.plans.isDefault")}</Badge>}
           <p>{planLimitsSummary(i18n, plan.limits)}</p>
           <p>{intervalLabel(i18n, plan.limits.sync_interval)}</p>
-          <p>{t("settings.plans.people", { count: plan.people })}</p>
+          <p>{t("people.plans.people", { count: plan.people })}</p>
         </div>
         <div className="setting-form-actions">
           <Button
             ref={editButton}
             type="button"
             variant="outline"
-            aria-label={t("settings.plans.editLabel", { name: plan.name })}
+            aria-label={t("people.plans.editLabel", { name: plan.name })}
             aria-expanded={editing}
             aria-controls={`plan-edit-${plan.key}`}
             aria-disabled={busy || undefined}
             onClick={() => !busy && onOpen({ action: "edit", key: plan.key })}
           >
-            {t("settings.plans.edit")}
+            {t("people.plans.edit")}
           </Button>
           <Button
             ref={removeButton}
             type="button"
             variant="ghost"
-            aria-label={t("settings.plans.removeLabel", { name: plan.name })}
+            aria-label={t("people.plans.removeLabel", { name: plan.name })}
             aria-expanded={removing}
             aria-controls={`plan-remove-${plan.key}`}
             aria-disabled={busy || undefined}
             onClick={() => !busy && onOpen({ action: "remove", key: plan.key })}
           >
-            {t("settings.plans.remove")}
+            {t("people.plans.remove")}
           </Button>
         </div>
       </div>
@@ -287,11 +288,11 @@ function PlanRemoval({
     <>
       <DestructiveConfirmation
         id={`plan-remove-${plan.key}`}
-        title={t("settings.plans.removeConfirm.title", { name: plan.name })}
-        body={t("settings.plans.removeConfirm.body")}
-        cancelLabel={t("settings.plans.removeConfirm.keep")}
-        confirmLabel={t("settings.plans.removeConfirm.confirm")}
-        pendingLabel={t("settings.plans.removeConfirm.pending")}
+        title={t("people.plans.removeConfirm.title", { name: plan.name })}
+        body={t("people.plans.removeConfirm.body")}
+        cancelLabel={t("people.plans.removeConfirm.keep")}
+        confirmLabel={t("people.plans.removeConfirm.confirm")}
+        pendingLabel={t("people.plans.removeConfirm.pending")}
         pending={remove.isPending}
         onConfirm={() => remove.mutate(plan.key, { onSuccess: onRemoved })}
         onCancel={onKeep}
@@ -343,7 +344,7 @@ function AddPlanItem({
           onClick={() => !busy && onOpen({ action: "add" })}
         >
           <Plus aria-hidden="true" />
-          {t("settings.plans.add")}
+          {t("people.plans.add")}
         </Button>
       </div>
       {adding && (

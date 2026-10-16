@@ -11,7 +11,7 @@ import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testin
 import type { I18n } from "@/i18n/translator"
 import type { PlanSummary, PlansOverview, Registration, SessionStatus } from "@/lib/api"
 
-import { SettingsPage } from "./settings"
+import { PeopleView } from "./people-page"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -88,13 +88,8 @@ let calls: Call[] = []
 function serve({ registration = INVITATION_ONLY, plans = overview(), answers = {} }: Scenario) {
   const defaults: Record<string, Response | Promise<Response>> = {
     "GET /api/v1/session": jsonResponse(session),
-    "GET /api/v1/providers": jsonResponse([]),
-    "GET /api/v1/storage": jsonResponse({
-      database: { bytes: 1024 * 1024, reclaimable_bytes: 0, activity_entries: 0, oldest_activity_at: null },
-      logs: { bytes: 0, files: 0, oldest_at: null, newest_at: null },
-      activity_ages: [30, 90, 180, 365],
-    }),
     "GET /api/v1/registration": jsonResponse(registration),
+    "GET /api/v1/invitations": jsonResponse([]),
     "GET /api/v1/plans": jsonResponse(plans),
   }
   const routes = { ...defaults, ...answers }
@@ -123,7 +118,7 @@ beforeEach(() => {
   container = document.createElement("div")
   document.body.append(container)
   address = window.location.href
-  page().happyDOM.setURL(`${ORIGIN}/settings/administration`)
+  page().happyDOM.setURL(`${ORIGIN}/people/plans`)
 })
 
 afterEach(() => {
@@ -144,7 +139,7 @@ async function settle(times = 8) {
   }
 }
 
-async function renderAdministration(i18n: I18n, scenario: Scenario = {}) {
+async function renderPlans(i18n: I18n, scenario: Scenario = {}) {
   serve(scenario)
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -153,7 +148,7 @@ async function renderAdministration(i18n: I18n, scenario: Scenario = {}) {
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <SettingsPage tab="administration" onOpenTab={() => undefined} onOpenPeople={() => undefined} />
+            <PeopleView tab="plans" notice={null} onOpenPerson={() => undefined} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -169,7 +164,7 @@ function plansSection(): HTMLElement {
 }
 
 function sections(): (string | null)[] {
-  return [...container.querySelectorAll(".settings-page > section")].map((item) => item.getAttribute("aria-labelledby"))
+  return [...container.querySelectorAll(".people-page > section")].map((item) => item.getAttribute("aria-labelledby"))
 }
 
 function button(name: string, within: ParentNode = plansSection()): HTMLButtonElement {
@@ -241,21 +236,23 @@ function alertText(): string | null | undefined {
   return plansSection().querySelector("[role='alert']")?.textContent
 }
 
-describe("Plans under Administration", () => {
-  it("is hidden under Only me, where the only person administers", async () => {
-    await renderAdministration(testI18n(), { registration: { policy: "only_me", only_me_available: true } })
+describe("People's Plans tab", () => {
+  it("is hidden with People under Only me, where the only person administers, and never asks for plans", async () => {
+    await renderPlans(testI18n(), { registration: { policy: "only_me", only_me_available: true } })
     expect(container.querySelector("[aria-labelledby='plans-title']")).toBeNull()
-    expect(sections()).toEqual(["registration-title", "storage-title"])
+    expect(calls.some((call) => call.path === "/api/v1/plans")).toBe(false)
   })
 
-  it("sits between who can join and storage under Invitation only", async () => {
-    await renderAdministration(testI18n())
-    expect(sections()).toEqual(["registration-title", "plans-title", "storage-title"])
+  it("is the Plans tab of People under Invitation only", async () => {
+    await renderPlans(testI18n())
+    expect(container.querySelector("h1")?.textContent).toBe("People")
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Plans")
+    expect(sections()).toEqual(["plans-title"])
     expect(plansSection().querySelector("h2")?.textContent).toBe("Plans")
   })
 
   it("lists each Plan with its limits, interval, people, and which is the default", async () => {
-    await renderAdministration(testI18n(), { plans: overview({ defaultPlan: "free" }) })
+    await renderPlans(testI18n(), { plans: overview({ defaultPlan: "free" }) })
     expect([...planRow("Family").querySelectorAll("p")].map((line) => line.textContent)).toEqual([
       "5 rules, 3 calendar accounts, 2 tokens",
       "Instant sync, and a check every 5 minutes",
@@ -271,14 +268,14 @@ describe("Plans under Administration", () => {
   })
 
   it("keeps Limit people with plans unavailable until a default exists, and says why", async () => {
-    await renderAdministration(testI18n())
+    await renderPlans(testI18n())
     const enabled = field("plans-enabled")
     expect(enabled.disabled).toBe(true)
     expect(element("plans-enabled-hint").textContent).toBe("Choose a default plan first.")
   })
 
   it("chooses a default, leaving plans off", async () => {
-    await renderAdministration(testI18n(), {
+    await renderPlans(testI18n(), {
       answers: { "PUT /api/v1/plan-settings": jsonResponse(overview({ defaultPlan: "family" })) },
     })
     await choose(select("plans-default"), "family")
@@ -289,7 +286,7 @@ describe("Plans under Administration", () => {
   })
 
   it("turns plans on with the default it has", async () => {
-    await renderAdministration(testI18n(), {
+    await renderPlans(testI18n(), {
       plans: overview({ defaultPlan: "free" }),
       answers: { "PUT /api/v1/plan-settings": jsonResponse(overview({ enabled: true, defaultPlan: "free" })) },
     })
@@ -301,7 +298,7 @@ describe("Plans under Administration", () => {
 
   it("shows the plan asked for, and holds the select, while the default is on its way", async () => {
     const neverAnswered = new Promise<Response>(() => undefined)
-    await renderAdministration(testI18n(), { answers: { "PUT /api/v1/plan-settings": neverAnswered } })
+    await renderPlans(testI18n(), { answers: { "PUT /api/v1/plan-settings": neverAnswered } })
     await choose(select("plans-default"), "family")
     expect(sent("PUT", "/api/v1/plan-settings")).toEqual({ enabled: false, default_plan: "family" })
     expect(select("plans-default").value).toBe("family")
@@ -310,7 +307,7 @@ describe("Plans under Administration", () => {
 
   it("keeps the box ticked, and holds it, while turning plans on is on its way", async () => {
     const neverAnswered = new Promise<Response>(() => undefined)
-    await renderAdministration(testI18n(), {
+    await renderPlans(testI18n(), {
       plans: overview({ defaultPlan: "free" }),
       answers: { "PUT /api/v1/plan-settings": neverAnswered },
     })
@@ -321,14 +318,14 @@ describe("Plans under Administration", () => {
   })
 
   it("offers no way to clear the default while plans are on", async () => {
-    await renderAdministration(testI18n(), { plans: overview({ enabled: true, defaultPlan: "free" }) })
+    await renderPlans(testI18n(), { plans: overview({ enabled: true, defaultPlan: "free" }) })
     const none = select("plans-default").querySelector<HTMLOptionElement>("option[value='']")!
     expect(none.textContent).toBe("No default")
     expect(none.disabled).toBe(true)
   })
 
   it("says why a setting was refused", async () => {
-    await renderAdministration(testI18n(), {
+    await renderPlans(testI18n(), {
       answers: { "PUT /api/v1/plan-settings": refusal(404, "plan_not_found") },
     })
     await choose(select("plans-default"), "family")
@@ -344,7 +341,7 @@ describe("Plans under Administration", () => {
       people: 0,
       limited_people: 0,
     }
-    await renderAdministration(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse(added, 201) } })
+    await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse(added, 201) } })
     await click(button("Add a plan"))
     expect(element("plan-new-key-hint").textContent).toBe(
       "Lower-case letters, digits, and hyphens. The key cannot change later.",
@@ -376,7 +373,7 @@ describe("Plans under Administration", () => {
   })
 
   it("keeps Save unavailable until each limit has a number or Unlimited", async () => {
-    await renderAdministration(testI18n())
+    await renderPlans(testI18n())
     await click(button("Add a plan"))
     type(field("plan-new-key"), "family-2")
     type(field("plan-new-name"), "Family Plus")
@@ -392,7 +389,7 @@ describe("Plans under Administration", () => {
     ["plan-new-accounts", "Calendar accounts"],
     ["plan-new-tokens", "Integration Tokens"],
   ])("labels the %s limit with the shared label, grouping its number and Unlimited", async (id, label) => {
-    await renderAdministration(testI18n())
+    await renderPlans(testI18n())
     await click(button("Add a plan"))
     expect(container.querySelector(`label[for='${id}']`)?.textContent).toBe(label)
     const group = element("plan-edit-new").querySelector(`[role='group'][aria-labelledby='${id}-label']`)
@@ -407,7 +404,7 @@ describe("Plans under Administration", () => {
       "Use 1 to 32 lower-case letters, digits, and hyphens for the key, starting with a letter or digit.",
     ],
   ])("keeps the new plan's form open with the reason it was refused", async (answer, reason) => {
-    await renderAdministration(testI18n(), { answers: { "POST /api/v1/plans": answer } })
+    await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": answer } })
     await click(button("Add a plan"))
     type(field("plan-new-key"), "Family")
     type(field("plan-new-name"), "Family")
@@ -417,7 +414,7 @@ describe("Plans under Administration", () => {
   })
 
   it("edits a plan without changing its key, and warns before lowering its rule limit", async () => {
-    await renderAdministration(testI18n(), {
+    await renderPlans(testI18n(), {
       answers: { "PUT /api/v1/plans/family": jsonResponse({ ...family, name: "Family Large" }) },
     })
     await click(button("Edit", planRow("Family")))
@@ -446,7 +443,7 @@ describe("Plans under Administration", () => {
   })
 
   it("shows the key it cannot change as read-only, set apart from the fields that can", async () => {
-    await renderAdministration(testI18n())
+    await renderPlans(testI18n())
     await click(button("Edit", planRow("Family")))
     const key = field("plan-family-key")
     expect(key.readOnly).toBe(true)
@@ -456,7 +453,7 @@ describe("Plans under Administration", () => {
   })
 
   it("names the plan each Edit and Remove acts on, for assistive technology", async () => {
-    await renderAdministration(testI18n())
+    await renderPlans(testI18n())
     expect(button("Edit", planRow("Family")).getAttribute("aria-label")).toBe("Edit Family")
     expect(button("Remove", planRow("Family")).getAttribute("aria-label")).toBe("Remove Family")
     expect(button("Edit", planRow("Free")).getAttribute("aria-label")).toBe("Edit Free")
@@ -468,7 +465,7 @@ describe("Plans under Administration", () => {
     const held = new Promise<Response>((resolve) => {
       answer = resolve
     })
-    await renderAdministration(testI18n(), { answers: { "PUT /api/v1/plans/family": held } })
+    await renderPlans(testI18n(), { answers: { "PUT /api/v1/plans/family": held } })
     await click(button("Edit", planRow("Family")))
     type(field("plan-family-name"), "Family Large")
     await submit(field("plan-family-name").closest("form")!)
@@ -504,7 +501,7 @@ describe("Plans under Administration", () => {
   })
 
   it("does not warn about a lower rule limit when the plan limits nobody", async () => {
-    await renderAdministration(testI18n(), { plans: overview({ plans: [{ ...family, limited_people: 0 }] }) })
+    await renderPlans(testI18n(), { plans: overview({ plans: [{ ...family, limited_people: 0 }] }) })
     await click(button("Edit", planRow("Family")))
     type(field("plan-family-rules"), "2")
     await settle()
@@ -513,7 +510,7 @@ describe("Plans under Administration", () => {
 
   it("keeps an interval a later release saved, beside the offered ones", async () => {
     const hourly: PlanSummary = { ...family, limits: { ...family.limits, sync_interval: "60_minutes" } }
-    await renderAdministration(testI18n(), { plans: overview({ plans: [hourly] }) })
+    await renderPlans(testI18n(), { plans: overview({ plans: [hourly] }) })
     expect(planRow("Family").textContent).toContain("Every hour")
     await click(button("Edit", planRow("Family")))
     const intervals = select("plan-family-interval")
@@ -522,7 +519,7 @@ describe("Plans under Administration", () => {
   })
 
   it("closes the form on Cancel, sending nothing", async () => {
-    await renderAdministration(testI18n())
+    await renderPlans(testI18n())
     await click(button("Edit", planRow("Family")))
     await click(button("Cancel"))
     expect(container.querySelector("#plan-edit-family")).toBeNull()
@@ -531,7 +528,7 @@ describe("Plans under Administration", () => {
   })
 
   it("asks inline before removing a plan", async () => {
-    await renderAdministration(testI18n(), { answers: { "DELETE /api/v1/plans/family": NO_CONTENT } })
+    await renderPlans(testI18n(), { answers: { "DELETE /api/v1/plans/family": NO_CONTENT } })
     await click(button("Remove", planRow("Family")))
     const confirmation = element("plan-remove-family")
     expect(confirmation.querySelector("h3")?.textContent).toBe("Remove Family?")
@@ -555,7 +552,7 @@ describe("Plans under Administration", () => {
     [refusal(409, "plan_in_use", { people: 1, count: 1 }), "1 person has this plan. Give them another plan before you remove it."],
     [refusal(409, "plan_is_default"), "This is the default plan. Choose another default before you remove it."],
   ])("says why a plan cannot be removed", async (answer, reason) => {
-    await renderAdministration(testI18n(), { answers: { "DELETE /api/v1/plans/family": answer } })
+    await renderPlans(testI18n(), { answers: { "DELETE /api/v1/plans/family": answer } })
     await click(button("Remove", planRow("Family")))
     await click(button("Remove plan", element("plan-remove-family")))
     expect(planRow("Family").querySelector("[role='alert']")?.textContent).toBe(reason)
@@ -563,14 +560,20 @@ describe("Plans under Administration", () => {
   })
 
   it("shows its own error with Try again when plans cannot load, and the rest still works", async () => {
-    await renderAdministration(testI18n(), { answers: { "GET /api/v1/plans": jsonResponse({ detail: "boom" }, 500) } })
+    await renderPlans(testI18n(), { answers: { "GET /api/v1/plans": jsonResponse({ detail: "boom" }, 500) } })
     expect(alertText()).toContain("Plans could not load.")
     expect(button("Try again")).not.toBeNull()
-    expect(sections()).toEqual(["registration-title", "plans-title", "storage-title"])
+    expect(sections()).toEqual(["plans-title"])
+    expect([...container.querySelectorAll("nav.page-tabs a")].map((tab) => tab.textContent)).toEqual([
+      "Everyone",
+      "Invitations",
+      "Plans",
+    ])
+    expect(button("Invite someone", container)).not.toBeNull()
   })
 
   it("has no untranslated text", async () => {
-    await renderAdministration(pseudoI18n(), { plans: overview({ defaultPlan: "free" }) })
+    await renderPlans(pseudoI18n(), { plans: overview({ defaultPlan: "free" }) })
     await click(container.querySelector<HTMLButtonElement>("[aria-controls='plan-edit-new']")!)
     expect(untranslatedText(container, [...dateWords(), family.name, free.name])).toEqual([])
     await click(container.querySelector<HTMLButtonElement>("[aria-controls='plan-edit-family']")!)

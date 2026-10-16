@@ -6,8 +6,10 @@ import { PageTabs } from "@/components/page-tabs"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { Button } from "@/components/ui/button"
 import { InvitationsSection } from "@/features/people-invitations"
+import { PlansSection } from "@/features/people-plans"
 import { PeopleRoster } from "@/features/people-roster"
 import { useI18n } from "@/i18n/provider"
+import type { MessageKey } from "@/i18n/types"
 import { api } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
 import { appPathForPeopleTab, type OpenPerson, type PeopleTab } from "@/lib/navigation"
@@ -17,13 +19,20 @@ import { usePeopleAccess } from "@/lib/use-people-access"
 import { useInvitations, type InvitationCommands } from "@/lib/use-invitations"
 import { usePeopleLocation } from "@/lib/use-people-location"
 
+/** What the browser tab says on each of People's tabs, before the product name. */
+const TAB_TITLES: Record<PeopleTab, MessageKey> = {
+  everyone: "people.page.title",
+  invitations: "people.tabs.documentTitle.invitations",
+  plans: "people.tabs.documentTitle.plans",
+}
+
 /**
  * The people who use this installation, for an Installation Administrator: who they are, their
  * role and state, when they last signed in, and whether their synchronization works, never what
  * they own. People comes first, with Installation Health above them; the invitations still
- * waiting have a tab of their own. The app offers this page only while the Registration Policy
- * lets people join. `notice` says what just happened elsewhere, such as deleting someone from
- * their own page.
+ * waiting, and the Plans that limit people, have tabs of their own. The app offers this page only
+ * while the Registration Policy lets people join. `notice` says what just happened elsewhere, such
+ * as deleting someone from their own page.
  */
 export function PeopleView({
   tab,
@@ -60,8 +69,7 @@ function PeopleContent({
   const invitations = useInvitations()
   const now = useNow()
   useEffect(() => {
-    const page = tab === "invitations" ? i18n.t("people.tabs.documentTitle") : i18n.t("people.page.title")
-    document.title = documentTitle(i18n, page)
+    document.title = documentTitle(i18n, i18n.t(TAB_TITLES[tab]))
   }, [i18n, tab])
 
   // Each tab has its own address; switching keeps this page, and what it shows, in place.
@@ -92,7 +100,7 @@ function PeopleContent({
         </div>
       </div>
       <PeopleTabs current={tab} invitations={invitations} onOpen={openTab} />
-      {tab === "everyone" ? (
+      {tab === "everyone" && (
         <PeopleRoster
           query={query}
           update={update}
@@ -101,9 +109,9 @@ function PeopleContent({
           notice={notice}
           onOpenPerson={onOpenPerson}
         />
-      ) : (
-        <InvitationsSection commands={invitations} now={now} />
       )}
+      {tab === "invitations" && <InvitationsSection commands={invitations} now={now} />}
+      {tab === "plans" && <PlansSection />}
       <p className="sr-only" role="status">
         {invitations.message}
       </p>
@@ -136,6 +144,7 @@ function PeopleTabs({
           count: waiting,
           countLabel: t("people.tabs.waiting", { count: waiting }),
         },
+        { id: "plans", label: t("people.tabs.plans"), href: appPathForPeopleTab("plans") },
       ]}
     />
   )
