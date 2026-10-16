@@ -731,8 +731,8 @@ Indicator rule.
   contain), self-hosting (Plans, the monitor table), troubleshooting (a held rule; the account
   limit and the changed-address recovery), domain-model (the state machine), sync-model,
   deployment, the multi-user spec's slice order, and the CHANGELOG.
-- **`tests/test_ubiquitous_language.py`** adds `tier`, `suspension`, `plan pause`, and `downgrade
-  deletion`. Not `quota` or `subscription`: `Cause.QUOTA_EXCEEDED` and Graph subscriptions use them
+- **`tests/test_ubiquitous_language.py`** adds the terms `CONTEXT.md` avoids for Plan and Plan
+  Hold, except `quota` and `subscription`, which `Cause.QUOTA_EXCEEDED` and Graph subscriptions use
   for other things.
 
 ## 12. Delivery
