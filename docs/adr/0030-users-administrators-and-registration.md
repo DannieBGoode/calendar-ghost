@@ -1,7 +1,9 @@
 # Users, Installation Administrators, and registration
 
 Builds on [ADR 0023](0023-hosted-service-runs-the-open-codebase.md) and
-[ADR 0029](0029-isolate-users-in-one-sqlite-database.md).
+[ADR 0029](0029-isolate-users-in-one-sqlite-database.md). Amended by
+[ADR 0038](0038-plans-allowances-and-limits.md): the Operator Overview shows each User's Plan, and
+returning to setup turns Plans off.
 
 ## Context
 
@@ -88,6 +90,23 @@ other at the same time are serialized: the second is checked against the first's
 cannot succeed. The rule itself stays in the domain, in `require_administrator_remains`
 (`domain/access.py`), which the adapter calls. Moving the changes onto `User` would also need an
 atomic save that succeeds only while the set of administrators is unchanged.
+
+## Amendment: Plans (2026-10-15)
+
+Plans arrived ([ADR 0038](0038-plans-allowances-and-limits.md)), and three decisions above gained
+their detail:
+
+- **The Operator Overview shows each User's Plan** once any Plan exists, whether Plans are on or
+  off: the Plan that limits them, marked when it is the default; for an Installation
+  Administrator, that no Plan limits administrators, with any Plan they were given; and a Plan that
+  applies once Plans are on. A person's page offers "Change plan". A failure to read Plans leaves
+  the Plan out instead of failing the page.
+- **Plans have no effect under Only Me.** Installation Administrators are never limited, and under
+  Only Me the only User administers, so the Web UI hides Plans there, as it hides Users and
+  Invitations.
+- **Returning to setup turns Plans off,** keeping their definitions and the default, so a new
+  first User never inherits limits nobody can see. Invitations carry no Plan: an invited User
+  starts on the Default Plan.
 
 ## Considered Options
 
