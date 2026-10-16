@@ -261,9 +261,9 @@ join and the app shows nothing about other people. To share it with your househo
 3. Everyone's calendar accounts, rules, Activity, and tokens are their own. As the administrator you
    see each person's email, role, whether they may sign in, when they joined, when they last signed
    in, and, once you define a Plan, their Plan, never their calendars or events. Search by part of
-   an email, filter by role or state, sort by email, joining, or last sign-in, and page through 50
-   people at a time; the address keeps your choices, so a reload or a shared link shows the same
-   list.
+   an email, filter by role, state, or sync status, and, once you define a Plan, by Plan, sort by
+   email, joining, or last sign-in, and page through 50 people at a time; the address keeps your
+   choices, so a reload or a shared link shows the same list.
 
 From **People** you can also make someone an administrator, disable someone, which signs them out
 and holds their rules until you enable them again, create a password reset link for someone who
@@ -285,20 +285,28 @@ calendar accounts and Integration Tokens a person may have, and whether their ca
 instantly or every 5 minutes. Calendar Ghost makes the Plan's key, which names it in the API,
 from its name. To limit everyone, choose a **Default plan**, which everyone without a Plan of
 their own has, including people who join later, and **Save default**. To limit only some people,
-give them a Plan with **Change plan** on their page under **People**. Then tick **Limit people
-with plans**, which says how many people Plans limit. Each Plan says how many people have it, how
-many it limits, and how many of those have more than it allows, as after a limit was lowered; a
-person's page, and their row of **Everyone**, name each limit they are over, and **Everyone** can
-list only the people who have one Plan. Two Plans cannot share a name. With no default, turning Plans on adds a
-Plan named No limits, which limits nobody, as the default, so nothing changes until someone has a
-smaller Plan; you can rename and change it like any Plan. The default, and a Plan someone has,
-cannot be removed: choose another default, or give those people another Plan, first. Remove on
-a Plan someone has names them and links to the list of everyone who has it.
-Administrators are never limited, and while Plans are off, which is the default, nobody is. A
-lower limit stops nothing: rules beyond it keep syncing, and accounts and tokens keep working, but
-nobody can start a rule, connect a new calendar account, or issue a token past it. Each person
-sees what their Plan allows under **Settings → Your account → Your plan**
+give them a Plan with **Change plan** on their page under **People**; under the choice it says
+what the chosen Plan allows. Then tick **Limit people with plans**, which says how many people
+Plans limit. Two Plans cannot share a name, whatever its case: the form says so under **Name**.
+With no default, turning Plans on adds a Plan named No limits, which limits nobody, as the
+default, so nothing changes until someone has a smaller Plan; you can rename and change it like
+any Plan. Administrators are never limited, and while Plans are off, which is the default, nobody
+is. A lower limit stops nothing: rules beyond it keep syncing, and accounts and tokens keep
+working, but nobody can start a rule, connect a new calendar account, or issue a token past it.
+Each person sees what their Plan allows under **Settings → Your account → Your plan**
 ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
+
+Each Plan says how many people have it and how many it limits ("4 people have it. Limits 3
+people."), and, when a limit is lower than what some of them already have, how many of those have
+more than it allows ("1 has more than this plan allows."). Before you save a lower limit, the form
+says how many people it would leave with more. **Everyone** shows each person's Plan in its own
+column, and their page says it too; both name each limit they are over ("Family. 2 calendar
+accounts, 1 allowed"), and the **Plan** filter lists only the people who have one Plan. The
+default, and a Plan someone has, cannot be removed: choose another default, or give those people
+another Plan, first. **Remove** on a Plan someone has names the first three by email and links to
+**Everyone**, filtered to the people who have it. [Someone has more than their plan
+allows](troubleshooting.md#someone-has-more-than-their-plan-allows) says what to do when someone
+is over a limit.
 
 ## 5. Use a LAN host or HTTPS
 

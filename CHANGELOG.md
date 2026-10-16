@@ -14,33 +14,33 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   people it would leave with more than it allows. Each Plan says how many people have it, how many
   it limits, and how many of those have more than it allows, and a person's page names each limit
   they are over. **Everyone** shows each person's Plan in its own column, with any limit they are
-  over, and can list only the people who have one Plan. Two Plans cannot share a name; the form
-  says so under Name. The default has no Remove and says to choose another default first, and
-  Remove on a Plan someone has names the first three of them and links to everyone who has it.
-  The administrator chooses the Default Plan with **Save default**, and turns Plans on with
+  over, and can list only the people who have one Plan. Two Plans cannot share a name, whatever its
+  case; the form says so under Name. The default has no Remove and says to choose another default
+  first, and Remove on a Plan someone has names the first three of them and links to everyone who
+  has it. The administrator chooses the Default Plan with **Save default**, and turns Plans on with
   **Limit people with plans**, which says how many people Plans limit. Turning Plans on with no
   default adds a Plan named No limits, which limits nobody, as the default, so nothing changes until
   someone has a smaller Plan; it can be renamed and changed like any Plan. **Change plan** on a
-  person's page gives them a Plan of their own, saying what the chosen Plan allows under the
-  choice. Plans are off by
-  default, and while they are off nothing changes. Administrators are never limited, and under
-  **Only me** Plans stay hidden. Once Plans are on, starting a rule, connecting a new calendar
-  account, and issuing a token respect the person's Plan: each control says so at the limit and
-  links to **Settings → Your account → Your plan**, which gives one row per limit with how much of
-  it is in use, marks any count past its limit, and says to ask the administrator for a change.
-  **Create sync rule** says how many rules the Plan lets sync at once. Reauthorization is never
-  refused. A lowered rule limit refuses new Starts and stops nothing: rules beyond it keep syncing,
-  and existing calendar accounts and tokens keep working. Returning to setup turns Plans off and
-  keeps their definitions. In the API, a Plan's key is made from its name unless
+  person's page gives them a Plan of their own, saying what the chosen Plan allows under the choice.
+  Plans are off by default, and while they are off nothing changes. Administrators are never
+  limited, and under **Only me** Plans stay hidden. Once Plans are on, starting a rule, connecting a
+  new calendar account, and issuing a token respect the person's Plan: each control says so at the
+  limit and links to **Settings → Your account → Your plan**, which gives one row per limit with how
+  much of it is in use, marks any count past its limit, and says to ask the administrator for a
+  change. **Create sync rule** says how many rules the Plan lets sync at once. Reauthorization is
+  never refused. A lowered rule limit refuses new Starts and stops nothing: rules beyond it keep
+  syncing, and existing calendar accounts and tokens keep working. Returning to setup turns Plans
+  off and keeps their definitions. In the API, a Plan's key is made from its name unless
   `POST /api/v1/plans` names one, rule details gain `can_start` and `rule_limit`, and rules and rule
   details gain `keeps_place`. Two Plans may not share a name, whatever its case (409
   `plan_name_taken`). Each Plan in `GET /api/v1/plans` gains `over_people`, how many of the people
   it limits have more than it allows, and `use`, how many of them have each count. Each row of
   `GET /api/v1/users` gains the person's `plan`, as their overview shows it, and both gain `has`,
-  the Plan they have, and `over`, each of its limits they are over. `GET /api/v1/users?plan=` lists
-  everyone who has a Plan. Migration 33 adds the `plans` table and the Plan columns; rolling back to
-  an earlier release works with the same database, which ignores them and limits nobody, and after
-  upgrading again, Plans are as the administrator left them.
+  the Plan they have, and `over`, each of its limits they are over. `GET /api/v1/users?plan={key}`
+  lists everyone who has that Plan, their own or as the default. Migration 33 adds the `plans` table
+  and the Plan columns; rolling back to an earlier release works with the same database, which
+  ignores them and limits nobody, and after upgrading again, Plans are as the administrator left
+  them.
 - Instant Sync: with a public HTTPS address in `CALENDAR_SYNC_PUBLIC_URL` that Google and Microsoft
   reach at `/api/v1/watch-notices/`, a rule runs soon after its provider reports a change in its
   Source Calendar instead of waiting for the next five-minute sync. Scheduled syncs and the daily

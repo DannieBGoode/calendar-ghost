@@ -357,25 +357,29 @@ People is the Installation Administrator's view of everyone here, laid out like 
 a Fraunces title with one sentence and "Invite someone" as the page's one primary action, then link
 tabs (Everyone first, then Invitations with a count of those waiting, hidden at zero, then Plans).
 Plans sit beside the people they limit, so Settings keeps only each person's own Your plan. The
-Plans tab runs in the order setting up needs: each Plan with whom it limits, then Add a plan, then
-the Default plan, saved with Save default, then Limit people with plans, which says whether
-Plans are on and whom they limit. The box sends the plan the Default plan select shows, saved or
-not, and says before what turning on does with it, so a choice not saved yet is never ignored;
-with no Plan it is one empty state whose action is Add a plan.
-The default Plan has no Remove; where Remove would be, it says to choose another default first. On
-a Plan someone has, Remove says at once who has it, the first three by email and then how many
-more, instead of a confirmation the server would refuse, with one next step: a link to Everyone
-filtered by that Plan. The Plan form asks for a name and the limits, never a key, and refuses a
-name another Plan has before sending it. While a Plan command is on its way, its controls stay
-focusable and wait, so focus never drops to the page; a refusal shows under the field it names,
-which takes focus. Change plan on a person's page lists the Plans by name and says what the chosen
-one allows under the choice, so nothing is cut off on a narrow screen. Everyone
-shows Installation Health in a card, then everyone here in one card holding its search, filters,
-table, and pages, sorted by when people joined unless asked otherwise. Once a Plan exists, the
-table has a Plan column, in the words of the person's page, and the filters a Plan filter. Installation Health leads with what
-the administrator must do: "Needs you" in Destructive Red with the likely causes only they can fix,
-or "Nothing needs you" in Healthy Moss with one quiet sentence on how many people have something
-of their own to fix ("1 of 4 people has something to fix on their own dashboard"). While something
+Plans tab runs in the order setting up needs: each Plan with who has it and whom it limits, worded
+alike on every surface ("4 people have it. Limits 3 people."), then Add a plan, then the Default
+plan, saved with Save default, then Limit people with plans, which says whether Plans are on and
+whom they limit. The box sends the plan the Default plan select shows, saved or not, and says before
+what turning on does with it, so a choice not saved yet is never ignored; with no Plan it is one
+empty state whose action is Add a plan. When some of the people a Plan limits have more than it
+allows, its row says how many in Attention Ochre with an icon, never color alone, and a lower limit
+typed in the form says exactly how many people it would leave with more. The default Plan has no
+Remove; where Remove would be, it says to choose another default first. On a Plan someone has,
+Remove says at once who has it, the first three by email and then how many more, instead of a
+confirmation the server would refuse, with one next step: a link to Everyone filtered by that Plan.
+The Plan form asks for a name and the limits, never a key, and refuses a name another Plan has
+before sending it. While a Plan command is on its way, its controls stay focusable and wait, so
+focus never drops to the page; a refusal shows under the field it names, which takes focus.
+Change plan on a person's page lists the Plans by name and says what the chosen one allows under
+the choice, so nothing is cut off on a narrow screen. Everyone shows Installation Health in a card,
+then everyone here in one card holding its search, filters, table, and pages, sorted by when people
+joined unless asked otherwise. Once a Plan exists, the table has a Plan column, in the words of the
+person's page, and the filters a Plan filter, kept in the address like the others; a limit the
+person is over reads in Attention Ochre with an icon. Installation Health leads with what the
+administrator must do: "Needs you" in Destructive Red with the likely causes only they can fix, or
+"Nothing needs you" in Healthy Moss with one quiet sentence on how many people have something of
+their own to fix ("1 of 4 people has something to fix on their own dashboard"). While something
 needs them, a small red dot sits beside People in the navigation, read as "needs you". Then quiet
 pill counts ("Show only: Stopped: 1, …, Disabled: 1") that set the list's Sync
 and State filters to exactly the people counted, and read as pressed whenever the filters say the
@@ -392,7 +396,9 @@ chip and last sync, and under a rule its own problems with who takes the next st
 problem the person fixes themself, with a muted "If they ask for help: …" saying what they do, "You fix this as the administrator" with "How to fix" for the
 installation's own, and nothing for the administrator to do otherwise. On their own page an
 administrator reads the steps as their own, with a link to take each one, and their calendars by
-name. With problems, a second card holds their accounts, Activity, and calls, with one line on
+name. Among the person's facts, their Plan reads "Plan: Family", and each limit they are over
+follows it in Attention Ochre with an icon: "Plan: Family. 2 calendar accounts, 1 allowed". With
+problems, a second card holds their accounts, Activity, and calls, with one line on
 whether the calls look normal; with none, those close the one Synchronization card. Calendars of
 anyone else appear only by number ("Calendar 1"), in the reader's language. The privacy note closes
 the page as a footnote, and coming back to People returns to their row.

@@ -730,6 +730,50 @@ so no monitor stops on its own. A token that reads Installation Health is for ad
 are never limited. An API client receives `409` with the code `plan_limit_reached` and the reason
 `integration_tokens`.
 
+## Someone has more than their plan allows
+
+This is for administrators. After you lower a limit, or give someone a smaller Plan, some people
+can have more than their Plan allows. Nothing stops for them: their rules keep syncing, and their
+calendar accounts and Integration Tokens keep working. But they cannot start another rule, connect
+another calendar account, or issue another token until they are within the limit. Before you save
+a lower limit, the Plan form says how many people it would leave with more: "1 person on this plan
+has more calendar accounts than this. They keep them, but cannot connect another."
+
+**People** shows who they are, in Attention Ochre with an icon:
+
+- On **Plans**, the Plan's row says how many of the people it limits are over: "1 has more than
+  this plan allows."
+- On **Everyone**, the **Plan** column names each limit a person is over: "Family. 2 calendar
+  accounts, 1 allowed". Choose the Plan in the **Plan** filter to list only the people who have it.
+- On the person's page, the Plan fact says the same: "Plan: Family. 2 calendar accounts, 1
+  allowed".
+
+Each count is made as the limit counts it: rules that count toward the Plan ([Start syncing is
+unavailable](#start-syncing-is-unavailable-your-plans-rule-limit) says which), every calendar
+account, Disconnected Accounts too, and Integration Tokens not revoked. Administrators and
+disabled people are never limited, so they are never shown over a limit. While Plans are off, the
+same marks show what turning them on would do.
+
+To fix it, do one of these:
+
+- Give the person a larger Plan with **Change plan** on their page.
+- Raise the limit with **Edit** on the Plan.
+- Ask the person to make room: pause a rule, delete a calendar account they no longer use, or
+  revoke a token.
+
+## A plan cannot be removed, or its name is refused
+
+- **The default Plan has no Remove.** Its row says "Default plan. Choose another default to remove
+  it." Choose another **Default plan**, choose **Save default**, then remove it.
+- **Remove names who has the Plan.** A Plan someone has cannot be removed. Remove says who has it,
+  the first three by email and then how many more: "robin@example.test has Family. Give them
+  another plan to remove it." Choose **Show who has Family** to list everyone who has it, give each
+  of them another Plan with **Change plan**, then remove it.
+- **"Another plan is named Free. Choose a different name."** Two Plans cannot share a name, whatever
+  its case or the spaces around it. Choose another name, or rename the other Plan first.
+
+An API client receives `409` with the code `plan_in_use`, `plan_is_default`, or `plan_name_taken`.
+
 ## Getting more help
 
 If this guide does not solve the problem, ask in
