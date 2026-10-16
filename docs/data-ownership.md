@@ -62,10 +62,12 @@ shows:
 - their email, role, state, when they joined, and when they last signed in;
 - once any Plan exists, their Plan: which Plan limits them and whether it is their own or the
   default, or, while Plans are off or for an administrator, the Plan they were given that does not
-  apply yet; the Plan they have, their own or the default; and each limit of it they have more of
-  than it allows, such as "2 calendar accounts, 1 allowed", whether or not Plans are on, counted as
-  the limit counts: rules that count toward it, every calendar account, and unrevoked Integration
-  Tokens. No Plan limits an administrator or a disabled User, so neither is ever shown over a
+  apply yet; the Plan they have, their own or the default; which administrator last gave them
+  their own Plan, by email, and when; how much of it they use, as counts of the rules that count
+  toward it, every calendar account, and unrevoked Integration Tokens, never a token's name or
+  scopes ([ADR 0030](adr/0030-users-administrators-and-registration.md), amended); and each limit
+  of it they have more of than it allows, such as "2 calendar accounts, 1 allowed", whether or not
+  Plans are on. No Plan limits an administrator or a disabled User, so neither is ever shown over a
   limit;
 - their Installation Status: its verdict, each problem, and each rule's state and last successful
   sync, with every calendar named only "Calendar 1", "Calendar 2", and so on, numbered in the order
@@ -78,7 +80,8 @@ many people have it, how many it limits, how many of those have more than it all
 rules, calendar accounts, and Integration Tokens, how many people have each count, so an
 administrator can see what a lower limit would do; it names nobody, though on a Plan only one
 person has, the counts are theirs
-([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
+([ADR 0038](adr/0038-plans-allowances-and-limits.md)). Before an administrator gives people a
+Plan, People says which of its limits each of them would have more of, from the same counts.
 
 It never shows a User's calendar names or identifiers, their Google or Microsoft account emails, or any event
 title or other event content, and there is no setting that shows more. Installation Health, above

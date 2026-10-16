@@ -14,6 +14,8 @@ Amended 2026-10-16: a Plan's key is made from its name, turning Plans on with no
 Plan named "No limits" the default, and Plans moved to a tab of People; see the amendment at the
 end. Amended again 2026-10-16: administrators see who is over a limit, computed by the Operator
 Overview, Plan names are unique, and People finds people by their Plan; see the second amendment.
+Amended again 2026-10-17: the catalog, with one switch, Make default, giving a Plan to many people
+at once after a dry run, and how much of their Plan a person uses; see the third amendment.
 
 ## Context
 
@@ -283,3 +285,52 @@ Rejected: counting in Identity, which would read other Users' records outside th
 Overview (ADR 0029); computing who is over only while Plans are on, which would hide from an
 administrator what turning them on would do; and a list of each limited person's counts per Plan,
 which grows with the people a Plan limits where the counts per value stay small.
+
+## Amendment: the catalog (2026-10-17)
+
+A third design review found the first Plans UI correct and hard to use: Plans' on and off was a
+checkbox at the bottom of the tab, coupled with a Default plan select that offered "No default";
+Plans were prose that could not be compared by limit; and a Plan could be given only from a
+person's page, one person at a time. The product owner approved the
+[catalog design](../superpowers/specs/2026-10-17-plans-ui-catalog-design.md): a status card with
+one switch, a table of Plans, a side panel at each Plan's own address for editing and assigning,
+bulk Change plan in Everyone, and meters on a person's page and on Your plan. The Allowance, the
+limits, what they count, and how they are enforced do not change.
+
+- **One switch, and the default only by Make default.** The switch applies at once.
+  `PUT /api/v1/plan-settings` does not change: the switch sends the saved default with the new
+  `enabled`, and Make default sends the saved `enabled` with the new `default_plan`. The Web UI
+  never sends a `null` default, so it offers no "No default". Turning Plans on with none still adds
+  "No limits", and `plans_need_default` still refuses to clear the default while Plans are on.
+- **A Plan for many people at once.** `POST /api/v1/plan-assignments` (administrator) gives one
+  Plan, or the default with `null`, to up to 100 Users, all or none, through `PlanAssignments`,
+  with one `AssignmentChange(administrator, actor, now)` and one log line per User. It answers
+  each User with the Plan they had and have, and the limits of it they are over. Those come from
+  the Operator Overview, through `plan_use` as `over` does, so assigning reads no other User's
+  records outside it ([ADR 0029](0029-isolate-users-in-one-sqlite-database.md)). With `dry_run` it
+  writes nothing and answers the same, so Assign people and Change plan say who would be over
+  before anyone confirms. It refuses a Plan that does not exist with 404 `plan_not_found`, and no
+  Users, more than 100, or an identifier that names no User with 422 `invalid_assignment`.
+  `PUT /api/v1/users/{user_id}/plan` stays for one User.
+- **People over a limit.** `GET /api/v1/users?over=true` lists the Users over a limit of the Plan
+  they have, as `over` says, alone or with `?plan=`, for the "1 over a limit" chip and Everyone's
+  Limits filter.
+- **How much of their Plan a person uses.** The person's Plan gains `assigned_by`, the email of
+  the administrator who last gave it, `assigned_at`, and `use`: how many Active Rules, Connected
+  Accounts, and unrevoked Integration Tokens they have, counted by `plan_use`
+  ([ADR 0030](0030-users-administrators-and-registration.md), amended, for the token count). A
+  fault reading them leaves the Plan out, as before.
+- **The Plans overview counts administrators,** for the status card's Never limited fact.
+- **No Plan has the key `new`.** The New plan panel's address is `/people/plans/new`, beside each
+  Plan's `/people/plans/<key>`, so a key made from a name treats `new` as taken (a Plan named New
+  gets `new-2`), and `POST /api/v1/plans` refuses a request that names it with 422 `invalid_plan`.
+  Plans had not been released when this rule was made, so no stored Plan has the key.
+- **Invitations still carry no Plan.** The Invite form says which Plan the person will get once a
+  Plan is the default, and leaves the sentence out when Plans cannot be read.
+
+Rejected: Plan pages with a side-by-side ladder, which stops working past about five Plans and
+leaves the catalog to edit or assign; a split view that edits in place, which compares one Plan at
+a time and needs the most focus and announcement handling; giving a Plan to many people through
+one `PUT /api/v1/users/{user_id}/plan` each, where a failure halfway leaves some moved and nothing
+says beforehand who would be over; and keeping "No default" while Plans are off, a choice that
+stops working the moment they turn on.

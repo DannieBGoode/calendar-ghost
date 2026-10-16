@@ -59,6 +59,11 @@ typography:
     fontWeight: 560
     lineHeight: 1.15
     letterSpacing: "-0.015em"
+  object-title:
+    fontFamily: "Figtree Variable, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    fontSize: "1.25rem"
+    fontWeight: 650
+    lineHeight: 1.25
   title:
     fontFamily: "Figtree Variable, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
     fontSize: "1rem"
@@ -122,7 +127,7 @@ the mark, the sign-in panel, loading, and empty states; everywhere else the inte
 household utility. It serves a nontechnical administrator first, with audit and provider evidence
 available through progressive disclosure.
 
-The layout uses a restrained top navigation and a readable central work area rather than a permanent dashboard sidebar. Stable information stays flat. Forms and workflows use familiar shadcn/ui affordances, while domain-specific health strips and directional rule rows carry the product language.
+The layout uses a restrained top navigation and a readable central work area rather than a permanent dashboard sidebar. Stable information stays flat. Forms and workflows use familiar shadcn/ui affordances, while domain-specific health strips and directional rule rows carry the product language. Administration surfaces, such as People and its Plans, are denser in the same calm surfaces: a feature's state and its switch lead, a data table compares like things by column, and a side panel holds the form for the selected row.
 
 **Key Characteristics:**
 
@@ -206,9 +211,10 @@ A lavender-tinted neutral canvas (the "Twilight" palette) supports a single indi
 
 ### Hierarchy
 
-Product text uses six steps: 2rem Fraunces page titles, 1rem Figtree section titles (weight 650), 1rem Figtree row titles (weight 550), 1rem Figtree body (weight 400), 0.875rem labels and controls (weight 600), and 0.8125rem supporting metadata. Settings and Rule Details section and row headings are aligned to these levels.
+Product text uses seven steps: 2rem Fraunces page titles, 1.25rem Figtree object titles (weight 650), 1rem Figtree section titles (weight 650), 1rem Figtree row titles (weight 550), 1rem Figtree body (weight 400), 0.875rem labels and controls (weight 600), and 0.8125rem supporting metadata. Settings and Rule Details section and row headings are aligned to these levels. Counts in tables, meters, and facts use tabular numerals, so columns of numbers line up.
 
 - **Headline**: Screen titles and the auth headline, in Fraunces at a strong but quiet scale.
+- **Object title**: The name of the one thing a panel or card is about, such as a Plan's name in its side panel, on a person's Plan card, and on Your plan, and the state a status card leads with ("Plans are on"). It sits between the page title and section titles, so a Plan's name never reads as a row label.
 - **Title**: Section titles and row titles (rule names, grouped settings, and recovery headings) in Figtree, distinguished by weight rather than size.
 - **Body**: Instructions and explanations, capped near 70 characters per line.
 - **Label**: Field labels, navigation, compact state, and metadata in sentence case.
@@ -217,11 +223,13 @@ Product text uses six steps: 2rem Fraunces page titles, 1rem Figtree section tit
 
 **The Calendar Language Rule.** Labels use the domain glossary and plain calendar terminology. Provider codes, tokens, and infrastructure terms remain in diagnostic details.
 
+**The Data Register Rule.** Table cells, chips, facts, and meters hold nouns and numbers ("2 people", "1 over a limit", "2 of 1"); sentences belong to hints, descriptions, empty states, confirmations, and results. Both use the same words, so a cell is the short form of the sentence that explains it, never a different term.
+
 **The Room To Grow Rule.** Leave room for about 35% longer text in other languages; check layouts with `?locale=pseudo`.
 
 ## Elevation
 
-The system is flat by default. Tonal layering, dividers, and spacing establish structure. Only transient menus, dialogs, and toasts may lift above the page; stable panels never use decorative shadows.
+The system is flat by default. Tonal layering, dividers, and spacing establish structure. Only transient menus, popovers, dialogs, and toasts may lift above the page; stable panels never use decorative shadows. A side panel beside a table is stable: a border, no shadow.
 
 ### Named Rules
 
@@ -235,6 +243,7 @@ The system is flat by default. Tonal layering, dividers, and spacing establish s
 - **Primary:** Lantern Indigo with a contrast-checked foreground, reserved for the next meaningful action.
 - **Hover / Focus:** A small tonal change and a visible indigo focus ring over 180 milliseconds.
 - **Secondary / Ghost:** Neutral structure for reversible and navigational actions.
+- **Size:** 40 pixels high; on a coarse pointer, buttons, fields, switches, checkboxes, and segmented options reach a 44-pixel target.
 
 ### Chips
 
@@ -259,6 +268,85 @@ The system is flat by default. Tonal layering, dividers, and spacing establish s
 - **Style:** Canvas fill, quiet border, compact curved edge.
 - **Focus:** Indigo border and a visible translucent ring with at least 3:1 contrast.
 - **Error / Disabled:** Error text accompanies destructive color; disabled controls remain readable and explain their prerequisite nearby.
+
+### Switches
+
+A switch turns a mode on or off and applies at once; it never waits for a Save, and a choice a form
+saves is a checkbox or radio instead. It is `role="switch"` with its state as visible text beside
+it ("On", "Off"), so it never relies on the thumb's position or color, and its label and the
+sentence beside it say what it does now or would do before it is pressed. A feature's state and its
+switch lead the page that manages the feature, before the things it applies to, as Plans' status
+card does. Its result is a toast; a change that deletes nothing needs no confirmation.
+
+### Limit Fields
+
+A limit that may be unlimited is one segmented radio group, never a checkbox beside a number:
+`No limit | Up to [- 3 +] rules`, and, where zero is a real choice, `None | Up to [- 2 +] |
+No limit`. The number stays visible, dimmed, while another option is chosen, so switching back
+keeps it. The number is a text field with a numeric keyboard and a stepper on each side, so a
+scroll wheel never changes it. Its hint, above the control, says in one line what counts.
+
+### Radio Cards
+
+When each option of a choice needs a sentence, the options are radio cards: a bordered row per
+option with its radio, an optional icon, a title, and a description, the chosen one outlined in
+the palette's lantern color. Sync speed and Change plan use them. An option that cannot be chosen
+stays visible, dimmed, with why ("Current").
+
+### Selection and Bulk Actions
+
+A table whose rows people act on together gives each row a checkbox and its header one that selects
+the page, mixed when only some are. Selecting shows a bulk bar above the table, on Quiet Surface
+with the panel radius: how many are selected, the actions, and Clear selection. Each bulk action is
+also in each row's More actions for one person.
+
+### Meters
+
+A meter shows how much of a limit is in use: a thin track with a neutral fill (muted ink, never
+the lantern color), always beside its numbers ("1 of 1") and a chip. At the limit the chip is
+neutral, "Limit reached"; past it the fill turns Attention Ochre with diagonal stripes, and the
+chip, "Over", carries the attention icon, with one sentence below on what keeps working and how to
+make room. While the limit is not enforced, as while Plans are off, a count past it stays neutral
+and its chip reads "Would be over". A count with no limit, or a thing the Plan does not include,
+has no meter, only words.
+Each meter is `role="meter"` with an `aria-valuetext` such as "2 of 1, over the limit". A compact
+meter beside a limit is not a metric card.
+
+### Toasts
+
+A result that belongs to the page rather than a row, such as Plans turned on or a new default, is
+a toast at the bottom of the window: an icon, one sentence ("Plans are on. They limit 2 people."),
+and Undo when the change can be reversed. It is announced through one polite live region, never
+takes focus, and stays until it is closed or the next result replaces it, so Undo is still there
+when a keyboard or screen reader user reaches it. A result about one row still appears on that
+row.
+
+### Popovers
+
+A popover holds one short choice beside the control that opened it, such as Change plan for the
+selected people: a title, the choice, what it will do, and its one action with Cancel. It lifts
+above the page as a menu does, takes focus when it opens, and Escape or Cancel closes it and
+returns focus to its control. It never blocks the rest of the page, and anything longer is a side
+panel.
+
+### Data Tables
+
+When people compare like things, such as Plans, a data table gives each comparable value a column:
+a header row, one row per thing with its name as a link, counts right-aligned in tabular numerals,
+"Unlimited" and "None" in muted text, chips beside a value they qualify, and a More actions menu
+whose items carry descriptions and say why an item is disabled. Columns keep fixed widths, and
+when the table itself is narrow each row becomes a card that labels its values, as People's
+Everyone does. A data table is how an administration surface compares; it is not a chart wall.
+
+### Side Panels
+
+A side panel opens the selected row of a table beside it, at its own address, never as a modal:
+Activity's entry and incident panels, and a Plan's panel on People. It may hold the form that
+creates or edits the selected thing, with a footer holding its one primary action, Cancel, and how
+many changes are not saved, and tabs when the thing has more than one side. While it is open the
+table drops the columns it no longer has room for, and marks the open row as selected. Opening it
+moves focus to its title; Close returns to the table's address and focus to the row it came from.
+On a narrow screen it replaces the table.
 
 ### Navigation
 
@@ -349,35 +437,47 @@ keeps is not a choice, so Rule Details shows it under Latest runs.
 
 ### Settings Groups
 
-Settings sections run from what the installation depends on to what only this browser keeps: Connected accounts, Storage, Integrations, Appearance. Each section's heading and one sentence sit above a single group of rows with the same border, Quiet Surface fill, panel radius, and panel padding as the app's other cards; a row pairs a title and its current state with at most its own controls, and a section with nothing to show or change does not exist. Connect is one action, never a button per provider: "Connect Google account" when one provider is configured, otherwise a "Connect an account" menu whose items name each provider's account beside its mark and say that it opens that provider's sign-in. While no account exists it is primary and sits in the empty state, as it does in Getting started; after that it is an outline button in the section heading. Connected accounts collapse to one summary row naming how many there are and how many need reauthorization ("2 accounts, 1 needs reauthorization"), with their addresses grouped by provider ("Google: a, b · Microsoft: c"), and open by themselves when one does. Their avatars overlap only slightly, earlier ones on top, so initials stay whole. An account row names its provider beside its address, and shows its state chip, its one fix, and Check access; the fix that leaves for the provider's consent says so ("Reauthorize with Microsoft"); a lapsed account says so once, in its chip and its stopped rules, and Disconnect account waits in the row's "More actions" menu. Integrations, which most administrators never use, collapse the same way to one row naming how many tokens are in use and when one was last used. A newly issued token appears once, on Quiet Surface inside the group, in a read-only field with Copy beside it; revoked tokens gather under one disclosure at the end of the group. Plain HTTP on this machine or a home network is the homelab norm and says nothing; only an address that would carry a token across the internet unencrypted gets a quiet note in the group's footer. Conditions that need no action, such as Google and Microsoft returning to a different address, close the group they affect as a quiet disclosure on Quiet Surface, and become an Attention Ochre step only while the administrator can act on them. Providers that return elsewhere share one such note: it names the address when they agree and lists each provider's when they do not, has one field that finishes any of them because the returned address names its provider, and gives the fix once. Your plan, under Your account, gives one row per limit with how much of it is in use, or "No limit"; a count past its limit reads "6 in use, 5 allowed" in Attention Ochre with an icon and a sentence on what keeps working, never color alone, and the group closes by saying the administrator changes plans.
+Settings sections run from what the installation depends on to what only this browser keeps: Connected accounts, Storage, Integrations, Appearance. Each section's heading and one sentence sit above a single group of rows with the same border, Quiet Surface fill, panel radius, and panel padding as the app's other cards; a row pairs a title and its current state with at most its own controls, and a section with nothing to show or change does not exist. Connect is one action, never a button per provider: "Connect Google account" when one provider is configured, otherwise a "Connect an account" menu whose items name each provider's account beside its mark and say that it opens that provider's sign-in. While no account exists it is primary and sits in the empty state, as it does in Getting started; after that it is an outline button in the section heading. Connected accounts collapse to one summary row naming how many there are and how many need reauthorization ("2 accounts, 1 needs reauthorization"), with their addresses grouped by provider ("Google: a, b · Microsoft: c"), and open by themselves when one does. Their avatars overlap only slightly, earlier ones on top, so initials stay whole. An account row names its provider beside its address, and shows its state chip, its one fix, and Check access; the fix that leaves for the provider's consent says so ("Reauthorize with Microsoft"); a lapsed account says so once, in its chip and its stopped rules, and Disconnect account waits in the row's "More actions" menu. Integrations, which most administrators never use, collapse the same way to one row naming how many tokens are in use and when one was last used. A newly issued token appears once, on Quiet Surface inside the group, in a read-only field with Copy beside it; revoked tokens gather under one disclosure at the end of the group. Plain HTTP on this machine or a home network is the homelab norm and says nothing; only an address that would carry a token across the internet unencrypted gets a quiet note in the group's footer. Conditions that need no action, such as Google and Microsoft returning to a different address, close the group they affect as a quiet disclosure on Quiet Surface, and become an Attention Ochre step only while the administrator can act on them. Providers that return elsewhere share one such note: it names the address when they agree and lists each provider's when they do not, has one field that finishes any of them because the returned address names its provider, and gives the fix once. Your plan, under Your account, is one card titled with the Plan's name, with a meter per limit as a person's page shows it, in the person's own words: a count past its limit reads "2 of 1" with an "Over" chip in Attention Ochre with an icon and a sentence on what keeps working and where to make room, never color alone, and the card closes by saying to ask the administrator, naming nobody.
 
 ### People
 
 People is the Installation Administrator's view of everyone here, laid out like Rules and Activity:
-a Fraunces title with one sentence and "Invite someone" as the page's one primary action, then link
-tabs (Everyone first, then Invitations with a count of those waiting, hidden at zero, then Plans).
-Plans sit beside the people they limit, so Settings keeps only each person's own Your plan. The
-Plans tab runs in the order setting up needs: each Plan with who has it and whom it limits, worded
-alike on every surface ("4 people have it. Limits 3 people."), then Add a plan, then the Default
-plan, saved with Save default, then Limit people with plans, which says whether Plans are on and
-whom they limit. The box sends the plan the Default plan select shows, saved or not, and says before
-what turning on does with it, so a choice not saved yet is never ignored; with no Plan it is one
-empty state whose action is Add a plan. When some of the people a Plan limits have more than it
-allows, its row says how many in Attention Ochre with an icon, never color alone, and a lower limit
-typed in the form says exactly how many people it would leave with more. The default Plan has no
-Remove; where Remove would be, it says to choose another default first. On a Plan someone has,
-Remove says at once who has it, the first three by email and then how many more, instead of a
-confirmation the server would refuse, with one next step: a link to Everyone filtered by that Plan.
-The Plan form asks for a name and the limits, never a key, and refuses a name another Plan has
-before sending it. While a Plan command is on its way, its controls stay focusable and wait, so
-focus never drops to the page; a refusal shows under the field it names, which takes focus.
-Change plan on a person's page lists the Plans by name and says what the chosen one allows under
-the choice, so nothing is cut off on a narrow screen. Everyone shows Installation Health in a card,
-then everyone here in one card holding its search, filters, table, and pages, sorted by when people
-joined unless asked otherwise. Once a Plan exists, the table has a Plan column, in the words of the
-person's page, and the filters a Plan filter, kept in the address like the others; a limit the
-person is over reads in Attention Ochre with an icon. Installation Health leads with what the
-administrator must do: "Needs you" in Destructive Red with the likely causes only they can fix, or
+a Fraunces title with one sentence and one primary action, then link tabs (Everyone first, then
+Invitations with a count of those waiting, hidden at zero, then Plans). The sentence and the action
+follow the tab, as Activity's title does: Everyone and Invitations say what an administrator sees
+and offer "Invite someone", which says which Plan the person will get once a Plan is the default;
+Plans says what Plans do and offers "New plan", outline while a side panel is open so the panel's
+footer holds the one primary action. Plans sit beside the people they limit, so Settings keeps only
+each person's own Your plan.
+
+The Plans tab leads with a status card: the state as an object title ("Plans are on"), one
+sentence on what Plans do now or, while they are off, would do once on, and the switch, which
+applies at once and answers in a toast with Undo. Below them sit four facts: Limited now, Over a
+limit (in Attention Ochre with an icon, and Show, which opens Everyone narrowed to those people),
+Default plan, and Never limited, which explains why People counts include people Plans do not
+limit. While Plans are off the facts say what turning on would do, and every over-limit chip on
+the page turns neutral, because nothing is enforced. With no Plan, the card is followed by one
+empty state whose action is New plan. Otherwise the catalog follows: a data table of Plans with one
+column per limit, the default first with a "Default" badge, and People as a link to Everyone
+filtered by the Plan, with an Attention Ochre "1 over a limit" chip linking to those of them over
+it. Each row's More actions holds Edit, Assign people, Make default, which says whom it moves,
+Duplicate, and Remove. Remove on the default, or on a Plan someone has, is disabled with its reason
+as its description, naming the first three who have it by email and then how many more, instead
+of a confirmation the server would refuse. There is no Default plan select and no "No default": a
+Plan becomes the default only by Make default, and Plans are never on without one.
+
+Selecting a Plan opens its side panel at its own address, with two tabs. Limits is the editor: a
+name, never a key, refused before it is sent when another Plan has it; a Limit field per count,
+with what counts as its hint; Sync speed as radio cards; and, under a limit typed lower than the
+people on the Plan use, how many people it would leave with more, in Attention Ochre with an icon.
+People is a searchable checklist of the people who do not have the Plan, each saying before anyone
+confirms what they would be over, administrators last as never limited, then who has the Plan now.
+While a Plan command is on its way, its controls stay focusable and wait, so focus never drops to
+the page; a refusal shows under the field it names, which takes focus.
+
+Everyone shows Installation Health in a card, then everyone here in one card holding its search,
+filters, table, and pages, sorted by when people joined unless asked otherwise. Installation Health
+leads with what the administrator must do: "Needs you" in Destructive Red with the likely causes only they can fix, or
 "Nothing needs you" in Healthy Moss with one quiet sentence on how many people have something of
 their own to fix ("1 of 4 people has something to fix on their own dashboard"). While something
 needs them, a small red dot sits beside People in the navigation, read as "needs you". Then quiet
@@ -387,7 +487,13 @@ same; "What each sync status means" opens below them. A person's sync status is 
 icon, text, and its tone (red stopped, ochre needs a look, neutral otherwise, moss healthy);
 Disabled is a neutral chip, because disabling is a choice, not an emergency. Table columns keep
 fixed widths, and the list becomes cards when the list itself is narrow, not the window. A
-command's result appears beside the person it changed.
+command's result appears beside the person it changed. Once a Plan exists, the table has a Plan
+column, the Plan's name with chips ("Default", "Over a limit" in Attention Ochre with an icon, "Not
+limited" for an administrator), and the filters a Plan filter and a Limits filter, kept in the
+address like the others. Rows can be selected; the bulk bar's Change plan opens a popover of radio
+cards, "Follow the default plan" first, then each Plan with what it allows, which says before it is
+confirmed who moves and who would be over. Each row's More actions and the person's page open the
+same chooser for one person, and the result of a change for several people is a toast.
 
 A person's page starts at their name, and the browser tab names them. It leads with a
 Synchronization card: the verdict with how many rules run, then a problem several rules share,
@@ -396,10 +502,11 @@ chip and last sync, and under a rule its own problems with who takes the next st
 problem the person fixes themself, with a muted "If they ask for help: …" saying what they do, "You fix this as the administrator" with "How to fix" for the
 installation's own, and nothing for the administrator to do otherwise. On their own page an
 administrator reads the steps as their own, with a link to take each one, and their calendars by
-name. Among the person's facts, their Plan reads "Plan: Family", and each limit they are over
-follows it in Attention Ochre with an icon: "Plan: Family. 2 calendar accounts, 1 allowed". With
-problems, a second card holds their accounts, Activity, and calls, with one line on
-whether the calls look normal; with none, those close the one Synchronization card. Calendars of
+name. Once a Plan exists, a Plan card follows Synchronization: who gave the Plan and when, whether it limits them
+now, Change plan, the Plan's name as an object title, and one meter per limit with "1 of 1" and its
+chip, past a limit with one sentence on what keeps working; an administrator's card says no Plan
+limits administrators. With problems, a second card holds their accounts, Activity, and calls,
+with one line on whether the calls look normal; with none, those close the one Synchronization card. Calendars of
 anyone else appear only by number ("Calendar 1"), in the reader's language. The privacy note closes
 the page as a footnote, and coming back to People returns to their row.
 Settings does not show a person what administrators see about them.
@@ -431,10 +538,12 @@ Removal shows its choice, its consequence, and a destructive button that names t
 - **Do** use list rhythm and progressive disclosure instead of nesting cards.
 - **Do** implement hover, focus, active, disabled, loading, and error states for every control.
 - **Do** preserve full keyboard operation, reduced motion, mobile structure, and non-color status cues.
+- **Do** compare like things in a data table with a column per value, and keep sentences for hints, descriptions, and results.
+- **Do** lead a page that manages a feature with the feature's state and its switch.
 
 ### Don't:
 
-- **Don't** build a generic SaaS analytics dashboard with oversized metric cards, dense decorative charts, promotional copy, or a permanent icon-heavy sidebar.
+- **Don't** build a generic SaaS analytics dashboard with oversized metric cards, dense decorative charts, promotional copy, or a permanent icon-heavy sidebar. A compact meter beside a limit, and a data table on an administration surface, are not that.
 - **Don't** imitate Google Calendar's visual language or calendar grid.
 - **Don't** make setup or recovery resemble a terminal or infrastructure console.
 - **Don't** reproduce a Datadog-style observability console with chart walls, compact technical labels, or excessive severity color.

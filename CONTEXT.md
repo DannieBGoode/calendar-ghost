@@ -27,19 +27,26 @@ availability. It runs the same open code, with no closed components (ADR 0023).
 
 **Plan**:
 A named set of limits that an Installation Administrator defines and assigns to Users: how many
-Directional Sync Rules may count toward it, how many Connected Accounts and Integration Tokens a
-User may have, and how soon their rules sync. Each Plan has a stable key, made from its name and
-never changed, and a name that can change but that no other Plan has, whatever its case; each count
-is a number or unlimited. The rules that count are enabled rules, rules stopped only by Lapsed
-Authorization, and a Rule Replacement's new draft that keeps its previous rule's place; drafts,
-previewed rules, and paused rules do not. Every Connected Account counts, Disconnected Accounts
-included, and every Integration Token not revoked. A Plan limits only how much a User uses, never
-how a rule projects events or how a User sees and recovers from a problem. Plans are an installation
-setting that is off by default; when off, every User has every feature with no limits (ADR 0028). An
-Installation Administrator is never limited. A User's own Plan is set by an Installation
-Administrator, and later also by billing under Commercial Mode, through one assignment that records
-who set it and when (ADR 0038).
+Active Rules, Connected Accounts, and Integration Tokens a User may have, and how soon their rules
+sync. Each Plan has a stable key, made from its name and never changed, and a name that can change
+but that no other Plan has, whatever its case; each count is a number or unlimited, and Integration
+Tokens may also be none. Every Connected Account counts, Disconnected Accounts included, so a Plan
+limits calendar accounts, never only "active" ones; every Integration Token not revoked counts too.
+A Plan limits only how much a User uses, never how a rule projects events or how a User sees and
+recovers from a problem. Plans are an installation setting that is off by default; when off, every
+User has every feature with no limits (ADR 0028). An Installation Administrator is never limited.
+A User's own Plan is set by an Installation Administrator, and later also by billing under
+Commercial Mode, through one assignment that records who set it and when (ADR 0038).
 _Avoid_: Tier, subscription, quota
+
+**Active Rule**:
+A Directional Sync Rule that counts toward its User's Plan: an enabled rule, a rule stopped only by
+Lapsed Authorization, or a Rule Replacement's new draft that keeps its previous rule's place.
+Drafts, previewed rules, paused rules, and rules stopped for any other reason are not active; nor,
+once Plan Hold ships, are the rules it holds. A Plan's rule limit is a maximum of Active Rules,
+checked at Start, so pausing a rule frees its place (ADR 0038). The code calls it
+`SyncRule.counts_toward_plan`.
+_Avoid_: Counted rule, rule that can sync
 
 **Default Plan**:
 The Plan an Installation Administrator marks as the default. Every User without a Plan of their own
@@ -47,8 +54,9 @@ has it, including Users who join later, so changing the default changes their li
 Turning Plans on with no default makes an ordinary Plan named "No limits" ("No limits 2" when a Plan
 already has that name), which limits nobody, the default, so turning Plans on changes nothing until
 an administrator gives someone a smaller Plan. Plans are never on without a default: it cannot be
-cleared while they are on, nor removed while it is the default. Billing will return a User to it
-when a payment ends.
+cleared while they are on, nor removed while it is the default. An administrator chooses it with
+Make default on another Plan; "no default" is never offered as a choice. Billing will return a User
+to it when a payment ends.
 _Avoid_: Base plan, fallback plan
 
 **Allowance**:
@@ -79,7 +87,7 @@ _Avoid_: SaaS mode, billing mode
 
 **Connected Account**:
 A calendar-service identity authorized on this installation by one User, such as a Google account or a Microsoft account authorized through one OAuth grant. It belongs to exactly one Provider Kind and one User. Two Users may each connect the same calendar-service identity; each gets a Connected Account of their own, and neither learns of the other's. A sync rule may use different connected accounts, even of different providers, for its source and destination calendars, but both belong to the rule's User.
-_Avoid_: Account, user, login
+_Avoid_: Account, user, login, active account, active calendar account
 
 **Provider Kind**:
 The calendar service a Connected Account belongs to: `google` or `outlook` (a Microsoft account, whose calendars Outlook shows). It is recorded when the account is first connected and never changes. Every request about the account's calendars goes to that provider's adapter (ADR 0022, ADR 0034). The domain and application name a provider only by its Provider Kind; what a provider is called, how it connects, and how its reasons read as Causes live in its adapter's descriptor.
@@ -388,7 +396,7 @@ A User who holds the role that operates the installation. The first User holds i
 _Avoid_: Owner, superuser, admin user
 
 **Operator Overview**:
-The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, Resource Use, and, once any Plan exists, their Plan with each of its limits they have more of than it allows. For People's Plans tab it also counts, per Plan, how many of the people it limits have more than it allows. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content. What it shows and never shows is documented, so every User can know it; Settings does not repeat it to them (ADR 0030, amended).
+The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, Resource Use, and, once any Plan exists, their Plan: who gave it to them and when, how many Active Rules, Connected Accounts, and Integration Tokens they have, as the Plan counts them, and each of its limits they have more of than it allows. For People's Plans tab it also counts, per Plan, how many of the people it limits have more than it allows, and, before an administrator gives people a Plan, which of its limits each of them would have more of. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content. What it shows and never shows is documented, so every User can know it; Settings does not repeat it to them (ADR 0030, amended).
 _Avoid_: Admin dashboard, user management, support view
 
 **Resource Use**:
@@ -509,9 +517,10 @@ diagnostics keep the glossary terms above.
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
 | Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the User's step when one exists, otherwise that Calendar Ghost checks again daily |
 | Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
-| Operator Overview | "People", with a "Sync" status per person and "Installation health" above them; once a Plan exists, a "Plan" column per person and a "Plan" filter ("Any plan", each Plan, the default as "Free (default)") |
-| Plan | "plan" in lower case: "Your plan" under Settings → Your account, "Plans" as a tab of People, "Change plan" on a person's page. Its limits are "Limits for each person": "Rules that can sync", "Calendar accounts they can connect", "Integration Tokens they can have", and "How soon calendars sync"; a count with none reads "No limit". The Web UI never shows a Plan's key. Who has a Plan and whom it limits are two facts, worded alike everywhere: a Plan's row on the Plans tab says "4 people have it. Limits 3 people.", "1 person has it. Limits nobody." for a Plan that limits nothing, such as No limits, or "Nobody has it."; past a lowered limit it adds "1 has more than this plan allows." in Attention Ochre with an icon. "Limit people with plans" says its state and whom Plans limit: "On. Limits 3 people." or "Off. Limits nobody." Remove on a Plan someone has names who has it, by email, the first three and then how many more ("robin@example.test has No limits.", "a, b, c, and 2 more have Family."), with "Show who has Family", which opens Everyone filtered by that Plan. A name another Plan has, whatever its case, is refused under Name: "Another plan is named Free. Choose a different name." A limit typed lower says how many people it leaves with more: "1 person on this plan has more calendar accounts than this. They keep them, but cannot connect another." A person's page names the Plan they have, an administrator's too ("Plan: Free (default). No plan limits administrators"), with each limit they are over in Attention Ochre with an icon: "Plan: Family. 2 calendar accounts, 1 allowed". Everyone has a Plan column and a Plan filter once a Plan exists; the column says the same words without "Plan:" ("Free (default)", "Family. 2 calendar accounts, 1 allowed"). Change plan lists each Plan by name, says what the chosen one allows under the choice ("Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes"), and names the result ("robin@example.test now has Free."). Your plan names the person's Plan ("You have Free, chosen by your administrator."), then gives one row per limit in the person's words ("Calendar accounts you can connect"): "3 of 5 in use", "No limit, 3 in use", or "Not included"; past a lowered limit, by the count in use, "6 in use, 5 allowed", with a sentence on what keeps working and how to make room. It closes with "To change your plan, ask your administrator." "Create sync rule" notes the rule limit: "Your plan lets 5 rules sync at once." A refusal names the limit and one way to make room, with "See your plan"; a Plan that includes no Integration Tokens says so ("Your plan does not include Integration Tokens. To get one, ask your administrator."), never "0" |
-| Default Plan | "Default plan"; a person who has it reads "Plan: Free (default)", with the Plan's name, and Change plan offers it as "Default plan (Free)". Its row on the Plans tab says "Default plan. Choose another default to remove it." where Remove would be |
+| Operator Overview | "People", with a "Sync" status per person and "Installation health" above them; once a Plan exists, a "Plan" column per person, a "Plan" filter ("Any plan", each Plan, the default as "Free (default)"), and a "Limits" filter ("Anyone", "Over a limit"), and people can be selected to "Change plan" together |
+| Plan | "plan" in lower case: "Your plan" under Settings → Your account, "Plans" as a tab of People, "New plan", and "Change plan" on a person's page, in each row's More actions on Everyone, and for the people selected there. The Plans tab leads with one switch, "Plans are on" or "Plans are off" with "On" or "Off" beside it, and one sentence on what Plans do now or would do: "Plans limit 2 people right now.", "Turning plans on limits 2 people right away, and 1 of them has more than their plan allows.", or, with no Plan, "Turning plans on adds a plan named No limits as the default, so nobody is limited until you give someone a smaller plan." Its facts are "Limited now" ("Would limit" while off), "Over a limit" ("Would be over a limit"), "Default plan", and "Never limited". A Plan's limits are "Maximum active rules", "Maximum calendar accounts", "Maximum Integration Tokens", and "Sync speed" in the editor, and "Active rules", "Calendar accounts", "Integration Tokens", and "Sync speed" in columns and usage. Each count is "No limit" or "Up to 3" in the editor, and "Unlimited" or the number elsewhere; Integration Tokens may also be "None", which Your plan and a person's page read as "Not included". Sync speed is "Instant" or "Every 5 minutes" ("Every 5 min" in a table cell), with "Longer intervals arrive in a later release." Cells and chips say nouns and numbers ("2 people", "1 over a limit"); sentences belong to hints, descriptions, and results. The Web UI never shows a Plan's key. A Plan's row menu holds Edit, Assign people, Make default, Duplicate, and Remove; Remove on a Plan someone has says who has it, the first three by email and then how many more, the count alone until the names arrive ("2 people have Free. Give them another plan first."). A name another Plan has, whatever its case, is refused under Name: "Another plan is named Free. Choose a different name." A limit typed lower says how many people it leaves with more: "1 person on Pro has more active rules than this. Their rules keep syncing, but they can't start another." Before anyone is given a Plan, each person says what they would be over ("Would be over: 3 active rules, Free allows 1"), administrators "Never limited, whatever plan they have", and the button names the effect ("Give Free to 2 people"). A result names it: "robin@example.test now has Free.", "2 people now have Pro." A person's Plan reads as its name with chips: "Default", "Over a limit" in Attention Ochre with an icon ("Would be over" and neutral while Plans are off), or "Not limited" for an administrator. On their page and on Your plan each limit reads "1 of 1" with "Limit reached", or "2 of 1" with "Over" and a sentence on what keeps working and how to make room: "robin@example.test has 2 calendar accounts and Free allows 1. Both keep syncing, but they can't connect another until one is removed." Your plan says it in the person's words ("You have 2 calendar accounts and your plan allows 1.") and closes with "To change your plan, ask your administrator.", naming nobody. Invite someone says which Plan the person gets once one is the default: "They get the default plan, Free. You can change it after they join." "Create sync rule" notes the rule limit: "Your plan lets 5 rules sync at once." A refusal names the limit and one way to make room, with "See your plan"; a Plan that includes no Integration Tokens says so ("Your plan does not include Integration Tokens. To get one, ask your administrator."), never "0" |
+| Active Rule | "active rules": "Maximum active rules" in the editor and "Active rules" in columns and usage, with what counts as the hint ("Running rules count, and rules waiting for an account to be reauthorized. Paused rules and drafts don't.") |
+| Default Plan | "Default plan": a "Default" badge beside its name and the status card's "Default plan" fact on the Plans tab, and "Make default" on every other Plan, which says whom it moves ("People without a plan of their own (2 now) move to Free."); never "No default". Change plan offers it as "Follow the default plan", which names the Plan that is the default now ("No limits now. If the default changes, so does theirs."), and a filter names it "Free (default)". Remove on it says "Make another plan the default first." |
 | Allowance | never named: Your plan says which Plan limits the person, or "You administer this installation, so no plan limits you." |
 | Cause | "Likely cause:" and the cause in plain words, naming the provider that raised it, such as "the Google Calendar API is turned off for this installation" or "Microsoft no longer accepts this installation's OAuth client"; neutral words ("the calendar provider") when the server names none. To the User, an administrator's Cause says only "Temporarily unavailable", naming neither the cause nor the administrator, with Check access to try again when the account lapsed; their own Cause offers its one step ("Reauthorize account", or "Open the rule" to choose another calendar or remove it), or says it fixes itself with when it was last and will next be tried. To an administrator, a User's Cause says "{name} can fix this from their dashboard" ("{name} can try again from their dashboard" when `unknown`) and offers no action |
 | Installation Hint, on People | the pattern in one sentence with how many people it affects, then "How to fix", linking to its troubleshooting section |

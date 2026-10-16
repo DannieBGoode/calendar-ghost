@@ -13,6 +13,8 @@ GLOSSARY = REPOSITORY / "CONTEXT.md"
 # "quota" and "subscription", which CONTEXT.md also avoids for Plan, stay out:
 # `Cause.QUOTA_EXCEEDED` and Microsoft Graph subscriptions use them for other things.
 AVOIDED = (
+    "active account",
+    "active calendar account",
     "bidirectional rule",
     "cloned event",
     "copied event",
@@ -123,6 +125,10 @@ def test_landing_page_copy_is_searched() -> None:
         "downgrade deletion",
         "downgrade\n  deletion",
         "rule suspensions",
+        "Maximum active accounts",
+        "active calendar accounts",
+        "ACTIVE_ACCOUNTS",
+        "activeCalendarAccount",
     ],
 )
 def test_avoided_terms_are_found_in_any_spelling(text: str) -> None:
@@ -140,6 +146,9 @@ def test_avoided_terms_are_found_in_any_spelling(text: str) -> None:
         "frontier",
         "a planned pause",
         "suspended",
+        "active rules",
+        "an active User's accounts",
+        "interactive accounts",
         # CONTEXT.md avoids these two for Plan as well, but other concepts need them.
         "Cause.QUOTA_EXCEEDED",
         "a Graph subscription",

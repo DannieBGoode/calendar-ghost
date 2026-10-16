@@ -3,7 +3,8 @@
 Builds on [ADR 0023](0023-hosted-service-runs-the-open-codebase.md) and
 [ADR 0029](0029-isolate-users-in-one-sqlite-database.md). Amended by
 [ADR 0038](0038-plans-allowances-and-limits.md): the Operator Overview shows each User's Plan, and
-returning to setup turns Plans off.
+returning to setup turns Plans off. Amended again on 2026-10-17: People shows how much of their Plan
+a person uses, Integration Tokens included; see the last amendment.
 
 ## Context
 
@@ -107,6 +108,31 @@ their detail:
 - **Returning to setup turns Plans off,** keeping their definitions and the default, so a new
   first User never inherits limits nobody can see. Invitations carry no Plan: an invited User
   starts on the Default Plan.
+
+## Amendment: how much of their Plan a person uses (2026-10-17)
+
+The [catalog design for Plans](../superpowers/specs/2026-10-17-plans-ui-catalog-design.md) gives a
+person's page on People a Plan card with one meter per limit, so the administrator who decides
+whether someone needs a larger Plan sees what they use, as the person sees it on Your plan. Three
+things it shows are new to the Operator Overview, for administrators only, whether or not Plans are
+on:
+
+- **How many Integration Tokens a User has.** Resource use already counted rules and Connected
+  Accounts; People may now also show how many unrevoked Integration Tokens a User has, as their
+  Plan counts them. It is a count only, never a token's name, scopes, or when it was issued or
+  last used. Until now a token count reached an administrator only past a limit, inside "2
+  Integration Tokens, 1 allowed"; the count within the limit is what is new. The Operator Overview
+  reads it through `InstallationUnitOfWork.plan_use`, as it already does to say who is over.
+- **Who gave the Plan, and when:** the administrator who last gave the User their own Plan, by
+  email, and the date, which the User's row already records.
+- **Who would be over:** before an administrator gives people a Plan, which of its limits each of
+  them would have more of, from the same counts.
+
+[Data ownership](../data-ownership.md) lists them with everything else the Operator Overview shows.
+
+Rejected: leaving Integration Tokens off the person's page, which would hide from the administrator
+the one limit a monitor or an AI agent uses, while the person sees it on Your plan; and naming the
+tokens, whose names can say what a person runs.
 
 ## Considered Options
 
