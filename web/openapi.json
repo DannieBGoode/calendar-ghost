@@ -118,7 +118,6 @@
           "plan": {
             "anyOf": [
               {
-                "maxLength": 200,
                 "type": "string"
               },
               {
@@ -2162,7 +2161,6 @@
           "default_plan": {
             "anyOf": [
               {
-                "maxLength": 200,
                 "type": "string"
               },
               {

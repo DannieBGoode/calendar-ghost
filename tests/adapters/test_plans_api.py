@@ -378,18 +378,62 @@ def test_a_new_plan_another_administrator_removed_at_once_is_answered_as_not_fou
         ),
         pytest.param("PUT", "/api/v1/users/{member}/plan", {"plan": "x y"}, id="assign-space"),
         pytest.param("PUT", "/api/v1/users/{member}/plan", {"plan": ""}, id="assign-empty"),
+        pytest.param(
+            "PUT",
+            "/api/v1/plan-settings",
+            {"enabled": False, "default_plan": "a" * 33},
+            id="default-33-characters",
+        ),
+        pytest.param(
+            "PUT",
+            "/api/v1/plan-settings",
+            {"enabled": False, "default_plan": "a" * 201},
+            id="default-201-characters",
+        ),
+        pytest.param(
+            "PUT", "/api/v1/users/{member}/plan", {"plan": "a" * 33}, id="assign-33-characters"
+        ),
+        pytest.param(
+            "PUT", "/api/v1/users/{member}/plan", {"plan": "a" * 201}, id="assign-201-characters"
+        ),
     ],
 )
 def test_a_malformed_plan_key_names_no_plan(
     installation: Installation, method: str, path: str, body: dict[str, Any] | None
 ) -> None:
-    """Never 422 or 500: a key this release refuses is answered as an unknown Plan."""
+    """Never 422 or 500: a key this release refuses, of any length, is answered as an unknown
+    Plan."""
     installation.define(FREE_BODY)
     response = installation.client.request(
         method, path.format(member=installation.member.value), json=body
     )
 
     assert _problem(response) == (404, "plan_not_found", {})
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        pytest.param("PUT", f"/api/v1/plans/{'a' * 5000}", CHANGE_FREE, id="path"),
+        pytest.param(
+            "PUT",
+            "/api/v1/plan-settings",
+            {"enabled": False, "default_plan": "a" * 100_000},
+            id="default",
+        ),
+        pytest.param("PUT", "/api/v1/users/{member}/plan", {"plan": "a" * 100_000}, id="assign"),
+    ],
+)
+def test_a_missing_plan_answer_never_repeats_a_malformed_key(
+    installation: Installation, method: str, path: str, body: dict[str, Any] | None
+) -> None:
+    """However long the key sent, the answer stays short: it names no key this release refuses."""
+    response = installation.client.request(
+        method, path.format(member=installation.member.value), json=body
+    )
+
+    assert _problem(response) == (404, "plan_not_found", {})
+    assert "aaaa" not in response.json()["detail"]
 
 
 def test_an_interval_a_later_release_offered_may_be_kept_but_not_newly_chosen(

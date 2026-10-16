@@ -859,12 +859,15 @@ class ChangePlanRequest(BaseModel):
 
 class PlansSettingRequest(BaseModel):
     enabled: bool
-    default_plan: str | None = Field(max_length=200)
+    # No length bound here: a key of any length that names no Plan answers 404 plan_not_found,
+    # and the Plan key's own check refuses one over 32 characters before anything reads it.
+    default_plan: str | None
     """Required. Null clears the default, which Plans allow only while they are off."""
 
 
 class AssignPlanRequest(BaseModel):
-    plan: str | None = Field(max_length=200)
+    # Bounded by the Plan key's own check, as `PlansSettingRequest.default_plan` is.
+    plan: str | None
     """Required: the Plan's key, or null to return the User to the Default Plan."""
 
 

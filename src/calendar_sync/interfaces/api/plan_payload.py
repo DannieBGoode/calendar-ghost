@@ -31,12 +31,13 @@ from calendar_sync.interfaces.api.schemas import (
 
 
 def named_plan(raw: str) -> PlanKey:
-    """The Plan a path or a request names. A key this release refuses names no Plan, so it is
-    answered 404 as an unknown Plan is, never as a validation or server error."""
+    """The Plan a path or a request names. A key this release refuses, of any length, names no
+    Plan, so it is answered 404 as an unknown Plan is, never as a validation or server error.
+    The answer does not repeat that key, so it stays short however long the key was."""
     try:
         return PlanKey(raw)
     except InvalidPlan as error:
-        missing = PlanNotFound(f"plan {raw} does not exist")
+        missing = PlanNotFound("no plan has this key")
         raise problem_from(status.HTTP_404_NOT_FOUND, missing) from error
 
 
