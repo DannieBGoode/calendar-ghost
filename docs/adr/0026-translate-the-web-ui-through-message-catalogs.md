@@ -92,3 +92,8 @@ touching any call site, since call sites never parse ICU syntax themselves.
 - New copy must go through the catalogs: the `calendar-ghost/no-literal-ui-text` ESLint rule flags
   literal JSX text and common text attributes, the catalog tests check keys and placeholders, and
   pseudo-locale render checks fail when a visible text node is not wrapped in `t()`.
+- A person never reads a placeholder's braces (amended 2026-10-17). In production the translator
+  leaves a missing parameter out and warns once. Under test it throws, also when a value it fills
+  in still holds a `{placeholder}`, and the Vitest setup (`web/src/test-setup.ts`) fails any test
+  whose page shows an unfilled `{placeholder}` or a raw catalog key, from any source. `${NAME}` and
+  `{{NAME}}` in configuration examples are other tools' variables and pass.

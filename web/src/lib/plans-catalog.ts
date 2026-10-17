@@ -102,12 +102,14 @@ function peopleCount({ t }: I18n, count: number): string {
 /**
  * The status card's facts: whom Plans limit, who is over a limit, the Default Plan, and who is
  * never limited. While Plans are off they say what turning them on would do, and nothing takes the
- * attention tone, since nothing is enforced. None before any Plan exists.
+ * attention tone, since nothing is enforced. None before any Plan exists. Who is never limited is
+ * left out when the answer has no count of them, as a server older than the page sends, rather
+ * than shown without its number.
  */
 export function statusFacts(i18n: I18n, overview: PlansOverview): PlansFact[] {
   const { t } = i18n
   if (overview.plans.length === 0) return []
-  const { enabled } = overview
+  const { enabled, administrators } = overview
   const over = overPeople(overview.plans)
   const fact = (id: PlansFact["id"], label: string, value: string, count = 0): PlansFact => ({
     id,
@@ -116,7 +118,7 @@ export function statusFacts(i18n: I18n, overview: PlansOverview): PlansFact[] {
     attention: enabled && count > 0,
     over: count,
   })
-  return [
+  const facts = [
     fact(
       "limited",
       t(enabled ? "people.plans.status.limited" : "people.plans.status.wouldLimitFact"),
@@ -124,16 +126,19 @@ export function statusFacts(i18n: I18n, overview: PlansOverview): PlansFact[] {
     ),
     fact("over", t(enabled ? "people.plans.status.over" : "people.plans.status.wouldBeOver"), peopleCount(i18n, over), over),
     fact("default", t("people.plans.status.default"), defaultName(overview) ?? t("people.plans.status.noDefault")),
-    fact(
-      "administrators",
-      t("people.plans.status.neverLimited"),
-      t("people.plans.status.administrators", { count: overview.administrators }),
-    ),
   ]
+  if (!Number.isFinite(administrators)) return facts
+  const never = t("people.plans.status.administrators", { count: administrators })
+  return [...facts, fact("administrators", t("people.plans.status.neverLimited"), never)]
 }
 
-/** What Make default says it does: whom it moves, everyone without a Plan of their own, and how many they are now. */
+/**
+ * What Make default says it does: whom it moves, everyone without a Plan of their own, and how many
+ * they are now. Without a count, as a server older than the page sends, it names whom it moves and
+ * never says that nobody moves.
+ */
 export function makeDefaultHint({ t }: I18n, { name }: Pick<PlanSummary, "name">, followers: number): string {
+  if (!Number.isFinite(followers)) return t("people.plans.menu.makeDefaultMovesUncounted", { name })
   return followers > 0
     ? t("people.plans.menu.makeDefaultMoves", { count: followers, name })
     : t("people.plans.menu.makeDefaultNobody", { name })

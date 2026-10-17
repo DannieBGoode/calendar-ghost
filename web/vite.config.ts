@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 
@@ -42,5 +43,9 @@ export default defineConfig({
   build: {
     outDir: "../src/calendar_sync/interfaces/api/static",
     emptyOutDir: true,
+  },
+  test: {
+    // Fails a test whose page shows an unfilled {placeholder} or a raw catalog key.
+    setupFiles: ["./src/test-setup.ts"],
   },
 })

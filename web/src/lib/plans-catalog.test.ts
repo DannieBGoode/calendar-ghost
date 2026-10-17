@@ -212,6 +212,12 @@ describe("statusFacts", () => {
   it("has no facts before any Plan exists", () => {
     expect(statusFacts(i18n, overview({ enabled: false, defaultPlan: null, plans: [] }))).toEqual([])
   })
+
+  it("leaves out who is never limited when the server did not count them, as one older than the page", () => {
+    const older: Partial<PlansOverview> = overview()
+    delete older.administrators
+    expect(statusFacts(i18n, older as PlansOverview).map((fact) => fact.id)).toEqual(["limited", "over", "default"])
+  })
 })
 
 describe("makeDefaultHint", () => {
@@ -219,6 +225,12 @@ describe("makeDefaultHint", () => {
     expect(makeDefaultHint(i18n, free, 2)).toBe("People without a plan of their own (2 now) move to Free.")
     expect(makeDefaultHint(i18n, free, 1)).toBe("People without a plan of their own (1 now) move to Free.")
     expect(makeDefaultHint(i18n, free, 0)).toBe("Everyone has a plan of their own now. People who join later get Free.")
+  })
+
+  it("says whom it moves without a number, never that nobody is moved, when the server did not count them", () => {
+    const older: Partial<PlansOverview> = overview()
+    delete older.followers
+    expect(makeDefaultHint(i18n, free, (older as PlansOverview).followers)).toBe("People without a plan of their own move to Free.")
   })
 })
 

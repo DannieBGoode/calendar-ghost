@@ -664,6 +664,18 @@ describe("The status card", () => {
     expect(statusCard().querySelector("[data-tone='attention']")).toBeNull()
   })
 
+  it("leaves out who is never limited, rather than show a placeholder, when the server is older than the page", async () => {
+    const older: Partial<PlansOverview> = overview({ enabled: true, defaultPlan: "free" })
+    delete older.administrators
+    await renderPlans(testI18n(), { plans: older as PlansOverview })
+    expect(facts()).toEqual([
+      ["Limited now", "5 people"],
+      ["Over a limit", "Nobody"],
+      ["Default plan", "Free"],
+    ])
+    expect(statusCard().textContent).not.toContain("{")
+  })
+
   it("says Plans limit nobody while the default limits nothing", async () => {
     await renderPlans(testI18n(), { plans: overview({ enabled: true, defaultPlan: "no-limits", plans: [noLimits] }) })
     expect(element("plans-status-sentence").textContent).toBe(

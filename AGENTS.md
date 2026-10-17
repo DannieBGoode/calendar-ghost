@@ -233,7 +233,10 @@ User-visible Web UI text lives in `web/src/i18n/locales/en/` and renders through
 numbers go through `i18n.format`. `web/src/i18n/catalog.test.ts` fails on an English key no source
 file names: delete a key with the code that used it, and give a key built from a template, such as
 `people.overview.next.${step}.self`, its known values in that test's `TEMPLATE_VALUES`. Server text the UI shows carries a stable code: raise API errors
-through `interfaces/api/problems.py` and give Incidents a message (ADR 0026). Never use em dashes.
+through `interfaces/api/problems.py` and give Incidents a message (ADR 0026). Under test, `t()`
+throws on a parameter it was not given, and the Vitest setup (`web/src/test-setup.ts`) fails any
+test whose page shows an unfilled `{placeholder}` or a raw catalog key; in production the
+translator leaves a missing parameter out rather than show its braces. Never use em dashes.
 
 ## Testing
 

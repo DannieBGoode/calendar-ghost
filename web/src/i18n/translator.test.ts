@@ -62,13 +62,20 @@ describe("createI18n", () => {
     expect(i18n.has("absent")).toBe(false)
   })
 
-  it("leaves the placeholder and warns once outside tests", () => {
+  it("throws under test when what it fills in still shows a placeholder", () => {
+    const i18n = createI18n({ locale: "en", catalog: english, fallback: english })
+    expect(() => i18n.t(key("greeting"), { name: "{count} people" })).toThrow("unfilled placeholder {count}")
+    expect(i18n.t(key("greeting"), { name: "${HOME} {{HOME}}" })).toBe("Hello ${HOME} {{HOME}}")
+  })
+
+  it("never shows a placeholder's braces outside tests, leaving out what is missing and warning once", () => {
     vi.stubEnv("MODE", "production")
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
     const i18n = createI18n({ locale: "en", catalog: english, fallback: english })
-    expect(i18n.t(key("greeting"))).toBe("Hello {name}")
+    expect(i18n.t(key("greeting"))).toBe("Hello ")
     i18n.t(key("greeting"))
     expect(warn).toHaveBeenCalledTimes(1)
+    expect(i18n.t(key("rules"))).not.toContain("{")
     vi.unstubAllEnvs()
     warn.mockRestore()
   })

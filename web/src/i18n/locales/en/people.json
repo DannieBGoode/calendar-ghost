@@ -567,6 +567,7 @@
         "other": "People without a plan of their own ({count} now) move to {name}."
       },
       "makeDefaultNobody": "Everyone has a plan of their own now. People who join later get {name}.",
+      "makeDefaultMovesUncounted": "People without a plan of their own move to {name}.",
       "duplicate": "Duplicate",
       "remove": "Remove",
       "removeDefault": "Make another plan the default first.",

@@ -23,6 +23,11 @@ type Options = {
 }
 
 const PLACEHOLDER = /(\{\w+\})/
+/**
+ * A `{placeholder}` left in text a person reads, the translator's or one a filled-in value brought.
+ * `${NAME}` and `{{NAME}}` in a configuration example are another tool's variables, not placeholders.
+ */
+export const UNFILLED = /(?<![${])\{(\w+)\}(?!\})/
 const warned = new Set<string>()
 
 export function isPluralMessage(node: unknown): node is PluralMessage {
@@ -62,13 +67,9 @@ export function createI18n({ locale, formatLocale = locale, catalog, fallback = 
     return message[plurals.select(count)] ?? message.other
   }
 
-  function t(key: MessageKey, params: MessageParams = {}): string {
-    const message = resolve(key)
-    if (message === undefined) {
-      report(key, "missing message")
-      return key
-    }
-    return template(key, message, params)
+  /** `text` with its placeholders filled; a missing one is left out, so its braces never show. */
+  function fill(key: string, text: string, params: MessageParams): string {
+    return text
       .split(PLACEHOLDER)
       .map((part) => {
         const name = /^\{(\w+)\}$/.exec(part)?.[1]
@@ -76,11 +77,24 @@ export function createI18n({ locale, formatLocale = locale, catalog, fallback = 
         const value = params[name]
         if (value === undefined) {
           report(key, `missing parameter {${name}}`)
-          return part
+          return ""
         }
         return typeof value === "number" ? numbers.format(value) : value
       })
       .join("")
+  }
+
+  function t(key: MessageKey, params: MessageParams = {}): string {
+    const message = resolve(key)
+    if (message === undefined) {
+      report(key, "missing message")
+      return key
+    }
+    const text = fill(key, template(key, message, params), params)
+    // Under test, a value that still holds a placeholder, such as server text, fails too.
+    const unfilled = import.meta.env.MODE === "test" ? UNFILLED.exec(text) : null
+    if (unfilled) report(key, `unfilled placeholder ${unfilled[0]}`)
+    return text
   }
 
   const has = (key: string): key is MessageKey => resolve(key) !== undefined
