@@ -1,0 +1,277 @@
+import { describe, expect, it } from "vitest"
+
+import { testI18n } from "@/i18n/testing"
+import type { PeoplePage, PersonRow, PlanSummary, PlansOverview } from "@/lib/api"
+import {
+  catalogOrder,
+  countCell,
+  makeDefaultHint,
+  overPeople,
+  removeRefusal,
+  settingResult,
+  speedLabel,
+  statusFacts,
+  statusSentence,
+  switchedBy,
+  undoOf,
+} from "@/lib/plans-catalog"
+
+const i18n = testI18n()
+
+const NO_USE: PlanSummary["use"] = { rules: [], connected_accounts: [], integration_tokens: [] }
+
+const free: PlanSummary = {
+  key: "free",
+  name: "Free",
+  limits: { rules: 1, connected_accounts: 1, integration_tokens: 0, sync_interval: "5_minutes" },
+  is_default: false,
+  people: 2,
+  limited_people: 2,
+  over_people: 1,
+  use: NO_USE,
+}
+const pro: PlanSummary = {
+  key: "pro",
+  name: "Pro",
+  limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" },
+  is_default: false,
+  people: 1,
+  limited_people: 1,
+  over_people: 0,
+  use: NO_USE,
+}
+/** The Plan the server makes the default when Plans turn on with none: it limits nothing. */
+const noLimits: PlanSummary = { ...pro, key: "no-limits", name: "No limits", people: 2, limited_people: 1 }
+
+function overview({
+  enabled = true,
+  defaultPlan = "no-limits",
+  plans = [noLimits, free, pro],
+  administrators = 1,
+  followers = 2,
+}: {
+  enabled?: boolean
+  defaultPlan?: string | null
+  plans?: PlanSummary[]
+  administrators?: number
+  followers?: number
+} = {}): PlansOverview {
+  return {
+    enabled,
+    default_plan: defaultPlan,
+    sync_intervals: ["instant", "5_minutes"],
+    administrators,
+    followers,
+    plans: plans.map((plan) => ({ ...plan, is_default: plan.key === defaultPlan })),
+  }
+}
+
+function person(email: string): PersonRow {
+  return {
+    id: `user-${email}`,
+    email,
+    role: "user",
+    state: "active",
+    created_at: "2026-10-01T09:00:00Z",
+    last_sign_in_at: null,
+    verdict: "healthy",
+    problems: 0,
+    last_synced_at: null,
+    resources: { rules: 0, connected_accounts: 0, activity_entries: 0, provider_calls: [], since: "2026-09-10" },
+    plan: null,
+  }
+}
+
+function holders(emails: string[], total = emails.length): PeoplePage {
+  return { users: emails.map(person), total, page: 1, page_size: 3 }
+}
+
+describe("catalogOrder", () => {
+  it("lists the default first, then the others in the order the server gives, by name", () => {
+    expect(catalogOrder(overview({ defaultPlan: "pro", plans: [noLimits, free, pro] }).plans).map((plan) => plan.key)).toEqual(
+      ["pro", "no-limits", "free"],
+    )
+    expect(catalogOrder(overview({ defaultPlan: null, plans: [free, pro] }).plans).map((plan) => plan.key)).toEqual([
+      "free",
+      "pro",
+    ])
+  })
+})
+
+describe("countCell", () => {
+  it("says a count as a number, no limit as Unlimited, and zero as None, the last two muted", () => {
+    expect(countCell(i18n, 1200)).toEqual({ text: "1,200", muted: false })
+    expect(countCell(i18n, null)).toEqual({ text: "Unlimited", muted: true })
+    expect(countCell(i18n, 0)).toEqual({ text: "None", muted: true })
+  })
+})
+
+describe("speedLabel", () => {
+  it.each([
+    ["instant", "Instant"],
+    ["5_minutes", "Every 5 min"],
+    ["10_minutes", "Every 10 min"],
+    ["15_minutes", "Every 15 min"],
+    ["30_minutes", "Every 30 min"],
+    ["60_minutes", "Every hour"],
+  ] as const)("says %s in a table cell's words", (interval, words) => {
+    expect(speedLabel(i18n, interval)).toBe(words)
+  })
+})
+
+describe("overPeople", () => {
+  it("adds up the people each Plan limits who have more than it allows", () => {
+    expect(overPeople([free, { ...pro, over_people: 2 }])).toBe(3)
+    expect(overPeople([])).toBe(0)
+  })
+})
+
+describe("statusSentence", () => {
+  it("says whom Plans limit now, and which Plan everyone else gets, while on", () => {
+    // Pro and No limits limit nothing, so only Free's people are limited.
+    expect(statusSentence(i18n, overview())).toBe(
+      "Plans limit <strong>2 people</strong> right now. Everyone without a plan of their own gets <strong>No limits</strong>, the default plan, including people who join later.",
+    )
+    expect(statusSentence(i18n, overview({ plans: [noLimits, { ...free, limited_people: 1 }] }))).toBe(
+      "Plans limit <strong>1 person</strong> right now. Everyone without a plan of their own gets <strong>No limits</strong>, the default plan, including people who join later.",
+    )
+    expect(statusSentence(i18n, overview({ plans: [noLimits] }))).toBe(
+      "Plans limit nobody right now. Everyone without a plan of their own gets <strong>No limits</strong>, the default plan, including people who join later.",
+    )
+  })
+
+  it("says what turning plans on would do while off, and that the plans are kept", () => {
+    expect(statusSentence(i18n, overview({ enabled: false }))).toBe(
+      "Everyone can use everything. Your 3 plans are kept. Turning plans on limits <strong>2 people</strong> right away, and 1 of them has more than their plan allows.",
+    )
+    expect(statusSentence(i18n, overview({ enabled: false, plans: [noLimits, { ...free, over_people: 2 }] }))).toBe(
+      "Everyone can use everything. Your 2 plans are kept. Turning plans on limits <strong>2 people</strong> right away, and 2 of them have more than their plan allows.",
+    )
+    expect(statusSentence(i18n, overview({ enabled: false, plans: [{ ...free, over_people: 0, limited_people: 1 }], defaultPlan: "free" }))).toBe(
+      "Everyone can use everything. Your 1 plan is kept. Turning plans on limits <strong>1 person</strong> right away.",
+    )
+    expect(statusSentence(i18n, overview({ enabled: false, plans: [noLimits] }))).toBe(
+      "Everyone can use everything. Your 1 plan is kept. Turning plans on limits nobody yet.",
+    )
+  })
+
+  it("says turning plans on adds No limits when there is no default", () => {
+    expect(statusSentence(i18n, overview({ enabled: false, defaultPlan: null, plans: [{ ...free, over_people: 0 }] }))).toBe(
+      "Everyone can use everything. Your 1 plan is kept. Turning plans on limits <strong>2 people</strong> right away. It also adds a plan named <strong>No limits</strong> as the default for everyone without a plan of their own.",
+    )
+    expect(statusSentence(i18n, overview({ enabled: false, defaultPlan: null, plans: [] }))).toBe(
+      "Everyone can use everything, with no limits. Turning plans on adds a plan named <strong>No limits</strong> as the default, so nobody is limited until you give someone a smaller plan.",
+    )
+  })
+})
+
+describe("statusFacts", () => {
+  it("states whom Plans limit, who is over, the default, and who is never limited, while on", () => {
+    expect(statusFacts(i18n, overview({ administrators: 2 }))).toEqual([
+      { id: "limited", label: "Limited now", value: "2 people", attention: false, over: 0 },
+      { id: "over", label: "Over a limit", value: "1 person", attention: true, over: 1 },
+      { id: "default", label: "Default plan", value: "No limits", attention: false, over: 0 },
+      { id: "administrators", label: "Never limited", value: "2 administrators", attention: false, over: 0 },
+    ])
+  })
+
+  it("says what Plans would do while off, all neutral, and when nobody is limited or over", () => {
+    expect(statusFacts(i18n, overview({ enabled: false, defaultPlan: null, plans: [noLimits] }))).toEqual([
+      { id: "limited", label: "Would limit", value: "Nobody", attention: false, over: 0 },
+      { id: "over", label: "Would be over a limit", value: "Nobody", attention: false, over: 0 },
+      { id: "default", label: "Default plan", value: "None yet", attention: false, over: 0 },
+      { id: "administrators", label: "Never limited", value: "1 administrator", attention: false, over: 0 },
+    ])
+    expect(statusFacts(i18n, overview({ enabled: false }))[1]).toEqual({
+      id: "over",
+      label: "Would be over a limit",
+      value: "1 person",
+      attention: false,
+      over: 1,
+    })
+  })
+
+  it("has no facts before any Plan exists", () => {
+    expect(statusFacts(i18n, overview({ enabled: false, defaultPlan: null, plans: [] }))).toEqual([])
+  })
+})
+
+describe("makeDefaultHint", () => {
+  it("says whom Make default moves, and how many they are now", () => {
+    expect(makeDefaultHint(i18n, free, 2)).toBe("People without a plan of their own (2 now) move to Free.")
+    expect(makeDefaultHint(i18n, free, 1)).toBe("People without a plan of their own (1 now) move to Free.")
+    expect(makeDefaultHint(i18n, free, 0)).toBe("Everyone has a plan of their own now. People who join later get Free.")
+  })
+})
+
+describe("removeRefusal", () => {
+  it("lets a Plan nobody has go, unless it is the default", () => {
+    expect(removeRefusal(i18n, { ...free, people: 0 }, undefined)).toBeNull()
+    expect(removeRefusal(i18n, { ...free, people: 0, is_default: true }, undefined)).toBe(
+      "Make another plan the default first.",
+    )
+  })
+
+  it("counts who has a Plan until their names arrive, or when they cannot", () => {
+    expect(removeRefusal(i18n, free, undefined)).toBe("2 people have Free. Give them another plan first.")
+    expect(removeRefusal(i18n, { ...free, people: 1 }, holders([]))).toBe("1 person has Free. Give them another plan first.")
+  })
+
+  it.each([
+    [["robin@example.test"], 1, "robin@example.test has Free. Give them another plan first."],
+    [["robin@example.test", "sam@example.test"], 2, "robin@example.test and sam@example.test have Free. Give them another plan first."],
+    [
+      ["ada@example.test", "robin@example.test", "sam@example.test"],
+      5,
+      "ada@example.test, robin@example.test, sam@example.test, and 2 more have Free. Give them another plan first.",
+    ],
+  ])("names the first three who have a Plan (%j of %i)", (emails, total, reason) => {
+    expect(removeRefusal(i18n, { ...free, people: total }, holders(emails, total))).toBe(reason)
+  })
+})
+
+describe("settingResult", () => {
+  it("says whom Plans limit once on", () => {
+    expect(settingResult(i18n, overview({ enabled: false }), overview())).toBe("Plans are on. They limit 2 people.")
+    expect(settingResult(i18n, overview({ enabled: false, plans: [noLimits] }), overview({ plans: [noLimits] }))).toBe(
+      "Plans are on. They limit nobody yet.",
+    )
+  })
+
+  it("names the No limits plan the server made the default when there was none", () => {
+    const before = overview({ enabled: false, defaultPlan: null, plans: [free] })
+    expect(settingResult(i18n, before, overview({ plans: [noLimits, free] }))).toBe(
+      "Plans are on. No limits is the default plan, and it limits nobody.",
+    )
+  })
+
+  it("says nobody is limited once off, and names a new default", () => {
+    expect(settingResult(i18n, overview(), overview({ enabled: false }))).toBe("Plans are off. Nobody is limited.")
+    expect(settingResult(i18n, overview(), overview({ defaultPlan: "free" }))).toBe("Free is the default plan now.")
+  })
+})
+
+describe("undoOf", () => {
+  it("presses the switch again, keeping the default the server has now", () => {
+    // Turning on with no default made No limits the default; Undo keeps it rather than make another.
+    const before = overview({ enabled: false, defaultPlan: null, plans: [free] })
+    expect(undoOf(before, overview({ plans: [noLimits, free] }))).toEqual({ enabled: false, defaultPlan: "no-limits" })
+    expect(undoOf(overview(), overview({ enabled: false }))).toEqual({ enabled: true, defaultPlan: "no-limits" })
+  })
+
+  it("gives the default back, keeping whether Plans are on", () => {
+    expect(undoOf(overview(), overview({ defaultPlan: "free" }))).toEqual({ enabled: true, defaultPlan: "no-limits" })
+    expect(undoOf(overview({ enabled: false, defaultPlan: null }), overview({ enabled: false, defaultPlan: "free" }))).toEqual({
+      enabled: false,
+      defaultPlan: null,
+    })
+  })
+})
+
+describe("switchedBy", () => {
+  it("tells the switch's change, which asks for another state, from Make default's", () => {
+    expect(switchedBy({ enabled: false, defaultPlan: "no-limits" }, overview())).toBe(true)
+    expect(switchedBy({ enabled: true, defaultPlan: "free" }, overview())).toBe(false)
+    expect(switchedBy(undefined, overview())).toBe(false)
+  })
+})

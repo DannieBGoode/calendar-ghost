@@ -47,6 +47,16 @@ export function draftOf(plan: PlanSummary | null, intervals: readonly SyncInterv
   }
 }
 
+/**
+ * A new Plan with another's limits, as Duplicate starts it, under `name`. A sync interval a later
+ * release saved, which a new Plan may not be given, starts at the first offered one instead.
+ */
+export function copyDraft(plan: PlanSummary, name: string, intervals: readonly SyncInterval[]): PlanDraft {
+  const copied = draftOf(plan, intervals)
+  const interval = intervals.includes(copied.interval) ? copied.interval : (intervals[0] ?? "instant")
+  return { ...copied, name, interval }
+}
+
 /** null for No limit, the whole number typed while it is in range, or undefined when there is none. */
 function limitValue(draft: PlanDraft, name: LimitName): number | null | undefined {
   const { amount, unlimited } = draft[name]

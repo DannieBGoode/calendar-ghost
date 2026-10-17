@@ -2482,6 +2482,10 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "followers": {
+            "title": "Followers",
+            "type": "integer"
+          },
           "plans": {
             "items": {
               "$ref": "#/components/schemas/PlanResponse"
@@ -2510,6 +2514,7 @@
           "default_plan",
           "sync_intervals",
           "administrators",
+          "followers",
           "plans"
         ],
         "title": "PlansResponse",

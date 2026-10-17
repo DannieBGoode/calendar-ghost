@@ -1,397 +1,243 @@
-import { Plus, TriangleAlert } from "lucide-react"
-import { useRef, useState, type RefObject } from "react"
+import { AlertCircle, Plus, RefreshCw } from "lucide-react"
+import { useEffect, useRef, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 
 import { GhostMark } from "@/components/ghost-mark"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { PlanRemoval, type ShowHolders } from "@/features/people-plan-removal"
-import { PlansSetting } from "@/features/people-plans-setting"
+import { useToast } from "@/components/ui/toast-context"
+import { PlansStatus, type ShowPeople } from "@/features/people-plans-status"
+import { PlansCatalog } from "@/features/people-plans-table"
 import { PlanEditor } from "@/features/plan-editor"
+import { useSettingChange } from "@/features/use-setting-change"
 import { useI18n } from "@/i18n/provider"
-import type { I18n } from "@/i18n/translator"
-import type { PlanSummary, PlansOverview, SyncInterval } from "@/lib/api"
-import { intervalLabel, limitsNothing, planLimitsSummary } from "@/lib/plans"
+import type { PlansOverview } from "@/lib/api"
+import { copyDraft } from "@/lib/plan-draft"
+import { usePlanWork, type PlanWorkControls } from "@/lib/use-plan-work"
 import { usePlans, type PlanCommands } from "@/lib/use-plans"
 
-/** The one form or confirmation open in the section: a Plan's edit or removal, or a new Plan. */
-type Opened = { action: "edit" | "remove"; key: string } | { action: "add" } | null
-type Open = (next: Opened) => void
-
 /**
- * People's Plans tab, in the order setting up needs: each Plan with its limits, an inline edit, and
- * Remove, then Add a plan; then the Default Plan; then whether Plans limit people. With no Plan yet
- * it holds only an empty state whose one action is Add a plan. It shows only while People does, so
- * never under Only me, where the only person administers and no Plan limits an administrator;
- * Plans are read only once it opens, or once Everyone shows that a Plan exists. `onShowHolders`
- * lists who has a Plan, from the note Remove opens on a Plan someone has.
+ * People's Plans tab: the status card with the one switch first, then the catalog of Plans, or,
+ * with no Plan yet, one empty state whose one action is New plan. Once a Plan exists, New plan
+ * sits beside the page title, in `headingAction`. It shows only while People does, so never under
+ * Only me, where the only person administers and no Plan limits an administrator. Plans are read
+ * only once it opens. `onShowPeople` opens Everyone at the people a link names.
  */
-export function PlansSection({ onShowHolders }: { onShowHolders: ShowHolders }) {
+export function PlansSection({
+  currentUserId,
+  headingAction,
+  onShowPeople,
+}: {
+  /** The reader, whom Assign people marks "You". */
+  currentUserId: string
+  headingAction: HTMLElement | null
+  onShowPeople: ShowPeople
+}) {
   const { t } = useI18n()
   const commands = usePlans()
-  const { plans, message } = commands
-  const overview = plans.data
+  const { plans } = commands
   return (
-    <section className="settings-section" aria-labelledby="plans-title">
-      <div className="section-heading">
-        <div>
-          <h2 id="plans-title">{t("people.plans.title")}</h2>
-          <p>{t("people.plans.intro")}</p>
-        </div>
-      </div>
-      {plans.isPending && <Skeleton className="h-16 w-full" />}
-      {plans.error && (
-        <div className="inline-error integration-load-error" role="alert">
-          <span>{t("people.plans.loadError")}</span>
-          <Button type="button" variant="outline" onClick={() => void plans.refetch()}>
-            {t("people.plans.tryAgain")}
-          </Button>
-        </div>
+    <section className="plans-tab" aria-labelledby="plans-title">
+      <h2 id="plans-title" className="sr-only">
+        {t("people.plans.title")}
+      </h2>
+      {plans.isPending && <PlansSkeleton />}
+      {!plans.data && plans.error && <PlansLoadError onRetry={() => void plans.refetch()} />}
+      {plans.data && (
+        <PlansContent
+          overview={plans.data}
+          commands={commands}
+          currentUserId={currentUserId}
+          headingAction={headingAction}
+          onShowPeople={onShowPeople}
+        />
       )}
-      {overview?.plans && <PlansList overview={overview} commands={commands} onShowHolders={onShowHolders} />}
-      {overview?.plans && (overview.plans.length > 0 || overview.enabled) && (
-        <PlansSetting overview={overview} commands={commands} />
-      )}
-      {/* Always present, so a screen reader announces each change as it is saved. */}
-      <p role="status" className={message ? undefined : "sr-only"}>
-        {message}
-      </p>
     </section>
   )
 }
 
-function PlansList({
+/** Skeletons in the shape of the status card and the catalog, so nothing moves as Plans arrive. */
+function PlansSkeleton() {
+  const { t } = useI18n()
+  return (
+    <div className="plans-skeleton" aria-busy="true" aria-label={t("people.plans.loading")} role="status">
+      <div className="page-card plans-skeleton-card plans-skeleton-status">
+        <div className="plans-skeleton-lines">
+          <Skeleton className="h-5 w-36" />
+          <Skeleton className="h-3.5 w-full" />
+        </div>
+        <Skeleton className="h-11 w-26 rounded-full" />
+      </div>
+      <div className="page-card plans-skeleton-card plans-skeleton-table">
+        <Skeleton className="h-3.5 w-24" />
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+      </div>
+    </div>
+  )
+}
+
+/** Plans could not be read: nothing changed for anyone, and Try again reads them again. */
+function PlansLoadError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="plans-load-error" role="alert">
+      <AlertCircle aria-hidden="true" />
+      <span>{t("people.plans.loadError")}</span>
+      <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+        <RefreshCw aria-hidden="true" />
+        {t("people.plans.tryAgain")}
+      </Button>
+    </div>
+  )
+}
+
+/**
+ * The tab once Plans are read: the status card, then the catalog with the new Plan's form above
+ * it while open, or the empty state holding that form. New plan moves beside the page title once a
+ * Plan exists, outline while its form is open, so the form's Save is the one primary action.
+ */
+function PlansContent({
   overview,
   commands,
-  onShowHolders,
+  currentUserId,
+  headingAction,
+  onShowPeople,
 }: {
   overview: PlansOverview
   commands: PlanCommands
-  onShowHolders: ShowHolders
+  currentUserId: string
+  headingAction: HTMLElement | null
+  onShowPeople: ShowPeople
 }) {
-  const [opened, setOpened] = useState<Opened>(null)
-  const addButton = useRef<HTMLButtonElement>(null)
-  // While a Plan is saved or removed, no other form or confirmation opens: opening one forgets
-  // the command on its way, and a refusal it met would show nowhere.
-  const busy = commands.define.isPending || commands.change.isPending || commands.remove.isPending
-
-  // Opening one form or confirmation closes any other, and forgets their refusals.
-  function open(next: Opened) {
-    commands.define.reset()
-    commands.change.reset()
-    commands.remove.reset()
-    setOpened(next)
-  }
-
+  const work = usePlanWork(commands)
+  const onChange = useSettingChange(commands.setting)
   const empty = overview.plans.length === 0
-
-  // Add a plan keeps its place among the children whether or not Plans exist, so focus can return
-  // to it once the first Plan is added and the empty state gives way to the list.
+  const opened = work.work?.action === "new" ? work.work : null
+  const newPlan = <NewPlanButton open={opened !== null} outline={!empty && opened !== null} work={work} />
+  const editor = opened && <NewPlanEditor overview={overview} commands={commands} work={work} copyOf={opened.copyOf} />
   return (
-    <div className="settings-list">
-      {empty && <NoPlans />}
-      {overview.plans.map((plan) => (
-        <PlanItem
-          key={plan.key}
-          plan={plan}
-          enabled={overview.enabled}
-          others={otherNames(overview.plans, plan.key)}
-          intervals={editorIntervals(overview.sync_intervals, plan)}
-          opened={opened}
-          busy={busy}
-          onOpen={open}
-          commands={commands}
-          onShowHolders={onShowHolders}
-          onRemoved={() => {
-            open(null)
-            addButton.current?.focus()
-          }}
-        />
-      ))}
-      <AddPlanItem
-        empty={empty}
-        enabled={overview.enabled}
-        others={otherNames(overview.plans, null)}
-        intervals={overview.sync_intervals}
-        adding={opened?.action === "add"}
-        busy={busy}
-        onOpen={open}
-        commands={commands}
-        addButton={addButton}
-      />
-    </div>
-  )
-}
-
-/** The names of every Plan but the one with `key`, which a Plan's name may not read as. */
-function otherNames(plans: readonly PlanSummary[], key: string | null): string[] {
-  return plans.filter((plan) => plan.key !== key).map((plan) => plan.name)
-}
-
-/** The offered intervals, plus a Plan's own when a later release saved one not offered here. */
-function editorIntervals(offered: SyncInterval[], plan: PlanSummary): SyncInterval[] {
-  const own = plan.limits.sync_interval
-  return offered.includes(own) ? offered : [...offered, own]
-}
-
-/** With no Plan yet, what Plans are for; Add a plan, right after it, is its one action. */
-function NoPlans() {
-  const { t } = useI18n()
-  return (
-    <div className="plans-empty">
-      <GhostMark className="empty-ghost" />
-      <h3>{t("people.plans.empty.title")}</h3>
-      <p>{t("people.plans.empty.body")}</p>
-    </div>
-  )
-}
-
-/**
- * Who has a Plan, and whom it limits, as two facts with one wording everywhere: everyone who has
- * it ("4 people have it."), as Remove and the person page count them, then the active people it
- * limits who do not administer ("Limits 3 people."), nobody for a Plan that limits nothing, and
- * only once Plans are on.
- */
-function planReach({ t }: I18n, plan: PlanSummary, enabled: boolean): string {
-  if (plan.people === 0) return t("people.plans.holdersNone")
-  const holders = t("people.plans.holders", { count: plan.people })
-  const count = limitsNothing(plan.limits) ? 0 : plan.limited_people
-  if (count === 0) return t("people.plans.limitedNone", { holders })
-  return t(enabled ? "people.plans.limited" : "people.plans.limitedLater", { holders, count })
-}
-
-/**
- * How many of the people a Plan limits have more than it allows, as after a limit was lowered, in
- * Attention Ochre with an icon, so the tone is never the only sign. Nothing while nobody does.
- */
-function PlanOver({ count }: { count: number }) {
-  const { t } = useI18n()
-  if (count === 0) return null
-  return (
-    <p className="field-hint" data-tone="attention">
-      <TriangleAlert aria-hidden="true" />
-      {t("people.plans.over", { count })}
-    </p>
-  )
-}
-
-/**
- * One Plan: its name, limits, interval, who has it and whom it limits, and how many of them have
- * more than it allows, with Edit and Remove. The default has no Remove: it says how to remove it
- * instead.
- */
-function PlanItem({
-  plan,
-  enabled,
-  others,
-  intervals,
-  opened,
-  busy,
-  onOpen,
-  commands,
-  onShowHolders,
-  onRemoved,
-}: {
-  plan: PlanSummary
-  /** Plans limit people now. */
-  enabled: boolean
-  /** The names of every other Plan. */
-  others: readonly string[]
-  intervals: SyncInterval[]
-  opened: Opened
-  /** A Plan command is on its way, so Edit and Remove wait. They stay focusable: focus returns to them as its form closes. */
-  busy: boolean
-  onOpen: Open
-  commands: PlanCommands
-  onShowHolders: ShowHolders
-  /** Moves focus on once the Plan's row is gone. */
-  onRemoved: () => void
-}) {
-  const i18n = useI18n()
-  const editButton = useRef<HTMLButtonElement>(null)
-  const removeButton = useRef<HTMLButtonElement>(null)
-  const shown = opened !== null && opened.action !== "add" && opened.key === plan.key ? opened.action : null
-  const editing = shown === "edit"
-  const removing = shown === "remove" && !plan.is_default
-  const { change } = commands
-
-  function close(toggle: RefObject<HTMLButtonElement | null>) {
-    onOpen(null)
-    toggle.current?.focus()
-  }
-
-  return (
-    <div className="setting-item">
-      <div className="setting-row">
-        <div className="setting-copy">
-          <div className="plan-title">
-            <h3>{plan.name}</h3>
-            {plan.is_default && <Badge variant="neutral">{i18n.t("people.plans.isDefault")}</Badge>}
-          </div>
-          <p>{planLimitsSummary(i18n, plan.limits)}</p>
-          <p>{intervalLabel(i18n, plan.limits.sync_interval)}</p>
-          <p>{planReach(i18n, plan, enabled)}</p>
-          <PlanOver count={plan.over_people} />
-        </div>
-        <PlanActions
-          plan={plan}
-          editing={editing}
-          removing={removing}
-          busy={busy}
-          onOpen={onOpen}
-          editButton={editButton}
-          removeButton={removeButton}
-        />
-      </div>
-      {editing && (
-        <div id={`plan-edit-${plan.key}`}>
-          <PlanEditor
-            plan={plan}
-            enabled={enabled}
-            others={others}
-            intervals={intervals}
-            pending={change.isPending}
-            error={change.error}
-            onSave={(payload) => change.mutate({ key: plan.key, payload }, { onSuccess: () => close(editButton) })}
-            onCancel={() => close(editButton)}
-          />
-        </div>
-      )}
-      {removing && (
-        <PlanRemoval
-          plan={plan}
-          commands={commands}
-          onShowHolders={onShowHolders}
-          onRemoved={onRemoved}
-          onKeep={() => close(removeButton)}
-        />
-      )}
-    </div>
-  )
-}
-
-/**
- * A Plan's Edit, and Remove, which opens and closes what it shows. Each names the Plan, and the
- * form or note it opens only while open. The default Plan has a line on how to remove it instead.
- */
-function PlanActions({
-  plan,
-  editing,
-  removing,
-  busy,
-  onOpen,
-  editButton,
-  removeButton,
-}: {
-  plan: PlanSummary
-  editing: boolean
-  removing: boolean
-  busy: boolean
-  onOpen: Open
-  editButton: RefObject<HTMLButtonElement | null>
-  removeButton: RefObject<HTMLButtonElement | null>
-}) {
-  const { t } = useI18n()
-  const waiting = busy || undefined
-  return (
-    <div className="setting-form-actions">
-      <Button
-        ref={editButton}
-        type="button"
-        variant="outline"
-        aria-label={t("people.plans.editLabel", { name: plan.name })}
-        aria-expanded={editing}
-        aria-controls={editing ? `plan-edit-${plan.key}` : undefined}
-        aria-disabled={waiting}
-        onClick={() => !busy && onOpen({ action: "edit", key: plan.key })}
-      >
-        {t("people.plans.edit")}
-      </Button>
-      {plan.is_default ? (
-        <p className="plan-remove-note">{t("people.plans.removeDefault")}</p>
+    <>
+      {headingAction && !empty && createPortal(newPlan, headingAction)}
+      <PlansStatus overview={overview} commands={commands} onChange={onChange} onShowPeople={onShowPeople} />
+      {empty ? (
+        <NoPlans action={newPlan} editor={editor} />
       ) : (
-        <Button
-          ref={removeButton}
-          type="button"
-          variant="ghost"
-          aria-label={t("people.plans.removeLabel", { name: plan.name })}
-          aria-expanded={removing}
-          aria-controls={removing ? `plan-remove-${plan.key}` : undefined}
-          aria-disabled={waiting}
-          onClick={() => !busy && onOpen(removing ? null : { action: "remove", key: plan.key })}
-        >
-          {t("people.plans.remove")}
-        </Button>
+        <>
+          {editor && <NewPlanCard editor={editor} />}
+          <PlansCatalog
+            overview={overview}
+            commands={commands}
+            work={work}
+            onChange={onChange}
+            onShowPeople={onShowPeople}
+            currentUserId={currentUserId}
+          />
+        </>
       )}
-    </div>
+    </>
   )
 }
 
-/** "Add a plan", and its inline form once opened. With no Plan yet it closes the empty state above it. */
-function AddPlanItem({
-  empty,
-  enabled,
-  others,
-  intervals,
-  adding,
-  busy,
-  onOpen,
+/**
+ * New plan: it opens the new Plan's form, waits while a Plan command is on its way, and takes
+ * focus where it shows when asked, as after a removal or the form's Cancel.
+ */
+function NewPlanButton({ open, outline, work }: { open: boolean; outline: boolean; work: PlanWorkControls }) {
+  const { t } = useI18n()
+  const button = useRef<HTMLButtonElement>(null)
+  const { newFocus, newFocused } = work
+  useEffect(() => {
+    if (!newFocus) return
+    button.current?.focus()
+    newFocused()
+  }, [newFocus, newFocused])
+  return (
+    <Button
+      ref={button}
+      id="plans-new"
+      type="button"
+      variant={outline ? "outline" : "default"}
+      aria-expanded={open}
+      aria-controls={open ? "plan-edit-new" : undefined}
+      aria-disabled={work.busy || undefined}
+      onClick={() => work.open({ action: "new", copyOf: null })}
+    >
+      <Plus aria-hidden="true" />
+      {t("people.plans.new")}
+    </Button>
+  )
+}
+
+/** The new Plan's form above the catalog, titled New plan. */
+function NewPlanCard({ editor }: { editor: ReactNode }) {
+  const { t } = useI18n()
+  return (
+    <section id="plan-new" className="page-card plan-new-card" aria-labelledby="plan-new-title">
+      <h3 id="plan-new-title">{t("people.plans.new")}</h3>
+      {editor}
+    </section>
+  )
+}
+
+/** With no Plan yet, what Plans are for, and New plan, the tab's one action, with its form under it. */
+function NoPlans({ action, editor }: { action: ReactNode; editor: ReactNode }) {
+  const { t } = useI18n()
+  return (
+    <section id="plans-empty" className="page-card plans-empty-card" aria-labelledby="plans-empty-title">
+      <div className="plans-empty">
+        <GhostMark className="empty-ghost" />
+        <h3 id="plans-empty-title">{t("people.plans.empty.title")}</h3>
+        <p>{t("people.plans.empty.body")}</p>
+        <div className="plans-empty-action">{action}</div>
+      </div>
+      {editor}
+    </section>
+  )
+}
+
+/**
+ * The form that adds a Plan: empty with no limits, or, from Duplicate, with another Plan's limits
+ * and a name of its own, checked like any name. Once added, the Plan's row takes focus.
+ */
+function NewPlanEditor({
+  overview,
   commands,
-  addButton,
+  work,
+  copyOf,
 }: {
-  /** No Plan exists yet. */
-  empty: boolean
-  /** Plans limit people now. */
-  enabled: boolean
-  /** The names of every Plan. */
-  others: readonly string[]
-  intervals: SyncInterval[]
-  adding: boolean
-  /** A Plan command is on its way, so Add a plan waits. It stays focusable: focus returns to it as its form closes. */
-  busy: boolean
-  onOpen: Open
+  overview: PlansOverview
   commands: PlanCommands
-  addButton: RefObject<HTMLButtonElement | null>
+  work: PlanWorkControls
+  copyOf: string | null
 }) {
   const { t } = useI18n()
+  const toasts = useToast()
   const { define } = commands
-
-  function close() {
-    onOpen(null)
-    addButton.current?.focus()
-  }
-
+  const copied = overview.plans.find((plan) => plan.key === copyOf)
+  const start = copied && copyDraft(copied, t("people.plans.copyName", { name: copied.name }), overview.sync_intervals)
   return (
-    <div className="setting-item">
-      <div className={empty ? "plans-empty-action" : "setting-row"}>
-        <Button
-          ref={addButton}
-          id="plans-add"
-          type="button"
-          variant="outline"
-          aria-expanded={adding}
-          aria-controls={adding ? "plan-edit-new" : undefined}
-          aria-disabled={busy || undefined}
-          onClick={() => !busy && onOpen({ action: "add" })}
-        >
-          <Plus aria-hidden="true" />
-          {t("people.plans.add")}
-        </Button>
-      </div>
-      {adding && (
-        <div id="plan-edit-new">
-          <PlanEditor
-            plan={null}
-            enabled={enabled}
-            others={others}
-            intervals={intervals}
-            pending={define.isPending}
-            error={define.error}
-            onSave={(payload) => define.mutate(payload, { onSuccess: close })}
-            onCancel={close}
-          />
-        </div>
-      )}
+    <div id="plan-edit-new" className="plan-new-editor">
+      <PlanEditor
+        key={copyOf ?? ""}
+        plan={null}
+        start={start}
+        enabled={overview.enabled}
+        others={overview.plans.map((plan) => plan.name)}
+        intervals={overview.sync_intervals}
+        pending={define.isPending}
+        error={define.error}
+        onSave={(payload) =>
+          define.mutate(payload, {
+            onSuccess: (plan) => {
+              toasts.show({ message: t("people.plans.results.defined", { name: plan.name }) })
+              work.closeAdded(plan.key)
+            },
+          })
+        }
+        onCancel={work.closeToNew}
+      />
     </div>
   )
 }

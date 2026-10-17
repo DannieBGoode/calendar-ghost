@@ -394,6 +394,9 @@ class MemoryPlans:
         ordered = sorted(self.catalog.values(), key=lambda plan: (plan.name, plan.key.value))
         return tuple(self._listing(plan) for plan in ordered)
 
+    def followers(self) -> int:
+        return sum(user.plan is None for user in self.users.users.values())
+
     def any_plans(self) -> bool:
         return bool(self.catalog)
 

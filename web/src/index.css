@@ -1877,40 +1877,6 @@ p {
   width: 7rem;
 }
 
-/* With no Plan yet, the Plans group holds one centered empty state, closed by Add a plan below it. */
-.plans-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 2rem 1rem 0.75rem;
-  text-align: center;
-}
-
-.plans-empty .empty-ghost {
-  margin-bottom: 1rem;
-}
-
-.plans-empty h3 {
-  color: var(--foreground);
-  font-size: 1rem;
-  font-weight: 650;
-  line-height: 1.35;
-}
-
-.plans-empty p {
-  max-width: 34rem;
-  margin-top: 0.5rem;
-  color: var(--muted-foreground);
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-
-.plans-empty-action {
-  display: flex;
-  justify-content: center;
-  padding: 0.5rem 0 2rem;
-}
-
 /* A Plan's name, with Default beside it rather than on a line of its own. */
 .plan-title {
   display: flex;
@@ -1919,60 +1885,786 @@ p {
   gap: 0.25rem 0.5rem;
 }
 
-/* Where Remove would be on the default Plan: how to remove it, quietly. */
-.setting-row .plan-remove-note {
-  max-width: 16rem;
+/* People's Plans tab: the status card with the one switch first, then the catalog of Plans, or with
+   no Plan yet one empty state. The tab's own width, not the window's, decides its layout. */
+.plans-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  container: plans-tab / inline-size;
+}
+
+.plans-status {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The Plans cards pad their own parts, so the status card's facts and the catalog's footnote reach
+   the card's edges; a narrow window's card padding must not add to it. */
+.page-card.plans-status,
+.page-card.plans-catalog {
+  padding: 0;
+}
+
+.plans-status-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.25rem var(--panel-padding);
+}
+
+/* The state leads as an object title, between the page title and section titles. */
+.plans-status-text h3,
+.plan-new-card h3 {
+  font-size: 1.25rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.plans-status-text p {
+  max-width: 62ch;
+  margin-top: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.plans-status-text strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.plans-status-control {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.plans-status-control .field-error {
+  max-width: 18rem;
+  text-align: right;
+}
+
+.plans-facts {
+  display: grid;
   margin: 0;
-  align-self: center;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+}
+
+.plans-fact {
+  min-width: 0;
+  padding: 0.875rem var(--panel-padding);
+}
+
+.plans-fact + .plans-fact {
+  border-left: 1px solid var(--border);
+}
+
+.plans-fact dt {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.plans-fact dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.4rem;
+  margin: 0.125rem 0 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* While off, nothing is enforced: the facts read quieter, and nothing takes the attention tone. */
+.plans-status[data-state="off"] .plans-fact dd {
+  color: var(--muted-foreground);
+}
+
+/* Who is over a limit names it with an icon as well as Attention Ochre. */
+.plans-fact dd[data-tone="attention"] {
+  color: var(--warning-foreground);
+}
+
+.plans-fact dd > svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  flex: none;
+}
+
+.plans-fact-link {
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+  text-underline-offset: 0.2em;
+}
+
+.plans-fact-link:hover {
+  color: var(--foreground);
+  text-decoration-color: currentColor;
+}
+
+.plans-fact-link:focus-visible,
+.plan-name:focus-visible,
+.plan-holders:focus-visible,
+.plan-over:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* The catalog: one row per Plan, one column per limit, so Plans compare by column. */
+.plans-catalog {
+  container: plans-catalog / inline-size;
+}
+
+.plans-catalog-head {
+  padding: 1.25rem var(--panel-padding) 0.5rem;
+}
+
+.plans-catalog-head h3 {
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.plans-catalog-intro {
+  margin-top: 0.125rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.plans-table-wrap {
+  padding: 0 var(--panel-padding);
+}
+
+.plans-table {
+  width: 100%;
+  border-collapse: collapse;
+  /* Columns keep their widths whatever a Plan says, so nothing moves sideways. */
+  table-layout: fixed;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.plans-table .col-plan {
+  width: 26%;
+}
+
+.plans-table .col-count {
+  width: 12%;
+}
+
+.plans-table .col-speed {
+  width: 14%;
+}
+
+.plans-table .col-people {
+  width: 16%;
+}
+
+.plans-table .col-actions {
+  width: 3rem;
+}
+
+.plans-table th {
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  vertical-align: bottom;
+}
+
+.plans-table td {
+  height: 3.75rem;
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+  vertical-align: middle;
+}
+
+.plans-table th:first-child,
+.plans-table td:first-child {
+  padding-left: 0;
+}
+
+.plans-table th:last-child,
+.plans-table td:last-child {
+  padding-right: 0;
+  text-align: right;
+}
+
+.plans-table tbody tr:last-child > td {
+  border-bottom: 0;
+}
+
+/* Counts line up as numbers; "Unlimited" and "None" read quieter than a count. */
+.plans-table .plans-count {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.plans-table td[data-muted="true"] {
+  color: var(--muted-foreground);
+}
+
+.plan-row:hover > td {
+  background: color-mix(in oklch, var(--muted) 55%, transparent);
+}
+
+/* The Plan whose form or confirmation is open under it. */
+.plan-row[data-open="true"] > td {
+  background: color-mix(in oklch, var(--primary-soft) 55%, transparent);
+}
+
+.plan-name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 0.5rem;
+}
+
+.plan-name {
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--foreground) 32%, transparent);
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.plan-name:hover {
+  text-decoration-color: currentColor;
+}
+
+.plan-name[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.plan-sub {
+  margin-top: 0.125rem;
+  color: var(--muted-foreground);
   font-size: 0.8125rem;
   line-height: 1.4;
 }
 
-/* Why a Plan people have cannot be removed yet, in place of the confirmation it would get. It
-   takes focus as it opens, like a confirmation's heading. */
-.plan-in-use {
-  display: flex;
-  max-width: 48rem;
-  align-items: flex-start;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 0.625rem;
-  background: var(--background);
-  color: var(--foreground);
-  font-size: 0.875rem;
-  line-height: 1.5;
+.plan-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
-.plan-in-use:focus {
-  outline: none;
-}
-
-.plan-in-use > svg {
-  width: 1rem;
-  height: 1rem;
-  margin-top: 0.15rem;
+.plan-speed svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
   flex: none;
   color: var(--muted-foreground);
 }
 
-/* Who has the Plan, then the one next step: Everyone, listing them all. */
-.plan-in-use-copy {
-  display: grid;
-  min-width: 0;
-  justify-items: start;
-  gap: 0.375rem;
-  overflow-wrap: anywhere;
-}
-
-/* The Default Plan's choice, and Save default beside it while the choice is not saved. */
-.plans-default-control {
+.plan-people {
   display: flex;
-  flex: none;
   flex-wrap: wrap;
   align-items: center;
+  gap: 0.375rem 0.5rem;
+}
+
+.plan-holders {
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  font-weight: 550;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--foreground) 32%, transparent);
+  text-underline-offset: 0.2em;
+  white-space: nowrap;
+}
+
+.plan-holders:hover {
+  text-decoration-color: currentColor;
+}
+
+.plan-nobody {
+  color: var(--muted-foreground);
+}
+
+.plan-over {
+  border-radius: 999px;
+  text-decoration: none;
+}
+
+.plan-over:hover > span {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* A Plan's form, its removal's confirmation, or a refusal, under its row across every column. */
+.plans-table .plan-details-row > td {
+  height: auto;
+  padding: 0.25rem 0 1.25rem;
+  text-align: left;
+}
+
+.plans-table .plan-details-row .disconnect-confirmation {
+  margin: 0;
+}
+
+.plans-catalog-note {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem var(--panel-padding);
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.plans-catalog-note svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  flex: none;
+}
+
+/* With no Plan yet: what Plans are for, the ghost, and New plan, the tab's one action. */
+.page-card.plans-empty-card {
+  padding: 0 var(--panel-padding);
+}
+
+.plans-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 3rem 0;
+  text-align: center;
+}
+
+.plans-empty .empty-ghost {
+  margin-bottom: 0.5rem;
+}
+
+.plans-empty h3 {
+  font-size: 1.0625rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.plans-empty p {
+  max-width: 34rem;
+  color: var(--muted-foreground);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.plans-empty-action {
+  margin-top: 1rem;
+}
+
+.plans-empty-card > .plan-new-editor {
+  padding: 1.5rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.page-card.plan-new-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem var(--panel-padding);
+}
+
+/* Skeletons in the shape of the status card and the catalog, so nothing moves as Plans arrive. */
+.plans-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.page-card.plans-skeleton-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.25rem var(--panel-padding);
+}
+
+.plans-skeleton-lines {
+  display: flex;
+  width: 60%;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.page-card.plans-skeleton-table {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: var(--panel-padding);
+}
+
+/* Assign people, under a Plan's row: a search, then one box listing who could have the Plan,
+   members first and administrators last, then what being over means, and the footer. */
+.plan-assign {
+  display: flex;
+  max-width: 44rem;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 0.75rem 0 0.25rem;
+}
+
+.plan-assign-head h3 {
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.plan-assign-head h3:focus {
+  outline: none;
+}
+
+.plan-assign-intro {
+  margin-top: 0.125rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.plan-assign-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.plan-assign-found {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.plan-assign-box {
+  padding: 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  background: var(--background);
+}
+
+.plan-assign-people {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: 0.125rem;
+  list-style: none;
+}
+
+.plan-assign-person {
+  display: flex;
+  align-items: flex-start;
   gap: 0.75rem;
+  padding: 0.625rem;
+  border-radius: 0.5rem;
+}
+
+.plan-assign-person > span:first-child {
+  margin-top: 0.125rem;
+}
+
+.plan-assign-person[data-checked="true"] {
+  background: color-mix(in oklch, var(--primary-soft) 55%, transparent);
+}
+
+.plan-assign-who {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.plan-assign-who label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.plan-assign-held,
+.plan-assign-over {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.plan-assign-over {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* Who would be over names it with an icon as well as Attention Ochre while Plans are on. */
+.plan-assign-over[data-tone="attention"] {
+  color: var(--warning-foreground);
+}
+
+.plan-assign-over svg,
+.plan-assign-note svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}
+
+.plan-assign-group {
+  padding: 0.75rem 0.625rem 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.plan-assign-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  background: var(--surface);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.plan-assign-note svg {
+  margin-top: 0.2rem;
+}
+
+.plan-assign-note[data-tone="attention"] {
+  border-color: var(--warning-border);
+  background: var(--warning-surface);
+}
+
+.plan-assign-note[data-tone="attention"] svg {
+  color: var(--warning-foreground);
+}
+
+.plan-assign-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.plan-assign-selected {
+  margin-left: auto;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.plan-assign-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.plan-assign-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+/* Plans could not be read: one line saying nothing changed, and Try again. */
+.plans-load-error {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--destructive-border);
+  border-radius: 0.625rem;
+  background: var(--destructive-surface);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.plans-load-error > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--destructive);
+}
+
+.plans-load-error > span {
+  flex: 1;
+}
+
+/* On a narrow tab the switch drops under its sentence and the facts go two by two. */
+@container plans-tab (max-width: 48rem) {
+  .plans-status-main {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 1rem;
+  }
+
+  .plans-status-control {
+    align-items: flex-start;
+  }
+
+  .plans-status-control .field-error {
+    text-align: left;
+  }
+
+  .plans-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .plans-fact {
+    padding: 0.75rem 1rem;
+  }
+
+  .plans-fact:nth-child(3) {
+    border-left: 0;
+  }
+
+  .plans-fact:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+
+  .plans-catalog-head {
+    padding: 1rem 1rem 0.5rem;
+  }
+
+  .plans-table-wrap {
+    padding: 0 1rem;
+  }
+
+  .plans-catalog-note {
+    padding: 0.875rem 1rem;
+  }
+
+  .page-card.plans-empty-card {
+    padding: 0 1rem;
+  }
+
+  .page-card.plan-new-card {
+    padding: 1rem;
+  }
+
+  .page-card.plans-skeleton-status,
+  .page-card.plans-skeleton-table {
+    padding: 1rem;
+  }
+}
+
+/* A wide catalog keeps each heading on one line; a narrower one lets them wrap rather than overlap. */
+@container plans-catalog (min-width: 66rem) {
+  .plans-table th {
+    white-space: nowrap;
+  }
+}
+
+/* When the catalog is narrow each Plan becomes a card that labels its values, as Everyone does.
+   The headings stay for screen readers, so each value keeps its column's name. */
+@container plans-catalog (max-width: 42rem) {
+  .plans-table,
+  .plans-table thead,
+  .plans-table tbody,
+  .plans-table tr,
+  .plans-table td {
+    display: block;
+  }
+
+  .plans-table colgroup {
+    display: none;
+  }
+
+  .plans-table th {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .plans-table tr.plan-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.75rem 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .plans-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .plans-table td,
+  .plans-table td:first-child,
+  .plans-table td:last-child,
+  .plans-table .plans-count {
+    height: auto;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+
+  .plans-table td[data-label]::before {
+    display: block;
+    color: var(--muted-foreground);
+    content: attr(data-label);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .plans-table .plan-col-plan {
+    grid-column: 1 / -1;
+    padding-right: 3rem;
+  }
+
+  .plans-table .plan-col-people {
+    grid-column: 1 / -1;
+  }
+
+  .plans-table .plan-col-actions {
+    position: absolute;
+    top: 0.625rem;
+    right: 0;
+  }
+
+  .plan-row:hover > td,
+  .plan-row[data-open="true"] > td {
+    background: none;
+  }
+
+  .plans-table .plan-details-row {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .plans-table .plan-details-row > td {
+    padding: 0 0 1rem;
+  }
 }
 
 .setting-item .disconnect-confirmation {
@@ -3496,6 +4188,14 @@ p {
 .overflow-menu-item[aria-disabled] {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/* Sets an item apart from the ones above it, as Remove is in a Plan's menu. */
+.overflow-menu-separator {
+  height: 0;
+  margin: 0.25rem 0.5rem;
+  border: 0;
+  border-top: 1px solid var(--border);
 }
 
 .overflow-menu-spacer {

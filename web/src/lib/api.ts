@@ -233,6 +233,10 @@ export type PersonPlan = Schemas["PersonPlanResponse"]
 export type PersonPlanOverview = Schemas["PersonPlanOverviewResponse"]
 /** One limit a person has more of than their Plan allows, as after it was lowered. */
 export type OverLimit = Schemas["OverLimitResponse"]
+/** Everyone a Plan was given to at once, or would be in a dry run, each with the Plan they had. */
+export type PlanAssignments = Schemas["PlanAssignmentsResponse"]
+/** One person given a Plan: the Plan they had, the one they have, and what they are over under it. */
+export type PlanMove = Schemas["PlanMoveResponse"]
 /** What the signed-in User's Plan allows and how much of it they have, for Your plan. */
 export type OwnPlan = Schemas["OwnPlanResponse"]
 /** A User as an Installation Administrator sees them: never their calendars, rules, or events. */
@@ -267,6 +271,8 @@ export type PeopleQuery = {
   verdict: Verdict | ""
   /** The key of the Plan people have, their own or as the default, as the Plans tab counts them. */
   plan: string
+  /** Only the people over a limit of the Plan they have, whether or not Plans are on. */
+  over: boolean
   sort: PeopleSort
   order: SortOrder
   /** From 1. */
@@ -283,6 +289,8 @@ export const INCIDENTS_PAGE_SIZE = 100
 const PEOPLE_PAGE_SIZE = 50
 /** How many people the Remove note on a Plan names before "and 2 more". */
 const PLAN_HOLDERS_NAMED = 3
+/** How many people Assign people lists at a time, by email; a search finds the others. */
+const PLAN_CANDIDATES_LISTED = 100
 
 export const api = {
   setup: () => call("/api/v1/setup", "get"),
@@ -334,7 +342,7 @@ export const api = {
   checkPasswordReset: (token: string) => call("/api/v1/password-resets/check", "post", { body: { token } }),
   resetPassword: (token: string, password: string) =>
     call("/api/v1/password-resets", "post", { body: { token, password } }),
-  people: ({ search, role, state, verdict, plan, sort, order, page }: PeopleQuery) =>
+  people: ({ search, role, state, verdict, plan, over, sort, order, page }: PeopleQuery) =>
     call("/api/v1/users", "get", {
       query: {
         ...(search.trim() ? { search: search.trim() } : {}),
@@ -342,6 +350,7 @@ export const api = {
         state: state || null,
         verdict: verdict || null,
         plan: plan || null,
+        ...(over ? { over } : {}),
         sort,
         order,
         page,
@@ -353,6 +362,23 @@ export const api = {
     call("/api/v1/users", "get", {
       query: { plan, sort: "email", order: "asc", page: 1, page_size: PLAN_HOLDERS_NAMED },
     }),
+  /** Everyone Assign people may list, by email, narrowed by part of an email. */
+  planCandidates: (search: string) =>
+    call("/api/v1/users", "get", {
+      query: {
+        ...(search ? { search } : {}),
+        sort: "email",
+        order: "asc",
+        page: 1,
+        page_size: PLAN_CANDIDATES_LISTED,
+      },
+    }),
+  /**
+   * Gives one Plan, or the Default Plan with null, to up to 100 people at once, all or none; with
+   * `dryRun`, gives nothing and answers what it would do.
+   */
+  assignPlan: (plan: string | null, userIds: string[], dryRun: boolean) =>
+    call("/api/v1/plan-assignments", "post", { body: { plan, user_ids: userIds, dry_run: dryRun } }),
   setPersonRole: (userId: string, role: PersonRole) =>
     call("/api/v1/users/{user_id}/role", "put", { params: { user_id: userId }, body: { role } }),
   setPersonState: (userId: string, state: PersonState) =>

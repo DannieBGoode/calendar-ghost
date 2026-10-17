@@ -427,6 +427,27 @@ def test_a_plan_counts_everyone_who_has_it_and_the_people_it_limits(store: Plans
     assert while_on == expected
 
 
+def test_everyone_without_a_plan_of_their_own_is_counted_whatever_their_role_or_state(
+    store: PlansStore,
+) -> None:
+    """Whom Make default moves: people given the default itself keep it as their own."""
+    other_admin = replace(ADMIN, id=UserId("other-admin"), email="other-admin@example.test")
+    store.people(ADMIN, other_admin, MEMBER, NEWCOMER, AWAY)
+    before = store.plans.followers()
+    plans_on(store.plans, FREE, FAMILY)
+    for user in (MEMBER, other_admin):
+        store.plans.assign(user.id, FAMILY.key, BY_ADMIN)
+    store.plans.assign(NEWCOMER.id, FREE.key, BY_ADMIN)
+    given = store.plans.followers()
+    store.plans.assign(MEMBER.id, None, BY_ADMIN)
+
+    assert before == 5
+    # The administrator and the disabled member follow the default; whether Plans are on or a
+    # default exists changes nothing.
+    assert given == 2
+    assert store.plans.followers() == 3
+
+
 def _sqlite(tmp_path: Path) -> tuple[Path, SqlitePlans]:
     database = tmp_path / "test.db"
     initialize_database(database)

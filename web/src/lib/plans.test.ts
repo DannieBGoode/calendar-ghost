@@ -21,7 +21,6 @@ import {
   personPlanText,
   planAllows,
   planChoiceAllows,
-  planLimitsSummary,
   planWarning,
   previewedStartRefusal,
   startRefusal,
@@ -142,32 +141,6 @@ describe("intervalLabel", () => {
     ["60_minutes", "Every hour"],
   ])("names %s", (interval, label) => {
     expect(intervalLabel(i18n, interval)).toBe(label)
-  })
-})
-
-describe("planLimitsSummary", () => {
-  it("counts each limit", () => {
-    expect(planLimitsSummary(i18n, FAMILY_LIMITS)).toBe("5 rules, 3 calendar accounts, 2 Integration Tokens")
-    expect(planLimitsSummary(i18n, { ...FAMILY_LIMITS, rules: 1, connected_accounts: 1, integration_tokens: 1 })).toBe(
-      "1 rule, 1 calendar account, 1 Integration Token",
-    )
-  })
-
-  it("says No limit where a count has none, and names a Plan that offers no tokens", () => {
-    expect(planLimitsSummary(i18n, { ...FAMILY_LIMITS, rules: null })).toBe(
-      "No limit on rules, 3 calendar accounts, 2 Integration Tokens",
-    )
-    expect(planLimitsSummary(i18n, { ...FAMILY_LIMITS, connected_accounts: null, integration_tokens: null })).toBe(
-      "5 rules, no limit on calendar accounts, no limit on Integration Tokens",
-    )
-    expect(planLimitsSummary(i18n, FREE_LIMITS)).toBe("1 rule, 1 calendar account, no Integration Tokens")
-  })
-
-  it("says once that a Plan has no limit on any count", () => {
-    expect(planLimitsSummary(i18n, UNLIMITED)).toBe("No limit on rules, calendar accounts, or Integration Tokens")
-    expect(planLimitsSummary(i18n, { ...UNLIMITED, sync_interval: "5_minutes" })).toBe(
-      "No limit on rules, calendar accounts, or Integration Tokens",
-    )
   })
 })
 

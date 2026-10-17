@@ -38,7 +38,7 @@ export function PeopleRoster({
   const { t } = i18n
   const people = usePeoplePage(query)
   const commands = usePersonCommands()
-  const plans = useFilterPlans(people.data, query.plan)
+  const plans = useFilterPlans(people.data, query)
 
   return (
     <>

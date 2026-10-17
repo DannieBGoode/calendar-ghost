@@ -279,34 +279,41 @@ their own account, Calendar Ghost returns to setup: the next person to open it c
 administrator, as on a new installation, and the OAuth settings and master key in `.env`
 stay as they were. Plans, if you turned them on, turn off and keep their definitions.
 
-To keep one person from using up what everyone shares, open **People → Plans**. Choose
-**Add a plan** for each set of limits you want: its name, how many rules may sync, how many
-calendar accounts and Integration Tokens a person may have, and whether their calendars sync
-instantly or every 5 minutes. Calendar Ghost makes the Plan's key, which names it in the API,
-from its name. To limit everyone, choose a **Default plan**, which everyone without a Plan of
-their own has, including people who join later, and **Save default**. To limit only some people,
-give them a Plan with **Change plan** on their page under **People**; under the choice it says
-what the chosen Plan allows. Then tick **Limit people with plans**, which says how many people
-Plans limit. Two Plans cannot share a name, whatever its case: the form says so under **Name**.
-With no default, turning Plans on adds a Plan named No limits, which limits nobody, as the
-default, so nothing changes until someone has a smaller Plan; you can rename and change it like
-any Plan. Administrators are never limited, and while Plans are off, which is the default, nobody
-is. A lower limit stops nothing: rules beyond it keep syncing, and accounts and tokens keep
-working, but nobody can start a rule, connect a new calendar account, or issue a token past it.
-Each person sees what their Plan allows under **Settings → Your account → Your plan**
+To keep one person from using up what everyone shares, open **People → Plans**. Its card at the
+top says whether Plans are on and what they do now, or would do once on, beside the **Plans**
+switch, which applies at once; a message at the bottom of the window says what changed, with
+**Undo**. Choose **New plan** for each set of limits you want: its name, how many rules may sync,
+how many calendar accounts and Integration Tokens a person may have, and whether their calendars
+sync instantly or every 5 minutes. Calendar Ghost makes the Plan's key, which names it in the API,
+from its name. Everyone without a Plan of their own has the default, including people who join
+later; the default carries a **Default** badge, and **Make default** in another Plan's **More
+actions** menu says how many people it moves. To limit only some people, choose **Assign people**
+in a Plan's menu: search by email, tick each person, and give it, as **Give Free to 2 people**
+does. Before you do, the list shows the Plan each person has now and any limit they would be over,
+and administrators come last, since no Plan limits them. **Change plan** on a person's page under
+**People** gives one
+person a Plan; under the choice it says what the chosen Plan allows. **Duplicate** starts a new
+Plan from another's limits. Two Plans cannot share a name, whatever its case: the form says so
+under **Name**. With no default, turning Plans on adds a Plan named No limits, which limits
+nobody, as the default, so nothing changes until someone has a smaller Plan; you can rename and
+change it like any Plan. Administrators are never limited, and while Plans are off, which is the
+default, nobody is. A lower limit stops nothing: rules beyond it keep syncing, and accounts and
+tokens keep working, but nobody can start a rule, connect a new calendar account, or issue a token
+past it. Each person sees what their Plan allows under **Settings → Your account → Your plan**
 ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 
-Each Plan says how many people have it and how many it limits ("4 people have it. Limits 3
-people."), and, when a limit is lower than what some of them already have, how many of those have
-more than it allows ("1 has more than this plan allows."). Before you save a lower limit, the form
-says how many people it would leave with more. **Everyone** shows each person's Plan in its own
-column, and their page says it too; both name each limit they are over ("Family. 2 calendar
-accounts, 1 allowed"), and the **Plan** filter lists only the people who have one Plan. The
-default, and a Plan someone has, cannot be removed: choose another default, or give those people
-another Plan, first. **Remove** on a Plan someone has names the first three by email and links to
-**Everyone**, filtered to the people who have it. [Someone has more than their plan
-allows](troubleshooting.md#someone-has-more-than-their-plan-allows) says what to do when someone
-is over a limit.
+The card counts how many people Plans limit, how many of them are over a limit, with **Show** to
+list them, the default Plan, and how many administrators are never limited. Below it, a table
+compares the Plans by limit: active rules, calendar accounts, Integration Tokens, sync speed, and
+how many people have each Plan, which lists them under **Everyone**, with how many of them are over
+a limit. Before you save a lower limit, the form says how many people it would leave with more.
+**Everyone** shows each person's Plan in its own column, and their page says it too; both name
+each limit they are over ("Family. 2 calendar accounts, 1 allowed"), and the **Plan** and
+**Limits** filters list only the people who have one Plan, or who are over a limit. The default,
+and a Plan someone has, cannot be removed: **Remove** in its menu says why, naming the first three
+who have it by email; make another Plan the default, or give those people another Plan, first.
+[Someone has more than their plan allows](troubleshooting.md#someone-has-more-than-their-plan-allows)
+says what to do when someone is over a limit.
 
 ## 5. Use a LAN host or HTTPS
 

@@ -210,5 +210,9 @@
       "one": "Your plan allows {count} calendar account, and disconnected accounts count too.",
       "other": "Your plan allows {count} calendar accounts, and disconnected accounts count too."
     }
+  },
+  "toast": {
+    "undo": "Undo",
+    "close": "Close"
   }
 }

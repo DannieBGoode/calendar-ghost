@@ -13,7 +13,7 @@ import type { MessageKey } from "@/i18n/types"
 import { api } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
 import { appPathForPeopleTab, type OpenPerson, type PeopleTab } from "@/lib/navigation"
-import { DEFAULT_PEOPLE_QUERY, peopleSearch } from "@/lib/people-query"
+import { DEFAULT_PEOPLE_QUERY, peoplePath, peopleSearch, type PeopleFilter } from "@/lib/people-query"
 import { useNow } from "@/lib/use-now"
 import { usePeopleAccess } from "@/lib/use-people-access"
 import { useInvitations, type InvitationCommands } from "@/lib/use-invitations"
@@ -70,6 +70,8 @@ function PeopleContent({
   const now = useNow()
   // Counts arrivals at the list from elsewhere on this page, each of which starts at its heading.
   const [listArrivals, setListArrivals] = useState(0)
+  // Where a tab may put its own action beside the page title.
+  const [headingAction, setHeadingAction] = useState<HTMLDivElement | null>(null)
   useEffect(() => {
     document.title = documentTitle(i18n, i18n.t(TAB_TITLES[tab]))
   }, [i18n, tab])
@@ -85,10 +87,11 @@ function PeopleContent({
     setTab(next)
   }
 
-  // Everyone who has a Plan, from its Remove note: that Plan alone filters the list, from its heading.
-  function showHolders(plan: string) {
-    const shown = { ...DEFAULT_PEOPLE_QUERY, plan }
-    window.history.pushState(null, "", `${appPathForPeopleTab("everyone")}${peopleSearch(shown)}`)
+  // The people a link on the Plans tab names, such as who has a Plan or who is over a limit: those
+  // filters alone narrow the list, from its heading.
+  function showPeople(filter: PeopleFilter) {
+    const shown = { ...DEFAULT_PEOPLE_QUERY, ...filter }
+    window.history.pushState(null, "", peoplePath(filter))
     update(shown, "replace")
     setTab("everyone")
     setListArrivals((count) => count + 1)
@@ -99,18 +102,23 @@ function PeopleContent({
     invitations.invite.mutate()
   }
 
+  // The sentence and the one action follow the tab: Plans says what Plans do, and offers New plan
+  // there, from the Plans tab itself, once a Plan exists.
+  const plans = tab === "plans"
   return (
     <div className="page-section people-page">
       <div className="page-heading-row">
         <div>
           <h1>{t("people.page.title")}</h1>
-          <p className="page-intro">{t("people.page.intro")}</p>
+          <p className="page-intro">{t(plans ? "people.plans.pageIntro" : "people.page.intro")}</p>
         </div>
-        <div className="heading-action">
-          <Button id="invite-someone" type="button" disabled={invitations.invite.isPending} onClick={inviteSomeone}>
-            <UserPlus aria-hidden="true" />
-            {invitations.invite.isPending ? t("people.invitations.inviting") : t("people.invitations.invite")}
-          </Button>
+        <div className="heading-action" ref={setHeadingAction}>
+          {!plans && (
+            <Button id="invite-someone" type="button" disabled={invitations.invite.isPending} onClick={inviteSomeone}>
+              <UserPlus aria-hidden="true" />
+              {invitations.invite.isPending ? t("people.invitations.inviting") : t("people.invitations.invite")}
+            </Button>
+          )}
         </div>
       </div>
       <PeopleTabs current={tab} invitations={invitations} onOpen={openTab} />
@@ -125,7 +133,7 @@ function PeopleContent({
         />
       )}
       {tab === "invitations" && <InvitationsSection commands={invitations} now={now} />}
-      {tab === "plans" && <PlansSection onShowHolders={showHolders} />}
+      {plans && <PlansSection currentUserId={currentUserId} headingAction={headingAction} onShowPeople={showPeople} />}
       <p className="sr-only" role="status">
         {invitations.message}
       </p>

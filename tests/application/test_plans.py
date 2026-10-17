@@ -181,6 +181,7 @@ def test_show_plans_answers_each_plan_who_has_it_the_setting_and_the_offered_int
         (PlanListing(FAMILY, False, 1, 1), PlanListing(FREE, True, 2, 1)),
         (SyncInterval.INSTANT, SyncInterval.EVERY_5_MINUTES),
         administrators=1,
+        followers=2,
     )
 
 
@@ -195,13 +196,26 @@ def test_the_overview_counts_every_administrator_whom_no_plan_limits() -> None:
     assert overview.plans == (PlanListing(FREE, True, 4, 2),)
 
 
+def test_the_overview_counts_everyone_make_default_would_move() -> None:
+    """Everyone with no Plan of their own, whatever their role or state; someone given the
+    default itself keeps it as their own."""
+    plans = _plans(RETIRED, NEIGHBOUR, LATECOMER)
+    plans_on(plans, FREE, FAMILY)
+    _assign(plans).execute(ADMIN.id, NEIGHBOUR.id, FAMILY.key)
+    _assign(plans).execute(ADMIN.id, LATECOMER.id, FREE.key)
+
+    overview = ShowPlans(plans.users, plans).execute(ADMIN.id)
+
+    assert overview.followers == 3
+
+
 def test_a_new_installation_shows_no_plans_and_plans_off() -> None:
     plans = _plans()
 
     overview = ShowPlans(plans.users, plans).execute(ADMIN.id)
 
     assert overview == PlansOverview(
-        PlansSetting(False, None), (), OFFERED_INTERVALS, administrators=1
+        PlansSetting(False, None), (), OFFERED_INTERVALS, administrators=1, followers=2
     )
 
 
@@ -357,6 +371,7 @@ def test_turning_plans_on_with_a_default_answers_the_overview_and_limits_members
         (PlanListing(FREE, True, 2, 1),),
         OFFERED_INTERVALS,
         administrators=1,
+        followers=2,
     )
     assert plans.of(MEMBER.id) == Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True)
 
@@ -372,6 +387,7 @@ def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_the_default() -
         (PlanListing(FREE, False, 0, 0), PlanListing(NO_LIMITS_PLAN, True, 2, 1)),
         OFFERED_INTERVALS,
         administrators=1,
+        followers=2,
     )
     # Turning Plans on this way limits nobody until someone has a smaller Plan.
     assert plans.of(MEMBER.id).limits == NO_LIMITS

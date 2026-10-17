@@ -1946,6 +1946,8 @@ export interface components {
             default_plan: string | null;
             /** Enabled */
             enabled: boolean;
+            /** Followers */
+            followers: number;
             /** Plans */
             plans: components["schemas"]["PlanResponse"][];
             /** Sync Intervals */

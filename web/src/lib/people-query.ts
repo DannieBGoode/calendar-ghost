@@ -1,4 +1,5 @@
 import type { PeoplePage, PeopleQuery, PeopleSort, PersonRole, PersonState, SortOrder, Verdict } from "@/lib/api"
+import { appPathForPeopleTab } from "@/lib/navigation"
 import { VERDICTS } from "@/lib/operator-overview"
 
 /** Everyone, in the order they joined, from the first page. */
@@ -8,6 +9,7 @@ export const DEFAULT_PEOPLE_QUERY: PeopleQuery = {
   state: "",
   verdict: "",
   plan: "",
+  over: false,
   sort: "joined",
   order: "asc",
   page: 1,
@@ -38,26 +40,42 @@ export function peopleQueryFromSearch(search: string): PeopleQuery {
     state: oneOf<PersonState | "">(STATES, params.get("state"), ""),
     verdict: oneOf<Verdict | "">(VERDICTS, params.get("verdict"), ""),
     plan: PLAN_KEY.test(params.get("plan") ?? "") ? (params.get("plan") ?? "") : "",
+    over: params.get("over") === "true",
     sort: oneOf(SORTS, params.get("sort"), defaults.sort),
     order: oneOf(ORDERS, params.get("order"), defaults.order),
     page: Number.isInteger(page) && page > 1 ? page : 1,
   }
 }
 
+/** The search and filters in use, in the order the address names them. */
+function filterParams(query: PeopleQuery): [string, string][] {
+  const filters: [string, string][] = [
+    ["search", query.search.trim()],
+    ["role", query.role],
+    ["state", query.state],
+    ["verdict", query.verdict],
+    ["plan", query.plan],
+    ["over", query.over ? "true" : ""],
+  ]
+  return filters.filter(([, value]) => value !== "")
+}
+
 /** The address for a query, naming only what differs from the default. */
 export function peopleSearch(query: PeopleQuery): string {
-  const params = new URLSearchParams()
-  const search = query.search.trim()
-  if (search) params.set("search", search)
-  if (query.role) params.set("role", query.role)
-  if (query.state) params.set("state", query.state)
-  if (query.verdict) params.set("verdict", query.verdict)
-  if (query.plan) params.set("plan", query.plan)
+  const params = new URLSearchParams(filterParams(query))
   if (query.sort !== DEFAULT_PEOPLE_QUERY.sort) params.set("sort", query.sort)
   if (query.order !== DEFAULT_PEOPLE_QUERY.order) params.set("order", query.order)
   if (query.page > 1) params.set("page", String(query.page))
   const text = params.toString()
   return text ? `?${text}` : ""
+}
+
+/** The filters a link from elsewhere on People opens Everyone with, such as one Plan's people over a limit. */
+export type PeopleFilter = Partial<Pick<PeopleQuery, "plan" | "over">>
+
+/** Everyone's address, from its first page, showing only the people `filter` names. */
+export function peoplePath(filter: PeopleFilter): string {
+  return `${appPathForPeopleTab("everyone")}${peopleSearch({ ...DEFAULT_PEOPLE_QUERY, ...filter })}`
 }
 
 /** Sorting by a column: a new one starts ascending, the current one reverses; both from page 1. */

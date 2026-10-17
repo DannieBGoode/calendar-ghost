@@ -33,7 +33,10 @@
     "anyVerdict": "Any sync status",
     "plan": "Plan",
     "anyPlan": "Any plan",
-    "missingPlan": "A plan that no longer exists"
+    "missingPlan": "A plan that no longer exists",
+    "limits": "Limits",
+    "anyLimits": "Anyone",
+    "overLimit": "Over a limit"
   },
   "table": {
     "email": "Email",
@@ -385,49 +388,188 @@
   },
   "plans": {
     "title": "Plans",
-    "intro": "Plans limit how many rules, calendar accounts, and Integration Tokens each person may have, and how soon their calendars sync. Administrators are never limited.",
-    "loadError": "Plans could not load.",
+    "pageIntro": "Plans set how much each person can use and how soon their calendars sync. Administrators are never limited.",
+    "new": "New plan",
+    "loading": "Loading plans",
+    "loadError": "Plans could not load. Nothing changed: the limits people had still apply.",
     "tryAgain": "Try again",
     "empty": {
       "title": "No plans yet",
-      "body": "Add a plan with the limits you want. Make it the default to limit everyone, or give it to someone from their page to limit only them."
+      "body": "A plan sets how many rules, calendar accounts, and Integration Tokens a person can have, and how soon their calendars sync. Make one, then give it to people or make it the default."
     },
-    "enabled": {
-      "label": "Limit people with plans",
-      "on": {
-        "one": "On. Limits {count} person.",
-        "other": "On. Limits {count} people."
+    "status": {
+      "titleOn": "Plans are on",
+      "titleOff": "Plans are off",
+      "offSentence": "Everyone can use everything. {kept} {impact}",
+      "switch": "Plans",
+      "stateOn": "On",
+      "stateOff": "Off",
+      "onLimits": {
+        "one": "Plans limit <strong>{count} person</strong> right now. Everyone without a plan of their own gets <strong>{name}</strong>, the default plan, including people who join later.",
+        "other": "Plans limit <strong>{count} people</strong> right now. Everyone without a plan of their own gets <strong>{name}</strong>, the default plan, including people who join later."
       },
-      "onNobody": "On. Limits nobody yet.",
-      "off": "Off. Limits nobody.",
-      "offChosen": "Off. Limits nobody. Turning this on also makes {name} the default plan.",
-      "offNoDefault": "Off. Limits nobody. There is no default plan yet, so turning this on adds a plan named No limits as the default. It limits nobody until you give someone a smaller plan."
+      "onNobody": "Plans limit nobody right now. Everyone without a plan of their own gets <strong>{name}</strong>, the default plan, including people who join later.",
+      "offNoPlans": "Everyone can use everything, with no limits. Turning plans on adds a plan named <strong>No limits</strong> as the default, so nobody is limited until you give someone a smaller plan.",
+      "offSentenceNoDefault": "Everyone can use everything. {kept} {impact} It also adds a plan named <strong>No limits</strong> as the default for everyone without a plan of their own.",
+      "kept": {
+        "one": "Your {count} plan is kept.",
+        "other": "Your {count} plans are kept."
+      },
+      "wouldLimit": {
+        "one": "Turning plans on limits <strong>{count} person</strong> right away.",
+        "other": "Turning plans on limits <strong>{count} people</strong> right away."
+      },
+      "wouldLimitOver": {
+        "one": "Turning plans on limits <strong>{people}</strong> right away, and {count} of them has more than their plan allows.",
+        "other": "Turning plans on limits <strong>{people}</strong> right away, and {count} of them have more than their plan allows."
+      },
+      "wouldLimitNobody": "Turning plans on limits nobody yet.",
+      "people": {
+        "one": "{count} person",
+        "other": "{count} people"
+      },
+      "nobody": "Nobody",
+      "administrators": {
+        "one": "{count} administrator",
+        "other": "{count} administrators"
+      },
+      "noDefault": "None yet",
+      "limited": "Limited now",
+      "wouldLimitFact": "Would limit",
+      "over": "Over a limit",
+      "wouldBeOver": "Would be over a limit",
+      "default": "Default plan",
+      "neverLimited": "Never limited",
+      "show": "Show",
+      "showLabel": "Show who is over a limit"
     },
-    "default": {
-      "label": "Default plan",
-      "hint": "Everyone without a plan of their own has this one, including people who join later.",
-      "none": "No default",
-      "save": "Save default"
+    "catalog": {
+      "title": {
+        "one": "{count} plan",
+        "other": "{count} plans"
+      },
+      "intro": "Select a plan to edit it or give it to people.",
+      "plan": "Plan",
+      "rules": "Active rules",
+      "accounts": "Calendar accounts",
+      "tokens": "Integration Tokens",
+      "speed": "Sync speed",
+      "people": "People",
+      "actions": "Actions",
+      "defaultFor": "Everyone without a plan of their own",
+      "unlimited": "Unlimited",
+      "none": "None",
+      "holders": {
+        "one": "{count} person",
+        "other": "{count} people"
+      },
+      "holdersLabel": {
+        "one": "Show the {count} person who has {name}",
+        "other": "Show the {count} people who have {name}"
+      },
+      "nobody": "Nobody",
+      "over": {
+        "one": "{count} over a limit",
+        "other": "{count} over a limit"
+      },
+      "overLabel": {
+        "one": "Show the {count} person on {name} who is over a limit",
+        "other": "Show the {count} people on {name} who are over a limit"
+      },
+      "wouldBeOver": {
+        "one": "{count} would be over",
+        "other": "{count} would be over"
+      },
+      "wouldBeOverLabel": {
+        "one": "Show the {count} person on {name} who would be over a limit",
+        "other": "Show the {count} people on {name} who would be over a limit"
+      },
+      "note": "People counts include administrators, who are never limited. Paused rules and drafts never count as active."
     },
-    "holders": {
-      "one": "{count} person has it.",
-      "other": "{count} people have it."
+    "speed": {
+      "instant": "Instant",
+      "5_minutes": "Every 5 min",
+      "10_minutes": "Every 10 min",
+      "15_minutes": "Every 15 min",
+      "30_minutes": "Every 30 min",
+      "60_minutes": "Every hour"
     },
-    "holdersNone": "Nobody has it.",
-    "limited": {
-      "one": "{holders} Limits {count} person.",
-      "other": "{holders} Limits {count} people."
+    "menu": {
+      "label": "More actions for {name}",
+      "edit": "Edit",
+      "assign": "Assign people",
+      "makeDefault": "Make default",
+      "makeDefaultMoves": {
+        "one": "People without a plan of their own ({count} now) move to {name}.",
+        "other": "People without a plan of their own ({count} now) move to {name}."
+      },
+      "makeDefaultNobody": "Everyone has a plan of their own now. People who join later get {name}.",
+      "duplicate": "Duplicate",
+      "remove": "Remove",
+      "removeDefault": "Make another plan the default first.",
+      "removeInUse": {
+        "one": "{count} person has {name}. Give them another plan first.",
+        "other": "{count} people have {name}. Give them another plan first."
+      },
+      "removeInUseNamed": {
+        "one": "{people} has {name}. Give them another plan first.",
+        "other": "{people} have {name}. Give them another plan first."
+      },
+      "more": {
+        "one": "{count} more",
+        "other": "{count} more"
+      }
     },
-    "limitedLater": {
-      "one": "{holders} Limits {count} person once plans are on.",
-      "other": "{holders} Limits {count} people once plans are on."
-    },
-    "limitedNone": "{holders} Limits nobody.",
-    "over": {
-      "one": "{count} has more than this plan allows.",
-      "other": "{count} have more than this plan allows."
+    "assign": {
+      "title": "Assign people",
+      "intro": "They move to {name} at once. Administrators are listed last; no plan limits them.",
+      "loading": "Looking for people",
+      "loadError": "People could not load.",
+      "found": {
+        "one": "{count} found",
+        "other": "{count} found"
+      },
+      "foundMore": {
+        "one": "{count} found. Search by email to find someone else.",
+        "other": "{count} found. Search by email to find someone else."
+      },
+      "nobody": "Nobody else found",
+      "administrators": "Administrators",
+      "neverLimited": "Never limited, whatever plan they have",
+      "has": "Has {name}",
+      "hasDefault": "Has {name}, the default",
+      "hasNone": "Has no plan",
+      "wouldBeOver": "Would be over: {limits}",
+      "overNoteOne": "{person} will have more than {name} allows. Everything they have keeps working, but they can't add more until they are within it.",
+      "overNote": {
+        "one": "{count} person you chose will have more than {name} allows. Everything they have keeps working, but they can't add more until they are within it.",
+        "other": "{count} people you chose will have more than {name} allows. Everything they have keeps working, but they can't add more until they are within it."
+      },
+      "give": {
+        "one": "Give {name} to {count} person",
+        "other": "Give {name} to {count} people"
+      },
+      "giveNone": "Give {name}",
+      "giveReason": "Choose who gets {name}.",
+      "cancel": "Cancel",
+      "selected": {
+        "one": "{count} selected",
+        "other": "{count} selected"
+      },
+      "givenOne": "{person} now has {name}.",
+      "given": {
+        "one": "{count} person now has {name}.",
+        "other": "{count} people now have {name}."
+      },
+      "restoredOne": "{person} has their plan back.",
+      "restored": {
+        "one": "{count} person has their plan back.",
+        "other": "{count} people have their plans back."
+      }
     },
     "isDefault": "Default",
+    "editLabel": "Edit {name}",
+    "copyName": "{name} copy",
     "limits": {
       "rules": {
         "one": "{count} rule",
@@ -441,8 +583,6 @@
         "one": "{count} Integration Token",
         "other": "{count} Integration Tokens"
       },
-      "unlimited": "No limit on rules, calendar accounts, or Integration Tokens",
-      "unlimitedRules": "No limit on rules",
       "unlimitedAccounts": "no limit on calendar accounts",
       "unlimitedTokens": "no limit on Integration Tokens",
       "noTokens": "no Integration Tokens"
@@ -455,25 +595,6 @@
       "30_minutes": "Every 30 minutes",
       "60_minutes": "Every hour"
     },
-    "edit": "Edit",
-    "editLabel": "Edit {name}",
-    "remove": "Remove",
-    "removeLabel": "Remove {name}",
-    "removeDefault": "Default plan. Choose another default to remove it.",
-    "inUse": {
-      "one": "{count} person has {name}. Give them another plan to remove it.",
-      "other": "{count} people have {name}. Give them another plan to remove it."
-    },
-    "inUseNamed": {
-      "one": "{people} has {name}. Give them another plan to remove it.",
-      "other": "{people} have {name}. Give them another plan to remove it."
-    },
-    "inUseMore": {
-      "one": "{count} more",
-      "other": "{count} more"
-    },
-    "inUseShow": "Show who has {name}",
-    "add": "Add a plan",
     "editor": {
       "name": "Name",
       "limitsLegend": "Limits for each person",
@@ -530,15 +651,15 @@
       "keep": "Keep plan",
       "pending": "Removing…"
     },
-    "saved": {
+    "results": {
       "on": {
-        "one": "Plans now limit {count} person.",
-        "other": "Plans now limit {count} people."
+        "one": "Plans are on. They limit {count} person.",
+        "other": "Plans are on. They limit {count} people."
       },
       "onNobody": "Plans are on. They limit nobody yet.",
-      "onNoLimits": "Plans are on. {name} is the new default plan, and it limits nothing.",
-      "off": "Plans no longer limit anyone.",
-      "defaultChanged": "{name} is now the default plan.",
+      "onNoLimits": "Plans are on. {name} is the default plan, and it limits nobody.",
+      "off": "Plans are off. Nobody is limited.",
+      "defaultChanged": "{name} is the default plan now.",
       "defined": "{name} was added.",
       "changed": "{name} was saved.",
       "removed": "{name} was removed."

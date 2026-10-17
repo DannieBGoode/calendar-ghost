@@ -496,6 +496,15 @@ describe("People", () => {
       },
       [`/api/v1/users/${administrator.id}/overview`]: { ...NOTHING_SET_UP, user: { ...NOTHING_SET_UP.user, id: administrator.id } },
       "/api/v1/invitations": [],
+      // Plans off, and none yet, as a new installation has them.
+      "/api/v1/plans": {
+        enabled: false,
+        default_plan: null,
+        sync_intervals: ["instant", "5_minutes"],
+        administrators: 1,
+        followers: 1,
+        plans: [],
+      },
     }
     vi.stubGlobal(
       "fetch",

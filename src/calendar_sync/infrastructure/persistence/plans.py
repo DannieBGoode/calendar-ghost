@@ -103,6 +103,11 @@ class SqlitePlans:
         listings = (_listing(row) for row in rows)
         return tuple(listing for listing in listings if listing is not None)
 
+    def followers(self) -> int:
+        with transaction(self._database_path) as connection:
+            row = connection.execute("SELECT COUNT(*) FROM users WHERE plan_key IS NULL").fetchone()
+        return int(row[0])
+
     def any_plans(self) -> bool:
         with transaction(self._database_path) as connection:
             return connection.execute("SELECT 1 FROM plans LIMIT 1").fetchone() is not None

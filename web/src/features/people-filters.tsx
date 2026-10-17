@@ -6,11 +6,11 @@ import type { PeopleQuery, PlanSummary } from "@/lib/api"
 import { VERDICTS } from "@/lib/operator-overview"
 import { heldPlanName } from "@/lib/plans"
 
-type Filters = Pick<PeopleQuery, "search" | "role" | "state" | "verdict" | "plan">
+type Filters = Pick<PeopleQuery, "search" | "role" | "state" | "verdict" | "plan" | "over">
 
 /**
  * Search by part of an email, and narrow to one role, state, sync status, or, once `plans` are
- * known, Plan.
+ * known, Plan and whether people are over a limit of it.
  */
 export function PeopleFilters({
   query,
@@ -72,6 +72,21 @@ export function PeopleFilters({
         </NativeSelect>
       </div>
       {plans && <PlanFilter plans={plans} plan={query.plan} onChange={(plan) => onChange({ plan })} />}
+      {plans && <LimitsFilter over={query.over} onChange={(over) => onChange({ over })} />}
+    </div>
+  )
+}
+
+/** Narrows to the people over a limit of the Plan they have, as the Plans tab's "Over a limit" counts them. */
+function LimitsFilter({ over, onChange }: { over: boolean; onChange: (over: boolean) => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="field-stack">
+      <Label htmlFor="people-limits">{t("people.filters.limits")}</Label>
+      <NativeSelect id="people-limits" value={over ? "over" : ""} onChange={(event) => onChange(event.target.value === "over")}>
+        <option value="">{t("people.filters.anyLimits")}</option>
+        <option value="over">{t("people.filters.overLimit")}</option>
+      </NativeSelect>
     </div>
   )
 }

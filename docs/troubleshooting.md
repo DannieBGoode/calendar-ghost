@@ -741,10 +741,12 @@ has more calendar accounts than this. They keep them, but cannot connect another
 
 **People** shows who they are, in Attention Ochre with an icon:
 
-- On **Plans**, the Plan's row says how many of the people it limits are over: "1 has more than
-  this plan allows."
+- On **Plans**, the card at the top counts everyone over a limit, with **Show** to list them, and
+  each Plan's row says how many of the people it limits are over: "1 over a limit", which lists
+  them too.
 - On **Everyone**, the **Plan** column names each limit a person is over: "Family. 2 calendar
-  accounts, 1 allowed". Choose the Plan in the **Plan** filter to list only the people who have it.
+  accounts, 1 allowed". Choose the Plan in the **Plan** filter to list only the people who have it,
+  and **Over a limit** in the **Limits** filter to list only the people over one.
 - On the person's page, the Plan fact says the same: "Plan: Family. 2 calendar accounts, 1
   allowed".
 
@@ -763,12 +765,13 @@ To fix it, do one of these:
 
 ## A plan cannot be removed, or its name is refused
 
-- **The default Plan has no Remove.** Its row says "Default plan. Choose another default to remove
-  it." Choose another **Default plan**, choose **Save default**, then remove it.
-- **Remove names who has the Plan.** A Plan someone has cannot be removed. Remove says who has it,
-  the first three by email and then how many more: "robin@example.test has Family. Give them
-  another plan to remove it." Choose **Show who has Family** to list everyone who has it, give each
-  of them another Plan with **Change plan**, then remove it.
+- **Remove is unavailable on the default Plan.** In its **More actions** menu, Remove says "Make
+  another plan the default first." Choose **Make default** on another Plan, then remove it.
+- **Remove names who has the Plan.** A Plan someone has cannot be removed. In its menu, Remove says
+  who has it, the first three by email and then how many more: "robin@example.test has Family. Give
+  them another plan first." Choose how many people have it, in the Plan's **People** column, to
+  list everyone who has it, give each of them another Plan with **Change plan**, or **Assign
+  people** on another Plan, then remove it.
 - **"Another plan is named Free. Choose a different name."** Two Plans cannot share a name, whatever
   its case or the spaces around it. Choose another name, or rename the other Plan first.
 

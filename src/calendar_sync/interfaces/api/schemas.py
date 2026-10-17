@@ -837,6 +837,9 @@ class PlansResponse(ApiResponse):
     administrators: int
     """Everyone who holds the Installation Administrator role, active or not. No Plan limits
     them, though each Plan's `people` counts those who have it."""
+    followers: int
+    """Everyone with no Plan of their own, whatever their role or state: whom making another Plan
+    the default moves to it."""
     plans: list[PlanResponse]
 
 

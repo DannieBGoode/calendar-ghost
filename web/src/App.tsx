@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Activity, CalendarCheck2, LogOut, Menu, Settings2, Users, Waypoints, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 
+import { AppToasts } from "@/components/app-toasts"
 import { GhostMark } from "@/components/ghost-mark"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -207,28 +208,30 @@ function AuthenticatedApp() {
   }
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <a className="wordmark" href={appPathForView("overview")} onClick={(event) => followSectionLink(event, "overview")} aria-label={t("app.wordmarkLabel")}>
-          <span className="wordmark-icon"><GhostMark /></span><span>{PRODUCT_NAME}</span>
-        </a>
-        <nav id="primary-nav" className={cn("primary-nav", mobileNav && "open")} aria-label={t("app.nav.primaryLabel")}>
-          {shownNavItems.map((item) => {
-            const Icon = item.icon
-            const flag = item.id === "people" && administratorFlag
-            return <a key={item.id} href={appPathForView(item.id)} className={cn("nav-item", view === item.id && "active")} onClick={(event) => followSectionLink(event, item.id)} aria-current={view === item.id ? "page" : undefined}><Icon /><span>{t(item.labelKey)}</span>{flag && <><span className="nav-flag" aria-hidden="true" /><span className="sr-only">{t("app.nav.needsYou")}</span></>}</a>
-          })}
-        </nav>
-        <div className="topbar-actions">
-          <ThemeToggle />
-          <Button variant="ghost" onClick={() => logout.mutate()} disabled={logout.isPending} aria-label={t("app.signOut")}><LogOut /> <span className="desktop-only">{t("app.signOut")}</span></Button>
-          <Button ref={menuButton} className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-controls="primary-nav" aria-label={mobileNav ? t("app.nav.close") : t("app.nav.open")}>{mobileNav ? <X /> : <Menu />}</Button>
-        </div>
-      </header>
-      <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} onOpenRulePreview={openRulePreview} onOpenSettingsTab={openSettingsTab} onOpenPerson={openPerson} /></main>
-      <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
-      <AppFooter />
-    </div>
+    <AppToasts>
+      <div className="app-shell">
+        <header className="topbar">
+          <a className="wordmark" href={appPathForView("overview")} onClick={(event) => followSectionLink(event, "overview")} aria-label={t("app.wordmarkLabel")}>
+            <span className="wordmark-icon"><GhostMark /></span><span>{PRODUCT_NAME}</span>
+          </a>
+          <nav id="primary-nav" className={cn("primary-nav", mobileNav && "open")} aria-label={t("app.nav.primaryLabel")}>
+            {shownNavItems.map((item) => {
+              const Icon = item.icon
+              const flag = item.id === "people" && administratorFlag
+              return <a key={item.id} href={appPathForView(item.id)} className={cn("nav-item", view === item.id && "active")} onClick={(event) => followSectionLink(event, item.id)} aria-current={view === item.id ? "page" : undefined}><Icon /><span>{t(item.labelKey)}</span>{flag && <><span className="nav-flag" aria-hidden="true" /><span className="sr-only">{t("app.nav.needsYou")}</span></>}</a>
+            })}
+          </nav>
+          <div className="topbar-actions">
+            <ThemeToggle />
+            <Button variant="ghost" onClick={() => logout.mutate()} disabled={logout.isPending} aria-label={t("app.signOut")}><LogOut /> <span className="desktop-only">{t("app.signOut")}</span></Button>
+            <Button ref={menuButton} className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-controls="primary-nav" aria-label={mobileNav ? t("app.nav.close") : t("app.nav.open")}>{mobileNav ? <X /> : <Menu />}</Button>
+          </div>
+        </header>
+        <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} onOpenRulePreview={openRulePreview} onOpenSettingsTab={openSettingsTab} onOpenPerson={openPerson} /></main>
+        <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
+        <AppFooter />
+      </div>
+    </AppToasts>
   )
 }
 

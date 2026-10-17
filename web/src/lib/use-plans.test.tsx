@@ -38,6 +38,7 @@ const overview: PlansOverview = {
   default_plan: "free",
   sync_intervals: ["instant", "5_minutes"],
   administrators: 1,
+  followers: 2,
   plans: [family, free],
 }
 
@@ -137,7 +138,7 @@ describe("usePlans", () => {
     expect(queryClient.getQueryData(PLANS_QUERY)).toEqual(overview)
   })
 
-  it("turns Plans on with the default it already has, and says so", async () => {
+  it("turns Plans on with the default it already has, and reads again what Plans change", async () => {
     const on: PlansOverview = { ...overview, enabled: true }
     await render({ "PUT /api/v1/plan-settings": jsonResponse(on) })
     await run((plans) => plans.setting.mutate({ enabled: true, defaultPlan: "free" }))
@@ -147,101 +148,58 @@ describe("usePlans", () => {
       body: { enabled: true, default_plan: "free" },
     })
     expect(queryClient.getQueryData(PLANS_QUERY)).toEqual(on)
-    // Family limits 3 people and Free, the default, 2.
-    expect(commands?.message).toBe("Plans now limit 5 people.")
+    expect(commands?.setting.data).toEqual(on)
     expect(refreshed(["people", "overview", "user-robin"])).toBe(true)
     expect(refreshed(OWN_PLAN_QUERY)).toBe(true)
   })
 
-  it("turns Plans on with no default, and names the No limits plan the server made the default", async () => {
-    const noLimits: PlanSummary = {
-      key: "no-limits",
-      name: "No limits",
-      limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" },
-      is_default: true,
-      people: 3,
-      limited_people: 2,
-      over_people: 0,
-      use: { rules: [], connected_accounts: [], integration_tokens: [] },
-    }
+  it("turns Plans on with no default, as the server then makes No limits the default", async () => {
     const off: PlansOverview = { ...overview, default_plan: null, plans: [family, { ...free, is_default: false }] }
-    const on: PlansOverview = {
-      ...overview,
-      enabled: true,
-      default_plan: "no-limits",
-      plans: [family, { ...free, is_default: false }, noLimits],
-    }
-    await render({ "GET /api/v1/plans": jsonResponse(off), "PUT /api/v1/plan-settings": jsonResponse(on) })
+    await render({ "GET /api/v1/plans": jsonResponse(off), "PUT /api/v1/plan-settings": jsonResponse(overview) })
     await run((plans) => plans.setting.mutate({ enabled: true, defaultPlan: null }))
     expect(calls.find((call) => call.method === "PUT")?.body).toEqual({ enabled: true, default_plan: null })
-    expect(commands?.message).toBe("Plans are on. No limits is the new default plan, and it limits nothing.")
   })
 
-  it("says Plans limit nobody yet when no Plan that limits something has anyone", async () => {
-    const on: PlansOverview = {
-      ...overview,
-      enabled: true,
-      plans: [
-        { ...family, limited_people: 0 },
-        { ...free, limited_people: 0 },
-      ],
-    }
-    await render({ "PUT /api/v1/plan-settings": jsonResponse(on) })
-    await run((plans) => plans.setting.mutate({ enabled: true, defaultPlan: "free" }))
-    expect(commands?.message).toBe("Plans are on. They limit nobody yet.")
-  })
-
-  it("turns Plans off, keeping every Plan", async () => {
-    await render({
-      "GET /api/v1/plans": jsonResponse({ ...overview, enabled: true }),
-      "PUT /api/v1/plan-settings": jsonResponse(overview),
-    })
-    await run((plans) => plans.setting.mutate({ enabled: false, defaultPlan: "free" }))
-    expect(commands?.message).toBe("Plans no longer limit anyone.")
-  })
-
-  it("names a new Default Plan", async () => {
-    const changed: PlansOverview = {
-      ...overview,
-      default_plan: "family",
-      plans: [{ ...family, is_default: true }, { ...free, is_default: false }],
-    }
-    await render({ "PUT /api/v1/plan-settings": jsonResponse(changed) })
-    await run((plans) => plans.setting.mutate({ enabled: false, defaultPlan: "family" }))
-    expect(commands?.message).toBe("Family is now the default plan.")
-  })
-
-  it("adds, saves, and removes a Plan, naming it each time", async () => {
+  it("adds, saves, and removes a Plan, listing the Plans again after each", async () => {
     await render({
       "POST /api/v1/plans": jsonResponse({ ...family, key: "family-2", name: "Family Plus" }, 201),
       "PUT /api/v1/plans/family": jsonResponse({ ...family, name: "Family Large" }),
       "DELETE /api/v1/plans/family": NO_CONTENT,
     })
+    const listings = () => calls.filter((call) => call.method === "GET" && call.path === "/api/v1/plans").length
     const payload = { key: "family-2", name: "Family Plus", limits: family.limits }
     await run((plans) => plans.define.mutate(payload))
     expect(calls.find((call) => call.method === "POST")?.body).toEqual(payload)
-    expect(commands?.message).toBe("Family Plus was added.")
+    expect(listings()).toBe(2)
 
     await run((plans) => plans.change.mutate({ key: "family", payload: { name: "Family Large", limits: family.limits } }))
     expect(calls.find((call) => call.method === "PUT")?.path).toBe("/api/v1/plans/family")
-    expect(commands?.message).toBe("Family Large was saved.")
+    expect(listings()).toBe(3)
 
     await run((plans) => plans.remove.mutate("family"))
     expect(calls.find((call) => call.method === "DELETE")?.path).toBe("/api/v1/plans/family")
-    expect(commands?.message).toBe("Family was removed.")
-    // Each change lists the Plans again.
-    expect(calls.filter((call) => call.method === "GET" && call.path === "/api/v1/plans").length).toBeGreaterThan(1)
+    expect(listings()).toBe(4)
+    expect(refreshed(OWN_PLAN_QUERY)).toBe(true)
   })
 
-  it("keeps the last message until the next change starts, and none after a refusal", async () => {
-    await render({
-      "POST /api/v1/plans": jsonResponse({ code: "plan_key_taken", params: {}, detail: "taken" }, 409),
-      "PUT /api/v1/plan-settings": jsonResponse({ ...overview, enabled: true }),
-    })
-    await run((plans) => plans.setting.mutate({ enabled: true, defaultPlan: "free" }))
-    expect(commands?.message).toBe("Plans now limit 5 people.")
-    await run((plans) => plans.define.mutate({ key: "free", name: "Free", limits: free.limits }))
-    expect(commands?.define.error).not.toBeNull()
-    expect(commands?.message).toBe("")
+  it("gives Plans to people, one call for each move, then reads again what Plans change", async () => {
+    await render({ "POST /api/v1/plan-assignments": jsonResponse({ dry_run: false, people: [] }) })
+    await run((plans) =>
+      plans.assign.mutate({
+        from: "free",
+        moves: [
+          { plan: null, userIds: ["user-alex"] },
+          { plan: "family", userIds: ["user-sam", "user-lee"] },
+        ],
+      }),
+    )
+    expect(calls.filter((call) => call.method === "POST").map((call) => call.body)).toEqual([
+      { plan: null, user_ids: ["user-alex"], dry_run: false },
+      { plan: "family", user_ids: ["user-sam", "user-lee"], dry_run: false },
+    ])
+    expect(commands?.assign.data).toHaveLength(2)
+    expect(calls.filter((call) => call.method === "GET" && call.path === "/api/v1/plans").length).toBe(2)
+    expect(refreshed(["people", "overview", "user-robin"])).toBe(true)
+    expect(refreshed(OWN_PLAN_QUERY)).toBe(true)
   })
 })

@@ -3,7 +3,6 @@ import type { MessageKey } from "@/i18n/types"
 import type {
   OverLimit,
   OwnPlan,
-  PeoplePage,
   PersonPlanOverview,
   PlanLimits,
   PlanSummary,
@@ -12,7 +11,6 @@ import type {
   RuleSummary,
   SyncInterval,
 } from "@/lib/api"
-import { personName } from "@/lib/people"
 
 /**
  * Whether Your plan shows: only when a Plan limits the User, or for an administrator while other
@@ -86,33 +84,19 @@ function tokenLimit({ t }: I18n, tokens: number | null): string {
 }
 
 /**
- * How a list of a Plan's counts says "No limit" where it starts: a Plan's row starts a line with
- * it, and Change plan's line on what the chosen Plan allows after the Plan's name.
- */
-type NoLimitWords = { rules: MessageKey; all: MessageKey }
-
-const ROW_NO_LIMIT: NoLimitWords = { rules: "people.plans.limits.unlimitedRules", all: "people.plans.limits.unlimited" }
-const OPTION_NO_LIMIT: NoLimitWords = { rules: "people.plan.limits.unlimitedRules", all: "people.plan.limits.unlimited" }
-
-/**
- * A Plan's counts: rules, calendar accounts, then Integration Tokens, with "No limit" where a
+ * A Plan's counts: rules, calendar accounts, then Integration Tokens, with "no limit" where a
  * count has none, said once when none has.
  */
-function countsList(i18n: I18n, { rules, connected_accounts, integration_tokens }: PlanLimits, noLimit: NoLimitWords): string {
+function countsList(i18n: I18n, { rules, connected_accounts, integration_tokens }: PlanLimits): string {
   const { t } = i18n
-  if (rules === null && connected_accounts === null && integration_tokens === null) return t(noLimit.all)
+  if (rules === null && connected_accounts === null && integration_tokens === null) return t("people.plan.limits.unlimited")
   return i18n.format.unitList([
-    rules === null ? t(noLimit.rules) : t("people.plans.limits.rules", { count: rules }),
+    rules === null ? t("people.plan.limits.unlimitedRules") : t("people.plans.limits.rules", { count: rules }),
     connected_accounts === null
       ? t("people.plans.limits.unlimitedAccounts")
       : t("people.plans.limits.accounts", { count: connected_accounts }),
     tokenLimit(i18n, integration_tokens),
   ])
-}
-
-/** A Plan's counts on its row in People's Plans tab, such as "5 rules, 3 calendar accounts, 2 Integration Tokens". */
-export function planLimitsSummary(i18n: I18n, limits: PlanLimits): string {
-  return countsList(i18n, limits, ROW_NO_LIMIT)
 }
 
 /**
@@ -122,7 +106,7 @@ export function planLimitsSummary(i18n: I18n, limits: PlanLimits): string {
 export function planAllows(i18n: I18n, { name, limits }: Pick<PlanSummary, "name" | "limits">): string {
   return i18n.t("people.plan.allows", {
     name,
-    limits: countsList(i18n, limits, OPTION_NO_LIMIT),
+    limits: countsList(i18n, limits),
     interval: i18n.t(`people.plan.interval.${limits.sync_interval}`),
   })
 }
@@ -133,21 +117,6 @@ export function planAllows(i18n: I18n, { name, limits }: Pick<PlanSummary, "name
  */
 export function planChoiceAllows(i18n: I18n, plan: PlanSummary | undefined): string {
   return plan ? planAllows(i18n, plan) : i18n.t("people.plan.allowsNoDefault")
-}
-
-/**
- * Why a Plan people have cannot be removed yet, naming the first of them, by email, from
- * `holders`, the first page of the people who have it: "robin@example.test and sam@example.test
- * have Family.", or "a, b, c, and 2 more have Family." Until they are known, or when they cannot
- * be read, it counts them as the Plan's row does.
- */
-export function planInUseText(i18n: I18n, plan: PlanSummary, holders: PeoplePage | undefined): string {
-  const { t } = i18n
-  if (!holders || holders.users.length === 0) return t("people.plans.inUse", { count: plan.people, name: plan.name })
-  const names = holders.users.map((person) => personName(i18n, person))
-  const more = holders.total - names.length
-  const people = i18n.format.list(more > 0 ? [...names, t("people.plans.inUseMore", { count: more })] : names)
-  return t("people.plans.inUseNamed", { count: holders.total, people, name: plan.name })
 }
 
 /**
@@ -233,7 +202,8 @@ const OVER_WORDS: Readonly<Record<OverLimit["limit"], MessageKey>> = {
   integration_tokens: "people.plan.over.tokens",
 }
 
-function overLimitText({ t }: I18n, { limit, in_use, allowed }: OverLimit): string {
+/** One limit a person is over, or would be under another Plan: "2 calendar accounts, 1 allowed". */
+export function overLimitText({ t }: I18n, { limit, in_use, allowed }: OverLimit): string {
   // A Plan may include no Integration Tokens; one lowered to none still counts those kept.
   if (limit === "integration_tokens" && allowed === 0) return t("people.plan.over.tokensNone", { count: in_use })
   return t(OVER_WORDS[limit], { count: in_use, allowed })

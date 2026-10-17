@@ -11,17 +11,22 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   administrator adds Plans by name, each with how many rules may sync, how many calendar accounts
   and Integration Tokens a person may have, and whether their calendars sync instantly or every 5
   minutes. The form says what counts toward each limit, and before a lower limit is saved, how many
-  people it would leave with more than it allows. Each Plan says how many people have it, how many
-  it limits, and how many of those have more than it allows, and a person's page names each limit
-  they are over. **Everyone** shows each person's Plan in its own column, with any limit they are
-  over, and can list only the people who have one Plan. Two Plans cannot share a name, whatever its
-  case; the form says so under Name. The default has no Remove and says to choose another default
-  first, and Remove on a Plan someone has names the first three of them and links to everyone who
-  has it. The administrator chooses the Default Plan with **Save default**, and turns Plans on with
-  **Limit people with plans**, which says how many people Plans limit. Turning Plans on with no
-  default adds a Plan named No limits, which limits nobody, as the default, so nothing changes until
-  someone has a smaller Plan; it can be renamed and changed like any Plan. **Change plan** on a
-  person's page gives them a Plan of their own, saying what the chosen Plan allows under the choice.
+  people it would leave with more than it allows. The Plans tab starts with a card that says
+  whether Plans are on and what they do now, or would do, beside the one **Plans** switch, which
+  applies at once, and counts whom Plans limit, who is over a limit, the default Plan, and the
+  administrators no Plan limits. A table then compares the Plans by limit, with how many people
+  have each and how many of them are over a limit, each linking to them under **Everyone**. Each
+  Plan's **More actions** menu offers **Edit**, **Assign people**, which gives the Plan to people
+  found by email after a dry run says who would be over, **Make default**, which says whom it
+  moves, **Duplicate**, and **Remove**. Results show at the bottom of the window, most with
+  **Undo**. A person's page names each limit they are over. **Everyone** shows each person's Plan in
+  its own column, with any limit they are over, and can list only the people who have one Plan, or
+  who are over a limit. Two Plans cannot share a name, whatever its case; the form says so under
+  Name. Remove is unavailable on the default, saying to make another Plan the default first, and on
+  a Plan someone has, naming the first three of them. Turning Plans on with no default adds a Plan
+  named No limits, which limits nobody, as the default, so nothing changes until someone has a
+  smaller Plan; it can be renamed and changed like any Plan. **Change plan** on a person's page
+  gives them a Plan of their own, saying what the chosen Plan allows under the choice.
   Plans are off by default, and while they are off nothing changes. Administrators are never
   limited, and under **Only me** Plans stay hidden. Once Plans are on, starting a rule, connecting a
   new calendar account, and issuing a token respect the person's Plan: each control says so at the
@@ -43,7 +48,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   after and what they are over; with `dry_run` it gives nothing and answers the same (422
   `invalid_assignment` for nobody, more than 100 people, or someone who is not a User). A person's
   `plan` also gains `assigned_by` and `assigned_at`, who gave their own Plan and when, and `use`,
-  each count beside its limit; `GET /api/v1/plans` gains `administrators`. No Plan has the key
+  each count beside its limit; `GET /api/v1/plans` gains `administrators` and `followers`, how
+  many people have no Plan of their own. No Plan has the key
   `new`, which the New plan page's address uses: a Plan named New gets `new-2`, and
   `POST /api/v1/plans` refuses the key (422 `invalid_plan`). Migration 33 adds the `plans` table
   and the Plan columns; rolling back to an earlier release works with the same database, which

@@ -49,11 +49,16 @@ class PlansOverview:
     administrators: int
     """Everyone who holds the Installation Administrator role, active or not: no Plan limits
     them, though each Plan's `people` counts those who have it."""
+    followers: int
+    """Everyone with no Plan of their own, whatever their role or state: whom Make default
+    moves to the Plan it makes the default."""
 
 
 def _overview(users: UserDirectory, catalog: PlanCatalog, setting: PlansSetting) -> PlansOverview:
     administrators = users.find(UserQuery(role=Role.INSTALLATION_ADMINISTRATOR, limit=0)).total
-    return PlansOverview(setting, tuple(catalog.plans()), OFFERED_INTERVALS, administrators)
+    return PlansOverview(
+        setting, tuple(catalog.plans()), OFFERED_INTERVALS, administrators, catalog.followers()
+    )
 
 
 def _listing(catalog: PlanCatalog, key: PlanKey) -> PlanListing:

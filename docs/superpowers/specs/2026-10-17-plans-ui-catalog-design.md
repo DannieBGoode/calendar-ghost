@@ -297,7 +297,8 @@ component.
   Accounts, and unrevoked Integration Tokens
   ([ADR 0030](../../adr/0030-users-administrators-and-registration.md), amended, for the token
   count).
-- The Plans overview gains how many administrators there are, for the Never limited fact.
+- The Plans overview gains how many administrators there are, for the Never limited fact, and how
+  many people have no Plan of their own, for the count Make default says it moves.
 - No Plan has the key `new`, which `/people/plans/new` names.
 - `PUT /api/v1/plan-settings` does not change: the switch sends the saved default with the new
   `enabled`, and Make default sends the saved `enabled` with the new `default_plan`.

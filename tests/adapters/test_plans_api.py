@@ -197,6 +197,7 @@ def test_an_administrator_defines_lists_changes_and_removes_plans(
         "default_plan": None,
         "sync_intervals": OFFERED,
         "administrators": 1,
+        "followers": 2,
         "plans": [],
     }
     assert defined.status_code == 201
@@ -326,6 +327,7 @@ def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_that_limits_nob
         "default_plan": "no-limits",
         "sync_intervals": OFFERED,
         "administrators": 1,
+        "followers": 2,
         "plans": [
             {**FREE_BODY, **NOBODY_ON_IT},
             # Everyone has it, and it limits the member, by nothing.
@@ -373,6 +375,7 @@ def test_the_default_is_never_cleared_while_plans_are_on_and_turning_them_off_ke
         "default_plan": "free",
         "sync_intervals": OFFERED,
         "administrators": 1,
+        "followers": 2,
         # Everyone has the default; it would limit only the member, never an administrator.
         "plans": [{**FREE_BODY, "is_default": True, "people": 2, "limited_people": 1, **NO_USE}],
     }
@@ -745,6 +748,7 @@ def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
     invited = UserId(joined.json()["user"]["id"])
     client.cookies.clear()
     installation.as_admin()
+    followers = client.get("/api/v1/plans").json()["followers"]
     member_seen = installation.overview_plan(installation.member)
     invited_seen = installation.overview_plan(invited)
     own_seen = installation.overview_plan(own_free)
@@ -768,6 +772,10 @@ def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
     }
     assert switched.status_code == 200
     assert joined.status_code == 200, joined.text
+    # Make default moves the administrator and the member, then the invited person too, never
+    # someone with a Plan of their own.
+    assert switched.json()["followers"] == 2
+    assert followers == 3
     assert member_seen == on_family
     assert invited_seen == on_family
     # Someone with a Plan of their own keeps it.

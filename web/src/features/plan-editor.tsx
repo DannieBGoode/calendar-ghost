@@ -111,6 +111,7 @@ function useRefusal(error: unknown, draft: PlanDraft, form: RefObject<HTMLFormEl
  */
 export function PlanEditor({
   plan,
+  start,
   enabled,
   others,
   intervals,
@@ -120,6 +121,8 @@ export function PlanEditor({
   onCancel,
 }: {
   plan: PlanSummary | null
+  /** How a new Plan starts, such as a copy of another; empty, with no limits, unless given. */
+  start?: PlanDraft | undefined
   /** Plans limit people now, so a lower limit's warning says what it does now, not once they are on. */
   enabled: boolean
   /** The names of every other Plan, which this one's may not read as. */
@@ -131,7 +134,7 @@ export function PlanEditor({
   onCancel: () => void
 }) {
   const { t } = useI18n()
-  const [draft, setDraft] = useState(() => draftOf(plan, intervals))
+  const [draft, setDraft] = useState(() => (plan === null && start ? start : draftOf(plan, intervals)))
   const form = useRef<HTMLFormElement>(null)
   const refusal = useRefusal(error, draft, form)
   useEffect(() => {

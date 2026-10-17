@@ -5,6 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { AppToasts } from "@/components/app-toasts"
 import { ThemeProvider } from "@/components/theme-provider"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
@@ -124,6 +125,7 @@ const PLANS: PlansOverview = {
   default_plan: "free",
   sync_intervals: ["instant", "5_minutes"],
   administrators: 1,
+  followers: 2,
   plans: [planSummary("family", "Family", false), planSummary("free", "Free", true)],
 }
 
@@ -234,7 +236,9 @@ function showPeople(i18n: I18n, queryClient: QueryClient, visit = 0) {
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <PeopleView key={visit} tab={tab} notice={null} onOpenPerson={openPerson} />
+            <AppToasts>
+              <PeopleView key={visit} tab={tab} notice={null} onOpenPerson={openPerson} />
+            </AppToasts>
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -436,6 +440,42 @@ describe("People page", () => {
     await select("people-plan", "")
     expect(lastPeopleQuery().plan).toBeUndefined()
     expect(window.location.search).toBe("")
+  })
+
+  it("narrows to the people over a limit of their plan, kept in the address beside the plan", async () => {
+    await renderPeople(testI18n(), {
+      search: "?page=2",
+      people: () => jsonResponse(withPlans(onePage([me, robin, sam], { total: 60 }))),
+      answers: { "GET /api/v1/plans": jsonResponse(PLANS) },
+    })
+    const limits = container.querySelector<HTMLSelectElement>("#people-limits")!
+    expect(container.querySelector("label[for='people-limits']")?.textContent).toBe("Limits")
+    expect([...limits.options].map((option) => [option.value, option.textContent])).toEqual([
+      ["", "Anyone"],
+      ["over", "Over a limit"],
+    ])
+    await select("people-limits", "over")
+    expect(lastPeopleQuery()).toMatchObject({ over: "true", page: "1" })
+    expect(window.location.search).toBe("?over=true")
+    await select("people-plan", "family")
+    expect(lastPeopleQuery()).toMatchObject({ plan: "family", over: "true" })
+    expect(window.location.search).toBe("?plan=family&over=true")
+    await select("people-limits", "")
+    expect(lastPeopleQuery().over).toBeUndefined()
+    expect(window.location.search).toBe("?plan=family")
+  })
+
+  it("restores the over-a-limit filter from the address, reading plans so it shows", async () => {
+    await renderPeople(testI18n(), {
+      search: "?over=true",
+      people: () => jsonResponse(onePage([], { total: 0 })),
+      answers: { "GET /api/v1/plans": jsonResponse(PLANS) },
+    })
+    expect(lastPeopleQuery()).toMatchObject({ over: "true" })
+    expect(container.querySelector<HTMLSelectElement>("#people-limits")!.value).toBe("over")
+    await click(button("Clear filters"))
+    expect(lastPeopleQuery().over).toBeUndefined()
+    expect(container.querySelector<HTMLSelectElement>("#people-limits")!.value).toBe("")
   })
 
   it("restores a plan filter from the address, even for a plan that no longer exists", async () => {
@@ -939,6 +979,24 @@ describe("People page", () => {
   ])("names the browser tab after the tab shown at %s", async (path, title) => {
     await renderPeople(testI18n(), { path })
     expect(document.title).toBe(title)
+  })
+
+  it("says what each tab is for, and offers its one action, beside the page title", async () => {
+    await renderPeople(testI18n(), { answers: { "GET /api/v1/plans": jsonResponse(PLANS) } })
+    const intro = () => container.querySelector(".page-intro")?.textContent
+    const actions = () => [...container.querySelectorAll(".heading-action button")].map((item) => item.textContent.trim())
+    expect(intro()).toBe(
+      "The people who sign in here and whether their synchronization works. You see their email, role, sign-ins, and sync status, never their calendars, connected account emails, or events.",
+    )
+    expect(actions()).toEqual(["Invite someone"])
+    const tabs = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")]
+    await click(tabs[2]!)
+    expect(intro()).toBe(
+      "Plans set how much each person can use and how soon their calendars sync. Administrators are never limited.",
+    )
+    expect(actions()).toEqual(["New plan"])
+    await click(tabs[1]!)
+    expect(actions()).toEqual(["Invite someone"])
   })
 
   it("opens Plans in place, and asks for plans only there", async () => {

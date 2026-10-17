@@ -1,5 +1,5 @@
 import { ChevronDown, MoreHorizontal } from "lucide-react"
-import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react"
+import { Fragment, useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
 
@@ -14,6 +14,8 @@ export type OverflowMenuItem = {
   /** Opens `href` in a new tab, so this page stays and the menu returns focus to its trigger. */
   newTab?: boolean
   disabled?: boolean
+  /** A divider before the item, setting it apart from the ones above, as Remove is. */
+  separated?: boolean
   onSelect: () => void
 }
 
@@ -35,10 +37,13 @@ export function OverflowMenu({
   label,
   items,
   trigger: visibleTrigger,
+  onOpen,
 }: {
   label: string
   items: OverflowMenuItem[]
   trigger?: OverflowMenuTrigger
+  /** Called as the menu opens, so items can read what their descriptions need. */
+  onOpen?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [placement, setPlacement] = useState<{ left: number; width: number } | null>(null)
@@ -68,6 +73,7 @@ export function OverflowMenu({
       setPlacement({ left: left - box.left, width })
     }
     setOpen(true)
+    onOpen?.()
   }
 
   function close(returnFocus: boolean) {
@@ -139,15 +145,17 @@ export function OverflowMenu({
           aria-label={label}
         >
           {items.map((item, index) => (
-            <OverflowMenuEntry
-              key={item.id}
-              item={item}
-              descriptionId={`${menuId}-${item.id}`}
-              entryRef={(element) => {
-                itemRefs.current[index] = element
-              }}
-              onChosen={() => close(!item.href || Boolean(item.newTab))}
-            />
+            <Fragment key={item.id}>
+              {item.separated && <hr className="overflow-menu-separator" />}
+              <OverflowMenuEntry
+                item={item}
+                descriptionId={`${menuId}-${item.id}`}
+                entryRef={(element) => {
+                  itemRefs.current[index] = element
+                }}
+                onChosen={() => close(!item.href || Boolean(item.newTab))}
+              />
+            </Fragment>
           ))}
         </div>
       )}
