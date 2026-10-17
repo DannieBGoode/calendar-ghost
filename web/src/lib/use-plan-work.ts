@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react"
 
+import { leaveThen } from "@/lib/leave-guard"
 import {
   appLocationFromPathname,
   appPathForPeopleTab,
@@ -28,7 +29,8 @@ function panelAtAddress(): PlanPanel | null {
  * and, under a Plan's row, the confirmation of its removal. Opening the panel from the page moves
  * focus to its title; closing it returns to the Plans tab's address, and focus to the Plan's name
  * or New plan. While a Plan command is on its way, nothing opens or closes, so its answer has a
- * place to show. Opening something forgets the refusals of the last.
+ * place to show. Opening something forgets the refusals of the last. While the open panel has
+ * changes not saved, opening, switching, or closing it asks first (`leaveThen`).
  */
 export function usePlanWork({ setting, define, change, remove, assign }: PlanCommands) {
   const [panel, setPanel] = useState(panelAtAddress)
@@ -61,23 +63,28 @@ export function usePlanWork({ setting, define, change, remove, assign }: PlanCom
    */
   function openPanel(next: PlanPanel, copy: string | null = null) {
     if (busy || (panel !== null && samePanel(panel, next) && copy === copyOf)) return
-    show(next, copy, panel === null || panel.plan === next.plan ? "push" : "replace")
-    setTitleFocus(true)
+    leaveThen(() => {
+      show(next, copy, panel === null || panel.plan === next.plan ? "push" : "replace")
+      setTitleFocus(true)
+    })
   }
 
   /** Shows the open Plan's other tab, at its own address; focus stays on the tab. */
   function openTab(tab: PlanPanelTab) {
     const plan = panel?.plan ?? null
     if (busy || plan === null || panel?.tab === tab) return
-    show({ plan, tab }, null, "push")
+    leaveThen(() => show({ plan, tab }, null, "push"))
   }
 
   function closePanel() {
     if (busy || panel === null) return
-    window.history.pushState(null, "", appPathForPeopleTab("plans"))
-    setFocusReturn({ plan: panel.plan })
-    setPanel(null)
-    setCopyOf(null)
+    const { plan } = panel
+    leaveThen(() => {
+      window.history.pushState(null, "", appPathForPeopleTab("plans"))
+      setFocusReturn({ plan })
+      setPanel(null)
+      setCopyOf(null)
+    })
   }
 
   return {

@@ -13,6 +13,7 @@ import type { MessageKey } from "@/i18n/types"
 import { api } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
 import { appPathForPeopleTab, type OpenPerson, type PeopleTab } from "@/lib/navigation"
+import { leaveThen } from "@/lib/leave-guard"
 import { DEFAULT_PEOPLE_QUERY, peoplePath, peopleSearch, type PeopleFilter } from "@/lib/people-query"
 import { useNow } from "@/lib/use-now"
 import { usePeopleAccess } from "@/lib/use-people-access"
@@ -79,22 +80,27 @@ function PeopleContent({
     if (listArrivals > 0) document.getElementById("people-list-title")?.focus()
   }, [listArrivals])
 
-  // Each tab has its own address; switching keeps this page, and what it shows, in place.
+  // Each tab has its own address; switching keeps this page, and what it shows, in place. A Plan's
+  // changes not saved are asked about first.
   function openTab(next: PeopleTab) {
     if (next === tab) return
-    const search = next === "everyone" ? peopleSearch(query) : ""
-    window.history.pushState(null, "", `${appPathForPeopleTab(next)}${search}`)
-    setTab(next)
+    leaveThen(() => {
+      const search = next === "everyone" ? peopleSearch(query) : ""
+      window.history.pushState(null, "", `${appPathForPeopleTab(next)}${search}`)
+      setTab(next)
+    })
   }
 
   // The people a link on the Plans tab names, such as who has a Plan or who is over a limit: those
   // filters alone narrow the list, from its heading.
   function showPeople(filter: PeopleFilter) {
-    const shown = { ...DEFAULT_PEOPLE_QUERY, ...filter }
-    window.history.pushState(null, "", peoplePath(filter))
-    update(shown, "replace")
-    setTab("everyone")
-    setListArrivals((count) => count + 1)
+    leaveThen(() => {
+      const shown = { ...DEFAULT_PEOPLE_QUERY, ...filter }
+      window.history.pushState(null, "", peoplePath(filter))
+      update(shown, "replace")
+      setTab("everyone")
+      setListArrivals((count) => count + 1)
+    })
   }
 
   function inviteSomeone() {

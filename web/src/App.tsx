@@ -29,6 +29,7 @@ import {
   type ViewOptions,
   withSettingsTab,
 } from "@/lib/navigation"
+import { holdHistory, leaveThen } from "@/lib/leave-guard"
 import { publicPageAt } from "@/lib/public-links"
 import { useAdministratorFlag } from "@/lib/use-administrator-flag"
 import { usePeopleAccess } from "@/lib/use-people-access"
@@ -119,6 +120,8 @@ function AuthenticatedApp() {
       )
     }
     const handlePopState = () => {
+      // A form with changes not saved, such as a Plan's, asks before Back or Forward drops them.
+      if (holdHistory()) return
       navigated.current = true
       setVisit((count) => count + 1)
       setArrival({})
@@ -167,17 +170,20 @@ function AuthenticatedApp() {
     return () => document.removeEventListener("keydown", close)
   }, [mobileNav])
 
+  // A form with changes not saved, such as a Plan's, asks before the page leaves it.
   function navigate(next: AppLocation, options: ViewOptions = {}) {
-    const nextPath = `${appPathForLocation(next)}${options.search ?? ""}`
-    if (`${window.location.pathname}${window.location.search}` !== nextPath || window.location.hash) {
-      window.history.pushState(null, "", nextPath)
-    }
-    navigated.current = true
-    setVisit((count) => count + 1)
-    setArrival(options)
-    setLocation(withSettingsTab(next, options.search ?? ""))
     setMobileNav(false)
-    window.scrollTo(0, 0)
+    leaveThen(() => {
+      const nextPath = `${appPathForLocation(next)}${options.search ?? ""}`
+      if (`${window.location.pathname}${window.location.search}` !== nextPath || window.location.hash) {
+        window.history.pushState(null, "", nextPath)
+      }
+      navigated.current = true
+      setVisit((count) => count + 1)
+      setArrival(options)
+      setLocation(withSettingsTab(next, options.search ?? ""))
+      window.scrollTo(0, 0)
+    })
   }
 
   function changeView(next: AppView, options?: ViewOptions) {

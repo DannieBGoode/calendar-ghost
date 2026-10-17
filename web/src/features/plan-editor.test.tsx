@@ -8,6 +8,7 @@ import { StaticI18nProvider } from "@/i18n/provider"
 import { pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
 import { ApiError, type PlanSummary, type SyncInterval } from "@/lib/api"
+import { leaveThen } from "@/lib/leave-guard"
 
 import { PlanEditor } from "./plan-editor"
 
@@ -70,7 +71,10 @@ afterEach(() => {
   container.remove()
 })
 
-/** Renders the editor, or renders it again with new props, keeping what was typed. */
+/**
+ * Renders the editor, or renders it again with new props, keeping what was typed. Cancel leaves
+ * the way the Plans tab's does, asking first while changes are not saved.
+ */
 function show({ plan, pending, error, enabled = true, others = [], intervals = ["instant", "5_minutes"] }: Props) {
   root ??= createRoot(container)
   act(() => {
@@ -84,7 +88,7 @@ function show({ plan, pending, error, enabled = true, others = [], intervals = [
           pending={pending}
           error={error}
           onSave={onSave}
-          onCancel={onCancel}
+          onCancel={() => leaveThen(onCancel)}
         />
       </StaticI18nProvider>,
     )
@@ -156,6 +160,11 @@ function speed(interval: SyncInterval): HTMLInputElement {
 
 function speedGroup(): HTMLElement {
   return container.querySelector<HTMLElement>("[role='radiogroup']")!
+}
+
+/** The footer's question before leaving changes not saved, while it asks. */
+function question(): HTMLElement | null {
+  return container.querySelector<HTMLElement>(".plan-panel-question")
 }
 
 /** How many changes the footer says are not saved; empty while there are none. */
@@ -373,6 +382,73 @@ describe("PlanEditor", () => {
     // Saved, the plan says what was typed, so nothing is left unsaved.
     show({ plan: { ...family, limits: { ...family.limits, sync_interval: "5_minutes" } }, pending: false, error: null })
     expect(changes()).toBe("")
+  })
+
+  it("asks before leaving changes not saved, and keeps them until they are discarded", () => {
+    edit()
+    type(field("plan-family-rules"), "2")
+    type(field("plan-family-name"), "Family Large")
+    act(() => field("plan-family-name").focus())
+    click(button("Cancel"))
+    expect(onCancel).not.toHaveBeenCalled()
+    // The footer asks in place of Save and Cancel, with Keep editing focused.
+    expect(question()?.textContent).toContain("Discard 2 changes?")
+    expect(element(question()!.getAttribute("aria-labelledby")!).textContent).toBe("Discard 2 changes?")
+    expect([...question()!.querySelectorAll("button")].map((choice) => choice.textContent)).toEqual(["Keep editing", "Discard"])
+    expect(document.activeElement).toBe(button("Keep editing"))
+    expect(container.querySelector("button[type='submit']")).toBeNull()
+
+    // Keep editing keeps what was typed, and focus returns where it was.
+    click(button("Keep editing"))
+    expect(question()).toBeNull()
+    expect(field("plan-family-name").value).toBe("Family Large")
+    expect(changes()).toBe("2 changes not saved")
+    expect(document.activeElement).toBe(field("plan-family-name"))
+
+    // Escape answers Keep editing too.
+    click(button("Cancel"))
+    act(() => {
+      button("Keep editing").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    })
+    expect(question()).toBeNull()
+    expect(onCancel).not.toHaveBeenCalled()
+
+    click(button("Cancel"))
+    click(button("Discard"))
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(question()).toBeNull()
+    expect(field("plan-family-name").value).toBe("Family")
+    expect(changes()).toBe("")
+  })
+
+  it("names one change as one", () => {
+    edit()
+    click(speed("5_minutes"))
+    click(button("Cancel"))
+    expect(question()?.querySelector("p")?.textContent).toBe("Discard 1 change?")
+  })
+
+  it("leaves at once with nothing to lose", () => {
+    edit()
+    type(field("plan-family-name"), "Family Large")
+    type(field("plan-family-name"), "Family")
+    click(button("Cancel"))
+    expect(question()).toBeNull()
+    expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+
+  it("has the browser ask before the tab closes or reloads only while changes are not saved", () => {
+    const unload = () => {
+      const event = new Event("beforeunload", { cancelable: true })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    edit()
+    expect(unload()).toBe(false)
+    type(field("plan-family-rules"), "2")
+    expect(unload()).toBe(true)
+    type(field("plan-family-rules"), "5")
+    expect(unload()).toBe(false)
   })
 
   it("keeps every control focusable while it saves, and ignores them until it ends", () => {
@@ -612,6 +688,9 @@ describe("PlanEditor", () => {
     click(option("plan-new-rules", i18n.t("people.plans.editor.upTo")))
     type(field("plan-new-name"), "Free")
     submit()
+    expect(untranslatedText(container, ["Free"])).toEqual([])
+    click(button(i18n.t("people.plans.editor.cancel")))
+    expect(question()).not.toBeNull()
     expect(untranslatedText(container, ["Free"])).toEqual([])
   })
 })

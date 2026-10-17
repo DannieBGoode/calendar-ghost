@@ -629,6 +629,59 @@ describe("People", () => {
     expect(container.querySelector("#plans-empty")).not.toBeNull()
   })
 
+  it("asks before Back or another page drops a new plan's changes, and goes there once they are discarded", async () => {
+    page.happyDOM.setURL("http://localhost:8000/people/plans/new")
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+    const name = container.querySelector<HTMLInputElement>("#plan-new-name")!
+    act(() => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(name, "Team")
+      name.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await settle()
+    const question = () => container.querySelector(".plan-panel-question")
+    const choice = (label: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>(".plan-panel-question button")].find((button) => button.textContent === label)!
+
+    // Back: the browser has left, so the page returns to the plan's address and asks.
+    act(() => {
+      window.history.replaceState(null, "", "/people/plans")
+      window.dispatchEvent(new PopStateEvent("popstate"))
+    })
+    await settle()
+    expect(window.location.pathname).toBe("/people/plans/new")
+    expect(container.querySelector<HTMLInputElement>("#plan-new-name")?.value).toBe("Team")
+    expect(question()?.querySelector("p")?.textContent).toBe("Discard 1 change?")
+    act(() => choice("Keep editing").click())
+
+    // A link to another page asks the same way.
+    const overview = [...container.querySelectorAll<HTMLAnchorElement>("#primary-nav a")].find((link) => link.textContent === "Overview")!
+    act(() => {
+      overview.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
+    })
+    await settle()
+    expect(window.location.pathname).toBe("/people/plans/new")
+    expect(question()).not.toBeNull()
+    act(() => choice("Keep editing").click())
+
+    // Discard goes where Back went.
+    act(() => {
+      window.history.replaceState(null, "", "/people/plans")
+      window.dispatchEvent(new PopStateEvent("popstate"))
+    })
+    await settle()
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {
+      window.history.replaceState(null, "", "/people/plans")
+      window.dispatchEvent(new PopStateEvent("popstate"))
+    })
+    act(() => choice("Discard").click())
+    await settle()
+    expect(back).toHaveBeenCalledTimes(1)
+    expect(window.location.pathname).toBe("/people/plans")
+    expect(container.querySelector("#plan-panel")).toBeNull()
+    expect(container.querySelector("#plans-empty")).not.toBeNull()
+  })
+
   it.each([
     ["someone who is not an administrator", "/people", "user", "invitation_only"],
     ["an administrator under Only me", "/people", "installation_administrator", "only_me"],

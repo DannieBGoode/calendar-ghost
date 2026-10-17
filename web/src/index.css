@@ -2554,6 +2554,11 @@ p {
   gap: 0.5rem 0.75rem;
 }
 
+/* Before the page leaves changes not saved, the footer asks in place of Save and Cancel. */
+.plan-panel-question-title {
+  font-weight: 600;
+}
+
 /* How many changes are not saved, or how many people are chosen, at the footer's end. */
 .plan-panel-status {
   margin-left: auto;

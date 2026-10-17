@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type RefObject, type SyntheticEvent } from "react"
+import { useEffect, useRef, useState, type KeyboardEvent, type RefObject, type SyntheticEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { NameField, PlanLimitField, SpeedField } from "@/features/plan-editor-fields"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { ApiError, PlanChange, PlanSummary, SyncInterval } from "@/lib/api"
+import { useLeaveQuestion, type LeaveQuestion } from "@/lib/leave-guard"
 import {
   COUNT_LIMIT,
   LIMIT_MINIMUM,
@@ -76,7 +77,9 @@ function useRefusal(error: unknown, draft: PlanDraft, form: RefObject<HTMLFormEl
  * for no key: the server makes a new Plan's from its name. While a save is on its way, every
  * control keeps its focus but ignores changes; a refusal moves focus to the field it names, and so
  * does a name another Plan already has, before anything is sent. A limit lower than the people on
- * the Plan use says how many of them it would leave with more than it allows.
+ * the Plan use says how many of them it would leave with more than it allows. While changes are
+ * not saved, leaving the form in any way, Cancel, Close, Escape, another Plan, a tab, another page,
+ * or Back, first asks in the footer whether to discard them.
  */
 export function PlanEditor({
   plan,
@@ -109,6 +112,8 @@ export function PlanEditor({
   const id = plan ? `plan-${plan.key}` : "plan-new"
   // What the Plan has saved, or how a new one started, so the footer counts what changed since.
   const saved = plan === null && start ? start : draftOf(plan, intervals)
+  const changes = changedFields(draft, saved)
+  const leaving = useLeaveQuestion(changes > 0)
   const errorOf = (field: DraftField) => (refusal.field === field ? refusal.message : null)
   const warningOf = (name: LimitName) => {
     const count = plan ? peopleOver(plan, draft, name) : 0
@@ -120,6 +125,20 @@ export function PlanEditor({
     if (pending) return
     refusal.changed(next)
     setDraft((current) => ({ ...current, ...next }))
+  }
+
+  /** Drops the changes, returns focus where it was as the question came, and leaves. */
+  function discard() {
+    setDraft(saved)
+    focusBack(leaving.asking?.from ?? null)
+    leaving.discard()
+  }
+
+  /** Keeps the changes, with focus back where it was, or on Save. */
+  function keep() {
+    const from = leaving.asking?.from ?? null
+    leaving.keep()
+    if (!focusBack(from)) form.current?.querySelector<HTMLElement>("button[type='submit']")?.focus()
   }
 
   function submit(event: SyntheticEvent<HTMLFormElement>) {
@@ -163,15 +182,73 @@ export function PlanEditor({
           />
         </fieldset>
       </div>
-      <EditorFooter
-        id={id}
-        missing={missingField(draft)}
-        changes={changedFields(draft, saved)}
-        pending={pending}
-        refusal={refusal.field === null ? refusal.message : null}
-        onCancel={onCancel}
-      />
+      {leaving.asking ? (
+        <LeaveQuestionBar id={id} asking={leaving.asking} changes={changes} onKeep={keep} onDiscard={discard} />
+      ) : (
+        <EditorFooter
+          id={id}
+          missing={missingField(draft)}
+          changes={changes}
+          pending={pending}
+          refusal={refusal.field === null ? refusal.message : null}
+          onCancel={onCancel}
+        />
+      )}
     </form>
+  )
+}
+
+/** Moves focus back to an element still on the page, other than the page itself; says if it did. */
+function focusBack(from: Element | null): boolean {
+  if (!(from instanceof HTMLElement) || !from.isConnected || from === document.body) return false
+  from.focus()
+  return true
+}
+
+/**
+ * The footer's question before the page leaves the form with changes not saved: how many it would
+ * discard, Keep editing, which takes focus as it asks, and Discard. Escape keeps editing.
+ */
+function LeaveQuestionBar({
+  id,
+  asking,
+  changes,
+  onKeep,
+  onDiscard,
+}: {
+  id: string
+  asking: LeaveQuestion
+  changes: number
+  onKeep: () => void
+  onDiscard: () => void
+}) {
+  const { t } = useI18n()
+  const keep = useRef<HTMLButtonElement>(null)
+  const titleId = `${id}-leave-title`
+  useEffect(() => {
+    keep.current?.focus()
+  }, [asking])
+
+  function escape(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Escape") return
+    event.preventDefault()
+    onKeep()
+  }
+
+  return (
+    <div className="plan-panel-foot plan-panel-question" role="group" aria-labelledby={titleId} onKeyDown={escape}>
+      <p id={titleId} className="plan-panel-question-title">
+        {t("people.plans.editor.leave.question", { count: changes })}
+      </p>
+      <div className="plan-panel-actions">
+        <Button ref={keep} type="button" variant="outline" onClick={onKeep}>
+          {t("people.plans.editor.leave.keep")}
+        </Button>
+        <Button type="button" variant="destructive" onClick={onDiscard}>
+          {t("people.plans.editor.leave.discard")}
+        </Button>
+      </div>
+    </div>
   )
 }
 

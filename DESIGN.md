@@ -349,7 +349,10 @@ creates or edits the selected thing, with a footer holding its one primary actio
 many changes are not saved, and tabs when the thing has more than one side. While it is open the
 table drops the columns it no longer has room for, and marks the open row as selected. Opening it
 moves focus to its title; Close returns to the table's address and focus to the row it came from.
-On a narrow screen it replaces the table.
+While its form has changes not saved, leaving it in any way (Close, Cancel, Escape, another row, a
+tab, another page, or Back) first asks in the footer, in place of its actions: "Discard 1 change?"
+with Keep editing, which takes focus and keeps the changes, and Discard; Escape keeps editing, and
+the browser asks before the tab closes or reloads. On a narrow screen it replaces the table.
 
 ### Navigation
 

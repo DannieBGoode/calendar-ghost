@@ -1139,6 +1139,90 @@ describe("A plan's panel", () => {
   })
 })
 
+describe("Leaving a plan's changes not saved", () => {
+  /** The panel footer's question before its changes are dropped, while it asks. */
+  function question(): HTMLElement | null {
+    return panel().querySelector<HTMLElement>(".plan-panel-question")
+  }
+
+  it("asks before Escape drops them, keeps them on Keep editing, and closes on Discard", async () => {
+    await renderPlans(testI18n())
+    await click(nameLink("family"))
+    type(field("plan-family-rules"), "2")
+    await settle()
+    focus(field("plan-family-rules"))
+    await escape(field("plan-family-rules"))
+    expect(here()).toBe("/people/plans/family")
+    expect(question()?.querySelector("p")?.textContent).toBe("Discard 1 change?")
+    expect(document.activeElement).toBe(button("Keep editing", panel()))
+
+    await click(button("Keep editing", panel()))
+    expect(question()).toBeNull()
+    expect(field("plan-family-rules").value).toBe("2")
+    expect(document.activeElement).toBe(field("plan-family-rules"))
+
+    await click(closeButton())
+    expect(question()).not.toBeNull()
+    await click(button("Discard", panel()))
+    expect(panelOrNull()).toBeNull()
+    expect(here()).toBe("/people/plans")
+    expect(document.activeElement).toBe(nameLink("family"))
+    expect(calls.some((call) => call.method !== "GET")).toBe(false)
+
+    // Opened again, the plan shows what it has saved, and closes at once.
+    await click(nameLink("family"))
+    expect(field("plan-family-rules").value).toBe("5")
+    await escape(field("plan-family-rules"))
+    expect(panelOrNull()).toBeNull()
+  })
+
+  it("asks before another plan, or the panel's People tab, takes the place of the changes", async () => {
+    await renderPlans(testI18n(), {
+      answers: { "GET /api/v1/users": jsonResponse(candidates([ALEX])), "POST /api/v1/plan-assignments": DRY_RUN },
+    })
+    await click(nameLink("family"))
+    type(field("plan-family-name"), "Family Large")
+    await settle()
+
+    await click(nameLink("free"))
+    expect(here()).toBe("/people/plans/family")
+    expect(panelTitle().textContent).toBe("Family")
+    expect(question()).not.toBeNull()
+    await click(button("Keep editing", panel()))
+
+    await click(panelTab("People"))
+    expect(here()).toBe("/people/plans/family")
+    expect(field("plan-family-name").value).toBe("Family Large")
+    await click(button("Keep editing", panel()))
+
+    await click(nameLink("free"))
+    await click(button("Discard", panel()))
+    expect(here()).toBe("/people/plans/free")
+    expect(panelTitle().textContent).toBe("Free")
+    expect(document.activeElement).toBe(panelTitle())
+    expect(question()).toBeNull()
+  })
+
+  it("asks before People's other tabs, or a link to Everyone, leave a new plan", async () => {
+    await renderPlans(testI18n(), { plans: overview({ enabled: true, defaultPlan: "free" }) })
+    await click(button("New plan", headerAction()))
+    type(field("plan-new-name"), "Team")
+    await settle()
+
+    const everyone = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")].find((tab) => tab.textContent === "Everyone")!
+    await click(everyone)
+    expect(here()).toBe("/people/plans/new")
+    expect(question()).not.toBeNull()
+    await click(button("Keep editing", panel()))
+
+    await click(cell("family", "people").querySelector("a")!)
+    expect(here()).toBe("/people/plans/new")
+    await click(button("Discard", panel()))
+    expect(here()).toBe("/people?plan=family")
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Everyone")
+  })
+})
+
 describe("Editing a plan", () => {
   it("edits in the panel without its key, warns before lowering a limit, and stays open once saved", async () => {
     const saved: PlanSummary = { ...family, name: "Family Large", limits: { ...family.limits, rules: 2 } }

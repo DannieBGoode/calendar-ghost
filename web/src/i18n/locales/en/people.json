@@ -682,6 +682,14 @@
         "one": "{count} change not saved",
         "other": "{count} changes not saved"
       },
+      "leave": {
+        "question": {
+          "one": "Discard {count} change?",
+          "other": "Discard {count} changes?"
+        },
+        "keep": "Keep editing",
+        "discard": "Discard"
+      },
       "missing": {
         "name": "Enter a name to save this plan.",
         "rules": "Enter how many active rules, from {min} to {max}, or choose No limit.",
