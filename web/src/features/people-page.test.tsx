@@ -1250,6 +1250,45 @@ describe("Changing plans from Everyone", () => {
     expect(toast()).toBe("2 people have their plans back.")
   })
 
+  it("says what Undo did, or why it could not, once the change leaves nobody in the list", async () => {
+    const changes = () => assignments().filter((body) => !(body as { dry_run: boolean }).dry_run).length
+    // Everyone narrowed to Family: once its people have Free nobody is left, and Undo brings them back.
+    const family = () => jsonResponse(withPlans(onePage(changes() % 2 === 1 ? [] : [robin, jordan])))
+    await renderPeople(testI18n(), {
+      search: "?plan=family",
+      people: family,
+      answers: { "GET /api/v1/plans": jsonResponse(PLANS), "POST /api/v1/plan-assignments": given([robin, jordan]) },
+    })
+    async function giveEveryoneFree() {
+      await click(checkbox("Select all"))
+      await click(button("Change plan", bulkBar()))
+      await click(choice("Free"))
+      await click(button("Give Free to 2 people", popover()!))
+      expect(toast()).toBe("2 people now have Free.")
+      expect(rows()).toHaveLength(0)
+      expect(container.querySelector(".people-bulk-bar")).toBeNull()
+    }
+
+    await giveEveryoneFree()
+    await click(button("Undo"))
+    expect(assignments().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin", "user-jordan"], dry_run: false })
+    expect(toast()).toBe("2 people have their plans back.")
+    expect(rows()).toHaveLength(2)
+
+    await giveEveryoneFree()
+    const served = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input, init) =>
+      init?.method === "POST" && (input as string).startsWith("/api/v1/plan-assignments")
+        ? Promise.resolve(jsonResponse({ detail: "gone", code: "plan_not_found", params: {} }, 404))
+        : served(input, init),
+    )
+    await click(button("Undo"))
+    expect(toast()).toBe("")
+    expect(container.querySelector("[role='alert']")?.textContent).toBe(
+      "This plan no longer exists. Reload to see the current plans.",
+    )
+  })
+
   it("closes the popover on Escape or Cancel, changing nothing, with focus back on Change plan", async () => {
     await renderPlanned(testI18n(), { "POST /api/v1/plan-assignments": given([robin, sam]) })
     await click(checkbox("Select robin@example.test"))

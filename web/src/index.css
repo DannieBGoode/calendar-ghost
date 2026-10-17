@@ -3860,10 +3860,6 @@ p {
   margin-left: auto;
 }
 
-.people-bulk-error {
-  flex-basis: 100%;
-}
-
 /* Every row is as tall as one with an actions menu, yours included. */
 .people-table tr.person-row {
   height: 4rem;
