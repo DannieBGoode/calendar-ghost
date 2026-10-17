@@ -10,6 +10,12 @@ export type I18n = {
   t: (key: MessageKey, params?: MessageParams) => string
   /** Whether a key built from server data, such as an error code, has a message. */
   has: (key: string) => key is MessageKey
+  /**
+   * Whether `params` fill every placeholder of the key's message, the plural count included. A
+   * message built from server data checks this first, because a server older or newer than the
+   * page can leave out a param, and production fills a missing one with nothing.
+   */
+  fills: (key: string, params?: MessageParams) => boolean
   format: Formatters
 }
 
@@ -23,12 +29,18 @@ type Options = {
 }
 
 const PLACEHOLDER = /(\{\w+\})/
+const PLACEHOLDER_NAMES = /\{(\w+)\}/g
 /**
  * A `{placeholder}` left in text a person reads, the translator's or one a filled-in value brought.
  * `${NAME}` and `{{NAME}}` in a configuration example are another tool's variables, not placeholders.
  */
 export const UNFILLED = /(?<![${])\{(\w+)\}(?!\})/
 const warned = new Set<string>()
+
+/** The names of the placeholders in `text`, such as "count" in "{count} rules". */
+function placeholders(text: string): string[] {
+  return Array.from(text.matchAll(PLACEHOLDER_NAMES), (match) => match[1] ?? "")
+}
 
 export function isPluralMessage(node: unknown): node is PluralMessage {
   return typeof node === "object" && node !== null && typeof (node as PluralMessage).other === "string"
@@ -57,14 +69,16 @@ export function createI18n({ locale, formatLocale = locale, catalog, fallback = 
   const numbers = new Intl.NumberFormat(formatLocale)
   const resolve = (key: string) => lookup(catalog, key) ?? lookup(fallback, key)
 
+  /** The form of a plural message `count` selects, or null when `count` is not a number. */
+  function selected(message: PluralMessage, count: MessageParams[string] | undefined): string | null {
+    return typeof count === "number" ? (message[plurals.select(count)] ?? message.other) : null
+  }
+
   function template(key: string, message: Message, params: MessageParams): string {
     if (typeof message === "string") return message
-    const count = params.count
-    if (typeof count !== "number") {
-      report(key, "plural message needs a numeric count")
-      return message.other
-    }
-    return message[plurals.select(count)] ?? message.other
+    const text = selected(message, params.count)
+    if (text === null) report(key, "plural message needs a numeric count")
+    return text ?? message.other
   }
 
   /** `text` with its placeholders filled; a missing one is left out, so its braces never show. */
@@ -98,5 +112,13 @@ export function createI18n({ locale, formatLocale = locale, catalog, fallback = 
   }
 
   const has = (key: string): key is MessageKey => resolve(key) !== undefined
-  return { locale, formatLocale, t, has, format: createFormatters(formatLocale, t, locale) }
+
+  function fills(key: string, params: MessageParams = {}): boolean {
+    const message = resolve(key)
+    if (message === undefined) return false
+    const text = typeof message === "string" ? message : selected(message, params.count)
+    return text !== null && placeholders(text).every((name) => params[name] !== undefined)
+  }
+
+  return { locale, formatLocale, t, has, fills, format: createFormatters(formatLocale, t, locale) }
 }

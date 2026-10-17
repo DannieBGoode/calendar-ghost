@@ -93,7 +93,10 @@ touching any call site, since call sites never parse ICU syntax themselves.
   literal JSX text and common text attributes, the catalog tests check keys and placeholders, and
   pseudo-locale render checks fail when a visible text node is not wrapped in `t()`.
 - A person never reads a placeholder's braces (amended 2026-10-17). In production the translator
-  leaves a missing parameter out and warns once. Under test it throws, also when a value it fills
-  in still holds a `{placeholder}`, and the Vitest setup (`web/src/test-setup.ts`) fails any test
-  whose page shows an unfilled `{placeholder}` or a raw catalog key, from any source. `${NAME}` and
-  `{{NAME}}` in configuration examples are other tools' variables and pass.
+  leaves a missing parameter out and warns once. So a message built from server data, such as an
+  error code's, first asks `i18n.fills(key, params)` whether the params fill it, plural count
+  included, and shows the server's `detail` when they do not, never a sentence with a gap where the
+  parameter belongs. Under test the translator throws, also when a value it fills in still holds a
+  `{placeholder}`, and the Vitest setup (`web/src/test-setup.ts`) fails any test whose page shows an
+  unfilled `{placeholder}` or a raw catalog key, from any source. `${NAME}` and `{{NAME}}` in
+  configuration examples are other tools' variables and pass.

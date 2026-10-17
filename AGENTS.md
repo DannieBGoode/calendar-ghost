@@ -236,7 +236,9 @@ file names: delete a key with the code that used it, and give a key built from a
 through `interfaces/api/problems.py` and give Incidents a message (ADR 0026). Under test, `t()`
 throws on a parameter it was not given, and the Vitest setup (`web/src/test-setup.ts`) fails any
 test whose page shows an unfilled `{placeholder}` or a raw catalog key; in production the
-translator leaves a missing parameter out rather than show its braces. Never use em dashes.
+translator leaves a missing parameter out rather than show its braces, so a message built from
+server data checks `i18n.fills(key, params)` before `t()` and otherwise shows the server's detail.
+Never use em dashes.
 
 ## Testing
 

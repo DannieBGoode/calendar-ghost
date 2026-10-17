@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { ApiError, UnreadableResponseError } from "@/lib/api"
 
@@ -88,10 +88,26 @@ describe("apiErrorMessage", () => {
     expect(apiErrorMessage(i18n, new ApiError("x", 422, null))).toBe("The request could not be completed.")
   })
 
-  it("never shows an unfilled placeholder outside tests", () => {
-    // Production leaves a missing `{name}` in place instead of throwing; the detail reads better.
-    const production = { ...i18n, t: ((key, params) => (key === "common.apiError.removal_interrupted" ? "{processed} of {total}" : i18n.t(key, params))) as typeof i18n.t }
-    expect(apiErrorMessage(production, coded("removal_interrupted", {}, "removal stopped"))).toBe("removal stopped")
+  it("shows the server's detail in production when the server left out one of a message's params", () => {
+    // Production fills a missing param with nothing, so the message must not be used at all.
+    vi.stubEnv("MODE", "production")
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    try {
+      const production = testI18n()
+      expect(apiErrorMessage(production, coded("removal_interrupted", {}, "removal stopped"))).toBe("removal stopped")
+      expect(apiErrorMessage(production, coded("plan_name_taken", {}, "That name is taken"))).toBe("That name is taken")
+      // Without its length, a too-short value gets the general validation message.
+      const tooShort = coded("invalid_request", { field: "password", reason: "string_too_short" })
+      expect(apiErrorMessage(production, tooShort)).toBe("Some of the information is not valid. Check it and try again.")
+      const rules = coded("plan_limit_reached", { reason: "rules", limit: 2 }, "Limit reached")
+      expect(apiErrorMessage(production, rules)).toBe(
+        "Your plan's limit is reached. Settings, Your account, Your plan shows what it allows.",
+      )
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+      warn.mockRestore()
+    }
   })
 
   it("describes an unreadable response", () => {

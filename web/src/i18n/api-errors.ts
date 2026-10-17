@@ -36,17 +36,13 @@ export function messageParams(i18n: I18n, params: ServerParams): MessageParams {
   }
 }
 
-/** A server-coded message, or null when there is none or the server left out one of its params. */
+/**
+ * A server-coded message, or null when there is none or the server left out one of its params,
+ * as a server older or newer than the page can. The caller then shows the server's detail, which
+ * reads better than a sentence with a gap where the param belongs.
+ */
 function coded(i18n: I18n, key: string, params: MessageParams): string | null {
-  if (!i18n.has(key)) return null
-  try {
-    const text = i18n.t(key, params)
-    // Outside tests a missing param stays as `{name}`; the server's detail reads better.
-    return /\{\w+\}/.test(text) ? null : text
-  } catch {
-    // Under test a missing param throws.
-    return null
-  }
+  return i18n.has(key) && i18n.fills(key, params) ? i18n.t(key, params) : null
 }
 
 /** A validation error's length limit, as the `count` its plural message selects a form by. */
