@@ -78,56 +78,6 @@ export function limitedPeople(plans: readonly PlanSummary[]): number {
   return plans.reduce((total, plan) => (limitsNothing(plan.limits) ? total : total + plan.limited_people), 0)
 }
 
-function tokenLimit({ t }: I18n, tokens: number | null): string {
-  if (tokens === null) return t("people.plans.limits.unlimitedTokens")
-  return tokens === 0 ? t("people.plans.limits.noTokens") : t("people.plans.limits.tokens", { count: tokens })
-}
-
-/**
- * A Plan's counts: rules, calendar accounts, then Integration Tokens, with "no limit" where a
- * count has none, said once when none has.
- */
-function countsList(i18n: I18n, { rules, connected_accounts, integration_tokens }: PlanLimits): string {
-  const { t } = i18n
-  if (rules === null && connected_accounts === null && integration_tokens === null) return t("people.plan.limits.unlimited")
-  return i18n.format.unitList([
-    rules === null ? t("people.plan.limits.unlimitedRules") : t("people.plans.limits.rules", { count: rules }),
-    connected_accounts === null
-      ? t("people.plans.limits.unlimitedAccounts")
-      : t("people.plans.limits.accounts", { count: connected_accounts }),
-    tokenLimit(i18n, integration_tokens),
-  ])
-}
-
-/**
- * What a Plan allows, by name, as Change plan says it under the choice, so the administrator need
- * not remember: "Free: 1 rule, 1 calendar account, no Integration Tokens, every 5 minutes".
- */
-export function planAllows(i18n: I18n, { name, limits }: Pick<PlanSummary, "name" | "limits">): string {
-  return i18n.t("people.plan.allows", {
-    name,
-    limits: countsList(i18n, limits),
-    interval: i18n.t(`people.plan.interval.${limits.sync_interval}`),
-  })
-}
-
-/**
- * What the Plan chosen in Change plan allows; for the Default Plan, the Plan that is the default
- * now, and while none is, that none is yet.
- */
-export function planChoiceAllows(i18n: I18n, plan: PlanSummary | undefined): string {
-  return plan ? planAllows(i18n, plan) : i18n.t("people.plan.allowsNoDefault")
-}
-
-/**
- * Change plan's choice to follow the Default Plan, naming the Plan that is the default now, as
- * "Default plan (Free)"; without one yet, "Default plan".
- */
-export function defaultPlanChoice({ t }: I18n, plans: readonly PlanSummary[]): string {
-  const current = plans.find((plan) => plan.is_default)
-  return current ? t("people.plan.default", { name: current.name }) : t("people.plan.defaultUnnamed")
-}
-
 /** Which limit a row of Your plan shows. */
 type OwnPlanLimit = "rules" | "accounts" | "tokens" | "sync"
 
@@ -219,49 +169,35 @@ export function heldPlanName({ t }: I18n, { name, on_default }: Pick<HeldPlan, "
   return on_default ? t("people.plan.held.default", { name }) : name
 }
 
-/** The Plan a person has, by name, "once plans are on" while Plans are off. */
-function heldPlanText(i18n: I18n, held: HeldPlan, later: boolean): string {
-  const named = heldPlanName(i18n, held)
-  return later ? i18n.t("people.plan.held.later", { plan: named }) : named
-}
-
 /** Whether no Plan limits this person because they administer, whether or not Plans are on. */
 function administers({ basis }: PersonPlanOverview, administrator: boolean): boolean {
   return administrator || basis === "administrator"
 }
 
 /**
- * A person's Plan as People's Plan column says it, in the words of the Plan fact on their page:
- * the Plan they have, as the Plans tab counts who has it ("Free (default)"), "once plans are on"
- * while Plans are off, and each limit they have more of than it allows ("Family. 2 calendar
- * accounts, 1 allowed"). An administrator has a Plan as anyone does, but no Plan limits them,
- * whether Plans are on or off.
+ * A chip beside a person's Plan: "Default" when they have it as the default, "Over a limit" in
+ * Attention Ochre while Plans are on and they have more than it allows ("Would be over", neutral,
+ * while off), with each limit in words as its `detail`, and "Not limited" for an administrator.
  */
-export function personPlanText(i18n: I18n, plan: PersonPlanOverview, administrator: boolean): string {
+export type PlanChip = { id: "default" | "over" | "notLimited"; text: string; tone: "neutral" | "attention"; detail?: string }
+
+/** The chips beside a person's Plan, in People's Plan column and on their Plan card, in that order. */
+export function heldPlanChips(i18n: I18n, plan: PersonPlanOverview, administrator: boolean): PlanChip[] {
   const { t } = i18n
-  const held = plan.has ?? plan.plan
+  const chips: PlanChip[] = []
+  if (plan.has?.on_default) chips.push({ id: "default", text: t("people.plan.chips.default"), tone: "neutral" })
   if (administers(plan, administrator)) {
-    return held
-      ? t("people.plan.held.administrator", { plan: heldPlanText(i18n, held, false) })
-      : t("people.plan.fact.administrator")
+    chips.push({ id: "notLimited", text: t("people.plan.chips.notLimited"), tone: "neutral" })
+    return chips
   }
-  const text = held ? heldPlanText(i18n, held, plan.basis !== "plan") : t("people.plan.held.laterNone")
-  return plan.over.reduce((words, over) => t("people.plan.fact.over", { fact: words, over: overLimitText(i18n, over) }), text)
-}
-
-/**
- * The Plan fact on a person's page: People's Plan column's words after "Plan:", as "Plan: Family.
- * 2 calendar accounts, 1 allowed". An administrator with no Plan reads only that no Plan limits
- * administrators.
- */
-export function personPlanFact(i18n: I18n, plan: PersonPlanOverview, administrator: boolean): string {
-  const { t } = i18n
-  const held = plan.has ?? plan.plan
-  if (held) return t("people.plan.fact.label", { plan: personPlanText(i18n, plan, administrator) })
-  return administers(plan, administrator) ? t("people.plan.fact.administrator") : t("people.plan.fact.laterNone")
-}
-
-/** Whether a person's Plan fact names a limit they are over, and so takes the attention tone. */
-export function personPlanOver(plan: PersonPlanOverview, administrator: boolean): boolean {
-  return !administers(plan, administrator) && plan.over.length > 0
+  if (plan.over.length > 0) {
+    const enforced = plan.basis === "plan"
+    chips.push({
+      id: "over",
+      text: t(enforced ? "people.plan.chips.over" : "people.plan.chips.wouldBeOver"),
+      tone: enforced ? "attention" : "neutral",
+      detail: i18n.format.list(plan.over.map((over) => overLimitText(i18n, over))),
+    })
+  }
+  return chips
 }

@@ -8,9 +8,12 @@ import {
   assignedResult,
   changeChoices,
   changeConfirm,
+  changeReason,
   changeResult,
+  changeTitle,
   changedResult,
   chosenPlan,
+  heldNow,
   heldPlanLine,
   overNote,
   restoredResult,
@@ -90,13 +93,13 @@ describe("heldPlanLine", () => {
 describe("wouldBeOver", () => {
   it("names each limit someone would have more of, or nothing", () => {
     expect(wouldBeOver(i18n, [])).toBeNull()
-    expect(wouldBeOver(i18n, [{ limit: "rules", in_use: 3, allowed: 1 }])).toBe("Would be over: 3 rules, 1 allowed")
+    expect(wouldBeOver(i18n, [{ limit: "rules", in_use: 3, allowed: 1 }])).toBe("Would be over: 3 active rules, 1 allowed")
     expect(
       wouldBeOver(i18n, [
         { limit: "rules", in_use: 4, allowed: 1 },
         { limit: "integration_tokens", in_use: 1, allowed: 0 },
       ]),
-    ).toBe("Would be over: 4 rules, 1 allowed and 1 Integration Token, none allowed")
+    ).toBe("Would be over: 4 active rules, 1 allowed and 1 Integration Token, none allowed")
   })
 })
 
@@ -165,10 +168,15 @@ function plan(key: string, name: string, isDefault = false): PlanSummary {
 const FREE_PLAN = plan("free", "Free")
 const DEFAULT_PLAN = { ...plan("no-limits", "No limits", true), limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" as const } }
 
+/** A choice in Change plan that gives `plan` of their own. */
+function to(plan: PlanSummary | undefined) {
+  return { plan, follows: false }
+}
+
 describe("Change plan", () => {
   it("offers following the default first, naming it, then each plan with what it allows, what they have marked Current", () => {
     const robin = person("robin@example.test", { key: "free", name: "Free", on_default: false })
-    expect(changeChoices(i18n, [FREE_PLAN, DEFAULT_PLAN], robin)).toEqual([
+    expect(changeChoices(i18n, [FREE_PLAN, DEFAULT_PLAN], [robin])).toEqual([
       {
         value: FOLLOW_DEFAULT,
         title: "Follow the default plan",
@@ -186,14 +194,29 @@ describe("Change plan", () => {
 
   it("marks following the default Current for someone with no plan of their own, and says when none is the default", () => {
     const alex = person("alex@example.test", { key: "no-limits", name: "No limits", on_default: true })
-    const [follow] = changeChoices(i18n, [FREE_PLAN], alex)
+    const [follow] = changeChoices(i18n, [FREE_PLAN], [alex])
     expect(follow).toEqual({
       value: FOLLOW_DEFAULT,
       title: "Follow the default plan",
       description: "No plan is the default yet.",
       unavailable: "Current",
     })
-    expect(changeChoices(i18n, [FREE_PLAN], person("lee@example.test", null))[0]?.unavailable).toBe("Current")
+    expect(changeChoices(i18n, [FREE_PLAN], [person("lee@example.test", null)])[0]?.unavailable).toBe("Current")
+  })
+
+  it("marks Current only what every one of several people has now", () => {
+    const robin = person("robin@example.test", FREE)
+    const jordan = person("jordan@example.test", FREE)
+    const sam = person("sam@example.test", PRO)
+    const alex = person("alex@example.test", NO_LIMITS)
+    const current = (people: PersonRow[]) =>
+      changeChoices(i18n, [FREE_PLAN, DEFAULT_PLAN], people)
+        .filter((choice) => choice.unavailable)
+        .map((choice) => choice.title)
+    expect(current([robin, jordan])).toEqual(["Free"])
+    expect(current([robin, sam])).toEqual([])
+    expect(current([alex, person("lee@example.test", NO_LIMITS)])).toEqual(["Follow the default plan"])
+    expect(current([alex, robin])).toEqual([])
   })
 
   it("finds the plan a choice gives, the default's for following it", () => {
@@ -202,22 +225,81 @@ describe("Change plan", () => {
     expect(chosenPlan([FREE_PLAN], FOLLOW_DEFAULT)).toBeUndefined()
   })
 
-  it("says what the dry run found, and nothing before it answers", () => {
+  it("titles the choice by the one person, or by how many", () => {
+    const robin = person("robin@example.test", FREE)
+    expect(changeTitle(i18n, [robin])).toBe("Change plan for robin@example.test")
+    expect(changeTitle(i18n, [robin, person("jordan@example.test", FREE)])).toBe("Change plan for 2 people")
+    expect(changeReason(i18n, [robin])).toBe("Choose a plan for robin@example.test.")
+    expect(changeReason(i18n, [robin, person("jordan@example.test", FREE)])).toBe("Choose a plan for 2 people.")
+  })
+
+  it("says which plan they have now, naming up to three people, counting more, and each plan when they differ", () => {
+    const robin = person("robin@example.test", FREE)
+    const jordan = person("jordan@example.test", FREE)
+    const sam = person("sam@example.test", PRO)
+    expect(heldNow(i18n, [robin])).toBe("robin@example.test has Free now.")
+    expect(heldNow(i18n, [robin, jordan])).toBe("robin@example.test and jordan@example.test have Free now.")
+    const four = ["a", "b", "c", "d"].map((name) => person(`${name}@example.test`, FREE))
+    expect(heldNow(i18n, four)).toBe("All 4 have Free now.")
+    expect(heldNow(i18n, [robin, jordan, sam])).toBe("They have Free (2) and Pro (1) now.")
+    expect(heldNow(i18n, [person("lee@example.test", null)])).toBe("lee@example.test has no plan now.")
+  })
+
+  it("says what the dry run found for one person, and nothing before it answers", () => {
     const robin = person("robin@example.test", null)
-    expect(changeResult(i18n, robin, FREE_PLAN, undefined)).toBe("")
-    expect(changeResult(i18n, robin, undefined, [])).toBe("")
-    expect(changeResult(i18n, robin, FREE_PLAN, [])).toBe("robin@example.test is within every limit of Free.")
-    expect(changeResult(i18n, robin, FREE_PLAN, [{ limit: "rules", in_use: 3, allowed: 1 }])).toBe(
-      "robin@example.test will have more than Free allows. Everything they have keeps working, but they can't add more until they are within it.",
+    const run = (over: PlanMove["over"]) => answer([{ ...move("robin@example.test", null), over }], true)
+    expect(changeResult(i18n, [robin], to(FREE_PLAN), undefined)).toEqual({ text: "", over: false })
+    expect(changeResult(i18n, [robin], to(undefined), run([]))).toEqual({ text: "", over: false })
+    expect(changeResult(i18n, [robin], to(FREE_PLAN), run([]))).toEqual({
+      text: "robin@example.test is within every limit of Free.",
+      over: false,
+    })
+    expect(changeResult(i18n, [robin], to(FREE_PLAN), run([{ limit: "rules", in_use: 3, allowed: 1 }]))).toEqual({
+      text: "robin@example.test will have more than Free allows. Everything they have keeps working, but they can't add more until they are within it.",
+      over: true,
+    })
+  })
+
+  it("says for several who moves where, who would be over, and who no longer is", () => {
+    const over = [{ limit: "connected_accounts" as const, in_use: 2, allowed: 1 }]
+    const robin = { ...person("robin@example.test", FREE), plan: { ...person("robin@example.test", FREE).plan!, over } }
+    const jordan = person("jordan@example.test", FREE)
+    const sam = person("sam@example.test", PRO)
+    const PRO_PLAN = plan("pro", "Pro")
+    const within = answer([move("robin@example.test", FREE, PRO), move("jordan@example.test", FREE, PRO)], true)
+    expect(changeResult(i18n, [robin, jordan], to(PRO_PLAN), within)).toEqual({
+      text: "They move from Free to Pro. robin@example.test is no longer over a limit.",
+      over: false,
+    })
+    expect(changeResult(i18n, [jordan, sam], to(FREE_PLAN), answer([move("jordan@example.test", FREE), move("sam@example.test", PRO)], true))).toEqual({
+      text: "They move to Free. They are all within every limit of Free.",
+      over: false,
+    })
+    const both = [robin, { ...jordan, plan: { ...jordan.plan!, over } }]
+    expect(changeResult(i18n, both, to(PRO_PLAN), within).text).toBe(
+      "They move from Free to Pro. 2 people are no longer over a limit.",
+    )
+    const tooMuch = answer([{ ...move("jordan@example.test", FREE), over }, move("sam@example.test", PRO)], true)
+    expect(changeResult(i18n, [jordan, sam], to(FREE_PLAN), tooMuch)).toEqual({
+      text: "They move to Free. jordan@example.test will have more than Free allows. Everything they have keeps working, but they can't add more until they are within it.",
+      over: true,
+    })
+    expect(changeResult(i18n, [jordan, robin], { plan: DEFAULT_PLAN, follows: true }, within).text).toBe(
+      "They move from Free to the default plan, No limits. robin@example.test is no longer over a limit.",
     )
   })
 
   it("names what confirming does, and what it did", () => {
     const robin = person("robin@example.test", null)
-    expect(changeConfirm(i18n, robin, null, undefined)).toBe("Change plan")
-    expect(changeConfirm(i18n, robin, FOLLOW_DEFAULT, DEFAULT_PLAN)).toBe("Move robin@example.test to the default plan")
-    expect(changeConfirm(i18n, robin, "free", FREE_PLAN)).toBe("Give Free to robin@example.test")
-    expect(changedResult(i18n, robin, FREE_PLAN)).toBe("robin@example.test now has Free.")
-    expect(changedResult(i18n, robin, null)).toBe("robin@example.test now follows the default plan.")
+    const two = [robin, person("jordan@example.test", null)]
+    expect(changeConfirm(i18n, [robin], null, undefined)).toBe("Change plan")
+    expect(changeConfirm(i18n, [robin], FOLLOW_DEFAULT, DEFAULT_PLAN)).toBe("Move robin@example.test to the default plan")
+    expect(changeConfirm(i18n, [robin], "free", FREE_PLAN)).toBe("Give Free to robin@example.test")
+    expect(changeConfirm(i18n, two, FOLLOW_DEFAULT, DEFAULT_PLAN)).toBe("Move 2 people to the default plan")
+    expect(changeConfirm(i18n, two, "free", FREE_PLAN)).toBe("Give Free to 2 people")
+    expect(changedResult(i18n, [robin], FREE_PLAN)).toBe("robin@example.test now has Free.")
+    expect(changedResult(i18n, [robin], null)).toBe("robin@example.test now follows the default plan.")
+    expect(changedResult(i18n, two, FREE_PLAN)).toBe("2 people now have Free.")
+    expect(changedResult(i18n, two, null)).toBe("2 people now follow the default plan.")
   })
 })

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
-import { useEffect, useRef } from "react"
-import { ArrowLeft, TriangleAlert } from "lucide-react"
+import { useEffect, useRef, type ReactNode } from "react"
+import { ArrowLeft } from "lucide-react"
 
 import { GhostMark } from "@/components/ghost-mark"
 import { LoadFailure } from "@/components/load-failure"
@@ -9,14 +9,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DisabledBadge } from "@/components/verdict-badge"
 import { PersonDetails, PersonMenu } from "@/features/person-actions"
+import { PersonPlanCard } from "@/features/person-plan"
 import { UserOverviewDetails, type OwnPage } from "@/features/user-overview"
 import { useI18n } from "@/i18n/provider"
-import { api, ApiError, type Person, type PersonPlanOverview, type RuleSummary, type UserOverview } from "@/lib/api"
+import { api, ApiError, type Person, type RuleSummary, type UserOverview } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
 import { appPathForView, isPlainLeftClick } from "@/lib/navigation"
 import { AS_ADMINISTRATOR } from "@/lib/operator-overview"
-import { isAdministrator, personName } from "@/lib/people"
-import { personPlanFact, personPlanOver } from "@/lib/plans"
+import { personName } from "@/lib/people"
 import { useNow } from "@/lib/use-now"
 import { peopleReturnSearch, usePersonCommands } from "@/lib/use-people"
 
@@ -83,6 +83,10 @@ function PersonContent({
   useEffect(() => {
     document.title = documentTitle(i18n, t("people.person.documentTitle", { name }))
   }, [i18n, t, name])
+  // Once any Plan exists, their Plan card follows Synchronization.
+  const planCard = overview.plan && (
+    <PersonPlanCard overview={overview} plan={overview.plan} commands={commands} own={you !== null} now={now} />
+  )
   return (
     <div className="page-section person-page">
       <BackToPeople href={`${appPathForView("people")}${peopleReturnSearch(person.id)}`} onBack={onBack} />
@@ -93,21 +97,21 @@ function PersonContent({
             {you !== null && <Badge variant="outline">{t("people.you")}</Badge>}
             {person.state === "disabled" && <DisabledBadge />}
           </h1>
-          <PersonFacts person={person} plan={overview.plan} now={now} />
+          <PersonFacts person={person} now={now} />
         </div>
-        {you === null && <PersonMenu person={person} name={name} commands={commands} plan={overview.plan} />}
+        {you === null && <PersonMenu person={person} name={name} commands={commands} />}
       </div>
-      {you === null && <PersonDetails person={person} name={name} commands={commands} plan={overview.plan} />}
+      {you === null && <PersonDetails person={person} name={name} commands={commands} planOnCard />}
       <p className="sr-only" role="status">
         {commands.message}
       </p>
       {you ? (
-        <OwnOverview overview={overview} now={now} steps={you} />
+        <OwnOverview overview={overview} now={now} steps={you} plan={planCard} />
       ) : (
-        <UserOverviewDetails overview={overview} now={now} audience={{ name }} />
+        <UserOverviewDetails overview={overview} now={now} audience={{ name }} plan={planCard} />
       )}
       {/* What administrators never see is about someone else; on their own page it says nothing. */}
-      {you === null && <p className="page-footnote">{t("people.person.intro")}</p>}
+      {you === null && <p className="page-footnote">{t(overview.plan ? "people.person.introPlan" : "people.person.intro")}</p>}
     </div>
   )
 }
@@ -119,10 +123,20 @@ export type OwnSteps = Omit<OwnPage, "names">
  * An administrator's own page. Only administrators see People, so they read the steps as their
  * own, with links to take them, and their calendars by the names they gave them.
  */
-function OwnOverview({ overview, now, steps }: { overview: UserOverview; now: number; steps: OwnSteps }) {
+function OwnOverview({
+  overview,
+  now,
+  steps,
+  plan,
+}: {
+  overview: UserOverview
+  now: number
+  steps: OwnSteps
+  plan: ReactNode
+}) {
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
   const own: OwnPage = { ...steps, names: ownCalendarNames(overview, rules.data ?? []) }
-  return <UserOverviewDetails overview={overview} now={now} audience={AS_ADMINISTRATOR} own={own} />
+  return <UserOverviewDetails overview={overview} now={now} audience={AS_ADMINISTRATOR} own={own} plan={plan} />
 }
 
 /** Each number's calendar, by the administrator's own name for it, from their own rules. */
@@ -163,24 +177,15 @@ function BackToPeople({ href, onBack }: { href: string; onBack: () => void }) {
   )
 }
 
-/** One fact about a person, keyed by which fact it is, and whether it needs a look. */
-type Fact = { id: string; text: string; attention?: boolean }
+/** One fact about a person, keyed by which fact it is. */
+type Fact = { id: string; text: string }
 
-/**
- * Their role, the Plan they have once any Plan exists (`plan` is null before then), and when they
- * joined and last signed in. A Plan they have more of a limit than allows takes Attention Ochre and
- * the attention icon beside the words that say so, so the tone is never the only sign.
- */
-function PersonFacts({ person, plan, now }: { person: Person; plan: PersonPlanOverview | null; now: number }) {
+/** Their role, and when they joined and last signed in. Their Plan has a card of its own. */
+function PersonFacts({ person, now }: { person: Person; now: number }) {
   const i18n = useI18n()
   const { t } = i18n
-  const administrator = isAdministrator(person)
-  // Keyed by which fact each is, since a Plan's name can equal another fact, such as "User".
   const facts: Fact[] = [
     { id: "role", text: t(`people.roles.${person.role}`) },
-    ...(plan
-      ? [{ id: "plan", text: personPlanFact(i18n, plan, administrator), attention: personPlanOver(plan, administrator) }]
-      : []),
     { id: "joined", text: t("people.person.joined", { relative: i18n.format.relative(person.created_at, now) }) },
     {
       id: "last-sign-in",
@@ -190,12 +195,9 @@ function PersonFacts({ person, plan, now }: { person: Person; plan: PersonPlanOv
     },
   ]
   return (
-    <ul className="person-facts" data-administrator={administrator}>
-      {facts.map(({ id, text, attention }) => (
-        <li key={id} data-tone={attention ? "attention" : undefined}>
-          {attention && <TriangleAlert aria-hidden="true" />}
-          {text}
-        </li>
+    <ul className="person-facts">
+      {facts.map(({ id, text }) => (
+        <li key={id}>{text}</li>
       ))}
     </ul>
   )

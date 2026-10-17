@@ -1,5 +1,14 @@
 import type { I18n } from "@/i18n/translator"
-import type { OverLimit, PeoplePage, PersonRow, PlanAssignments, PlanMove, PlanSummary } from "@/lib/api"
+import type {
+  OverLimit,
+  PeoplePage,
+  Person,
+  PersonPlanOverview,
+  PersonRow,
+  PlanAssignments,
+  PlanMove,
+  PlanSummary,
+} from "@/lib/api"
 import { personName } from "@/lib/people"
 import { planAllowsSentence } from "@/lib/plan-panel"
 import { overLimitText } from "@/lib/plans"
@@ -93,24 +102,34 @@ export function restoredResult(i18n: I18n, answer: PlanAssignments): string {
 /** Change plan's choice to follow the Default Plan; no Plan's key is empty. */
 export const FOLLOW_DEFAULT = ""
 
-/** The Plan someone has of their own, by key, or null when they follow the Default Plan. */
-function ownPlan(person: PersonRow): string | null {
+/** Someone whose Plan Change plan changes: who they are, and the Plan they have now. */
+export type PlanPerson = Person & { plan: PersonPlanOverview | null }
+
+/** The Plan someone has of their own, by key, or FOLLOW_DEFAULT when they follow the Default Plan. */
+function ownChoice(person: PlanPerson): string {
   const has = person.plan?.has
-  return has && !has.on_default ? has.key : null
+  return has && !has.on_default ? has.key : FOLLOW_DEFAULT
+}
+
+/** The choice every one of them has now, which they cannot be given again; null when they differ. */
+function sharedChoice(people: readonly PlanPerson[]): string | null {
+  const choices = new Set(people.map(ownChoice))
+  const [only] = choices
+  return choices.size === 1 && only !== undefined ? only : null
 }
 
 /** One choice in Change plan: what it is called, what it allows, and, for what they have now, "Current". */
 export type ChangeChoice = { value: string; title: string; description: string; unavailable?: string }
 
 /**
- * Change plan's choices for someone: "Follow the default plan" first, saying which Plan that is
- * now, then each Plan, the default first, with what it allows. What they have now is "Current" and
- * cannot be chosen again.
+ * Change plan's choices for some people: "Follow the default plan" first, saying which Plan that is
+ * now, then each Plan, the default first, with what it allows. What every one of them has now is
+ * "Current" and cannot be chosen again.
  */
-export function changeChoices(i18n: I18n, plans: readonly PlanSummary[], person: PersonRow): ChangeChoice[] {
+export function changeChoices(i18n: I18n, plans: readonly PlanSummary[], people: readonly PlanPerson[]): ChangeChoice[] {
   const { t } = i18n
-  const own = ownPlan(person)
-  const current = (held: boolean) => (held ? { unavailable: t("people.plans.change.current") } : {})
+  const shared = sharedChoice(people)
+  const current = (value: string) => (value === shared ? { unavailable: t("people.plans.change.current") } : {})
   const fallback = plans.find((plan) => plan.is_default)
   return [
     {
@@ -119,13 +138,13 @@ export function changeChoices(i18n: I18n, plans: readonly PlanSummary[], person:
       description: fallback
         ? t("people.plans.change.followNow", { name: fallback.name })
         : t("people.plans.change.followNone"),
-      ...current(own === null),
+      ...current(FOLLOW_DEFAULT),
     },
     ...catalogOrder(plans).map((plan) => ({
       value: plan.key,
       title: plan.name,
       description: planAllowsSentence(i18n, plan.limits),
-      ...current(own === plan.key),
+      ...current(plan.key),
     })),
   ]
 }
@@ -135,34 +154,143 @@ export function chosenPlan(plans: readonly PlanSummary[], choice: string): PlanS
   return plans.find((plan) => (choice === FOLLOW_DEFAULT ? plan.is_default : plan.key === choice))
 }
 
+/** The one person a change is for, when it is for one; their name then says who. */
+function onlyOne(i18n: I18n, people: readonly PlanPerson[]): string | null {
+  const [first] = people
+  return people.length === 1 && first ? personName(i18n, first) : null
+}
+
+/** Change plan's title: "Change plan for robin@example.test", or "Change plan for 2 people". */
+export function changeTitle(i18n: I18n, people: readonly PlanPerson[]): string {
+  const one = onlyOne(i18n, people)
+  return one === null
+    ? i18n.t("people.plans.change.titleMany", { count: people.length })
+    : i18n.t("people.plans.change.title", { person: one })
+}
+
+/** Why confirming waits before anything is chosen: "Choose a plan for 2 people." */
+export function changeReason(i18n: I18n, people: readonly PlanPerson[]): string {
+  const one = onlyOne(i18n, people)
+  return one === null
+    ? i18n.t("people.plans.change.chooseReasonMany", { count: people.length })
+    : i18n.t("people.plans.change.chooseReason", { person: one })
+}
+
+/** The name of the Plan someone has now, or "no plan". */
+function heldName(i18n: I18n, person: PlanPerson): string {
+  return person.plan?.has?.name ?? i18n.t("people.plans.change.noPlan")
+}
+
+/** Up to this many people are named in what they have now; more are counted. */
+const NAMED = 3
+
 /**
- * What the dry run says a choice in Change plan would do for someone: what they would have more
- * of than the Plan allows, or that they are within it. Nothing until it answers, or when no Plan
+ * Which Plan they have now, before they choose: "robin@example.test and jordan@example.test have
+ * Free now.", "All 4 have Free now.", or, when they differ, "They have Free (2) and Pro (1) now."
+ */
+export function heldNow(i18n: I18n, people: readonly PlanPerson[]): string {
+  const { t } = i18n
+  const groups = new Map<string, number>()
+  for (const person of people) groups.set(heldName(i18n, person), (groups.get(heldName(i18n, person)) ?? 0) + 1)
+  const [only] = groups.keys()
+  if (groups.size > 1 || only === undefined) {
+    const plans = [...groups].map(([name, count]) => t("people.plans.change.heldGroup", { name, count }))
+    return t("people.plans.change.heldMixed", { plans: i18n.format.list(plans) })
+  }
+  const one = onlyOne(i18n, people)
+  if (one !== null) return t("people.plans.change.heldOne", { person: one, name: only })
+  if (people.length > NAMED) return t("people.plans.change.heldAll", { count: people.length, name: only })
+  return t("people.plans.change.heldFew", { people: i18n.format.list(people.map((person) => personName(i18n, person))), name: only })
+}
+
+/** Where a choice in Change plan moves people: a Plan of their own, or following the default (`follows`). */
+export type ChangeTarget = { plan: PlanSummary | undefined; follows: boolean }
+
+/** What the dry run says a choice would do, and whether anyone would have more than it allows. */
+export type ChangeOutcome = { text: string; over: boolean }
+
+/** Where they move, for several people: "They move from Free to Pro.", or to the default plan. */
+function moveSentence(i18n: I18n, people: readonly PlanPerson[], { plan, follows }: ChangeTarget): string {
+  const { t } = i18n
+  const name = plan?.name ?? ""
+  const to = follows ? t("people.plans.change.toDefault", { name }) : name
+  const from = new Set(people.map((person) => heldName(i18n, person)))
+  const [only] = from
+  return from.size === 1 && only !== undefined && (follows || only !== name)
+    ? t("people.plans.change.moveFrom", { from: only, to })
+    : t("people.plans.change.moveTo", { to })
+}
+
+/** For several people none of whom would be over: who no longer is, or that they all fit. */
+function withinSentence(i18n: I18n, people: readonly PlanPerson[], name: string): string {
+  const { t } = i18n
+  const relieved = people.filter((person) => person.role !== "installation_administrator" && (person.plan?.over.length ?? 0) > 0)
+  const [first] = relieved
+  if (relieved.length === 1 && first) return t("people.plans.change.noLongerOverOne", { person: personName(i18n, first) })
+  if (relieved.length > 1) return t("people.plans.change.noLongerOver", { count: relieved.length })
+  return t("people.plans.change.allWithin", { name })
+}
+
+/**
+ * What the dry run says a choice in Change plan would do: for one person, what they would have
+ * more of than the Plan allows, or that they are within it; for several, where they move, then who
+ * would be over, who no longer is, or that they all fit. Nothing until it answers, or when no Plan
  * is the default to follow.
  */
-export function changeResult(i18n: I18n, person: PersonRow, plan: PlanSummary | undefined, over: readonly OverLimit[] | undefined): string {
-  if (!plan || !over) return ""
-  const name = personName(i18n, person)
-  return over.length > 0
-    ? (overNote(i18n, [name], plan.name) ?? "")
-    : i18n.t("people.plans.change.within", { person: name, name: plan.name })
+export function changeResult(
+  i18n: I18n,
+  people: readonly PlanPerson[],
+  target: ChangeTarget,
+  answer: PlanAssignments | undefined,
+): ChangeOutcome {
+  const { plan } = target
+  if (!plan || !answer) return { text: "", over: false }
+  const over = new Set(answer.people.filter((moved) => moved.over.length > 0).map((moved) => moved.user_id))
+  const overNames = people.filter((person) => over.has(person.id)).map((person) => personName(i18n, person))
+  const verdict = overNote(i18n, overNames, plan.name)
+  const one = onlyOne(i18n, people)
+  if (one !== null) {
+    return { text: verdict ?? i18n.t("people.plans.change.within", { person: one, name: plan.name }), over: verdict !== null }
+  }
+  return {
+    text: i18n.t("people.plans.change.result", {
+      move: moveSentence(i18n, people, target),
+      over: verdict ?? withinSentence(i18n, people, plan.name),
+    }),
+    over: verdict !== null,
+  }
 }
 
 /**
- * What confirms a choice in Change plan: "Give Pro to robin@example.test", "Move
- * robin@example.test to the default plan", or, before a choice, "Change plan".
+ * What confirms a choice in Change plan: "Give Pro to robin@example.test", "Give Pro to 2 people",
+ * "Move robin@example.test to the default plan", or, before a choice, "Change plan".
  */
-export function changeConfirm(i18n: I18n, person: PersonRow, choice: string | null, plan: PlanSummary | undefined): string {
-  const name = personName(i18n, person)
-  if (choice === null) return i18n.t("people.plans.change.choose")
-  if (choice === FOLLOW_DEFAULT) return i18n.t("people.plans.change.giveDefault", { person: name })
-  return i18n.t("people.plans.change.give", { name: plan?.name ?? "", person: name })
+export function changeConfirm(i18n: I18n, people: readonly PlanPerson[], choice: string | null, plan: PlanSummary | undefined): string {
+  const { t } = i18n
+  const one = onlyOne(i18n, people)
+  if (choice === null) return t("people.plans.change.choose")
+  if (choice === FOLLOW_DEFAULT) {
+    return one === null
+      ? t("people.plans.change.giveDefaultMany", { count: people.length })
+      : t("people.plans.change.giveDefault", { person: one })
+  }
+  const name = plan?.name ?? ""
+  return one === null
+    ? t("people.plans.assign.give", { name, count: people.length })
+    : t("people.plans.change.give", { name, person: one })
 }
 
-/** What a change in Change plan did: "robin@example.test now has Pro.", or that they follow the default. */
-export function changedResult(i18n: I18n, person: PersonRow, plan: PlanSummary | null | undefined): string {
-  const name = personName(i18n, person)
-  return plan === null
-    ? i18n.t("people.plans.change.followed", { person: name })
-    : i18n.t("people.plans.assign.givenOne", { person: name, name: plan?.name ?? "" })
+/** What a change in Change plan did: "robin@example.test now has Pro.", "2 people now follow the default plan." */
+export function changedResult(i18n: I18n, people: readonly PlanPerson[], plan: PlanSummary | null | undefined): string {
+  const { t } = i18n
+  const one = onlyOne(i18n, people)
+  if (plan === null) {
+    return one === null
+      ? t("people.plans.change.followedMany", { count: people.length })
+      : t("people.plans.change.followed", { person: one })
+  }
+  const name = plan?.name ?? ""
+  return one === null
+    ? t("people.plans.assign.given", { count: people.length, name })
+    : t("people.plans.assign.givenOne", { person: one, name })
 }

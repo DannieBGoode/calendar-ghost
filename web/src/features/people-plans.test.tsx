@@ -1451,7 +1451,7 @@ describe("Assigning people from a plan", () => {
     expect(assignCalls()).toEqual([{ plan: "free", user_ids: ["user-alex", "user-sam"], dry_run: true }])
     expect(assign.querySelector(".plan-assign-found")?.textContent).toBe("3 found")
     expect(assignRows("free")).toEqual([
-      ["alex@example.test", "Has Family, the default", "Would be over: 3 rules, 1 allowed"],
+      ["alex@example.test", "Has Family, the default", "Would be over: 3 active rules, 1 allowed"],
       ["sam@example.test", "Has No limits", null],
       ["dana@example.testYou", "Never limited, whatever plan they have", null],
     ])

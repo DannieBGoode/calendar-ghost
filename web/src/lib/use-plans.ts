@@ -66,7 +66,8 @@ export type SettingChange = { enabled: boolean; defaultPlan: string | null }
  */
 export type AssignCommand = { from: string; via: "give" | "change" | "undo"; moves: readonly AssignMove[] }
 
-function sendMoves(moves: readonly AssignMove[]): Promise<PlanAssignments[]> {
+/** Sends each move, one call per Plan, all at once; each is all or none for the people it names. */
+export function sendMoves(moves: readonly AssignMove[]): Promise<PlanAssignments[]> {
   return Promise.all(moves.map(({ plan, userIds }) => api.assignPlan(plan, userIds, false)))
 }
 

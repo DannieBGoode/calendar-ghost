@@ -2,6 +2,7 @@ import { GhostMark } from "@/components/ghost-mark"
 import { LoadFailure } from "@/components/load-failure"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
+import { PeopleBulkBar } from "@/features/people-bulk-bar"
 import { PeopleFilters } from "@/features/people-filters"
 import { InstallationHealthSummary } from "@/features/people-health"
 import { PeoplePagination } from "@/features/people-pagination"
@@ -14,6 +15,7 @@ import { DEFAULT_PEOPLE_QUERY, nextSort, pageRange } from "@/lib/people-query"
 import { usePeoplePage, usePersonCommands, type PeopleCommands } from "@/lib/use-people"
 import type { UpdatePeopleQuery } from "@/lib/use-people-location"
 import { useFilterPlans } from "@/lib/use-plans"
+import { useRowSelection } from "@/lib/use-row-selection"
 
 /**
  * People's first tab: Installation Health, then everyone here in one card with its search,
@@ -117,6 +119,9 @@ function PeopleResults({
   update: UpdatePeopleQuery
   onOpenPerson: OpenPerson
 }) {
+  // Who is selected belongs to what the list shows: another search, filter, sort, or page selects nobody.
+  const selection = useRowSelection(JSON.stringify(query))
+  const planned = page.users.some((person) => person.plan !== null)
   function openPage(next: number) {
     update({ page: next }, "push")
     // The new page starts at the list's heading, as a new page of the app starts at its own.
@@ -134,12 +139,20 @@ function PeopleResults({
   }
   return (
     <div className="people-table-wrap" aria-busy={updating} data-updating={updating}>
+      {planned && (
+        <PeopleBulkBar
+          selected={page.users.filter((person) => selection.ids.has(person.id))}
+          busy={commands.busy}
+          onClear={selection.clear}
+        />
+      )}
       <PeopleTable
         people={page.users}
         query={query}
         currentUserId={currentUserId}
         now={now}
         commands={commands}
+        selection={selection}
         onSort={(sort: PeopleSort) => update(nextSort(query, sort), "replace")}
         onOpenPerson={onOpenPerson}
       />

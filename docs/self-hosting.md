@@ -257,7 +257,8 @@ join and the app shows nothing about other people. To share it with your househo
 1. Open **Settings → Administration → Who can join** and choose **Invitation only**. A **People**
    page appears in the main navigation.
 2. On **People**, choose **Invite someone** and pass the link on yourself. It works once and expires
-   after 7 days; the person chooses their own email and password.
+   after 7 days; the person chooses their own email and password. Once a Plan is the default,
+   **Invitations** says which Plan they will get; you can change it after they join.
 3. Everyone's calendar accounts, rules, Activity, and tokens are their own. As the administrator you
    see each person's email, role, whether they may sign in, when they joined, when they last signed
    in, and, once you define a Plan, their Plan, never their calendars or events. Search by part of
@@ -296,8 +297,12 @@ give it, as **Give Free to 2 people** does. Before you do, the list shows the Pl
 now and any limit they would be over, and administrators come last, since no Plan limits them.
 Below it, **Have Free now** lists who has the Plan, with any limit they are over, and **Change
 plan** beside each of them gives them another Plan, or the default, after saying whether they
-would be over it. **Change plan** on a person's page under **People** does the same for one
-person; under the choice it says what the chosen Plan allows. **Duplicate** opens a new Plan with
+would be over it. Under **Everyone**, tick people, or the box above the list for the whole page,
+and choose **Change plan** in the bar above the table: it says which Plan they have now, offers
+**Follow the default plan** and each Plan with what it allows, and, before you confirm, who moves
+where and who would be over. A message at the bottom of the window says what changed, with
+**Undo**. **Change plan** in a person's **More actions**, and on the **Plan** card of their page,
+does the same for one person. **Duplicate** opens a new Plan with
 another's limits. Two Plans cannot share a name, whatever its case: the form says so
 under **Name**. With no default, turning Plans on adds a Plan named No limits, which limits
 nobody, as the default, so nothing changes until someone has a smaller Plan; you can rename and
@@ -312,9 +317,11 @@ list them, the default Plan, and how many administrators are never limited. Belo
 compares the Plans by limit: active rules, calendar accounts, Integration Tokens, sync speed, and
 how many people have each Plan, which lists them under **Everyone**, with how many of them are over
 a limit. Before you save a lower limit, the panel says how many people it would leave with more.
-**Everyone** shows each person's Plan in its own column, and their page says it too; both name
-each limit they are over ("Family. 2 calendar accounts, 1 allowed"), and the **Plan** and
-**Limits** filters list only the people who have one Plan, or who are over a limit. The default,
+**Everyone** shows each person's Plan in its own column, with **Default**, **Over a limit**, or
+**Not limited** beside it, and the **Plan** and **Limits** filters list only the people who have
+one Plan, or who are over a limit. A person's page has a **Plan** card: who gave the Plan and when,
+whether it limits them now, and a meter for each limit with how much of it they use ("2 of 1",
+**Over**), saying under a limit they are over what keeps working. The default,
 and a Plan someone has, cannot be removed: **Remove** in its menu says why, naming the first three
 who have it by email; make another Plan the default, or give those people another Plan, first.
 [Someone has more than their plan allows](troubleshooting.md#someone-has-more-than-their-plan-allows)

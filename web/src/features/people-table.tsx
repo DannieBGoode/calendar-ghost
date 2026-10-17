@@ -1,28 +1,45 @@
-import { ArrowDown, ArrowUp, ArrowUpDown, TriangleAlert } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { Fragment, useEffect, useRef } from "react"
 
+import { PlanChips } from "@/components/plan-chips"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { DisabledBadge, VerdictBadge } from "@/components/verdict-badge"
+import { SELECT_ALL } from "@/features/people-bulk-bar"
 import { PersonDetails, PersonMenu } from "@/features/person-actions"
+import { PersonPlanPopover } from "@/features/person-plan"
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
 import type { PeopleQuery, PeopleSort, PersonRow, SortOrder } from "@/lib/api"
 import { appPathForPerson, isPlainLeftClick, type OpenPerson } from "@/lib/navigation"
 import { isAdministrator, lastSignIn, personName } from "@/lib/people"
-import { personPlanOver, personPlanText } from "@/lib/plans"
+import { heldPlanChips } from "@/lib/plans"
 import { rememberOpenedPerson, takeOpenedPerson, type PeopleCommands } from "@/lib/use-people"
+import type { RowSelection } from "@/lib/use-row-selection"
 
-// Fixed widths, so columns stay put whatever a filter shows; Plan only once a Plan exists.
+// Fixed widths, so columns stay put whatever a filter shows; once a Plan exists, a box to select
+// each row and the Plan column.
 const COLUMN_CLASSES = ["col-email", "col-sync", "col-role", "col-state", "col-joined", "col-last", "col-actions"]
-const PLAN_COLUMN_CLASSES = ["col-email", "col-sync", "col-role", "col-state", "col-plan", "col-joined", "col-last", "col-actions"]
+const PLAN_COLUMN_CLASSES = [
+  "col-select",
+  "col-email",
+  "col-sync",
+  "col-role",
+  "col-state",
+  "col-plan",
+  "col-joined",
+  "col-last",
+  "col-actions",
+]
 const ARIA_SORT: Record<SortOrder, "ascending" | "descending"> = { asc: "ascending", desc: "descending" }
 const SORT_ICONS = { asc: ArrowUp, desc: ArrowDown }
 
 /**
  * One page of people as a table. Email, Sync, Joined, and Last sign-in sort when their heading is
- * pressed; each email opens that person's page. Once a Plan exists, each person's Plan has a
- * column, in the words of their page. On a narrow screen each row becomes a card that labels its
- * own values, and the sortable headings stay above the cards as buttons.
+ * pressed; each email opens that person's page. Once a Plan exists, each row has a box that
+ * selects it, the header one that selects the page, and each person's Plan has a column: its name
+ * with chips. On a narrow screen each row becomes a card that labels its own values, and the
+ * sortable headings and the box for the page stay above the cards.
  */
 export function PeopleTable({
   people,
@@ -30,6 +47,7 @@ export function PeopleTable({
   currentUserId,
   now,
   commands,
+  selection,
   onSort,
   onOpenPerson,
 }: {
@@ -38,6 +56,8 @@ export function PeopleTable({
   currentUserId: string
   now: number
   commands: PeopleCommands
+  /** Who is selected, once a Plan exists. */
+  selection: RowSelection
   onSort: (sort: PeopleSort) => void
   onOpenPerson: OpenPerson
 }) {
@@ -64,6 +84,7 @@ export function PeopleTable({
       </colgroup>
       <thead role="rowgroup">
         <tr role="row">
+          {planned && <SelectAllHeader people={people} selection={selection} />}
           {sortable("email", "people.table.email")}
           {sortable("verdict", "people.table.sync")}
           <th scope="col" role="columnheader">{t("people.table.role")}</th>
@@ -83,6 +104,7 @@ export function PeopleTable({
             person={person}
             you={person.id === currentUserId}
             planned={planned}
+            selection={selection}
             columns={columns.length}
             now={now}
             commands={commands}
@@ -117,23 +139,43 @@ function SortHeader({
   )
 }
 
+/** The header's box, which selects everyone on the page, mixed while only some are. */
+function SelectAllHeader({ people, selection }: { people: readonly PersonRow[]; selection: RowSelection }) {
+  const { t } = useI18n()
+  const chosen = people.filter((person) => selection.ids.has(person.id)).length
+  return (
+    <th scope="col" role="columnheader" className="person-col-select" data-select-all="true">
+      <label className="people-select">
+        <Checkbox
+          id={SELECT_ALL}
+          checked={chosen > 0 && chosen === people.length}
+          indeterminate={chosen > 0 && chosen < people.length}
+          onCheckedChange={(on) => selection.setAll(people.map((person) => person.id), on)}
+        />
+        <span className="people-select-label">{t("people.table.selectAll")}</span>
+      </label>
+    </th>
+  )
+}
+
 /**
- * A person's Plan, as their page says it after "Plan:". A limit they have more of than it allows
- * takes Attention Ochre and the attention icon beside the words that say so, never the tone alone.
+ * A person's Plan: its name, and chips for the default, a limit they are over in Attention Ochre
+ * with an icon ("Would be over", neutral, while Plans are off), and an administrator, whom no Plan
+ * limits. What they are over follows in words for a screen reader.
  */
 function PlanCell({ person }: { person: PersonRow }) {
   const i18n = useI18n()
-  const administrator = isAdministrator(person)
-  const over = person.plan !== null && personPlanOver(person.plan, administrator)
+  const plan = person.plan
   return (
-    <td
-      role="cell"
-      className="person-col-plan"
-      data-label={i18n.t("people.table.plan")}
-      data-tone={over ? "attention" : undefined}
-    >
-      {over && <TriangleAlert aria-hidden="true" />}
-      {person.plan && personPlanText(i18n, person.plan, administrator)}
+    <td role="cell" className="person-col-plan" data-label={i18n.t("people.table.plan")}>
+      {plan && (
+        <span className="person-plan-cell">
+          <span className="person-plan-name" data-none={plan.has ? undefined : true}>
+            {plan.has?.name ?? i18n.t("people.table.noPlan")}
+          </span>
+          <PlanChips chips={heldPlanChips(i18n, plan, isAdministrator(person))} />
+        </span>
+      )}
     </td>
   )
 }
@@ -142,6 +184,7 @@ function PersonRows({
   person,
   you,
   planned,
+  selection,
   columns,
   now,
   commands,
@@ -149,8 +192,9 @@ function PersonRows({
 }: {
   person: PersonRow
   you: boolean
-  /** A Plan exists, so the row has a Plan column. */
+  /** A Plan exists, so the row has a box that selects it and a Plan column. */
   planned: boolean
+  selection: RowSelection
   /** How many columns the table has, which a row of details spans. */
   columns: number
   now: number
@@ -160,9 +204,19 @@ function PersonRows({
   const i18n = useI18n()
   const { t } = i18n
   const name = personName(i18n, person)
+  const selected = selection.ids.has(person.id)
   return (
     <Fragment>
-      <tr role="row" className="person-row">
+      <tr role="row" className="person-row" data-selected={planned && selected ? true : undefined}>
+        {planned && (
+          <td role="cell" className="person-col-select">
+            <Checkbox
+              aria-label={t("people.table.select", { email: name })}
+              checked={selected}
+              onCheckedChange={(on) => selection.toggle(person.id, on)}
+            />
+          </td>
+        )}
         <td role="cell" className="person-col-email">
           <a
             className="person-email"
@@ -206,9 +260,7 @@ function PersonRows({
             lastSignIn(i18n, person, now)
           )}
         </td>
-        <td role="cell" className="person-col-actions">
-          {!you && <PersonMenu person={person} name={name} commands={commands} />}
-        </td>
+        <PersonActions person={person} name={name} you={you} commands={commands} />
       </tr>
       {commands.hasDetails(person) && (
         <tr role="row" className="person-details-row">
@@ -218,5 +270,25 @@ function PersonRows({
         </tr>
       )}
     </Fragment>
+  )
+}
+
+/**
+ * Someone else's actions: the menu, and, once a Plan exists, Change plan in a popover beside it,
+ * which gives focus back to the menu as it closes.
+ */
+function PersonActions({ person, name, you, commands }: { person: PersonRow; name: string; you: boolean; commands: PeopleCommands }) {
+  const cell = useRef<HTMLTableCellElement>(null)
+  return (
+    <td ref={cell} role="cell" className="person-col-actions">
+      {!you && <PersonMenu person={person} name={name} commands={commands} plan={person.plan} />}
+      {!you && person.plan && (
+        <PersonPlanPopover
+          person={person}
+          commands={commands}
+          returnFocus={() => cell.current?.querySelector<HTMLElement>("[aria-haspopup='menu']") ?? null}
+        />
+      )}
+    </td>
   )
 }

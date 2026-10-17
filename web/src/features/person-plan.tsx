@@ -1,181 +1,172 @@
-import { useEffect, useRef, useState, type SyntheticEvent } from "react"
+import { RefreshCw } from "lucide-react"
+import { useRef } from "react"
 
+import { PlanChips } from "@/components/plan-chips"
+import { PlanUsage } from "@/components/plan-usage"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { NativeSelect } from "@/components/ui/native-select"
-import { apiErrorMessage } from "@/i18n/api-errors"
+import { Popover } from "@/components/ui/popover"
+import { Skeleton } from "@/components/ui/skeleton"
+import { PlanChooser, type ConfirmChange, type PlanChooserProps } from "@/features/plan-change"
 import { useI18n } from "@/i18n/provider"
-import type { Person, PersonPlan, PlanSummary } from "@/lib/api"
-import { defaultPlanChoice, planChoiceAllows } from "@/lib/plans"
-import type { PeopleCommands, PlanChoice } from "@/lib/use-people"
+import type { PersonPlanOverview, UserOverview } from "@/lib/api"
+import { isAdministrator, personName } from "@/lib/people"
+import type { PlanPerson } from "@/lib/plan-assignment"
+import { planCardSummary, planUsageRows } from "@/lib/plan-usage"
+import { heldPlanChips } from "@/lib/plans"
+import type { PeopleCommands } from "@/lib/use-people"
 import { usePlanList } from "@/lib/use-plans"
 
-/** The choice's value for the Default Plan; no Plan key is empty. */
-const DEFAULT_PLAN = ""
-
-/** The Plan a value of the choice gives: for the Default Plan, the Plan that is the default now. */
-function chosenPlan(value: string, plans: readonly PlanSummary[]): PlanSummary | undefined {
-  return plans.find((plan) => (value === DEFAULT_PLAN ? plan.is_default : plan.key === value))
-}
-
-/** The Plan a value of the choice gives, with the name its result says. */
-function planChoice(value: string, plans: readonly PlanSummary[]): PlanChoice {
-  const name = chosenPlan(value, plans)?.name
-  return value === DEFAULT_PLAN ? { key: null, name: name ?? null } : { key: value, name: name ?? value }
+type ChangePopoverProps = Omit<PlanChooserProps, "overview" | "level" | "onCancel"> & {
+  open: boolean
+  /** It lines up with its control's end edge, as for a control at the end of a row or card. */
+  alignEnd?: boolean
+  /** The control that opened it, which gets focus back as it closes. */
+  returnFocus: () => HTMLElement | null
+  /** Escape, Cancel, or a press outside asks to close it. */
+  onClose: () => void
 }
 
 /**
- * What the Plan chosen allows, under the choice. It is always present, so a screen reader
- * announces each new choice's limits; it says nothing until the Plans are read.
+ * Change plan in a popover beside the control that opened it, for the people selected in
+ * Everyone, one person's row, or their page: the Plans are read as it opens, with Try again when
+ * they cannot be, then the chooser.
  */
-function ChosenPlanAllows({ id, plans, value }: { id: string; plans: readonly PlanSummary[] | undefined; value: string }) {
-  const i18n = useI18n()
+export function ChangePlanPopover({ open, alignEnd, returnFocus, onClose, ...chooser }: ChangePopoverProps) {
   return (
-    <p id={id} className="field-hint" aria-live="polite">
-      {plans ? planChoiceAllows(i18n, chosenPlan(value, plans)) : null}
-    </p>
+    <Popover
+      id={`${chooser.id}-popover`}
+      open={open}
+      alignEnd={alignEnd}
+      aria-labelledby={`${chooser.id}-title`}
+      returnFocus={returnFocus}
+      onClose={onClose}
+      className="plan-change-popover"
+    >
+      <ChooserWithPlans {...chooser} onCancel={onClose} />
+    </Popover>
   )
 }
 
-/** The ids an element's aria-describedby names, leaving out those not shown. */
-function describedBy(...ids: (string | false | null | undefined)[]): string | undefined {
-  return ids.filter(Boolean).join(" ") || undefined
-}
-
-/**
- * The choice as it stands: the Plans to choose from, the one chosen, and the refusal of the last
- * change, which takes focus as it arrives. While a change is on its way, every control keeps focus
- * but ignores input; choosing again puts a refusal away, and so does Cancel.
- */
-function usePlanChoice(person: Person, current: PersonPlan | null, commands: PeopleCommands) {
-  // People's Plans tab reads the same list under the same key.
+function ChooserWithPlans(props: Omit<PlanChooserProps, "overview" | "level">) {
+  const { t } = useI18n()
   const plans = usePlanList()
-  const listed = plans.data?.plans ?? []
-  // Null until the administrator chooses, so the choice opens on their own Plan. A Plan no
-  // longer listed is no choice, so it falls back to their own, then the default.
-  const [chosen, setChosen] = useState<string | null>(null)
-  const value =
-    [chosen, current?.assigned?.key].find(
-      (key) => key === DEFAULT_PLAN || listed.some((plan) => plan.key === key),
-    ) ?? DEFAULT_PLAN
-  const select = useRef<HTMLSelectElement>(null)
-  const { busy } = commands
-  const refused = commands.errorFor(person)
-  useEffect(() => {
-    if (refused) select.current?.focus()
-  }, [refused])
-
-  const choose = (next: string) => {
-    if (busy) return
-    if (refused) commands.command.reset()
-    setChosen(next)
+  if (plans.data) return <PlanChooser {...props} overview={plans.data} level={3} />
+  if (plans.isPending) {
+    return (
+      <div role="status" aria-busy="true" aria-label={t("people.plans.change.loading")}>
+        <h3 id={`${props.id}-title`} className="sr-only">
+          {t("people.plans.change.loading")}
+        </h3>
+        <Skeleton className="h-40 w-full" />
+      </div>
+    )
   }
-  const save = () => {
-    if (busy || !plans.data) return
-    commands.send({ person, action: "plan", plan: planChoice(value, listed) })
-  }
-  const cancel = () => {
-    if (busy) return
-    commands.command.reset()
-    commands.setChoosingPlan(null)
-  }
-  return { plans, listed, value, select, refused, choose, save, cancel }
+  return (
+    <div className="plan-assign-error" role="alert">
+      <h3 id={`${props.id}-title`}>{t("people.plans.change.loadError")}</h3>
+      <Button type="button" variant="outline" size="sm" onClick={() => void plans.refetch()}>
+        <RefreshCw aria-hidden="true" />
+        {t("people.plans.tryAgain")}
+      </Button>
+    </div>
+  )
 }
 
 /**
- * Which Plan limits this person, chosen inline beside them: one of the Plans by name, or the
- * Default Plan, named by the Plan that is the default now, which they then follow whenever it
- * changes. What the chosen Plan allows shows under the choice, rather than in its options, so
- * nothing is cut off on a narrow screen, and is announced as the choice changes. It opens on their
- * own Plan. Save sends the key, or null for the default;
- * the result names the Plan, and a refusal shows under the choice. The Plans are read again after
- * a refusal, so one removed meanwhile leaves the choice. Once the choice closes, by Cancel or a
- * saved Plan, focus returns to their actions, where Change plan opened it.
+ * Change plan for one person, as a command on them like their others: open while their Plan is
+ * being chosen, waiting while any person command runs, with the refusal of the last change. The
+ * change gives the Plan chosen by its key, or the default with none, named as its result says it.
  */
-export function PersonPlanChoice({
+export function PersonPlanPopover({
   person,
-  name,
-  current,
   commands,
+  returnFocus,
 }: {
-  person: Person
-  /** How People names them, as their actions menu's label does. */
-  name: string
-  current: PersonPlan | null
+  person: PlanPerson
   commands: PeopleCommands
+  returnFocus: () => HTMLElement | null
+}) {
+  const refused = commands.errorFor(person)
+  const confirm: ConfirmChange = (key, chosen) => {
+    const name = chosen?.name ?? null
+    commands.send({ person, action: "plan", plan: key === null ? { key, name } : { key, name: name ?? key } })
+  }
+  return (
+    <ChangePlanPopover
+      id={`plan-change-${person.id}`}
+      open={commands.choosingPlan === person.id}
+      alignEnd
+      people={[person]}
+      pending={commands.busy}
+      refusal={refused}
+      returnFocus={returnFocus}
+      onChoose={() => refused && commands.command.reset()}
+      onConfirm={confirm}
+      onClose={commands.closePlanChoice}
+    />
+  )
+}
+
+/**
+ * A person's Plan card, after Synchronization once any Plan exists: who gave the Plan and when and
+ * whether it limits them now, Change plan for anyone but the reader, the Plan's name with its chips,
+ * then one meter per limit. What a change did shows here, as their page's status announces it.
+ */
+export function PersonPlanCard({
+  overview,
+  plan,
+  commands,
+  own,
+  now,
+}: {
+  overview: UserOverview
+  plan: PersonPlanOverview
+  commands: PeopleCommands
+  /** The reader's own page, where no Change plan is offered. */
+  own: boolean
+  now: number
 }) {
   const i18n = useI18n()
   const { t } = i18n
-  const { plans, listed, value, select, refused, choose, save, cancel } = usePlanChoice(person, current, commands)
-  useEffect(() => {
-    select.current?.focus()
-  }, [select])
-  const actionsLabel = t("people.actions.label", { email: name })
-  useEffect(
-    () => () => {
-      // Closing removed the focused control, unless the administrator already moved on.
-      const active = document.activeElement
-      if (active !== null && active !== document.body) return
-      document.querySelector<HTMLElement>(`[aria-label=${JSON.stringify(actionsLabel)}]`)?.focus()
-    },
-    [actionsLabel],
-  )
-  const id = `person-plan-${person.id}`
-  const waiting = commands.busy || undefined
-
-  function submit(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault()
-    save()
-  }
-
+  const person = { ...overview.user, plan }
+  const name = personName(i18n, person)
+  const administrator = isAdministrator(person)
+  const change = useRef<HTMLButtonElement>(null)
+  const result = commands.planResultFor(person)
+  const choosing = commands.choosingPlan === person.id
   return (
-    <form className="setting-form person-plan-choice" noValidate onSubmit={submit}>
-      <div className="field-stack">
-        <Label htmlFor={id}>{t("people.plan.label", { email: name })}</Label>
-        <NativeSelect
-          ref={select}
-          id={id}
-          value={value}
-          aria-disabled={waiting}
-          aria-invalid={refused ? true : undefined}
-          aria-describedby={describedBy(Boolean(refused) && `${id}-error`, `${id}-allows`, `${id}-hint`)}
-          onChange={(event) => choose(event.target.value)}
-        >
-          <option value={DEFAULT_PLAN}>{defaultPlanChoice(i18n, listed)}</option>
-          {listed.map((plan) => (
-            <option key={plan.key} value={plan.key}>
-              {plan.name}
-            </option>
-          ))}
-        </NativeSelect>
-        <ChosenPlanAllows id={`${id}-allows`} plans={plans.data?.plans} value={value} />
-        <p id={`${id}-hint`} className="field-hint">
-          {t("people.plan.hint")}
-        </p>
-        {Boolean(refused) && (
-          <p id={`${id}-error`} className="field-error" role="alert">
-            {apiErrorMessage(i18n, refused)}
-          </p>
+    <section className="page-card workflow user-overview-block person-plan-card" aria-labelledby="person-plan-title">
+      <div className="person-plan-head">
+        <div>
+          <h2 id="person-plan-title">{t("people.person.plan.title")}</h2>
+          <p className="person-plan-summary">{planCardSummary(i18n, plan, { name, administrator, now })}</p>
+        </div>
+        {!own && (
+          <div className="person-plan-change">
+            <Button
+              ref={change}
+              type="button"
+              variant="outline"
+              aria-haspopup="dialog"
+              aria-expanded={choosing}
+              aria-controls={choosing ? `plan-change-${person.id}-popover` : undefined}
+              aria-disabled={commands.busy || undefined}
+              onClick={() => (choosing ? commands.closePlanChoice() : commands.start({ person, action: "plan" }))}
+            >
+              {t("people.person.plan.change")}
+            </Button>
+            <PersonPlanPopover person={person} commands={commands} returnFocus={() => change.current} />
+          </div>
         )}
       </div>
-      {plans.error && (
-        <p id={`${id}-load-error`} className="field-error" role="alert">
-          {apiErrorMessage(i18n, plans.error)}
+      {plan.has && (
+        <p className="person-plan-held">
+          <span className="person-plan-name">{plan.has.name}</span>
+          <PlanChips chips={heldPlanChips(i18n, plan, administrator)} />
         </p>
       )}
-      <div className="setting-form-actions">
-        <Button
-          type="submit"
-          aria-disabled={waiting ?? (plans.data ? undefined : true)}
-          aria-busy={waiting}
-          aria-describedby={plans.error ? `${id}-load-error` : undefined}
-        >
-          {t("people.plan.save")}
-        </Button>
-        <Button type="button" variant="ghost" aria-disabled={waiting} onClick={cancel}>
-          {t("people.plan.cancel")}
-        </Button>
-      </div>
-    </form>
+      {result !== null && <p className="command-result person-plan-result">{result}</p>}
+      {!administrator && plan.basis !== "administrator" && <PlanUsage rows={planUsageRows(i18n, plan, name)} />}
+    </section>
   )
 }

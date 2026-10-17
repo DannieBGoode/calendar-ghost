@@ -23,14 +23,19 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   each with **Change plan**. Each Plan's **More actions** menu offers **Edit** and **Assign
   people**, which open its panel, **Make default**, which says whom it moves, **Duplicate**, which
   opens New plan with its limits, and **Remove**. Results show at the bottom of the window, most with
-  **Undo**. A person's page names each limit they are over. **Everyone** shows each person's Plan in
-  its own column, with any limit they are over, and can list only the people who have one Plan, or
-  who are over a limit. Two Plans cannot share a name, whatever its case; the form says so under
+  **Undo**. **Everyone** shows each person's Plan in its own column, its name with **Default**,
+  **Over a limit**, or **Not limited** beside it, and can list only the people who have one Plan,
+  or who are over a limit. Its rows can be selected, a page at a time, and **Change plan** in the
+  bar above the table gives the people selected another Plan, or the default, from a popover that
+  says after a dry run who moves where and who would be over, with **Undo** once done. Each row's
+  **More actions** offers the same for one person. A person's page has a **Plan** card: who gave
+  the Plan and when, whether it limits them now, **Change plan**, and a meter for each limit with
+  how much of it they use, saying under a limit they are over what keeps working. Once a Plan is
+  the default, **Invitations** says which Plan someone invited will get. Two Plans cannot share a name, whatever its case; the form says so under
   Name. Remove is unavailable on the default, saying to make another Plan the default first, and on
   a Plan someone has, naming the first three of them. Turning Plans on with no default adds a Plan
   named No limits, which limits nobody, as the default, so nothing changes until someone has a
-  smaller Plan; it can be renamed and changed like any Plan. **Change plan** on a person's page
-  gives them a Plan of their own, saying what the chosen Plan allows under the choice.
+  smaller Plan; it can be renamed and changed like any Plan.
   Plans are off by default, and while they are off nothing changes. Administrators are never
   limited, and under **Only me** Plans stay hidden. Once Plans are on, starting a rule, connecting a
   new calendar account, and issuing a token respect the person's Plan: each control says so at the

@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "People",
-    "intro": "The people who sign in here and whether their synchronization works. You see their email, role, sign-ins, and sync status, never their calendars, connected account emails, or events.",
+    "intro": "The people who sign in here and whether their synchronization works. You see their email, role, sign-ins, plan, and sync status, never their calendars, connected account emails, or events.",
     "loading": "Loading people",
     "loadFailure": "People could not load",
     "listTitle": "Everyone here"
@@ -46,7 +46,20 @@
     "lastSignIn": "Last sign-in",
     "actions": "Actions",
     "sync": "Sync",
-    "plan": "Plan"
+    "plan": "Plan",
+    "selectAll": "Select all",
+    "select": "Select {email}",
+    "noPlan": "No plan"
+  },
+  "bulk": {
+    "label": "Selected people",
+    "rest": "Select people to change their plan together.",
+    "selected": {
+      "one": "{count} selected",
+      "other": "{count} selected"
+    },
+    "change": "Change plan",
+    "clear": "Clear selection"
   },
   "pagination": {
     "label": "Pages of people",
@@ -133,7 +146,8 @@
     "empty": {
       "title": "No invitations are waiting",
       "body": "Invite someone to create a link they can use once to join."
-    }
+    },
+    "plan": "They get the default plan, {name}. You can change it after they join."
   },
   "verdicts": {
     "stalled": "Not running",
@@ -318,45 +332,78 @@
       "body": "This person may have been deleted.",
       "back": "Back to People"
     },
-    "documentTitle": "{name} – People"
+    "documentTitle": "{name} – People",
+    "introPlan": "You see whether their synchronization works and how much of their plan they use, never their calendar names, connected account emails, or events.",
+    "plan": {
+      "title": "Plan",
+      "change": "Change plan",
+      "administrator": "No plan limits administrators.",
+      "none": "They have no plan until one is the default.",
+      "default": "The default plan.",
+      "givenBy": "Given by {email} on {date}.",
+      "givenOn": "Given on {date}.",
+      "own": "Their own plan, not the default.",
+      "on": "Plans are on, so it limits {person} now.",
+      "off": "Plans are off, so it limits nobody yet.",
+      "summary": "{origin} {effect}"
+    }
+  },
+  "usage": {
+    "rules": "Active rules",
+    "rulesHint": "Running, or waiting for reauthorization",
+    "accounts": "Calendar accounts",
+    "accountsHint": "Disconnected accounts count",
+    "tokens": "Integration Tokens",
+    "tokensHint": "Revoked tokens don't count",
+    "speed": "Sync speed",
+    "speedHint": "How soon changes reach other calendars",
+    "of": "{used} of {limit}",
+    "inUse": "{used} in use",
+    "noLimit": "No limit",
+    "notIncluded": "Not included",
+    "includesNone": "{name} includes none.",
+    "noInstant": "Instant sync is not part of {name}.",
+    "limitReached": "Limit reached",
+    "over": "Over",
+    "wouldBeOver": "Would be over",
+    "valueReached": "{used} of {limit}, limit reached",
+    "valueOver": "{used} of {limit}, over the limit",
+    "valueWouldBeOver": "{used} of {limit}, would be over the limit",
+    "interval": {
+      "instant": "Instant",
+      "5_minutes": "Every 5 minutes",
+      "10_minutes": "Every 10 minutes",
+      "15_minutes": "Every 15 minutes",
+      "30_minutes": "Every 30 minutes",
+      "60_minutes": "Every hour"
+    },
+    "note": {
+      "rules": {
+        "one": "{person} has {count} active rule and {name} allows {allowed}. Their rules keep syncing, but they can't start another until fewer are active. They see the same on Your plan.",
+        "other": "{person} has {count} active rules and {name} allows {allowed}. Their rules keep syncing, but they can't start another until fewer are active. They see the same on Your plan."
+      },
+      "accounts": {
+        "one": "{person} has {count} calendar account and {name} allows {allowed}. Their accounts keep syncing, but they can't connect another until one is removed. They see the same on Your plan.",
+        "other": "{person} has {count} calendar accounts and {name} allows {allowed}. Their accounts keep syncing, but they can't connect another until one is removed. They see the same on Your plan."
+      },
+      "tokens": {
+        "one": "{person} has {count} Integration Token and {name} allows {allowed}. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan.",
+        "other": "{person} has {count} Integration Tokens and {name} allows {allowed}. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan."
+      },
+      "tokensNone": {
+        "one": "{person} has {count} Integration Token and {name} includes none. Their tokens keep working, but they can't create another. They see the same on Your plan.",
+        "other": "{person} has {count} Integration Tokens and {name} includes none. Their tokens keep working, but they can't create another. They see the same on Your plan."
+      }
+    }
   },
   "plan": {
-    "label": "Plan for {email}",
-    "default": "Default plan ({name})",
-    "defaultUnnamed": "Default plan",
-    "hint": "Default plan always means whichever plan is the default. Any other plan stays theirs until you change it.",
-    "allows": "{name}: {limits}, {interval}",
-    "allowsNoDefault": "No plan is the default yet.",
-    "limits": {
-      "unlimitedRules": "no limit on rules",
-      "unlimited": "no limit on rules, calendar accounts, or Integration Tokens"
-    },
-    "interval": {
-      "instant": "instant sync",
-      "5_minutes": "every 5 minutes",
-      "10_minutes": "every 10 minutes",
-      "15_minutes": "every 15 minutes",
-      "30_minutes": "every 30 minutes",
-      "60_minutes": "every hour"
-    },
-    "save": "Save plan",
-    "cancel": "Cancel",
     "held": {
-      "default": "{name} (default)",
-      "later": "{plan}, once plans are on",
-      "laterNone": "The default, once plans are on",
-      "administrator": "{plan}. No plan limits administrators"
-    },
-    "fact": {
-      "label": "Plan: {plan}",
-      "laterNone": "Plan: the default, once plans are on",
-      "administrator": "No plan limits administrators",
-      "over": "{fact}. {over}"
+      "default": "{name} (default)"
     },
     "over": {
       "rules": {
-        "one": "{count} rule, {allowed} allowed",
-        "other": "{count} rules, {allowed} allowed"
+        "one": "{count} active rule, {allowed} allowed",
+        "other": "{count} active rules, {allowed} allowed"
       },
       "accounts": {
         "one": "{count} calendar account, {allowed} allowed",
@@ -370,6 +417,12 @@
         "one": "{count} Integration Token, none allowed",
         "other": "{count} Integration Tokens, none allowed"
       }
+    },
+    "chips": {
+      "default": "Default",
+      "over": "Over a limit",
+      "wouldBeOver": "Would be over",
+      "notLimited": "Not limited"
     }
   },
   "tabs": {
@@ -579,23 +632,6 @@
     },
     "isDefault": "Default",
     "copyName": "{name} copy",
-    "limits": {
-      "rules": {
-        "one": "{count} rule",
-        "other": "{count} rules"
-      },
-      "accounts": {
-        "one": "{count} calendar account",
-        "other": "{count} calendar accounts"
-      },
-      "tokens": {
-        "one": "{count} Integration Token",
-        "other": "{count} Integration Tokens"
-      },
-      "unlimitedAccounts": "no limit on calendar accounts",
-      "unlimitedTokens": "no limit on Integration Tokens",
-      "noTokens": "no Integration Tokens"
-    },
     "interval": {
       "instant": "Instant sync, and a check every 5 minutes",
       "5_minutes": "Every 5 minutes",
@@ -782,7 +818,41 @@
       "give": "Give {name} to {person}",
       "giveDefault": "Move {person} to the default plan",
       "followed": "{person} now follows the default plan.",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "titleMany": {
+        "one": "Change plan for {count} person",
+        "other": "Change plan for {count} people"
+      },
+      "chooseReasonMany": {
+        "one": "Choose a plan for {count} person.",
+        "other": "Choose a plan for {count} people."
+      },
+      "heldOne": "{person} has {name} now.",
+      "heldFew": "{people} have {name} now.",
+      "heldAll": "All {count} have {name} now.",
+      "heldMixed": "They have {plans} now.",
+      "heldGroup": "{name} ({count})",
+      "noPlan": "no plan",
+      "moveFrom": "They move from {from} to {to}.",
+      "moveTo": "They move to {to}.",
+      "toDefault": "the default plan, {name}",
+      "noLongerOverOne": "{person} is no longer over a limit.",
+      "noLongerOver": {
+        "one": "{count} person is no longer over a limit.",
+        "other": "{count} people are no longer over a limit."
+      },
+      "allWithin": "They are all within every limit of {name}.",
+      "result": "{move} {over}",
+      "giveDefaultMany": {
+        "one": "Move {count} person to the default plan",
+        "other": "Move {count} people to the default plan"
+      },
+      "followedMany": {
+        "one": "{count} person now follows the default plan.",
+        "other": "{count} people now follow the default plan."
+      },
+      "loading": "Loading plans",
+      "loadError": "Plans could not load."
     }
   },
   "cause": {

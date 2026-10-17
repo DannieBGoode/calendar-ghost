@@ -1,19 +1,18 @@
 import { DestructiveConfirmation } from "@/components/destructive-confirmation"
 import { LinkReveal } from "@/components/link-reveal"
 import { OverflowMenu, type OverflowMenuItem } from "@/components/overflow-menu"
-import { PersonPlanChoice } from "@/features/person-plan"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
-import type { Person, PersonPlan } from "@/lib/api"
+import type { Person, PersonPlanOverview } from "@/lib/api"
 import { isAdministrator } from "@/lib/people"
 import { passwordResetLink } from "@/lib/public-links"
 import type { PeopleCommands, PersonCommand } from "@/lib/use-people"
 
 /**
- * The menu of what an administrator can do to someone else. Change plan shows only on their own
- * page, once any Plan exists: there `plan` is their Plan, null while no Plan exists; the People
- * table passes none.
+ * The menu of what an administrator can do to someone else. In People's table, Change plan shows
+ * once any Plan exists: there `plan` is their Plan, null while no Plan exists. Their page passes
+ * none, since its Plan card holds Change plan.
  */
 export function PersonMenu({
   person,
@@ -24,7 +23,7 @@ export function PersonMenu({
   person: Person
   name: string
   commands: PeopleCommands
-  plan?: PersonPlan | null
+  plan?: PersonPlanOverview | null
 }) {
   const i18n = useI18n()
   return (
@@ -61,25 +60,25 @@ function personActions({ t }: I18n, person: Person, { busy, start }: PeopleComma
 }
 
 /**
- * What a command on this person shows beside them: its error, the Plan to choose, the deletion
- * to confirm, or a link. `plan` is their Plan, which the choice opens on.
+ * What a command on this person shows beside them: its error, the deletion to confirm, or a link.
+ * Change plan shows its own refusal in its popover. On their page, `planOnCard` leaves what a Plan
+ * change did to their Plan card.
  */
 export function PersonDetails({
   person,
   name,
   commands,
-  plan,
+  planOnCard = false,
 }: {
   person: Person
   name: string
   commands: PeopleCommands
-  plan?: PersonPlan | null
+  planOnCard?: boolean
 }) {
   const i18n = useI18n()
   const { t } = i18n
   const error = commands.errorFor(person)
-  const result = commands.resultFor(person)
-  // The Plan choice shows its own refusal, under the choice it refuses.
+  const result = planOnCard && commands.planResultFor(person) !== null ? null : commands.resultFor(person)
   const choosingPlan = commands.choosingPlan === person.id
   return (
     <>
@@ -88,9 +87,6 @@ export function PersonDetails({
         <p className="field-error" role="alert">
           {apiErrorMessage(i18n, error)}
         </p>
-      )}
-      {choosingPlan && (
-        <PersonPlanChoice person={person} name={name} current={plan ?? null} commands={commands} />
       )}
       {commands.deleting === person.id && <PersonDeletion person={person} name={name} commands={commands} />}
       {commands.resetLink?.personId === person.id && (
