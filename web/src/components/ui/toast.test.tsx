@@ -69,6 +69,11 @@ function buttonNamed(container: HTMLElement, name: string): HTMLButtonElement | 
   )
 }
 
+/** The toast itself: its icon, its result, and its buttons. */
+function card(container: HTMLElement): HTMLElement {
+  return liveRegion(container).parentElement!
+}
+
 function control(container: HTMLElement): HTMLButtonElement {
   return container.querySelector<HTMLButtonElement>("#plans-switch")!
 }
@@ -112,7 +117,7 @@ describe("ToastProvider", () => {
     expect(liveRegion(container).firstElementChild).not.toBe(first)
   })
 
-  it("stays until it is closed, so Undo is still there when a keyboard reaches it", () => {
+  it("stays with Undo until it is closed, so Undo is still there when a keyboard reaches it", () => {
     vi.useFakeTimers()
     const { container, show } = render()
     show({ message: "Plans are off. Nobody is limited.", action: { label: "Undo", onSelect: vi.fn() } })
@@ -121,6 +126,86 @@ describe("ToastProvider", () => {
     })
     expect(liveRegion(container).textContent).toBe("Plans are off. Nobody is limited.")
     expect(buttonNamed(container, "Undo")).toBeDefined()
+  })
+
+  it("closes a result with no Undo on its own after six seconds", () => {
+    vi.useFakeTimers()
+    const { container, show } = render()
+    show({ message: "Free was saved." })
+    act(() => {
+      vi.advanceTimersByTime(5_900)
+    })
+    expect(liveRegion(container).textContent).toBe("Free was saved.")
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+    expect(liveRegion(container).textContent).toBe("")
+    expect(buttonNamed(container, "Close")).toBeUndefined()
+  })
+
+  it("gives the next result six seconds of its own", () => {
+    vi.useFakeTimers()
+    const { container, show } = render()
+    show({ message: "Free was saved." })
+    act(() => {
+      vi.advanceTimersByTime(4_000)
+    })
+    show({ message: "Family was saved." })
+    act(() => {
+      vi.advanceTimersByTime(4_000)
+    })
+    expect(liveRegion(container).textContent).toBe("Family was saved.")
+  })
+
+  it("waits while the pointer is on it, then gives six seconds more", () => {
+    vi.useFakeTimers()
+    const { container, show } = render()
+    show({ message: "Free was saved." })
+    act(() => {
+      card(container).dispatchEvent(new PointerEvent("pointerover", { bubbles: true, relatedTarget: document.body }))
+    })
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(liveRegion(container).textContent).toBe("Free was saved.")
+    act(() => {
+      card(container).dispatchEvent(new PointerEvent("pointerout", { bubbles: true, relatedTarget: document.body }))
+    })
+    act(() => {
+      vi.advanceTimersByTime(5_900)
+    })
+    expect(liveRegion(container).textContent).toBe("Free was saved.")
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+    expect(liveRegion(container).textContent).toBe("")
+  })
+
+  it("waits while focus is in it, so a keyboard can still reach Close", () => {
+    vi.useFakeTimers()
+    const { container, show } = render()
+    act(() => control(container).focus())
+    show({ message: "Free was saved." })
+    act(() => buttonNamed(container, "Close")!.focus())
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(liveRegion(container).textContent).toBe("Free was saved.")
+    act(() => control(container).focus())
+    act(() => {
+      vi.advanceTimersByTime(6_100)
+    })
+    expect(liveRegion(container).textContent).toBe("")
+  })
+
+  it("reserves its height at the foot of the page while it shows, so nothing has to stay under it", () => {
+    const { container, show } = render()
+    const space = () => document.documentElement.style.getPropertyValue("--toast-space")
+    expect(space()).toBe("")
+    show({ message: "Plans are on.", action: { label: "Undo", onSelect: vi.fn() } })
+    expect(space()).toMatch(/^\d+px$/)
+    act(() => buttonNamed(container, "Close")!.click())
+    expect(space()).toBe("")
   })
 
   it("runs Undo once, closes, and returns focus to the control that was focused when it appeared", () => {

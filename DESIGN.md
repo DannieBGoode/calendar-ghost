@@ -316,10 +316,13 @@ meter beside a limit is not a metric card.
 
 A result that belongs to the page rather than a row, such as Plans turned on or a new default, is
 a toast at the bottom of the window: an icon, one sentence ("Plans are on. They limit 2 people."),
-and Undo when the change can be reversed. It is announced through one polite live region, never
-takes focus, and stays until it is closed or the next result replaces it, so Undo is still there
-when a keyboard or screen reader user reaches it. A result about one row still appears on that
-row.
+and Undo when the change can be reversed. It is announced through one polite live region and never
+takes focus. A toast with Undo stays until it is closed or the next result replaces it, so Undo is
+still there when a keyboard or screen reader user reaches it; one without Undo leaves after six
+seconds, and waits while the pointer is on it or focus is in it. While a toast shows, the page
+reserves its height, so the page can scroll its last line clear of it and keyboard focus stops
+above it; while a side panel is open, the toast sits at the bottom left, over the list, so it never
+covers the panel's footer. A result about one row still appears on that row.
 
 ### Popovers
 

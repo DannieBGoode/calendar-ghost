@@ -7,7 +7,10 @@ export type Toast = {
 }
 
 export type Toasts = {
-  /** Shows a result in place of the one shown, if any. It stays until closed or replaced. */
+  /**
+   * Shows a result in place of the one shown, if any. One with Undo stays until closed or
+   * replaced; one without leaves after a few seconds.
+   */
   show: (toast: Toast) => void
 }
 

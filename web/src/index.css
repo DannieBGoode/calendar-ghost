@@ -158,6 +158,8 @@
 html {
   min-width: 320px;
   scroll-padding-top: 5rem;
+  /* While a toast shows, focus moved by keyboard stops above it (see ToastProvider). */
+  scroll-padding-bottom: var(--toast-space, 0px);
   min-height: 100%;
   background: var(--background);
 }
@@ -455,6 +457,18 @@ p {
 
 .app-shell {
   min-height: 100vh;
+  /* While a toast shows, the page can scroll its last line clear of it. */
+  padding-bottom: var(--toast-space, 0px);
+}
+
+/* While a side panel is open beside its list, a toast sits at the bottom left, over the list, so
+   it never covers the panel or the footer that holds its one primary action. */
+@media (min-width: 40rem) {
+  html:has(.plan-panel, .activity-detail) .toast-viewport {
+    right: auto;
+    left: 1.5rem;
+    justify-content: flex-start;
+  }
 }
 
 .topbar {
