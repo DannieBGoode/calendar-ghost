@@ -86,6 +86,7 @@ function overview({
     enabled,
     default_plan: defaultPlan,
     sync_intervals: ["instant", "5_minutes"],
+    administrators: 1,
     plans: plans.map((plan) => ({ ...plan, is_default: plan.key === defaultPlan })),
   }
 }

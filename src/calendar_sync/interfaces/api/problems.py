@@ -69,6 +69,9 @@ from calendar_sync.application.sync.errors import (
 from calendar_sync.domain.access import InvalidEmail, LastAdministrator, OnlyMeNeedsOneUser
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.plans import (
+    PEOPLE_PER_ASSIGNMENT,
+    InvalidAssignment,
+    InvalidAssignmentReason,
     InvalidPlan,
     PlanInUse,
     PlanIsDefault,
@@ -161,6 +164,7 @@ _CODES: dict[type[Exception], str] = {
     PlanNameTaken: "plan_name_taken",
     PlanInUse: "plan_in_use",
     PlanIsDefault: "plan_is_default",
+    InvalidAssignment: "invalid_assignment",
     # A DomainValidationError too; the MRO reaches this code before "invalid_rule".
     InvalidPlan: "invalid_plan",
     DomainValidationError: "invalid_rule",
@@ -218,7 +222,17 @@ def _plan_params(error: Exception) -> dict[str, ParamValue]:
         return {"reason": error.reason.value}
     if isinstance(error, PlanNameTaken):
         return {"name": error.name}
+    if isinstance(error, InvalidAssignment):
+        return _assignment_params(error)
     return {}
+
+
+def _assignment_params(error: InvalidAssignment) -> dict[str, ParamValue]:
+    """Why a Plan cannot be given; too many people names how many may be at once."""
+    if error.reason is InvalidAssignmentReason.TOO_MANY:
+        limit = PEOPLE_PER_ASSIGNMENT
+        return {"reason": error.reason.value, "limit": limit, "count": limit}
+    return {"reason": error.reason.value}
 
 
 def problem_from(status_code: int, error: Exception, *, fallback: str | None = None) -> ApiProblem:

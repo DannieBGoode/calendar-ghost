@@ -143,6 +143,19 @@ def _with_limits(body: dict[str, Any], **limits: Any) -> dict[str, Any]:
     return {**body, "limits": {**body["limits"], **limits}}
 
 
+def _use(
+    body: dict[str, Any], rules: int = 0, accounts: int = 0, tokens: int = 0
+) -> dict[str, Any]:
+    """How much of the Plan in `body` a person uses, as their page shows it."""
+    limits = body["limits"]
+    return {
+        "rules": {"in_use": rules, "allowed": limits["rules"]},
+        "connected_accounts": {"in_use": accounts, "allowed": limits["connected_accounts"]},
+        "integration_tokens": {"in_use": tokens, "allowed": limits["integration_tokens"]},
+        "sync_interval": limits["sync_interval"],
+    }
+
+
 def _member_rules(installation: Installation) -> None:
     """Two enabled rules between the member's two calendar accounts, which count, and a previewed
     rule that has not started, which does not."""
@@ -183,6 +196,7 @@ def test_an_administrator_defines_lists_changes_and_removes_plans(
         "enabled": False,
         "default_plan": None,
         "sync_intervals": OFFERED,
+        "administrators": 1,
         "plans": [],
     }
     assert defined.status_code == 201
@@ -215,6 +229,8 @@ def test_a_new_plan_without_a_key_gets_one_made_from_its_name(
     first = client.post("/api/v1/plans", json=unkeyed)
     second = client.post("/api/v1/plans", json={**FAMILY_BODY, "key": None, "name": "Free!"})
     unnamed = client.post("/api/v1/plans", json={**unkeyed, "name": "日本"})
+    # The New plan panel's address is /people/plans/new, so no Plan has the key "new".
+    new = client.post("/api/v1/plans", json={**unkeyed, "name": "New"})
     taken = client.post("/api/v1/plans", json={**FAMILY_BODY, "key": "free-2"})
     listed = client.get("/api/v1/plans").json()["plans"]
 
@@ -222,11 +238,13 @@ def test_a_new_plan_without_a_key_gets_one_made_from_its_name(
     assert first.json() == {**FREE_BODY, **NOBODY_ON_IT}
     assert (second.status_code, second.json()["key"]) == (201, "free-2")
     assert (unnamed.status_code, unnamed.json()["key"]) == (201, "plan")
+    assert (new.status_code, new.json()["key"]) == (201, "new-2")
     # A key asked for is never changed to fit: another Plan has it, so it is refused.
     assert _problem(taken) == (409, "plan_key_taken", {})
     assert [(plan["key"], plan["name"]) for plan in listed] == [
         ("free", "Free"),
         ("free-2", "Free!"),
+        ("new-2", "New"),
         ("plan", "日本"),
     ]
 
@@ -307,6 +325,7 @@ def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_that_limits_nob
         "enabled": True,
         "default_plan": "no-limits",
         "sync_intervals": OFFERED,
+        "administrators": 1,
         "plans": [
             {**FREE_BODY, **NOBODY_ON_IT},
             # Everyone has it, and it limits the member, by nothing.
@@ -353,6 +372,7 @@ def test_the_default_is_never_cleared_while_plans_are_on_and_turning_them_off_ke
         "enabled": False,
         "default_plan": "free",
         "sync_intervals": OFFERED,
+        "administrators": 1,
         # Everyone has the default; it would limit only the member, never an administrator.
         "plans": [{**FREE_BODY, "is_default": True, "people": 2, "limited_people": 1, **NO_USE}],
     }
@@ -421,6 +441,7 @@ def test_each_refusal_answers_its_code_and_params(installation: Installation) ->
         pytest.param({**FREE_BODY, "key": "free plan"}, "key", id="space-in-key"),
         pytest.param({**FREE_BODY, "key": "a" * 33}, "key", id="33-character-key"),
         pytest.param({**FREE_BODY, "key": ""}, "key", id="empty-key"),
+        pytest.param({**FREE_BODY, "key": "new"}, "key", id="reserved-key"),
         pytest.param({**FREE_BODY, "name": "   "}, "name", id="blank-name"),
         pytest.param({**FREE_BODY, "name": "Free\nplan"}, "name", id="line-break"),
         pytest.param({**FREE_BODY, "name": "x" * 61}, "name", id="61-character-name"),
@@ -684,12 +705,16 @@ def test_an_administrator_assigns_plans_even_while_plans_are_off(
     family = {"key": "family", "name": "Family"}
     assert while_off.status_code == 200
     assert while_off.json() == {"basis": "plans_off", "plan": None, "assigned": family}
+    # Given by the administrator, at the time it was given.
+    assert datetime.fromisoformat(once_on.pop("assigned_at")).tzinfo is not None
     assert once_on == {
         "basis": "plan",
         "plan": {**family, "on_default": False},
         "assigned": family,
         "has": {**family, "on_default": False},
         "over": [],
+        "assigned_by": ADMIN_EMAIL,
+        "use": _use(FAMILY_BODY),
     }
     assert returned.json() == {
         "basis": "plan",
@@ -736,6 +761,10 @@ def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
         "assigned": None,
         "has": default_family,
         "over": [],
+        # Nobody gave it: they have the default.
+        "assigned_by": None,
+        "assigned_at": None,
+        "use": _use(FAMILY_BODY),
     }
     assert switched.status_code == 200
     assert joined.status_code == 200, joined.text
@@ -743,12 +772,16 @@ def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
     assert invited_seen == on_family
     # Someone with a Plan of their own keeps it.
     free_of_their_own = {"key": "free", "name": "Free", "on_default": False}
+    # Their own, though nothing recorded who gave it.
     assert own_seen == {
         "basis": "plan",
         "plan": free_of_their_own,
         "assigned": {"key": "free", "name": "Free"},
         "has": free_of_their_own,
         "over": [],
+        "assigned_by": None,
+        "assigned_at": None,
+        "use": _use(FREE_BODY),
     }
     assert (member_own["plan"], member_own["limits"]) == (
         {"key": "family", "name": "Family", "on_default": True},
@@ -758,6 +791,148 @@ def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
     assert _problem(old_default) == (409, "plan_in_use", {"people": 1, "count": 1})
     assert _problem(new_default) == (409, "plan_is_default", {})
     assert _problem(cleared) == (409, "plans_need_default", {})
+
+
+THIRD_EMAIL = "third@example.test"
+
+
+def _assign(installation: Installation, plan: str | None, *users: UserId, **body: Any) -> Any:
+    response = installation.client.post(
+        "/api/v1/plan-assignments",
+        json={"plan": plan, "user_ids": [user.value for user in users], **body},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_an_administrator_gives_a_plan_to_many_people_after_a_dry_run(
+    installation: Installation,
+) -> None:
+    """The member has 2 rules that count and 2 calendar accounts, where Free allows 1 of each.
+    A third person has nothing, and no Plan limits the administrator."""
+    client, database = installation.client, installation.database
+    member, admin = installation.member, installation.admin
+    third = limited_user(database, UserId("user-3"), email=THIRD_EMAIL)
+    _member_rules(installation)
+    installation.define(FREE_BODY, FAMILY_BODY)
+    installation.turn_on("family")
+    people = (member, third, admin)
+
+    planned = _assign(installation, "free", *people, dry_run=True)
+    before = installation.overview_plan(member)
+    given = _assign(installation, "free", *people)
+    after = installation.overview_plan(member)
+    over_free = client.get("/api/v1/users", params={"over": "true"}).json()
+    returned = _assign(installation, None, member)
+
+    family = {"key": "family", "name": "Family", "on_default": True}
+    free = {"key": "free", "name": "Free", "on_default": False}
+    member_over = [
+        {"limit": "rules", "in_use": 2, "allowed": 1},
+        {"limit": "connected_accounts", "in_use": 2, "allowed": 1},
+    ]
+    moves = [
+        {"user_id": member.value, "email": MEMBER_EMAIL, "had": family, "has": free},
+        {"user_id": third.value, "email": THIRD_EMAIL, "had": family, "has": free},
+        {"user_id": admin.value, "email": ADMIN_EMAIL, "had": family, "has": free},
+    ]
+    overs = [member_over, [], []]
+    assert planned == {
+        "dry_run": True,
+        "people": [{**move, "over": over} for move, over in zip(moves, overs, strict=True)],
+    }
+    # The dry run gave nothing.
+    assert (before["has"], before["assigned_by"]) == (family, None)
+    assert given == {**planned, "dry_run": False}
+    assert (after["has"], after["over"], after["assigned_by"]) == (free, member_over, ADMIN_EMAIL)
+    assert after["use"] == _use(FREE_BODY, rules=2, accounts=2)
+    assert [row["id"] for row in over_free["users"]] == [member.value]
+    assert returned["people"] == [
+        {
+            "user_id": member.value,
+            "email": MEMBER_EMAIL,
+            "had": free,
+            "has": family,
+            "over": [],
+        }
+    ]
+
+
+def test_a_plan_given_to_nobody_too_many_or_someone_unknown_is_refused_with_its_reason(
+    installation: Installation,
+) -> None:
+    client, member = installation.client, installation.member.value
+    installation.define(FREE_BODY)
+    installation.turn_on("free")
+
+    def assigning(**body: Any) -> Any:
+        return client.post(
+            "/api/v1/plan-assignments", json={"plan": "free", "user_ids": [member], **body}
+        )
+
+    answers = {
+        "nobody": assigning(user_ids=[]),
+        "too_many": assigning(user_ids=[f"user-{number}" for number in range(101)]),
+        "unknown": assigning(user_ids=[member, "nobody"]),
+        "malformed": assigning(user_ids=[member, " "], dry_run=True),
+        "unknown_plan": assigning(plan="gold"),
+        "malformed_plan": assigning(plan="Not a key", dry_run=True),
+        "no_plan": client.post("/api/v1/plan-assignments", json={"user_ids": [member]}),
+    }
+    seen = installation.overview_plan(installation.member)
+
+    assert {name: _problem(response) for name, response in answers.items()} == {
+        "nobody": (422, "invalid_assignment", {"reason": "no_people"}),
+        "too_many": (422, "invalid_assignment", {"reason": "too_many", "limit": 100, "count": 100}),
+        "unknown": (422, "invalid_assignment", {"reason": "unknown_people"}),
+        "malformed": (422, "invalid_assignment", {"reason": "unknown_people"}),
+        "unknown_plan": (404, "plan_not_found", {}),
+        "malformed_plan": (404, "plan_not_found", {}),
+        # Null gives the default, so the Plan is never left out by accident.
+        "no_plan": (422, "invalid_request", {"field": "plan", "reason": "missing"}),
+    }
+    assert (seen["assigned"], seen["assigned_by"]) == (None, None)
+
+
+def test_with_no_default_a_person_without_a_plan_of_their_own_has_none_to_count(
+    installation: Installation,
+) -> None:
+    member = installation.member
+    installation.define(FREE_BODY)
+
+    planned = _assign(installation, None, member, dry_run=True)
+    seen = installation.overview_plan(member)
+
+    assert planned["people"] == [
+        {"user_id": member.value, "email": MEMBER_EMAIL, "had": None, "has": None, "over": []}
+    ]
+    assert (seen["has"], seen["use"], seen["assigned_by"]) == (None, None, None)
+
+
+def test_people_over_a_limit_of_the_plan_they_have_are_listed_whether_or_not_plans_are_on(
+    installation: Installation,
+) -> None:
+    client, database = installation.client, installation.database
+    _member_rules(installation)
+    limited_user(database, UserId("user-3"), email=THIRD_EMAIL)
+    installation.define(FREE_BODY, FAMILY_BODY)
+    client.put("/api/v1/plan-settings", json={"enabled": False, "default_plan": "free"})
+
+    def over(**query: str) -> tuple[list[str], int]:
+        page = client.get("/api/v1/users", params={"over": "true", **query}).json()
+        return [row["id"] for row in page["users"]], page["total"]
+
+    member = installation.member.value
+    while_off = over()
+    installation.turn_on("free")
+    while_on = over()
+    on_family = over(plan="family")
+    everyone = client.get("/api/v1/users", params={"over": "false"}).json()["total"]
+
+    assert while_off == ([member], 1)
+    assert while_on == ([member], 1)
+    assert on_family == ([], 0)
+    assert everyone == 3
 
 
 def test_a_member_is_refused_every_plans_administrator_route_and_reads_their_own_plan(
@@ -774,6 +949,10 @@ def test_a_member_is_refused_every_plans_administrator_route_and_reads_their_own
         client.delete("/api/v1/plans/free"),
         client.put("/api/v1/plan-settings", json={"enabled": True, "default_plan": "free"}),
         client.put(f"/api/v1/users/{installation.member.value}/plan", json={"plan": "free"}),
+        client.post(
+            "/api/v1/plan-assignments",
+            json={"plan": "free", "user_ids": [installation.member.value], "dry_run": True},
+        ),
     ]
     own = client.get("/api/v1/account/plan")
     installation.as_admin()

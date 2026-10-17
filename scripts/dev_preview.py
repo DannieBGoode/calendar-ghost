@@ -575,6 +575,7 @@ def build_preview_container(
             preview_clock,
             adapters.allowances,
             adapters.plan_catalog,
+            adapters.plan_assignments,
         ),
     )
     SetUpInstallation(

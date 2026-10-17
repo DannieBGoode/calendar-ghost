@@ -72,17 +72,33 @@ const OVERVIEWS: Record<string, Partial<PersonRow>> = {
 const FREE = { key: "free", name: "Free", on_default: true }
 const FAMILY = { key: "family", name: "Family", on_default: false }
 
+/** How much of a Plan with `planSummary`'s limits a person uses: nothing but their calendar accounts. */
+function used(accounts = 0): NonNullable<PersonPlanOverview["use"]> {
+  return {
+    rules: { in_use: 0, allowed: 1 },
+    connected_accounts: { in_use: accounts, allowed: 1 },
+    integration_tokens: { in_use: 0, allowed: 0 },
+    sync_interval: "5_minutes",
+  }
+}
+
+/** Nobody gave the Plan: the person has the default. */
+const NOT_GIVEN = { assigned_by: null, assigned_at: null }
+
 /** Each person's Plan once a Plan exists: Dana administers, Robin is over Family, Sam has the default. */
 const PLANS_HELD: Record<string, PersonPlanOverview> = {
-  "user-dana": { basis: "administrator", plan: null, assigned: null, has: FREE, over: [] },
+  "user-dana": { basis: "administrator", plan: null, assigned: null, has: FREE, over: [], ...NOT_GIVEN, use: used() },
   "user-robin": {
     basis: "plan",
     plan: FAMILY,
     assigned: { key: "family", name: "Family" },
     has: FAMILY,
     over: [{ limit: "connected_accounts", in_use: 2, allowed: 1 }],
+    assigned_by: "dana@example.test",
+    assigned_at: "2026-10-12T09:00:00+00:00",
+    use: used(2),
   },
-  "user-sam": { basis: "plan", plan: FREE, assigned: null, has: FREE, over: [] },
+  "user-sam": { basis: "plan", plan: FREE, assigned: null, has: FREE, over: [], ...NOT_GIVEN, use: used() },
 }
 
 /** The same page once a Plan exists, each person with the Plan they have. */
@@ -107,6 +123,7 @@ const PLANS: PlansOverview = {
   enabled: true,
   default_plan: "free",
   sync_intervals: ["instant", "5_minutes"],
+  administrators: 1,
   plans: [planSummary("family", "Family", false), planSummary("free", "Free", true)],
 }
 

@@ -422,14 +422,24 @@ class MemoryPlans:
         del self.catalog[key]
 
     def assign(self, user: UserId, plan: PlanKey | None, change: AssignmentChange) -> bool:
+        return self.assign_all([user], plan, change)
+
+    def assign_all(
+        self, users: Collection[UserId], plan: PlanKey | None, change: AssignmentChange
+    ) -> bool:
         if plan is not None:
             self._require(plan)
-        found = self.users.get(user)
-        if found is None:
+        found = [self.users.get(user) for user in users]
+        if any(user is None for user in found):
             return False
-        self.users.users[user] = replace(found, plan=plan)
-        self.changes[user] = change
+        for user in found:
+            assert user is not None
+            self.users.users[user.id] = replace(user, plan=plan)
+            self.changes[user.id] = change
         return True
+
+    def last_changes(self, users: Collection[UserId]) -> dict[UserId, AssignmentChange]:
+        return {user: self.changes[user] for user in users if user in self.changes}
 
     def _require(self, key: PlanKey) -> None:
         if key not in self.catalog:

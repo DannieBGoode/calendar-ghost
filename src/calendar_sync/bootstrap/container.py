@@ -77,6 +77,7 @@ from calendar_sync.application.operations.instant_sync import (
 )
 from calendar_sync.application.operations.operator_overview import OperatorOverview, UserStatuses
 from calendar_sync.application.operations.own_plan import ShowOwnPlan
+from calendar_sync.application.operations.plan_assignment import AssignPlans
 from calendar_sync.application.operations.ports import (
     CauseSighting,
     DatabaseStorage,
@@ -297,6 +298,8 @@ class PlanServices:
     change_plan: ChangePlan
     remove_plan: RemovePlan
     set_plans_setting: SetPlansSetting
+    assign_plans: AssignPlans
+    """Gives one Plan to many people at once, after a dry run that says who would be over."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -562,6 +565,15 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
     )
     # Installation Health counts the verdicts People shows, so the two never disagree.
     statuses = UserStatuses(adapters.installation_units, adapters.locks, adapters.clock, scheduler)
+    overview = OperatorOverview(
+        adapters.users,
+        statuses,
+        adapters.installation_units,
+        adapters.clock,
+        adapters.allowances,
+        adapters.plan_catalog,
+        adapters.plan_assignments,
+    )
     return Container(
         secure_cookies=settings.secure_cookies,
         providers=adapters.providers,
@@ -569,7 +581,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         administration=_administration(
             adapters, lambda owner: _owned_rules(owner, adapters, user_services(owner))
         ),
-        plans=_plan_services(adapters),
+        plans=_plan_services(adapters, overview),
         token_authentication=adapters.token_authentication,
         storage=StorageAdministration(
             adapters.database_storage, adapters.locks, adapters.clock, adapters.log_files
@@ -598,14 +610,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             ),
             adapters.providers.client_secrets,
         ),
-        operator_overview=OperatorOverview(
-            adapters.users,
-            statuses,
-            adapters.installation_units,
-            adapters.clock,
-            adapters.allowances,
-            adapters.plan_catalog,
-        ),
+        operator_overview=overview,
         sends_email=adapters.sends_email,
         instant_dispatcher=instant.dispatcher,
         watch_keeper=instant.keeper,
@@ -792,8 +797,9 @@ def _administration(
     )
 
 
-def _plan_services(adapters: Adapters) -> PlanServices:
-    """Every Plan use case reads and writes the installation's one Plans store."""
+def _plan_services(adapters: Adapters, overview: OperatorOverview) -> PlanServices:
+    """Every Plan use case reads and writes the installation's one Plans store; giving a Plan to
+    many people counts what they use through the Operator Overview."""
     users, catalog, clock = adapters.users, adapters.plan_catalog, adapters.clock
     return PlanServices(
         show_plans=ShowPlans(users, catalog),
@@ -801,6 +807,7 @@ def _plan_services(adapters: Adapters) -> PlanServices:
         change_plan=ChangePlan(users, catalog, clock),
         remove_plan=RemovePlan(users, catalog),
         set_plans_setting=SetPlansSetting(users, catalog, clock),
+        assign_plans=AssignPlans(users, overview, adapters.plan_assignments, clock),
     )
 
 

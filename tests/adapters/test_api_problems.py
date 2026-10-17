@@ -26,6 +26,8 @@ from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.errors import DomainError, DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.domain.plans import (
+    InvalidAssignment,
+    InvalidAssignmentReason,
     InvalidPlan,
     InvalidPlanReason,
     LimitedResource,
@@ -33,6 +35,7 @@ from calendar_sync.domain.plans import (
     PlanKey,
     PlanLimitReached,
     needs_no_limits_plan,
+    require_assignable,
     require_removable,
     require_unique_name,
 )
@@ -211,6 +214,17 @@ FAMILY_KEY = PlanKey("family")
         ),
         (_refusal(lambda: require_removable(FAMILY_KEY, FAMILY_KEY, 0)), "plan_is_default", {}),
         (PlanNotFound("plan family does not exist"), "plan_not_found", {}),
+        (_refusal(lambda: require_assignable(0)), "invalid_assignment", {"reason": "no_people"}),
+        (
+            _refusal(lambda: require_assignable(101)),
+            "invalid_assignment",
+            {"reason": "too_many", "limit": 100, "count": 100},
+        ),
+        (
+            InvalidAssignment(InvalidAssignmentReason.UNKNOWN_PEOPLE, "nobody has this id"),
+            "invalid_assignment",
+            {"reason": "unknown_people"},
+        ),
         (PlanKeyTaken("a plan with the key family already exists"), "plan_key_taken", {}),
         (
             _refusal(lambda: require_unique_name("family", ["Family"])),

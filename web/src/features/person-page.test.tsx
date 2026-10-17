@@ -81,13 +81,21 @@ const session: SessionStatus = {
 const hasFamily = { key: "family", name: "Family", on_default: false }
 const hasFree = { key: "free", name: "Free", on_default: true }
 
-/** Robin's own Plan, which limits them while Plans are on, within each of its limits. */
+/** Robin's own Plan, which Dana gave and which limits them while Plans are on, within each of its limits. */
 const onFamily: PersonPlanOverview = {
   basis: "plan",
   plan: hasFamily,
   assigned: { key: "family", name: "Family" },
   has: hasFamily,
   over: [],
+  assigned_by: "dana@example.test",
+  assigned_at: "2026-10-12T09:00:00+00:00",
+  use: {
+    rules: { in_use: 0, allowed: 5 },
+    connected_accounts: { in_use: 0, allowed: 3 },
+    integration_tokens: { in_use: 0, allowed: 2 },
+    sync_interval: "instant",
+  },
 }
 
 /** Robin on the Default Plan, as assigning it answers and their page then shows it. */
@@ -97,6 +105,14 @@ const onFree: PersonPlanOverview = {
   assigned: null,
   has: hasFree,
   over: [],
+  assigned_by: null,
+  assigned_at: null,
+  use: {
+    rules: { in_use: 0, allowed: 1 },
+    connected_accounts: { in_use: 0, allowed: 1 },
+    integration_tokens: { in_use: 0, allowed: 0 },
+    sync_interval: "5_minutes",
+  },
 }
 
 /** The Plans an administrator chooses from, by name then key, as the server lists them. */
@@ -104,6 +120,7 @@ const plans: PlansOverview = {
   enabled: true,
   default_plan: "free",
   sync_intervals: ["instant", "5_minutes"],
+  administrators: 1,
   plans: [
     {
       key: "family",
@@ -781,11 +798,10 @@ describe("A person's page", () => {
     it("states a plan named like another fact without confusing the two", async () => {
       const hasUser = { key: "user", name: "User", on_default: false }
       const onUser: PersonPlanOverview = {
-        basis: "plan",
+        ...onFamily,
         plan: hasUser,
         assigned: { key: "user", name: "User" },
         has: hasUser,
-        over: [],
       }
       const errors = vi.spyOn(console, "error")
       await renderPerson(testI18n(), "user-robin", withPlan(onUser))

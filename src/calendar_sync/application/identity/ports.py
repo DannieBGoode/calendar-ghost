@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -365,4 +365,16 @@ class PlanAssignments(Protocol):
     def assign(self, user: UserId, plan: PlanKey | None, change: AssignmentChange) -> bool:
         """Set the User's own Plan, None for the Default Plan, recording the change; False when
         no such User. Raises PlanNotFound."""
+        ...
+
+    def assign_all(
+        self, users: Collection[UserId], plan: PlanKey | None, change: AssignmentChange
+    ) -> bool:
+        """Set each of `users`' own Plan in one step, all or none, recording the same change for
+        each: False, changing nothing, when one of them is not a User. Raises PlanNotFound."""
+        ...
+
+    def last_changes(self, users: Collection[UserId]) -> Mapping[UserId, AssignmentChange]:
+        """How each of `users`' own Plan was last set, read at once; a User whose own Plan
+        nobody ever set is left out. The actor is None once that administrator is deleted."""
         ...

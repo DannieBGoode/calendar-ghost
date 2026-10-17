@@ -437,6 +437,13 @@ def test_the_person_page_shows_the_plan_that_limits_them_and_their_own(
     free = {"key": "free", "name": "Free", "on_default": True}
     # The member's two calendar accounts, where Free allows one.
     accounts_over = [{"limit": "connected_accounts", "in_use": 2, "allowed": 1}]
+    # The rule the refused authorization stopped keeps its place; the other one gave it up.
+    free_use = {
+        "rules": {"in_use": 1, "allowed": 1},
+        "connected_accounts": {"in_use": 2, "allowed": 1},
+        "integration_tokens": {"in_use": 0, "allowed": 0},
+        "sync_interval": "5_minutes",
+    }
     assert assigned
     assert member_while_on == {
         "basis": "plan",
@@ -444,14 +451,26 @@ def test_the_person_page_shows_the_plan_that_limits_them_and_their_own(
         "assigned": None,
         "has": free,
         "over": accounts_over,
+        "assigned_by": None,
+        "assigned_at": None,
+        "use": free_use,
     }
-    # No Plan limits an administrator; the one they were given waits until they stop.
+    # No Plan limits an administrator; the one they were given waits until they stop. Their
+    # page still says who gave it, and how much of it they use.
     assert admin_while_on == {
         "basis": "administrator",
         "plan": None,
         "assigned": {"key": "family", "name": "Family"},
         "has": {"key": "family", "name": "Family", "on_default": False},
         "over": [],
+        "assigned_by": "admin@example.test",
+        "assigned_at": given.at.isoformat(),
+        "use": {
+            "rules": {"in_use": 1, "allowed": 5},
+            "connected_accounts": {"in_use": 2, "allowed": 3},
+            "integration_tokens": {"in_use": 0, "allowed": 2},
+            "sync_interval": "instant",
+        },
     }
     # Once a Plan exists, the person page shows it even while Plans are off, with what the Plan
     # they have would say once Plans are on.
@@ -461,6 +480,9 @@ def test_the_person_page_shows_the_plan_that_limits_them_and_their_own(
         "assigned": None,
         "has": free,
         "over": accounts_over,
+        "assigned_by": None,
+        "assigned_at": None,
+        "use": free_use,
     }
     # Each row of People shows the Plan as the person's page does.
     assert _person_row({"users": people_while_on}, admin)["plan"] == admin_while_on

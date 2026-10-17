@@ -313,6 +313,42 @@ def test_assigning_a_plan_records_how_who_and_when(store: PlansStore) -> None:
     assert store.recorded(MEMBER.id) == by_billing
 
 
+def test_a_plan_is_given_to_many_people_at_once_all_or_none(store: PlansStore) -> None:
+    store.people(ADMIN, MEMBER, NEWCOMER, AWAY)
+    store.plans.add(as_new(FAMILY), NOW)
+
+    given = store.plans.assign_all([MEMBER.id, AWAY.id, ADMIN.id], FAMILY.key, BY_ADMIN)
+    with pytest.raises(PlanNotFound):
+        store.plans.assign_all([NEWCOMER.id], PlanKey("missing"), BY_ADMIN)
+    refused = store.plans.assign_all([NEWCOMER.id, NOBODY], FAMILY.key, BY_ADMIN)
+    newcomer = (store.users.get(NEWCOMER.id), store.recorded(NEWCOMER.id))
+    by_billing = AssignmentChange(AssignmentSource.BILLING, None, LATER)
+    returned = store.plans.assign_all([MEMBER.id, AWAY.id], None, by_billing)
+
+    assert given
+    assert store.users.get(ADMIN.id) == replace(ADMIN, plan=FAMILY.key)
+    assert store.recorded(ADMIN.id) == BY_ADMIN
+    # Someone who is not a User moves nobody, so the newcomer keeps the default.
+    assert not refused
+    assert newcomer == (NEWCOMER, None)
+    assert returned
+    assert [store.users.get(user.id) for user in (MEMBER, AWAY)] == [MEMBER, AWAY]
+    assert store.recorded(AWAY.id) == by_billing
+
+
+def test_who_last_gave_each_person_their_plan_is_read_at_once(store: PlansStore) -> None:
+    store.people(ADMIN, MEMBER, NEWCOMER)
+    store.plans.add(as_new(FAMILY), NOW)
+    store.plans.assign(MEMBER.id, FAMILY.key, BY_ADMIN)
+    by_billing = AssignmentChange(AssignmentSource.BILLING, None, LATER)
+    store.plans.assign(ADMIN.id, None, by_billing)
+
+    changes = store.plans.last_changes([ADMIN.id, MEMBER.id, NEWCOMER.id, NOBODY])
+
+    # Nobody ever set the newcomer's own Plan; nobody is not a User.
+    assert changes == {MEMBER.id: BY_ADMIN, ADMIN.id: by_billing}
+
+
 def test_each_users_allowance_follows_the_setting_their_role_and_their_own_plan(
     store: PlansStore,
 ) -> None:
@@ -456,6 +492,37 @@ def test_the_allowances_of_many_users_are_read_in_chunks(
     assert allowances[users[0]] == Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True)
     assert allowances[users[1199]] == Allowance(AllowanceBasis.PLAN, plan=FAMILY, assigned=FAMILY)
     assert sum(allowance.on_default for allowance in allowances.values()) == 600
+
+
+def test_an_assignment_names_nobody_once_its_administrator_is_deleted(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The assigner's reference is set to NULL with them (migration 33), and a source a later
+    release wrote is left out rather than breaking People."""
+    database, plans = _sqlite(tmp_path)
+    users = SqliteUserDirectory(database)
+    other_admin = replace(ADMIN, id=UserId("other-admin"), email="other-admin@example.test")
+    for user in (ADMIN, other_admin, MEMBER, NEWCOMER):
+        users.add(user, "hash")
+    plans.add(as_new(FAMILY), NOW)
+    plans.assign_all(
+        [MEMBER.id, NEWCOMER.id],
+        FAMILY.key,
+        AssignmentChange(AssignmentSource.ADMINISTRATOR, other_admin.id, NOW),
+    )
+    users.delete(other_admin.id)
+    with transaction(database) as connection:
+        connection.execute(
+            "UPDATE users SET plan_assigned_by = 'reseller' WHERE id = ?", (NEWCOMER.id.value,)
+        )
+
+    with caplog.at_level(logging.WARNING, logger="calendar_sync.infrastructure.persistence"):
+        changes = plans.last_changes([MEMBER.id, NEWCOMER.id])
+
+    assert changes == {MEMBER.id: AssignmentChange(AssignmentSource.ADMINISTRATOR, None, NOW)}
+    assert caplog.messages == [
+        "User newcomer's Plan was given by a source this release does not know; it is left out"
+    ]
 
 
 def test_a_sync_interval_this_release_does_not_know_reads_as_instant(

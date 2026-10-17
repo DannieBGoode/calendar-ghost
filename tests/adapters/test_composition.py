@@ -107,3 +107,8 @@ def test_the_plan_use_cases_share_the_installations_one_plans_store(tmp_path: Pa
     assert adapters.allowances.of(member) == Allowance(
         AllowanceBasis.PLAN, plan=FAMILY, assigned=FAMILY
     )
+    # Giving many people a Plan at once goes through the same store.
+    container.plans.assign_plans.execute(admin, [member], None)
+    assert adapters.allowances.of(member) == Allowance(
+        AllowanceBasis.PLAN, plan=FAMILY, on_default=True
+    )

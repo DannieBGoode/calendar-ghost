@@ -59,6 +59,7 @@ ADMINISTRATOR_ROUTES = {
     ("PUT", "/api/v1/plans/{plan_key}"),
     ("DELETE", "/api/v1/plans/{plan_key}"),
     ("PUT", "/api/v1/plan-settings"),
+    ("POST", "/api/v1/plan-assignments"),
     ("GET", "/api/v1/storage"),
     ("GET", "/api/v1/storage/activity"),
     ("POST", "/api/v1/storage/activity/clear"),

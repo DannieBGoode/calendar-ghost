@@ -15,6 +15,7 @@ from calendar_sync.domain.plans import (
     NO_LIMITS_PLAN,
     UNLIMITED,
     Allowance,
+    AssignmentSource,
     InvalidPlan,
     NewPlan,
     Plan,
@@ -154,25 +155,64 @@ class SqlitePlans:
     # PlanAssignments
 
     def assign(self, user: UserId, plan: PlanKey | None, change: AssignmentChange) -> bool:
+        return self.assign_all([user], plan, change)
+
+    def assign_all(
+        self, users: Collection[UserId], plan: PlanKey | None, change: AssignmentChange
+    ) -> bool:
+        ordered = sorted({user.value for user in users})
+        chunks = [
+            ordered[start : start + USERS_PER_QUERY]
+            for start in range(0, len(ordered), USERS_PER_QUERY)
+        ]
         with transaction(self._database_path) as connection:
+            # Held from the checks to the updates, so nobody is deleted and no Plan removed
+            # in between: everyone named moves, or nobody does.
             connection.execute("BEGIN IMMEDIATE")
             if plan is not None:
                 _require_plan(connection, plan)
-            assigned = connection.execute(
-                """
-                UPDATE users SET plan_key = ?, plan_assigned_by = ?, plan_assigner_id = ?,
-                    plan_assigned_at = ?
-                WHERE id = ?
-                """,
-                (
-                    plan.value if plan is not None else None,
-                    change.source.value,
-                    change.actor.value if change.actor is not None else None,
-                    change.at.isoformat(),
-                    user.value,
-                ),
-            ).rowcount
-        return assigned == 1
+            if sum(_existing(connection, chunk) for chunk in chunks) != len(ordered):
+                return False
+            values = (
+                plan.value if plan is not None else None,
+                change.source.value,
+                change.actor.value if change.actor is not None else None,
+                change.at.isoformat(),
+            )
+            for chunk in chunks:
+                marks = ", ".join("?" * len(chunk))
+                # Interpolates only `?` placeholders; values stay bound.
+                connection.execute(
+                    f"""
+                    UPDATE users SET plan_key = ?, plan_assigned_by = ?, plan_assigner_id = ?,
+                        plan_assigned_at = ?
+                    WHERE id IN ({marks})
+                    """,  # noqa: S608
+                    (*values, *chunk),
+                )
+        return True
+
+    def last_changes(self, users: Collection[UserId]) -> dict[UserId, AssignmentChange]:
+        changes: dict[UserId, AssignmentChange] = {}
+        ordered = sorted({user.value for user in users})
+        with transaction(self._database_path) as connection:
+            for start in range(0, len(ordered), USERS_PER_QUERY):
+                chunk = ordered[start : start + USERS_PER_QUERY]
+                marks = ", ".join("?" * len(chunk))
+                # Interpolates only `?` placeholders; values stay bound.
+                rows = connection.execute(
+                    f"""
+                    SELECT id, plan_assigned_by, plan_assigner_id, plan_assigned_at FROM users
+                    WHERE id IN ({marks}) AND plan_assigned_by IS NOT NULL
+                    """,  # noqa: S608
+                    chunk,
+                ).fetchall()
+                changes |= {
+                    UserId(str(row["id"])): change
+                    for row in rows
+                    if (change := _change(row)) is not None
+                }
+        return changes
 
 
 def _insert(connection: sqlite3.Connection, new: NewPlan, at: datetime) -> Plan:
@@ -194,6 +234,37 @@ def _insert(connection: sqlite3.Connection, new: NewPlan, at: datetime) -> Plan:
         (*_plan_values(plan), at.isoformat(), at.isoformat()),
     )
     return plan
+
+
+def _existing(connection: sqlite3.Connection, users: Sequence[str]) -> int:
+    """How many of `users` are Users."""
+    marks = ", ".join("?" * len(users))
+    # Interpolates only `?` placeholders; values stay bound.
+    return int(
+        connection.execute(
+            f"SELECT COUNT(*) FROM users WHERE id IN ({marks})",  # noqa: S608
+            users,
+        ).fetchone()[0]
+    )
+
+
+def _change(row: sqlite3.Row) -> AssignmentChange | None:
+    """How a User's own Plan was last set; None, with a warning, for a source this release does
+    not know, such as one a later release wrote, so it never breaks People."""
+    try:
+        source = AssignmentSource(str(row["plan_assigned_by"]))
+    except ValueError:
+        logger.warning(
+            "User %s's Plan was given by a source this release does not know; it is left out",
+            row["id"],
+        )
+        return None
+    actor = row["plan_assigner_id"]
+    return AssignmentChange(
+        source,
+        UserId(str(actor)) if actor is not None else None,
+        datetime.fromisoformat(str(row["plan_assigned_at"])),
+    )
 
 
 def _names(connection: sqlite3.Connection) -> dict[str, str]:

@@ -2,11 +2,13 @@
 setting that turns Plans on, and what the signed-in User's own Plan allows.
 
 Every route here is an Installation Administrator's, except Your plan, which every User reads.
-Assigning a Plan to a User is in `users.py`, beside the other changes to a User.
+Giving one User a Plan is in `users.py`, beside the other changes to a User; giving one Plan to
+many people at once is here.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, status
@@ -24,8 +26,11 @@ from calendar_sync.application.identity.plans import (
 from calendar_sync.application.identity.ports import PlanListing
 from calendar_sync.application.operations.operator_overview import OperatorOverview
 from calendar_sync.application.operations.own_plan import ShowOwnPlan
+from calendar_sync.application.operations.plan_assignment import AssignPlans, unknown_people
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.errors import DomainValidationError
 from calendar_sync.domain.plans import (
+    InvalidAssignment,
     InvalidPlan,
     NewPlan,
     Plan,
@@ -39,6 +44,7 @@ from calendar_sync.interfaces.api.dependencies import administrator, app_service
 from calendar_sync.interfaces.api.plan_payload import (
     named_plan,
     own_plan_response,
+    plan_assignments_response,
     plan_limits,
     plan_response,
     plans_response,
@@ -48,6 +54,8 @@ from calendar_sync.interfaces.api.schemas import (
     ChangePlanRequest,
     DefinePlanRequest,
     OwnPlanResponse,
+    PlanAssignmentsRequest,
+    PlanAssignmentsResponse,
     PlanLimitsRequest,
     PlanResponse,
     PlansResponse,
@@ -66,6 +74,8 @@ class PlanAdministration(Protocol):
     def remove_plan(self) -> RemovePlan: ...
     @property
     def set_plans_setting(self) -> SetPlansSetting: ...
+    @property
+    def assign_plans(self) -> AssignPlans: ...
 
 
 class PlansApiServices(Protocol):
@@ -172,11 +182,42 @@ def remove_plan(plan_key: str, services: Services, actor: Administrator) -> None
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
 
 
+@router.post("/api/v1/plan-assignments", response_model=PlanAssignmentsResponse)
+def assign_plans(
+    payload: PlanAssignmentsRequest, services: Services, actor: Administrator
+) -> PlanAssignmentsResponse:
+    """Give one Plan, or with null the Default Plan, to up to 100 people at once, all or none,
+    and answer each person's Plan before and after and what they are over. With `dry_run`,
+    give nothing and answer the same, so who would be over is known before anyone confirms."""
+    plan = named_plan(payload.plan) if payload.plan is not None else None
+    assign = services.plans.assign_plans
+    try:
+        moves = assign.execute(
+            actor, _named_people(payload.user_ids), plan, dry_run=payload.dry_run
+        )
+    except InvalidAssignment as error:
+        raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
+    except PlanNotFound as error:
+        raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
+    except AdministratorRequired as error:
+        raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
+    return plan_assignments_response(moves, dry_run=payload.dry_run)
+
+
 @router.get("/api/v1/account/plan", response_model=OwnPlanResponse)
 def own_plan(services: OwnServices) -> OwnPlanResponse:
     """What the signed-in User's Plan allows and how much of it they have, for Your plan. A
     fault reading Plans fails this request; each limit is still checked where it applies."""
     return own_plan_response(services.show_own_plan.execute())
+
+
+def _named_people(user_ids: Sequence[str]) -> list[UserId]:
+    """The Users a request names; a malformed identifier names nobody, as an unknown one does.
+    Raises InvalidAssignment."""
+    try:
+        return [UserId(user_id) for user_id in user_ids]
+    except DomainValidationError as error:
+        raise unknown_people() from error
 
 
 def _changed(key: PlanKey, name: str, limits: PlanLimitsRequest) -> Plan:

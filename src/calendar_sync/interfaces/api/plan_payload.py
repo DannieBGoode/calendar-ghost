@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from fastapi import status
 
@@ -11,26 +11,33 @@ from calendar_sync.application.identity.plans import PlansOverview
 from calendar_sync.application.identity.ports import PlanListing
 from calendar_sync.application.operations.operator_overview import PersonPlan
 from calendar_sync.application.operations.own_plan import OwnPlan
+from calendar_sync.application.operations.plan_assignment import PlanMove
 from calendar_sync.domain.plans import (
     Allowance,
     AllowanceBasis,
     InvalidPlan,
+    OverLimit,
     Plan,
     PlanKey,
     PlanLimits,
     PlanReach,
+    PlanUse,
     SyncInterval,
     UseCount,
 )
 from calendar_sync.interfaces.api.problems import problem_from
 from calendar_sync.interfaces.api.schemas import (
     AppliedPlanResponse,
+    LimitUseResponse,
     OverLimitResponse,
     OwnPlanResponse,
     PersonPlanOverviewResponse,
     PersonPlanResponse,
+    PersonPlanUseResponse,
+    PlanAssignmentsResponse,
     PlanLimitsRequest,
     PlanLimitsResponse,
+    PlanMoveResponse,
     PlanNameResponse,
     PlanResponse,
     PlansResponse,
@@ -95,6 +102,7 @@ def plans_response(overview: PlansOverview, reach: Mapping[PlanKey, PlanReach]) 
         enabled=overview.setting.enabled,
         default_plan=default.value if default is not None else None,
         sync_intervals=[interval.value for interval in overview.offered],
+        administrators=overview.administrators,
         plans=[plan_response(listing, reach[listing.plan.key]) for listing in overview.plans],
     )
 
@@ -111,18 +119,36 @@ def person_plan_response(allowance: Allowance) -> PersonPlanResponse:
 
 def person_plan_overview_response(person: PersonPlan) -> PersonPlanOverviewResponse:
     """A person's Plan for the Operator Overview: as it limits them now, the Plan they have,
-    and each of its limits they are over."""
+    each of its limits they are over, who gave it and when, and how much of it they use."""
     allowance, has = person.allowance, person.has
     return PersonPlanOverviewResponse(
         basis=allowance.basis.value,
         plan=_applied(allowance),
         assigned=_named(allowance.assigned) if allowance.assigned is not None else None,
-        has=AppliedPlanResponse(key=has.key.value, name=has.name, on_default=person.on_default)
-        if has is not None
-        else None,
-        over=[
-            OverLimitResponse(limit=over.resource.value, in_use=over.in_use, allowed=over.allowed)
-            for over in person.over
+        has=_held(person),
+        over=_over(person.over),
+        assigned_by=person.assigned_by,
+        assigned_at=person.assigned_at.isoformat() if person.assigned_at is not None else None,
+        use=_use(person.use, has.limits) if has is not None and person.use is not None else None,
+    )
+
+
+def plan_assignments_response(
+    moves: Sequence[PlanMove], *, dry_run: bool
+) -> PlanAssignmentsResponse:
+    """Each person given a Plan, or who would be: the Plan they had and have, and what they are
+    over."""
+    return PlanAssignmentsResponse(
+        dry_run=dry_run,
+        people=[
+            PlanMoveResponse(
+                user_id=move.user.id.value,
+                email=move.user.email,
+                had=_held(move.before),
+                has=_held(move.after),
+                over=_over(move.after.over),
+            )
+            for move in moves
         ],
     )
 
@@ -156,6 +182,34 @@ def _applied(allowance: Allowance) -> AppliedPlanResponse | None:
 
 def _named(plan: Plan) -> PlanNameResponse:
     return PlanNameResponse(key=plan.key.value, name=plan.name)
+
+
+def _held(person: PersonPlan) -> AppliedPlanResponse | None:
+    """The Plan a person has, whether or not it limits them now."""
+    has = person.has
+    if has is None:
+        return None
+    return AppliedPlanResponse(key=has.key.value, name=has.name, on_default=person.on_default)
+
+
+def _over(over: tuple[OverLimit, ...]) -> list[OverLimitResponse]:
+    return [
+        OverLimitResponse(limit=each.resource.value, in_use=each.in_use, allowed=each.allowed)
+        for each in over
+    ]
+
+
+def _use(use: PlanUse, limits: PlanLimits) -> PersonPlanUseResponse:
+    return PersonPlanUseResponse(
+        rules=LimitUseResponse(in_use=use.rules, allowed=limits.rules),
+        connected_accounts=LimitUseResponse(
+            in_use=use.connected_accounts, allowed=limits.connected_accounts
+        ),
+        integration_tokens=LimitUseResponse(
+            in_use=use.integration_tokens, allowed=limits.integration_tokens
+        ),
+        sync_interval=limits.sync_interval.value,
+    )
 
 
 def _counts(counts: tuple[UseCount, ...]) -> list[UseCountResponse]:

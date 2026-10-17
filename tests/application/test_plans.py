@@ -1,7 +1,7 @@
 """What Installation Administrators do with Plans (ADR 0038), over the in-memory Plans store."""
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, replace
 from datetime import datetime
 
@@ -77,6 +77,14 @@ class _DeletedMeanwhile:
 
     def assign(self, user: UserId, plan: PlanKey | None, change: AssignmentChange) -> bool:
         return False
+
+    def assign_all(
+        self, users: Collection[UserId], plan: PlanKey | None, change: AssignmentChange
+    ) -> bool:
+        return False
+
+    def last_changes(self, users: Collection[UserId]) -> dict[UserId, AssignmentChange]:
+        return {}
 
 
 def _plans(*others: User) -> MemoryPlans:
@@ -172,7 +180,19 @@ def test_show_plans_answers_each_plan_who_has_it_the_setting_and_the_offered_int
         PlansSetting(True, FREE.key),
         (PlanListing(FAMILY, False, 1, 1), PlanListing(FREE, True, 2, 1)),
         (SyncInterval.INSTANT, SyncInterval.EVERY_5_MINUTES),
+        administrators=1,
     )
+
+
+def test_the_overview_counts_every_administrator_whom_no_plan_limits() -> None:
+    """For the Never limited fact: a disabled administrator administers too."""
+    plans = _plans(RETIRED, NEIGHBOUR)
+    plans_on(plans, FREE)
+
+    overview = ShowPlans(plans.users, plans).execute(ADMIN.id)
+
+    assert overview.administrators == 2
+    assert overview.plans == (PlanListing(FREE, True, 4, 2),)
 
 
 def test_a_new_installation_shows_no_plans_and_plans_off() -> None:
@@ -180,7 +200,9 @@ def test_a_new_installation_shows_no_plans_and_plans_off() -> None:
 
     overview = ShowPlans(plans.users, plans).execute(ADMIN.id)
 
-    assert overview == PlansOverview(PlansSetting(False, None), (), OFFERED_INTERVALS)
+    assert overview == PlansOverview(
+        PlansSetting(False, None), (), OFFERED_INTERVALS, administrators=1
+    )
 
 
 # Defining and changing Plans
@@ -331,7 +353,10 @@ def test_turning_plans_on_with_a_default_answers_the_overview_and_limits_members
     overview = _setting(plans).execute(ADMIN.id, True, FREE.key)
 
     assert overview == PlansOverview(
-        PlansSetting(True, FREE.key), (PlanListing(FREE, True, 2, 1),), OFFERED_INTERVALS
+        PlansSetting(True, FREE.key),
+        (PlanListing(FREE, True, 2, 1),),
+        OFFERED_INTERVALS,
+        administrators=1,
     )
     assert plans.of(MEMBER.id) == Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True)
 
@@ -346,6 +371,7 @@ def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_the_default() -
         PlansSetting(True, NO_LIMITS_PLAN.key),
         (PlanListing(FREE, False, 0, 0), PlanListing(NO_LIMITS_PLAN, True, 2, 1)),
         OFFERED_INTERVALS,
+        administrators=1,
     )
     # Turning Plans on this way limits nobody until someone has a smaller Plan.
     assert plans.of(MEMBER.id).limits == NO_LIMITS

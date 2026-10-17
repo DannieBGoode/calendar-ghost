@@ -390,6 +390,9 @@ describe("personPlanFact", () => {
     assigned: null,
     has: null,
     over: [],
+    assigned_by: null,
+    assigned_at: null,
+    use: null,
     ...plan,
   })
 
@@ -475,6 +478,9 @@ describe("personPlanText", () => {
     assigned: null,
     has: null,
     over: [],
+    assigned_by: null,
+    assigned_at: null,
+    use: null,
     ...plan,
   })
 

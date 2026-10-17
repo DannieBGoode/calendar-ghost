@@ -1565,6 +1565,32 @@
         "title": "IssuedLinkResponse",
         "type": "object"
       },
+      "LimitUseResponse": {
+        "description": "How many of one resource a person has, beside what the Plan they have allows.",
+        "properties": {
+          "allowed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed"
+          },
+          "in_use": {
+            "title": "In Use",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "in_use",
+          "allowed"
+        ],
+        "title": "LimitUseResponse",
+        "type": "object"
+      },
       "LinkRequest": {
         "properties": {
           "token": {
@@ -1844,6 +1870,28 @@
               }
             ]
           },
+          "assigned_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned At"
+          },
+          "assigned_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned By"
+          },
           "basis": {
             "enum": [
               "plans_off",
@@ -1879,6 +1927,16 @@
                 "type": "null"
               }
             ]
+          },
+          "use": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonPlanUseResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -1886,7 +1944,10 @@
           "plan",
           "assigned",
           "has",
-          "over"
+          "over",
+          "assigned_by",
+          "assigned_at",
+          "use"
         ],
         "title": "PersonPlanOverviewResponse",
         "type": "object"
@@ -1930,6 +1991,40 @@
           "assigned"
         ],
         "title": "PersonPlanResponse",
+        "type": "object"
+      },
+      "PersonPlanUseResponse": {
+        "description": "How much of the Plan they have a person uses, each count beside its limit, for the\nmeters on their page (ADR 0030, amended, for the token count). Counts only.",
+        "properties": {
+          "connected_accounts": {
+            "$ref": "#/components/schemas/LimitUseResponse"
+          },
+          "integration_tokens": {
+            "$ref": "#/components/schemas/LimitUseResponse"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/LimitUseResponse"
+          },
+          "sync_interval": {
+            "enum": [
+              "instant",
+              "5_minutes",
+              "10_minutes",
+              "15_minutes",
+              "30_minutes",
+              "60_minutes"
+            ],
+            "title": "Sync Interval",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rules",
+          "connected_accounts",
+          "integration_tokens",
+          "sync_interval"
+        ],
+        "title": "PersonPlanUseResponse",
         "type": "object"
       },
       "PersonResponse": {
@@ -2037,6 +2132,61 @@
           "plan"
         ],
         "title": "PersonResponse",
+        "type": "object"
+      },
+      "PlanAssignmentsRequest": {
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          },
+          "user_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "User Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "plan",
+          "user_ids"
+        ],
+        "title": "PlanAssignmentsRequest",
+        "type": "object"
+      },
+      "PlanAssignmentsResponse": {
+        "description": "Everyone a Plan was given to, in the order first named, or would be in a dry run.",
+        "properties": {
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/PlanMoveResponse"
+            },
+            "title": "People",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dry_run",
+          "people"
+        ],
+        "title": "PlanAssignmentsResponse",
         "type": "object"
       },
       "PlanLimitsRequest": {
@@ -2155,6 +2305,62 @@
         "title": "PlanLimitsResponse",
         "type": "object"
       },
+      "PlanMoveResponse": {
+        "description": "One person given a Plan, or who would be in a dry run.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "had": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPlanResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "has": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPlanResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "over": {
+            "items": {
+              "$ref": "#/components/schemas/OverLimitResponse"
+            },
+            "title": "Over",
+            "type": "array"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "had",
+          "has",
+          "over"
+        ],
+        "title": "PlanMoveResponse",
+        "type": "object"
+      },
       "PlanNameResponse": {
         "description": "A Plan as people know it: its key, which never changes, and its name.",
         "properties": {
@@ -2257,6 +2463,10 @@
       "PlansResponse": {
         "description": "The Plans setting, the sync intervals offered now, and every Plan by name.",
         "properties": {
+          "administrators": {
+            "title": "Administrators",
+            "type": "integer"
+          },
           "default_plan": {
             "anyOf": [
               {
@@ -2299,6 +2509,7 @@
           "enabled",
           "default_plan",
           "sync_intervals",
+          "administrators",
           "plans"
         ],
         "title": "PlansResponse",
@@ -6434,6 +6645,63 @@
         "summary": "Check Password Reset"
       }
     },
+    "/api/v1/plan-assignments": {
+      "post": {
+        "description": "Give one Plan, or with null the Default Plan, to up to 100 people at once, all or none,\nand answer each person's Plan before and after and what they are over. With `dry_run`,\ngive nothing and answer the same, so who would be over is known before anyone confirms.",
+        "operationId": "assign_plans_api_v1_plan_assignments_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanAssignmentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanAssignmentsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Plans"
+      }
+    },
     "/api/v1/plan-settings": {
       "put": {
         "description": "Turn Plans on or off, and choose the Default Plan. Turning Plans on with no default makes\na Plan named \"No limits\" the default; the default cannot be cleared while Plans are on.\nTurning them off is always allowed and keeps every Plan and assignment.",
@@ -8025,7 +8293,7 @@
     },
     "/api/v1/users": {
       "get": {
-        "description": "One page of the people here, by part of their email, role, state, and Installation\nStatus, each with what the Operator Overview shows about them; never their calendars.",
+        "description": "One page of the people here, by part of their email, role, state, Installation Status,\nPlan, and whether they are over a limit of it, each with what the Operator Overview shows\nabout them; never their calendars.",
         "operationId": "users_api_v1_users_get",
         "parameters": [
           {
@@ -8119,6 +8387,16 @@
                 }
               ],
               "title": "Plan"
+            }
+          },
+          {
+            "in": "query",
+            "name": "over",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Over",
+              "type": "boolean"
             }
           },
           {

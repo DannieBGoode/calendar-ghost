@@ -32,6 +32,9 @@ _PLAN_KEY = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
 # What a key made from a name turns into one hyphen: every run of anything but a letter or digit.
 _NOT_IN_KEY = re.compile(r"[^a-z0-9]+")
 _FALLBACK_KEY = "plan"
+# Keys no Plan may have: the Web UI's New plan panel is at /people/plans/new, beside each Plan's
+# /people/plans/<key> (ADR 0038, the catalog).
+_RESERVED_KEYS = frozenset({"new"})
 # Control and format characters, and the line and paragraph separators that break a line, refused
 # as an Integration Token's name refuses them.
 _REFUSED_CATEGORIES = ("C", "Zl", "Zp")
@@ -73,13 +76,13 @@ class PlanKey:
 def plan_key_from(name: str, taken: Container[str]) -> PlanKey:
     """The key a new Plan named `name` gets: its letters and digits in lower case, accents
     dropped, with one hyphen for each run of anything else, at most 32 characters, or "plan" when
-    nothing is left. When a Plan in `taken` has it, "-2", "-3", and so on is added, shortening
-    the rest so the key still fits."""
+    nothing is left. When a Plan in `taken` has it, or it is reserved ("new"), "-2", "-3", and so
+    on is added, shortening the rest so the key still fits."""
     plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
     made = _NOT_IN_KEY.sub("-", plain.lower()).strip("-")
     base = made[:PLAN_KEY_LIMIT].rstrip("-") or _FALLBACK_KEY
     key, number = base, 1
-    while key in taken:
+    while key in taken or key in _RESERVED_KEYS:
         number += 1
         suffix = f"-{number}"
         key = base[: PLAN_KEY_LIMIT - len(suffix)].rstrip("-") + suffix
@@ -183,10 +186,16 @@ class NewPlan:
     name: str
     limits: PlanLimits
     key: PlanKey | None = None
-    """The key asked for; None makes one from the name."""
+    """The key asked for; None makes one from the name. Never "new", which is reserved."""
 
     def __post_init__(self) -> None:
         _require_name(self.name)
+        if self.key is not None and self.key.value in _RESERVED_KEYS:
+            raise InvalidPlan(
+                InvalidPlanReason.KEY,
+                f"the plan key {self.key.value} is reserved for the new plan page; "
+                "choose another key",
+            )
 
     def keyed(self, taken: Container[str]) -> Plan:
         """The Plan to store: with the key asked for, or else with one made from the name that
@@ -250,6 +259,40 @@ class AssignmentSource(StrEnum):
 
     ADMINISTRATOR = "administrator"
     BILLING = "billing"
+
+
+PEOPLE_PER_ASSIGNMENT = 100
+"""The most people one assignment gives a Plan to at once."""
+
+
+class InvalidAssignmentReason(StrEnum):
+    """Why a Plan cannot be given to the people named, so the Web UI can say how to fix it."""
+
+    NO_PEOPLE = "no_people"
+    TOO_MANY = "too_many"
+    UNKNOWN_PEOPLE = "unknown_people"
+    """Someone named is not a User, or no longer is."""
+
+
+class InvalidAssignment(DomainError):
+    """A Plan cannot be given to the people named; nobody was given it."""
+
+    def __init__(self, reason: InvalidAssignmentReason, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+def require_assignable(people: int) -> None:
+    """Refuse giving a Plan to nobody, or to more than PEOPLE_PER_ASSIGNMENT people at once."""
+    if people < 1:
+        raise InvalidAssignment(
+            InvalidAssignmentReason.NO_PEOPLE, "name at least one person to give the plan to"
+        )
+    if people > PEOPLE_PER_ASSIGNMENT:
+        raise InvalidAssignment(
+            InvalidAssignmentReason.TOO_MANY,
+            f"a plan is given to at most {PEOPLE_PER_ASSIGNMENT} people at once",
+        )
 
 
 class AllowanceBasis(StrEnum):

@@ -60,6 +60,13 @@
     "insufficient_scope": "This Integration Token is not allowed to read Installation Status.",
     "integration_token_not_found": "This Integration Token no longer exists. Reload to see the current tokens.",
     "invalid_activity_age": "Choose one of the offered ages for clearing Activity.",
+    "invalid_assignment": "This plan can't be given to these people. Reload and try again.",
+    "invalid_assignment_no_people": "Choose at least one person to give the plan to.",
+    "invalid_assignment_too_many": {
+      "one": "Choose at most {count} person at a time.",
+      "other": "Choose at most {count} people at a time."
+    },
+    "invalid_assignment_unknown_people": "Someone you chose no longer has access to this Calendar Ghost. Reload and try again.",
     "invalid_authorization_state": "This sign-in link expired or was already used. Start again from Settings.",
     "invalid_email": "Enter an email address, such as name@example.com.",
     "invalid_integration_token_name": "Give the token a name of 1 to 80 characters, without line breaks or other control characters.",

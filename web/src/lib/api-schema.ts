@@ -554,6 +554,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plan-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assign Plans
+         * @description Give one Plan, or with null the Default Plan, to up to 100 people at once, all or none,
+         *     and answer each person's Plan before and after and what they are over. With `dry_run`,
+         *     give nothing and answer the same, so who would be over is known before anyone confirms.
+         */
+        post: operations["assign_plans_api_v1_plan_assignments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plan-settings": {
         parameters: {
             query?: never;
@@ -972,8 +994,9 @@ export interface paths {
         };
         /**
          * Users
-         * @description One page of the people here, by part of their email, role, state, and Installation
-         *     Status, each with what the Operator Overview shows about them; never their calendars.
+         * @description One page of the people here, by part of their email, role, state, Installation Status,
+         *     Plan, and whether they are over a limit of it, each with what the Operator Overview shows
+         *     about them; never their calendars.
          */
         get: operations["users_api_v1_users_get"];
         put?: never;
@@ -1607,6 +1630,16 @@ export interface components {
             /** Token */
             token: string;
         };
+        /**
+         * LimitUseResponse
+         * @description How many of one resource a person has, beside what the Plan they have allows.
+         */
+        LimitUseResponse: {
+            /** Allowed */
+            allowed: number | null;
+            /** In Use */
+            in_use: number;
+        };
         /** LinkRequest */
         LinkRequest: {
             /** Token */
@@ -1710,6 +1743,10 @@ export interface components {
          */
         PersonPlanOverviewResponse: {
             assigned: components["schemas"]["PlanNameResponse"] | null;
+            /** Assigned At */
+            assigned_at: string | null;
+            /** Assigned By */
+            assigned_by: string | null;
             /**
              * Basis
              * @enum {string}
@@ -1719,6 +1756,7 @@ export interface components {
             /** Over */
             over: components["schemas"]["OverLimitResponse"][];
             plan: components["schemas"]["AppliedPlanResponse"] | null;
+            use: components["schemas"]["PersonPlanUseResponse"] | null;
         };
         /**
          * PersonPlanResponse
@@ -1732,6 +1770,21 @@ export interface components {
              */
             basis: "plans_off" | "administrator" | "plan";
             plan: components["schemas"]["AppliedPlanResponse"] | null;
+        };
+        /**
+         * PersonPlanUseResponse
+         * @description How much of the Plan they have a person uses, each count beside its limit, for the
+         *     meters on their page (ADR 0030, amended, for the token count). Counts only.
+         */
+        PersonPlanUseResponse: {
+            connected_accounts: components["schemas"]["LimitUseResponse"];
+            integration_tokens: components["schemas"]["LimitUseResponse"];
+            rules: components["schemas"]["LimitUseResponse"];
+            /**
+             * Sync Interval
+             * @enum {string}
+             */
+            sync_interval: "instant" | "5_minutes" | "10_minutes" | "15_minutes" | "30_minutes" | "60_minutes";
         };
         /**
          * PersonResponse
@@ -1768,6 +1821,28 @@ export interface components {
              */
             verdict: "stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy";
         };
+        /** PlanAssignmentsRequest */
+        PlanAssignmentsRequest: {
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
+            /** Plan */
+            plan: string | null;
+            /** User Ids */
+            user_ids: string[];
+        };
+        /**
+         * PlanAssignmentsResponse
+         * @description Everyone a Plan was given to, in the order first named, or would be in a dry run.
+         */
+        PlanAssignmentsResponse: {
+            /** Dry Run */
+            dry_run: boolean;
+            /** People */
+            people: components["schemas"]["PlanMoveResponse"][];
+        };
         /**
          * PlanLimitsRequest
          * @description Each limit is a whole number, or null for unlimited.
@@ -1801,6 +1876,20 @@ export interface components {
              * @enum {string}
              */
             sync_interval: "instant" | "5_minutes" | "10_minutes" | "15_minutes" | "30_minutes" | "60_minutes";
+        };
+        /**
+         * PlanMoveResponse
+         * @description One person given a Plan, or who would be in a dry run.
+         */
+        PlanMoveResponse: {
+            /** Email */
+            email: string | null;
+            had: components["schemas"]["AppliedPlanResponse"] | null;
+            has: components["schemas"]["AppliedPlanResponse"] | null;
+            /** Over */
+            over: components["schemas"]["OverLimitResponse"][];
+            /** User Id */
+            user_id: string;
         };
         /**
          * PlanNameResponse
@@ -1851,6 +1940,8 @@ export interface components {
          * @description The Plans setting, the sync intervals offered now, and every Plan by name.
          */
         PlansResponse: {
+            /** Administrators */
+            administrators: number;
             /** Default Plan */
             default_plan: string | null;
             /** Enabled */
@@ -3705,6 +3796,41 @@ export interface operations {
             };
         };
     };
+    assign_plans_api_v1_plan_assignments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanAssignmentsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanAssignmentsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     set_plans_setting_api_v1_plan_settings_put: {
         parameters: {
             query?: never;
@@ -4723,6 +4849,7 @@ export interface operations {
                 state?: ("active" | "disabled") | null;
                 verdict?: ("stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy") | null;
                 plan?: string | null;
+                over?: boolean;
                 sort?: "joined" | "email" | "last_sign_in" | "verdict";
                 order?: "asc" | "desc";
                 page?: number;

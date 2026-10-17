@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from calendar_sync.application.identity.administration import AdministratorRequired, UserNotFound
+from calendar_sync.application.identity.errors import PlanNotFound
 from calendar_sync.application.identity.ports import AssignmentChange, UserQuery
 from calendar_sync.application.operations.operator_overview import (
     OperatorOverview,
@@ -39,6 +40,7 @@ from calendar_sync.domain.plans import (
     AssignmentSource,
     LimitedResource,
     OverLimit,
+    PlanKey,
     PlanReach,
     PlanUse,
     UseCount,
@@ -167,6 +169,7 @@ def _installation() -> OperatorOverview:
         UserStatuses(units.installation(), RuleLocks(), clock, RecentSchedulerHeartbeat(clock)),
         units.installation(),
         clock,
+        plans,
         plans,
         plans,
     )
@@ -421,17 +424,24 @@ def test_each_person_is_shown_the_plan_they_have_and_each_of_its_limits_they_are
 
     shown = _person_plans(overview)
 
+    # Each counts as their Plan counts: Alice's stopped rule gives up its place.
     assert shown == {
-        ADMIN.id: PersonPlan(Allowance(AllowanceBasis.ADMINISTRATOR), has=FREE),
+        ADMIN.id: PersonPlan(
+            Allowance(AllowanceBasis.ADMINISTRATOR), has=FREE, use=PlanUse(0, 0, 0)
+        ),
         ALICE.id: PersonPlan(
             Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True),
             has=FREE,
             over=(OverLimit(LimitedResource.CONNECTED_ACCOUNTS, in_use=2, allowed=1),),
+            use=PlanUse(0, 2, 0),
         ),
         BOB.id: PersonPlan(
             Allowance(AllowanceBasis.PLAN, plan=FAMILY_PLAN, assigned=FAMILY_PLAN),
             has=FAMILY_PLAN,
             over=(OverLimit(LimitedResource.INTEGRATION_TOKENS, in_use=3, allowed=2),),
+            use=PlanUse(1, 2, 3),
+            assigned_by=ADMIN.email,
+            assigned_at=NOW,
         ),
     }
     assert [plan.on_default if plan else None for plan in shown.values()] == [True, True, False]
@@ -450,6 +460,7 @@ def test_while_plans_are_off_a_person_is_shown_what_the_plan_they_have_allows() 
         Allowance(AllowanceBasis.PLANS_OFF),
         has=FREE,
         over=(OverLimit(LimitedResource.CONNECTED_ACCOUNTS, in_use=2, allowed=1),),
+        use=PlanUse(0, 2, 0),
     )
 
 
@@ -528,3 +539,138 @@ def test_a_fault_counting_shows_no_plan_on_people_but_fails_a_plans_reach() -> N
     assert _person_plans(overview) == {ADMIN.id: None, ALICE.id: None, BOB.id: None}
     with pytest.raises(RuntimeError):
         overview.reach_of(ADMIN.id, [FREE])
+
+
+# Who gave a person their Plan, and how much of it they use (ADR 0038, the catalog)
+
+
+def test_a_person_plan_names_who_gave_it_only_while_it_is_their_own() -> None:
+    """Alice was returned to the default; the administrator who gave Bob his Plan was deleted
+    since, so nobody is named, but when stays."""
+    overview = _installation()
+    _bob_on_family(overview)
+    plans = _plans(overview)
+    plans.assign(ALICE.id, None, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW))
+    gone = UserId("former-admin")
+    plans.changes[BOB.id] = AssignmentChange(AssignmentSource.ADMINISTRATOR, gone, NOW + DAY)
+
+    shown = _person_plans(overview)
+
+    assert [(plan.assigned_by, plan.assigned_at) for plan in shown.values() if plan] == [
+        (None, None),
+        (None, None),
+        (None, NOW + DAY),
+    ]
+
+
+def _over(overview: OperatorOverview, **query: object) -> tuple[list[UserId], int]:
+    found = overview.page(ADMIN.id, OverviewQuery(over=True, **query))  # type: ignore[arg-type]
+    return [entry.user.id for entry in found.users], found.total
+
+
+def test_people_over_a_limit_are_found_across_every_page() -> None:
+    """Alice has 2 calendar accounts where Free allows 1, and Bob 3 Integration Tokens where
+    Family allows 2; no Plan limits the administrator."""
+    overview = _installation()
+    _bob_on_family(overview)
+    _database(overview).unrevoked_tokens[BOB.id] = 3
+
+    assert _over(overview) == ([ALICE.id, BOB.id], 2)
+    assert _over(overview, users=UserQuery(limit=1)) == ([ALICE.id], 2)
+    assert _over(overview, users=UserQuery(offset=1, limit=1)) == ([BOB.id], 2)
+    assert _over(overview, users=UserQuery(plan=FAMILY_PLAN.key)) == ([BOB.id], 1)
+    assert _over(overview, verdict=StatusVerdict.STOPPED) == ([ALICE.id], 1)
+    assert _over(overview, by_verdict=True, users=UserQuery(descending=True)) == (
+        [BOB.id, ALICE.id],
+        2,
+    )
+    # Over a limit of the Plan they have, whether or not Plans are on.
+    _plans(overview).change_settings(False, FREE.key, NOW)
+    assert _over(overview) == ([ALICE.id, BOB.id], 2)
+
+
+def test_nobody_is_over_while_no_plan_exists_or_plans_cannot_be_read() -> None:
+    overview = _installation()
+
+    assert _over(overview) == ([], 0)
+    _bob_on_family(overview)
+    overview.allowances = BrokenAllowances()
+    assert _over(overview) == ([], 0)
+
+
+def test_what_people_would_have_under_another_plan_is_read_without_giving_it() -> None:
+    """Bob has 2 calendar accounts and 3 Integration Tokens, where Free allows 1 and none."""
+    overview = _installation()
+    _bob_on_family(overview)
+    _database(overview).unrevoked_tokens[BOB.id] = 3
+    people = [ADMIN, ALICE, BOB]
+
+    given_free = overview.plans_given(ADMIN.id, people, FREE.key)
+    given_default = overview.plans_given(ADMIN.id, people, None)
+
+    accounts = OverLimit(LimitedResource.CONNECTED_ACCOUNTS, in_use=2, allowed=1)
+    tokens = OverLimit(LimitedResource.INTEGRATION_TOKENS, in_use=3, allowed=0)
+    assert given_free == {
+        ADMIN.id: PersonPlan(
+            Allowance(AllowanceBasis.ADMINISTRATOR, assigned=FREE), FREE, (), PlanUse(0, 0, 0)
+        ),
+        ALICE.id: PersonPlan(
+            Allowance(AllowanceBasis.PLAN, plan=FREE, assigned=FREE),
+            FREE,
+            (accounts,),
+            PlanUse(0, 2, 0),
+        ),
+        BOB.id: PersonPlan(
+            Allowance(AllowanceBasis.PLAN, plan=FREE, assigned=FREE),
+            FREE,
+            (accounts, tokens),
+            PlanUse(1, 2, 3),
+        ),
+    }
+    assert given_default[BOB.id] == PersonPlan(
+        Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True),
+        FREE,
+        (accounts, tokens),
+        PlanUse(1, 2, 3),
+    )
+    # Nothing was given: Bob still has Family, and the page says so.
+    assert overview.plans_of(ADMIN.id, people)[BOB.id] == _person_plans(overview)[BOB.id]
+    assert _person_plans(overview)[BOB.id] == PersonPlan(
+        Allowance(AllowanceBasis.PLAN, plan=FAMILY_PLAN, assigned=FAMILY_PLAN),
+        FAMILY_PLAN,
+        (OverLimit(LimitedResource.INTEGRATION_TOKENS, in_use=3, allowed=2),),
+        PlanUse(1, 2, 3),
+        assigned_by=ADMIN.email,
+        assigned_at=NOW,
+    )
+
+
+def test_a_plan_that_does_not_exist_is_refused_before_anything_is_counted() -> None:
+    overview = _installation()
+    _bob_on_family(overview)
+    overview.installation = UnreadablePlanUse(overview.installation)
+
+    with pytest.raises(PlanNotFound):
+        overview.plans_given(ADMIN.id, [ALICE], PlanKey("gold"))
+
+
+def test_only_an_administrator_reads_what_people_have_or_would_have() -> None:
+    overview = _installation()
+    _bob_on_family(overview)
+
+    with pytest.raises(AdministratorRequired):
+        overview.plans_of(ALICE.id, [BOB])
+    with pytest.raises(AdministratorRequired):
+        overview.plans_given(ALICE.id, [BOB], FREE.key)
+
+
+def test_unlike_people_reading_what_people_have_fails_when_plans_cannot_be_read() -> None:
+    """Giving a Plan says who would be over; it must not say nobody when it could not count."""
+    overview = _installation()
+    _bob_on_family(overview)
+    overview.installation = UnreadablePlanUse(overview.installation)
+
+    with pytest.raises(RuntimeError):
+        overview.plans_of(ADMIN.id, [BOB])
+    with pytest.raises(RuntimeError):
+        overview.plans_given(ADMIN.id, [BOB], FREE.key)

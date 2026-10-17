@@ -37,7 +37,15 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   it limits have more than it allows, and `use`, how many of them have each count. Each row of
   `GET /api/v1/users` gains the person's `plan`, as their overview shows it, and both gain `has`,
   the Plan they have, and `over`, each of its limits they are over. `GET /api/v1/users?plan={key}`
-  lists everyone who has that Plan, their own or as the default. Migration 33 adds the `plans` table
+  lists everyone who has that Plan, their own or as the default, and `?over=true` the people over
+  a limit of the Plan they have. `POST /api/v1/plan-assignments` gives one Plan, or with `null`
+  the default, to up to 100 people at once, all or none, and answers each person's Plan before and
+  after and what they are over; with `dry_run` it gives nothing and answers the same (422
+  `invalid_assignment` for nobody, more than 100 people, or someone who is not a User). A person's
+  `plan` also gains `assigned_by` and `assigned_at`, who gave their own Plan and when, and `use`,
+  each count beside its limit; `GET /api/v1/plans` gains `administrators`. No Plan has the key
+  `new`, which the New plan page's address uses: a Plan named New gets `new-2`, and
+  `POST /api/v1/plans` refuses the key (422 `invalid_plan`). Migration 33 adds the `plans` table
   and the Plan columns; rolling back to an earlier release works with the same database, which
   ignores them and limits nobody, and after upgrading again, Plans are as the administrator left
   them.

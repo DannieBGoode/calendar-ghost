@@ -834,6 +834,9 @@ class PlansResponse(ApiResponse):
     """The Default Plan's key; null until an administrator chooses one."""
     sync_intervals: list[SyncIntervalValue]
     """The sync intervals a Plan may be given now, in order."""
+    administrators: int
+    """Everyone who holds the Installation Administrator role, active or not. No Plan limits
+    them, though each Plan's `people` counts those who have it."""
     plans: list[PlanResponse]
 
 
@@ -858,6 +861,29 @@ class OverLimitResponse(ApiResponse):
     allowed: int
 
 
+class LimitUseResponse(ApiResponse):
+    """How many of one resource a person has, beside what the Plan they have allows."""
+
+    in_use: int
+    allowed: int | None
+    """What the Plan allows; null when it sets no limit, and 0 for Integration Tokens it does
+    not include."""
+
+
+class PersonPlanUseResponse(ApiResponse):
+    """How much of the Plan they have a person uses, each count beside its limit, for the
+    meters on their page (ADR 0030, amended, for the token count). Counts only."""
+
+    rules: LimitUseResponse
+    """Rules that count toward the rule limit: Active Rules."""
+    connected_accounts: LimitUseResponse
+    """Calendar accounts, Disconnected Accounts included."""
+    integration_tokens: LimitUseResponse
+    """Unrevoked Integration Tokens."""
+    sync_interval: SyncIntervalValue
+    """How soon the Plan they have syncs their rules, which counts nothing."""
+
+
 class PersonPlanOverviewResponse(PersonPlanResponse):
     """A person's Plan, as the Operator Overview shows it on their page and their row of People
     (ADR 0038)."""
@@ -869,6 +895,14 @@ class PersonPlanOverviewResponse(PersonPlanResponse):
     """Each limit of the Plan they have that they have more of than it allows, rules first,
     whether or not Plans are on; empty for an administrator or a disabled person, whom no Plan
     limits."""
+    assigned_by: str | None
+    """The email of the administrator who gave them their own Plan; null while they have the
+    Default Plan, and when billing gave it or that administrator was deleted or has no email."""
+    assigned_at: str | None
+    """When their own Plan was last given, in ISO 8601; null while they have the Default Plan,
+    or when nothing recorded it."""
+    use: PersonPlanUseResponse | None
+    """How much of the Plan they have they use, whoever they are; null when they have no Plan."""
 
 
 class OwnPlanResponse(ApiResponse):
@@ -931,6 +965,41 @@ class AssignPlanRequest(BaseModel):
     """Required: the Plan's key, or null to return the User to the Default Plan."""
 
 
+class PlanAssignmentsRequest(BaseModel):
+    # Bounded by the Plan key's own check, as `PlansSettingRequest.default_plan` is.
+    plan: str | None
+    """Required: the Plan's key, or null to return everyone named to the Default Plan."""
+    # No length bound here: more than 100 people, or none, answers 422 invalid_assignment with
+    # its reason, and an identifier that names no User answers the same.
+    user_ids: list[str]
+    """1 to 100 Users, each once; a User named again counts once."""
+    dry_run: bool = False
+    """Give nothing, and answer what giving it would do."""
+
+
+class PlanMoveResponse(ApiResponse):
+    """One person given a Plan, or who would be in a dry run."""
+
+    user_id: str
+    email: str | None
+    had: AppliedPlanResponse | None
+    """The Plan they had: their own, or else the Default Plan; null when they had neither."""
+    has: AppliedPlanResponse | None
+    """The Plan they have now, or would have in a dry run; null when it is the Default Plan and
+    there is none."""
+    over: list[OverLimitResponse]
+    """Each limit of the Plan they have that they have more of than it allows, rules first,
+    whether or not Plans are on; empty for an administrator or a disabled person."""
+
+
+class PlanAssignmentsResponse(ApiResponse):
+    """Everyone a Plan was given to, in the order first named, or would be in a dry run."""
+
+    dry_run: bool
+    """Whether nothing was given."""
+    people: list[PlanMoveResponse]
+
+
 class PersonResponse(UserResponse):
     """A row of People: who the User is, and the Operator Overview's summary of them."""
 
@@ -974,6 +1043,9 @@ class PeopleQuery(BaseModel):
     plan: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,31}$")
     """Only people who have the Plan with this key: as their own, or, for the Default Plan, by
     having none of their own."""
+    over: bool = False
+    """Only people over a limit of the Plan they have, whether or not Plans are on; never an
+    administrator or a disabled person."""
     sort: Literal["joined", "email", "last_sign_in", "verdict"] = "joined"
     """By verdict, the most urgent comes first in ascending order."""
     order: Literal["asc", "desc"] = "asc"

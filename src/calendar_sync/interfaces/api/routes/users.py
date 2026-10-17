@@ -274,8 +274,9 @@ def users(
     query: Annotated[PeopleQuery, Query()],
     response: Response,
 ) -> UserPageResponse:
-    """One page of the people here, by part of their email, role, state, and Installation
-    Status, each with what the Operator Overview shows about them; never their calendars."""
+    """One page of the people here, by part of their email, role, state, Installation Status,
+    Plan, and whether they are over a limit of it, each with what the Operator Overview shows
+    about them; never their calendars."""
     response.headers.update(NO_STORE)
     found = services.operator_overview.page(actor, _overview_query(query))
     return UserPageResponse(
@@ -429,6 +430,7 @@ def _overview_query(query: PeopleQuery) -> OverviewQuery:
         ),
         verdict=StatusVerdict(query.verdict) if query.verdict else None,
         by_verdict=by_verdict,
+        over=query.over,
     )
 
 

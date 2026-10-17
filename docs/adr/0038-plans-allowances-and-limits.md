@@ -310,17 +310,28 @@ limits, what they count, and how they are enforced do not change.
   records outside it ([ADR 0029](0029-isolate-users-in-one-sqlite-database.md)). With `dry_run` it
   writes nothing and answers the same, so Assign people and Change plan say who would be over
   before anyone confirms. It refuses a Plan that does not exist with 404 `plan_not_found`, and no
-  Users, more than 100, or an identifier that names no User with 422 `invalid_assignment`.
+  Users, more than 100, or an identifier that names no User with 422 `invalid_assignment`, whose
+  `reason` is `no_people`, `too_many` (with `limit`), or `unknown_people`; the Users are in the
+  body, not the path, and only an administrator reaches the route, so 422 reveals nothing. A User
+  named twice counts once. The use case, `AssignPlans`, lives in Operations beside the Operator
+  Overview it reads (`application/operations/plan_assignment.py`), and the store checks that
+  every User exists under the same write lock as the update. Unlike People, it fails when Plans
+  cannot be read, so it never says nobody would be over when it could not count.
   `PUT /api/v1/users/{user_id}/plan` stays for one User.
 - **People over a limit.** `GET /api/v1/users?over=true` lists the Users over a limit of the Plan
   they have, as `over` says, alone or with `?plan=`, for the "1 over a limit" chip and Everyone's
-  Limits filter.
+  Limits filter. Like the rest of People it fails open: while Plans cannot be read, it finds
+  nobody.
 - **How much of their Plan a person uses.** The person's Plan gains `assigned_by`, the email of
   the administrator who last gave it, `assigned_at`, and `use`: how many Active Rules, Connected
   Accounts, and unrevoked Integration Tokens they have, counted by `plan_use`
-  ([ADR 0030](0030-users-administrators-and-registration.md), amended, for the token count). A
-  fault reading them leaves the Plan out, as before.
-- **The Plans overview counts administrators,** for the status card's Never limited fact.
+  ([ADR 0030](0030-users-administrators-and-registration.md), amended, for the token count). Each
+  count comes beside the limit of the Plan they have, with its sync interval, for anyone with a
+  Plan, administrators included. `assigned_by` and `assigned_at` come from
+  `PlanAssignments.last_changes` only while the Plan is their own, and `assigned_by` is null once
+  that administrator is deleted. A fault reading them leaves the Plan out, as before.
+- **The Plans overview counts administrators,** for the status card's Never limited fact:
+  `administrators` is every User who holds the role, active or not.
 - **No Plan has the key `new`.** The New plan panel's address is `/people/plans/new`, beside each
   Plan's `/people/plans/<key>`, so a key made from a name treats `new` as taken (a Plan named New
   gets `new-2`), and `POST /api/v1/plans` refuses a request that names it with 422 `invalid_plan`.

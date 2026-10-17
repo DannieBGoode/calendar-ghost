@@ -10,10 +10,13 @@ from calendar_sync.domain.plans import (
     NO_LIMITS,
     NO_LIMITS_PLAN,
     OFFERED_INTERVALS,
+    PEOPLE_PER_ASSIGNMENT,
     UNLIMITED,
     Allowance,
     AllowanceBasis,
     AssignmentSource,
+    InvalidAssignment,
+    InvalidAssignmentReason,
     InvalidPlan,
     InvalidPlanReason,
     LimitedResource,
@@ -37,6 +40,7 @@ from calendar_sync.domain.plans import (
     needs_no_limits_plan,
     plan_key_from,
     plan_reach,
+    require_assignable,
     require_offered,
     require_removable,
     require_room,
@@ -404,6 +408,55 @@ def test_a_new_plan_keeps_the_key_asked_for_or_gets_one_from_its_name() -> None:
 
     assert asked.keyed({"free"}) == Plan(PlanKey("starter"), "Free", FREE.limits)
     assert made.keyed({"free"}) == Plan(PlanKey("free-2"), "Free", FREE.limits)
+
+
+@pytest.mark.parametrize(
+    ("name", "taken", "key"),
+    [
+        pytest.param("New", set(), "new-2", id="new"),
+        pytest.param("NEW!", set(), "new-2", id="in any spelling"),
+        pytest.param("New", {"new-2"}, "new-3", id="new-2 taken"),
+        pytest.param("Newsletter", set(), "newsletter", id="only the whole key"),
+        pytest.param("New plan", set(), "new-plan", id="a longer key"),
+    ],
+)
+def test_no_key_made_from_a_name_is_new_which_names_the_new_plan_page(
+    name: str, taken: set[str], key: str
+) -> None:
+    """The New plan panel's address is /people/plans/new, beside each Plan's own (ADR 0038)."""
+    assert plan_key_from(name, taken) == PlanKey(key)
+
+
+def test_a_new_plan_may_not_ask_for_the_key_new() -> None:
+    with pytest.raises(InvalidPlan) as refused:
+        NewPlan("Starter", FREE.limits, PlanKey("new"))
+
+    assert refused.value.reason is InvalidPlanReason.KEY
+    assert "reserved" in str(refused.value)
+    # Any other key that starts with it may be asked for.
+    assert NewPlan("Starter", FREE.limits, PlanKey("new-2")).key == PlanKey("new-2")
+
+
+@pytest.mark.parametrize("people", [1, PEOPLE_PER_ASSIGNMENT])
+def test_a_plan_is_given_to_one_to_a_hundred_people_at_once(people: int) -> None:
+    assert refusal(lambda: require_assignable(people)) is None
+
+
+@pytest.mark.parametrize(
+    ("people", "reason"),
+    [
+        pytest.param(0, InvalidAssignmentReason.NO_PEOPLE, id="nobody"),
+        pytest.param(101, InvalidAssignmentReason.TOO_MANY, id="more than a hundred"),
+    ],
+)
+def test_a_plan_given_to_nobody_or_to_more_than_a_hundred_people_is_refused(
+    people: int, reason: InvalidAssignmentReason
+) -> None:
+    refused = refusal(lambda: require_assignable(people))
+
+    assert isinstance(refused, InvalidAssignment)
+    assert refused.reason is reason
+    assert not isinstance(refused, DomainValidationError)
 
 
 def test_the_default_plan_is_refused_before_counting_who_has_it() -> None:
