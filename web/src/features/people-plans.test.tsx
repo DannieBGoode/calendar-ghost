@@ -735,7 +735,8 @@ describe("The catalog", () => {
     expect(chip.getAttribute("data-tone")).toBe("attention")
     expect(chip.querySelector("svg[aria-hidden='true']")).not.toBeNull()
     expect(chip.getAttribute("href")).toBe("/people?plan=family&over=true")
-    expect(chip.getAttribute("aria-label")).toBe("Show the 1 person on Family who is over a limit")
+    expect(chip.getAttribute("aria-label")).toBe("1 over a limit on Family")
+    expect(chip.getAttribute("aria-label")).toContain(chip.textContent)
     expect(cell("free", "people").querySelector(".plan-over")).toBeNull()
 
     await click(chip)
@@ -749,7 +750,8 @@ describe("The catalog", () => {
     expect(chip.textContent).toBe("2 would be over")
     expect(chip.hasAttribute("data-tone")).toBe(false)
     expect(chip.querySelector("svg")).toBeNull()
-    expect(chip.getAttribute("aria-label")).toBe("Show the 2 people on Family who would be over a limit")
+    expect(chip.getAttribute("aria-label")).toBe("2 would be over on Family")
+    expect(chip.getAttribute("aria-label")).toContain(chip.textContent)
   })
 })
 

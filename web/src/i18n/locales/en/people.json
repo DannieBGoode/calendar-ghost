@@ -473,16 +473,16 @@
         "other": "{count} over a limit"
       },
       "overLabel": {
-        "one": "Show the {count} person on {name} who is over a limit",
-        "other": "Show the {count} people on {name} who are over a limit"
+        "one": "{count} over a limit on {name}",
+        "other": "{count} over a limit on {name}"
       },
       "wouldBeOver": {
         "one": "{count} would be over",
         "other": "{count} would be over"
       },
       "wouldBeOverLabel": {
-        "one": "Show the {count} person on {name} who would be over a limit",
-        "other": "Show the {count} people on {name} who would be over a limit"
+        "one": "{count} would be over on {name}",
+        "other": "{count} would be over on {name}"
       },
       "note": "People counts include administrators, who are never limited. Paused rules and drafts never count as active."
     },
