@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import { ApiError, type PlanSummary } from "@/lib/api"
+import { ApiError, type PlanSummary, type SyncInterval } from "@/lib/api"
 
 import { PlanEditor } from "./plan-editor"
 
@@ -45,6 +45,7 @@ type Props = {
   enabled?: boolean
   /** The names of the other Plans. */
   others?: string[]
+  intervals?: SyncInterval[]
 }
 
 let container: HTMLDivElement
@@ -70,7 +71,7 @@ afterEach(() => {
 })
 
 /** Renders the editor, or renders it again with new props, keeping what was typed. */
-function show({ plan, pending, error, enabled = true, others = [] }: Props) {
+function show({ plan, pending, error, enabled = true, others = [], intervals = ["instant", "5_minutes"] }: Props) {
   root ??= createRoot(container)
   act(() => {
     root?.render(
@@ -79,7 +80,7 @@ function show({ plan, pending, error, enabled = true, others = [] }: Props) {
           plan={plan}
           enabled={enabled}
           others={others}
-          intervals={["instant", "5_minutes"]}
+          intervals={intervals}
           pending={pending}
           error={error}
           onSave={onSave}
@@ -104,10 +105,6 @@ function field(id: string): HTMLInputElement {
   return element(id) as HTMLInputElement
 }
 
-function select(id: string): HTMLSelectElement {
-  return element(id) as HTMLSelectElement
-}
-
 function button(name: string): HTMLButtonElement {
   const found = [...container.querySelectorAll("button")].find((candidate) => candidate.textContent.trim() === name)
   if (!found) throw new Error(`No button "${name}"`)
@@ -126,6 +123,46 @@ function description(target: Element): string[] {
   return ids.map((id) => element(id).textContent)
 }
 
+function labelOf(input: HTMLInputElement): string {
+  return [...(input.labels ?? [])].map((label) => label.textContent).join(" ")
+}
+
+/** The limit field around a count's number, by the number's id. */
+function limitField(id: string): HTMLFieldSetElement {
+  const found = field(id).closest("fieldset")
+  if (!found) throw new Error(`No limit field around ${id}`)
+  return found
+}
+
+/** One option of a limit field: None, Up to, or No limit. */
+function option(id: string, label: string): HTMLInputElement {
+  const found = [...limitField(id).querySelectorAll<HTMLInputElement>("input[type='radio']")].find(
+    (radio) => labelOf(radio) === label,
+  )
+  if (!found) throw new Error(`No option ${label} for ${id}`)
+  return found
+}
+
+function options(id: string): string[] {
+  return [...limitField(id).querySelectorAll<HTMLInputElement>("input[type='radio']")].map(labelOf)
+}
+
+/** The Sync speed radio for an interval. */
+function speed(interval: SyncInterval): HTMLInputElement {
+  const found = container.querySelector<HTMLInputElement>(`[role='radiogroup'] input[type='radio'][value='${interval}']`)
+  if (!found) throw new Error(`No sync speed ${interval}`)
+  return found
+}
+
+function speedGroup(): HTMLElement {
+  return container.querySelector<HTMLElement>("[role='radiogroup']")!
+}
+
+/** How many changes the footer says are not saved; empty while there are none. */
+function changes(): string {
+  return container.querySelector(".plan-panel-changes")?.textContent ?? ""
+}
+
 function type(input: HTMLInputElement, value: string) {
   act(() => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(input, value)
@@ -135,13 +172,6 @@ function type(input: HTMLInputElement, value: string) {
 
 function click(target: HTMLElement) {
   act(() => target.click())
-}
-
-function choose(target: HTMLSelectElement, value: string) {
-  act(() => {
-    target.value = value
-    target.dispatchEvent(new Event("change", { bubbles: true }))
-  })
 }
 
 function submit() {
@@ -162,11 +192,12 @@ function refuse(error: unknown, plan: PlanSummary | null = family) {
 }
 
 describe("PlanEditor", () => {
-  it("asks for a name, never a key, and starts there", () => {
+  it("asks for a name, never a key, and says where people see it", () => {
     edit(null)
     expect(container.querySelector("[id$='-key']")).toBeNull()
     expect([...container.querySelectorAll("label")].map((label) => label.textContent)).not.toContain("Key")
-    expect(document.activeElement).toBe(field("plan-new-name"))
+    expect(container.querySelector("label[for='plan-new-name']")?.textContent).toBe("Name")
+    expect(description(field("plan-new-name"))).toEqual(["People see this name in Your plan."])
 
     type(field("plan-new-name"), " Family Plus ")
     submit()
@@ -181,7 +212,7 @@ describe("PlanEditor", () => {
     edit()
     expect(container.querySelector("[id$='-key']")).toBeNull()
     expect(container.textContent).not.toContain("family")
-    expect(document.activeElement).toBe(field("plan-family-name"))
+    expect(field("plan-family-name").value).toBe("Family")
     type(field("plan-family-name"), "Family Large")
     submit()
     expect(onSave.mock.calls[0]?.[0]).toStrictEqual({
@@ -191,41 +222,92 @@ describe("PlanEditor", () => {
   })
 
   it.each([
-    ["rules", "Rules that can sync", "Paused rules and drafts don't count."],
-    ["accounts", "Calendar accounts they can connect", "Disconnected accounts count. Reconnecting an account is never refused."],
-    ["tokens", "Integration Tokens they can have", "Revoked tokens don't count."],
-  ])("puts the %s limit under Limits for each person, saying what counts", (limit, label, hint) => {
+    [
+      "rules",
+      "Maximum active rules",
+      "Running rules count, and rules waiting for an account to be reauthorized. Paused rules and drafts don't.",
+      { choices: ["No limit", "Up to"], unit: "rules" },
+    ],
+    [
+      "accounts",
+      "Maximum calendar accounts",
+      "Every connected account counts, disconnected ones too. Reconnecting is never refused.",
+      { choices: ["No limit", "Up to"], unit: "accounts" },
+    ],
+    ["tokens", "Maximum Integration Tokens", "Revoked tokens don't count.", { choices: ["None", "Up to", "No limit"], unit: "" }],
+  ])("puts the %s limit under Limits for each person as one choice, saying what counts", (limit, legend, hint, { choices, unit }) => {
     edit()
-    const limits = form().querySelector("fieldset")
-    expect(limits?.querySelector("legend")?.textContent).toBe("Limits for each person")
-    const group = limits?.querySelector(`[role='group'][aria-labelledby='plan-family-${limit}-label']`)
-    expect(element(`plan-family-${limit}-label`).textContent).toBe(label)
-    expect(container.querySelector(`label[for='plan-family-${limit}']`)?.textContent).toBe(label)
-    expect(group?.querySelector(`#plan-family-${limit}`)).toBe(field(`plan-family-${limit}`))
-    expect(description(group!)).toEqual([hint])
-    const noLimit = field(`plan-family-${limit}-unlimited`)
-    expect(group?.contains(noLimit)).toBe(true)
-    expect(container.querySelector(`label[for='plan-family-${limit}-unlimited']`)?.textContent).toBe("No limit")
+    const limits = form().querySelector("fieldset.plan-limits")!
+    expect(limits.querySelector("legend")?.textContent).toBe("Limits for each person")
+    const own = limitField(`plan-family-${limit}`)
+    expect(limits.contains(own)).toBe(true)
+    expect(own.querySelector("legend")?.textContent).toBe(legend)
+    expect(description(own)).toEqual([hint])
+    expect(options(`plan-family-${limit}`)).toEqual(choices)
+    expect(option(`plan-family-${limit}`, "Up to").checked).toBe(true)
+    // The number is named by the limit and reads as a spin button, never a scroll-wheel number field.
+    const amount = field(`plan-family-${limit}`)
+    expect(amount.getAttribute("role")).toBe("spinbutton")
+    expect(amount.type).toBe("text")
+    expect(element(amount.getAttribute("aria-labelledby")!).textContent).toBe(legend)
+    expect(amount.closest("[data-stepper]")?.nextElementSibling?.textContent ?? "").toBe(unit)
   })
 
-  it("puts how soon calendars sync with the limits, and says longer intervals come later", () => {
+  it("names the unit by the number typed", () => {
     edit()
-    const interval = select("plan-family-interval")
-    expect(form().querySelector("fieldset")?.contains(interval)).toBe(true)
-    expect(container.querySelector("label[for='plan-family-interval']")?.textContent).toBe("How soon calendars sync")
-    expect(description(interval)).toEqual(["Longer intervals arrive in a later release."])
+    type(field("plan-family-rules"), "1")
+    expect(field("plan-family-rules").closest("[data-stepper]")?.nextElementSibling?.textContent).toBe("rule")
+    type(field("plan-family-accounts"), "1")
+    expect(field("plan-family-accounts").closest("[data-stepper]")?.nextElementSibling?.textContent).toBe("account")
   })
 
-  it("shows a limit's number only while it has one", () => {
+  it("offers sync speed as radio cards with what each does, and says longer intervals come later", () => {
+    edit()
+    const group = speedGroup()
+    expect(form().querySelector("fieldset.plan-limits")?.contains(group)).toBe(true)
+    expect(element(group.getAttribute("aria-labelledby")!).textContent).toBe("Sync speed")
+    expect(description(group)).toEqual([
+      "How soon changes reach the other calendars.",
+      "Longer intervals arrive in a later release.",
+    ])
+    expect([...group.querySelectorAll<HTMLInputElement>("input[type='radio']")].map((radio) => [labelOf(radio), description(radio)])).toEqual([
+      [
+        "Instant",
+        ["Changes sync soon after the calendar provider reports them, with a check every 5 minutes as a backup."],
+      ],
+      ["Every 5 minutes", ["Calendars are checked for changes every 5 minutes."]],
+    ])
+    expect(speed("instant").checked).toBe(true)
+  })
+
+  it("keeps an interval a later release saved, beside the offered ones", () => {
+    show({
+      plan: { ...family, limits: { ...family.limits, sync_interval: "60_minutes" } },
+      pending: false,
+      error: null,
+      intervals: ["instant", "5_minutes", "60_minutes"],
+    })
+    expect(labelOf(speed("60_minutes"))).toBe("Every hour")
+    expect(description(speed("60_minutes"))).toEqual(["Calendars are checked for changes every hour."])
+    expect(speed("60_minutes").checked).toBe(true)
+  })
+
+  it("keeps a limit's number while No limit is chosen, so choosing Up to again keeps it", () => {
     edit(null)
-    expect(container.querySelector("#plan-new-rules")).toBeNull()
-    expect(field("plan-new-rules-unlimited").checked).toBe(true)
-    click(field("plan-new-rules-unlimited"))
-    expect(field("plan-new-rules").value).toBe("")
-    type(field("plan-new-rules"), "4")
-    click(field("plan-new-rules-unlimited"))
-    expect(container.querySelector("#plan-new-rules")).toBeNull()
-    click(field("plan-new-rules-unlimited"))
+    expect(option("plan-new-rules", "No limit").checked).toBe(true)
+    const amount = field("plan-new-rules")
+    expect(amount.value).toBe("")
+    expect(amount.tabIndex).toBe(-1)
+    click(option("plan-new-rules", "Up to"))
+    expect(amount.tabIndex).toBe(0)
+    type(amount, "4")
+    click(option("plan-new-rules", "No limit"))
+    expect(field("plan-new-rules").value).toBe("4")
+    expect(field("plan-new-rules").tabIndex).toBe(-1)
+    type(field("plan-new-name"), "Small")
+    submit()
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ limits: { rules: null } })
+    click(option("plan-new-rules", "Up to"))
     expect(field("plan-new-rules").value).toBe("4")
   })
 
@@ -242,30 +324,55 @@ describe("PlanEditor", () => {
     expect(save.getAttribute("aria-disabled")).toBeNull()
     expect(save.getAttribute("aria-describedby")).toBeNull()
 
-    click(field("plan-new-rules-unlimited"))
-    const rulesReason = "Enter how many rules can sync, from 1 to 10,000, or choose No limit."
+    click(option("plan-new-rules", "Up to"))
+    const rulesReason = "Enter how many active rules, from 1 to 10,000, or choose No limit."
     expect(reason()).toEqual([rulesReason])
-    for (const wrong of ["0", "2.5", "10001", "-1"]) {
+    for (const wrong of ["0", "10001"]) {
       type(field("plan-new-rules"), wrong)
       expect(reason()).toEqual([rulesReason])
     }
     type(field("plan-new-rules"), "3")
     expect(reason()).toEqual([])
 
-    click(field("plan-new-accounts-unlimited"))
-    expect(reason()).toEqual(["Enter how many calendar accounts they can connect, from 1 to 10,000, or choose No limit."])
+    click(option("plan-new-accounts", "Up to"))
+    expect(reason()).toEqual(["Enter how many calendar accounts, from 1 to 10,000, or choose No limit."])
     type(field("plan-new-accounts"), "1")
-    click(field("plan-new-tokens-unlimited"))
-    expect(reason()).toEqual(["Enter how many Integration Tokens they can have, from 0 to 10,000, or choose No limit."])
+    click(option("plan-new-tokens", "Up to"))
+    const tokensReason = "Enter how many Integration Tokens, from 1 to 10,000, or choose None or No limit."
+    expect(reason()).toEqual([tokensReason])
     type(field("plan-new-tokens"), "0")
+    expect(reason()).toEqual([tokensReason])
+    click(option("plan-new-tokens", "None"))
     expect(reason()).toEqual([])
-    choose(select("plan-new-interval"), "5_minutes")
+    click(speed("5_minutes"))
 
     submit()
     expect(onSave.mock.calls[0]?.[0]).toStrictEqual({
       name: "Small",
       limits: { rules: 3, connected_accounts: 1, integration_tokens: 0, sync_interval: "5_minutes" },
     })
+  })
+
+  it("counts the changes not saved, and says nothing while there are none", () => {
+    edit()
+    expect(changes()).toBe("")
+    type(field("plan-family-name"), "Family Large")
+    expect(changes()).toBe("1 change not saved")
+    type(field("plan-family-rules"), "2")
+    expect(changes()).toBe("2 changes not saved")
+    type(field("plan-family-rules"), "5")
+    expect(changes()).toBe("1 change not saved")
+    click(option("plan-family-accounts", "No limit"))
+    expect(changes()).toBe("2 changes not saved")
+    click(option("plan-family-accounts", "Up to"))
+    expect(changes()).toBe("1 change not saved")
+    type(field("plan-family-name"), " Family ")
+    expect(changes()).toBe("")
+    click(speed("5_minutes"))
+    expect(changes()).toBe("1 change not saved")
+    // Saved, the plan says what was typed, so nothing is left unsaved.
+    show({ plan: { ...family, limits: { ...family.limits, sync_interval: "5_minutes" } }, pending: false, error: null })
+    expect(changes()).toBe("")
   })
 
   it("keeps every control focusable while it saves, and ignores them until it ends", () => {
@@ -282,8 +389,8 @@ describe("PlanEditor", () => {
       button("Cancel"),
       field("plan-family-name"),
       field("plan-family-rules"),
-      field("plan-family-rules-unlimited"),
-      select("plan-family-interval"),
+      option("plan-family-rules", "No limit"),
+      speed("5_minutes"),
     ]
     for (const control of controls) {
       expect(control.disabled).toBe(false)
@@ -293,13 +400,13 @@ describe("PlanEditor", () => {
     expect(field("plan-family-rules").readOnly).toBe(true)
 
     type(field("plan-family-name"), "Other")
-    click(field("plan-family-rules-unlimited"))
-    choose(select("plan-family-interval"), "5_minutes")
+    click(option("plan-family-rules", "No limit"))
+    click(speed("5_minutes"))
     click(button("Cancel"))
     submit()
     expect(field("plan-family-name").value).toBe("Family")
-    expect(field("plan-family-rules-unlimited").checked).toBe(false)
-    expect(select("plan-family-interval").value).toBe("instant")
+    expect(option("plan-family-rules", "No limit").checked).toBe(false)
+    expect(speed("instant").checked).toBe(true)
     expect(onCancel).not.toHaveBeenCalled()
     expect(onSave).toHaveBeenCalledTimes(1)
 
@@ -312,28 +419,29 @@ describe("PlanEditor", () => {
   it.each([
     [
       refusal("invalid_plan", { reason: "name" }),
-      "plan-family-name",
+      () => field("plan-family-name"),
       "Give the plan a name of 1 to 60 characters, without line breaks or other control characters.",
     ],
-    [refusal("invalid_plan", { reason: "interval" }), "plan-family-interval", "Choose one of the offered sync intervals."],
-    [refusal("plan_name_taken", { name: "Free" }), "plan-family-name", "Another plan is named Free. Choose a different name."],
+    [refusal("invalid_plan", { reason: "interval" }), () => speed("instant"), "Choose one of the offered sync intervals."],
+    [refusal("plan_name_taken", { name: "Free" }), () => field("plan-family-name"), "Another plan is named Free. Choose a different name."],
     [
       refusal("invalid_plan", { reason: "limit" }),
-      "plan-family-rules",
+      () => field("plan-family-rules"),
       "Enter each limit as a whole number up to 10000, at least 1 for rules and calendar accounts, or choose No limit.",
     ],
-  ])("moves focus to the field a refusal names, and shows why under it", (error, id, reason) => {
+  ])("moves focus to the field a refusal names, and shows why under it", (error, refusedField, reason) => {
     edit()
     act(() => button("Save plan").focus())
     refuse(error)
 
-    const refused = element(id)
+    const refused = refusedField()
     expect(document.activeElement).toBe(refused)
-    expect(refused.getAttribute("aria-invalid")).toBe("true")
-    expect(description(refused)).toContain(reason)
+    const invalid = refused.closest("[role='radiogroup']") ?? refused
+    expect(invalid.getAttribute("aria-invalid")).toBe("true")
+    expect(description(invalid)).toContain(reason)
     const shown = [...form().querySelectorAll("[role='alert']")]
     expect(shown.map((alert) => alert.textContent)).toEqual([reason])
-    expect(shown[0]?.closest(".field-stack")?.contains(refused)).toBe(true)
+    expect(shown[0]?.closest(".plan-field")?.contains(refused)).toBe(true)
     expect(form().querySelectorAll("[aria-invalid='true']")).toHaveLength(1)
   })
 
@@ -350,7 +458,7 @@ describe("PlanEditor", () => {
       expect(document.activeElement).toBe(named)
       expect(named.getAttribute("aria-invalid")).toBe("true")
       const reason = "Another plan is named Free. Choose a different name."
-      expect(description(named)).toEqual([reason])
+      expect(description(named)).toEqual(["People see this name in Your plan.", reason])
       expect([...form().querySelectorAll("[role='alert']")].map((alert) => alert.textContent)).toEqual([reason])
 
       // Pressing Save again takes focus back to the name it waits for.
@@ -377,7 +485,7 @@ describe("PlanEditor", () => {
 
   it("names the first limit with a number when a limit is refused", () => {
     edit()
-    click(field("plan-family-rules-unlimited"))
+    click(option("plan-family-rules", "No limit"))
     refuse(refusal("invalid_plan", { reason: "limit" }))
     expect(document.activeElement).toBe(field("plan-family-accounts"))
     expect(field("plan-family-accounts").getAttribute("aria-invalid")).toBe("true")
@@ -408,43 +516,26 @@ describe("PlanEditor", () => {
   })
 
   it.each([
-    [
-      "rules",
-      "2",
-      "1 person on this plan has more rules syncing than this. Their rules keep syncing, but they cannot start another.",
-    ],
-    [
-      "rules",
-      "1",
-      "3 people on this plan have more rules syncing than this. Their rules keep syncing, but they cannot start another.",
-    ],
-    [
-      "accounts",
-      "1",
-      "2 people on this plan have more calendar accounts than this. They keep them, but cannot connect another.",
-    ],
-    [
-      "tokens",
-      "0",
-      "2 people on this plan have more Integration Tokens than this. They keep them, but cannot issue another.",
-    ],
-    [
-      "tokens",
-      "1",
-      "1 person on this plan has more Integration Tokens than this. They keep them, but cannot issue another.",
-    ],
+    ["rules", "2", "1 person on Family has more active rules than this. Their rules keep syncing, but they can't start another."],
+    ["rules", "1", "3 people on Family have more active rules than this. Their rules keep syncing, but they can't start another."],
+    ["accounts", "1", "2 people on Family have more calendar accounts than this. They keep them, but can't connect another."],
+    ["tokens", "None", "2 people on Family have more Integration Tokens than this. They keep them, but can't issue another."],
+    ["tokens", "1", "1 person on Family has more Integration Tokens than this. They keep them, but can't issue another."],
   ])("warns, and announces, how many people a lower %s limit of %s leaves with more", (limit, lower, warning) => {
     edit()
     const status = element(`plan-family-${limit}-warning`)
     expect(status.getAttribute("role")).toBe("status")
     expect(status.textContent).toBe("")
 
-    type(field(`plan-family-${limit}`), lower)
+    if (lower === "None") click(option(`plan-family-${limit}`, "None"))
+    else type(field(`plan-family-${limit}`), lower)
     expect(status.textContent).toBe(warning)
     expect(status.getAttribute("data-tone")).toBe("attention")
     expect(status.querySelector("svg[aria-hidden='true']")).not.toBeNull()
     expect(description(field(`plan-family-${limit}`))).toContain(warning)
+    expect(limitField(`plan-family-${limit}`).contains(status)).toBe(true)
 
+    click(option(`plan-family-${limit}`, "Up to"))
     type(field(`plan-family-${limit}`), "9")
     expect(status.textContent).toBe("")
   })
@@ -455,16 +546,16 @@ describe("PlanEditor", () => {
     expect(element("plan-family-rules-warning").textContent).toBe("")
     type(field("plan-family-rules"), "1")
     expect(element("plan-family-rules-warning").textContent).toBe(
-      "3 people on this plan have more rules syncing than this. Their rules keep syncing, but they cannot start another.",
+      "3 people on Family have more active rules than this. Their rules keep syncing, but they can't start another.",
     )
   })
 
   it("warns when a limit replaces No limit, naming one person as one", () => {
     edit({ ...family, limits: { ...family.limits, rules: null }, use: { ...family.use, rules: [{ in_use: 9, people: 1 }] } })
-    click(field("plan-family-rules-unlimited"))
+    click(option("plan-family-rules", "Up to"))
     type(field("plan-family-rules"), "8")
     expect(element("plan-family-rules-warning").textContent).toBe(
-      "1 person on this plan has more rules syncing than this. Their rules keep syncing, but they cannot start another.",
+      "1 person on Family has more active rules than this. Their rules keep syncing, but they can't start another.",
     )
   })
 
@@ -472,15 +563,15 @@ describe("PlanEditor", () => {
     show({ plan: family, pending: false, error: null, enabled: false })
     type(field("plan-family-accounts"), "1")
     expect(element("plan-family-accounts-warning").textContent).toBe(
-      "2 people on this plan have more calendar accounts than this. Once plans are on, they keep them, but cannot connect another.",
+      "2 people on Family have more calendar accounts than this. Once plans are on, they keep them, but can't connect another.",
     )
     type(field("plan-family-rules"), "1")
     expect(element("plan-family-rules-warning").textContent).toBe(
-      "3 people on this plan have more rules syncing than this. Once plans are on, their rules keep syncing, but they cannot start another.",
+      "3 people on Family have more active rules than this. Once plans are on, their rules keep syncing, but they can't start another.",
     )
-    type(field("plan-family-tokens"), "0")
+    click(option("plan-family-tokens", "None"))
     expect(element("plan-family-tokens-warning").textContent).toBe(
-      "2 people on this plan have more Integration Tokens than this. Once plans are on, they keep them, but cannot issue another.",
+      "2 people on Family have more Integration Tokens than this. Once plans are on, they keep them, but can't issue another.",
     )
   })
 
@@ -491,7 +582,7 @@ describe("PlanEditor", () => {
     act(() => root?.unmount())
     root = null
     edit(null)
-    click(field("plan-new-rules-unlimited"))
+    click(option("plan-new-rules", "Up to"))
     type(field("plan-new-rules"), "1")
     expect(element("plan-new-rules-warning").textContent).toBe("")
   })
@@ -503,7 +594,7 @@ describe("PlanEditor", () => {
     act(() => root?.unmount())
     root = null
     edit()
-    click(field("plan-family-tokens-unlimited"))
+    click(option("plan-family-tokens", i18n.t("people.plans.editor.noLimit")))
     type(field("plan-family-rules"), "1")
     type(field("plan-family-accounts"), "1")
     refuse(refusal("invalid_plan", { reason: "name" }))
@@ -513,11 +604,12 @@ describe("PlanEditor", () => {
     show({ plan: family, pending: false, error: null, enabled: false })
     type(field("plan-family-rules"), "1")
     type(field("plan-family-accounts"), "1")
-    type(field("plan-family-tokens"), "0")
+    click(option("plan-family-tokens", i18n.t("people.plans.editor.none")))
     expect(untranslatedText(container, [family.name])).toEqual([])
     act(() => root?.unmount())
     root = null
     show({ plan: null, pending: false, error: null, others: ["Free"] })
+    click(option("plan-new-rules", i18n.t("people.plans.editor.upTo")))
     type(field("plan-new-name"), "Free")
     submit()
     expect(untranslatedText(container, ["Free"])).toEqual([])

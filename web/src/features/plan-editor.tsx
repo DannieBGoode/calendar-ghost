@@ -1,18 +1,16 @@
-import { TriangleAlert } from "lucide-react"
 import { useEffect, useRef, useState, type RefObject, type SyntheticEvent } from "react"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { NativeSelect } from "@/components/ui/native-select"
+import { NameField, PlanLimitField, SpeedField } from "@/features/plan-editor-fields"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
-import type { MessageKey } from "@/i18n/types"
 import type { ApiError, PlanChange, PlanSummary, SyncInterval } from "@/lib/api"
 import {
   COUNT_LIMIT,
   LIMIT_MINIMUM,
   LIMIT_NAMES,
+  LIMIT_WORDS,
+  changedFields,
   draftOf,
   missingField,
   nameRefusal,
@@ -20,50 +18,21 @@ import {
   peopleOver,
   refusedField,
   type DraftField,
-  type LimitDraft,
   type LimitName,
   type PlanDraft,
 } from "@/lib/plan-draft"
-import { intervalLabel } from "@/lib/plans"
 
 /**
- * How the editor words each limit: its label, what counts, why Save waits for it, and what a lower
- * limit does, now or once Plans are on.
+ * Moves focus to one of the editor's fields, found by the `data-field` it carries: the field
+ * itself, or the radio chosen in a group of them, as Sync speed is.
  */
-const LIMIT_WORDS: Readonly<
-  Record<LimitName, { label: MessageKey; hint: MessageKey; missing: MessageKey; lowered: MessageKey; loweredLater: MessageKey }>
-> = {
-  rules: {
-    label: "people.plans.editor.rules",
-    hint: "people.plans.editor.rulesHint",
-    missing: "people.plans.editor.missing.rules",
-    lowered: "people.plans.editor.lowered.rules",
-    loweredLater: "people.plans.editor.loweredLater.rules",
-  },
-  accounts: {
-    label: "people.plans.editor.accounts",
-    hint: "people.plans.editor.accountsHint",
-    missing: "people.plans.editor.missing.accounts",
-    lowered: "people.plans.editor.lowered.accounts",
-    loweredLater: "people.plans.editor.loweredLater.accounts",
-  },
-  tokens: {
-    label: "people.plans.editor.tokens",
-    hint: "people.plans.editor.tokensHint",
-    missing: "people.plans.editor.missing.tokens",
-    lowered: "people.plans.editor.lowered.tokens",
-    loweredLater: "people.plans.editor.loweredLater.tokens",
-  },
-}
-
-/** Moves focus to one of the editor's fields, found by the `data-field` it carries. */
 function focusField(form: HTMLFormElement | null, field: DraftField) {
-  form?.querySelector<HTMLElement>(`[data-field='${field}']`)?.focus()
-}
-
-/** The ids an element's aria-describedby names, leaving out those not shown. */
-function describedBy(...ids: (string | false | null | undefined)[]): string | undefined {
-  return ids.filter(Boolean).join(" ") || undefined
+  const target = form?.querySelector<HTMLElement>(`[data-field='${field}']`)
+  if (!target || target instanceof HTMLInputElement) {
+    target?.focus()
+    return
+  }
+  ;(target.querySelector<HTMLElement>("input:checked") ?? target.querySelector<HTMLElement>("input"))?.focus()
 }
 
 /**
@@ -101,13 +70,13 @@ function useRefusal(error: unknown, draft: PlanDraft, form: RefObject<HTMLFormEl
 }
 
 /**
- * The inline form that adds a Plan or changes one: its name, then its limits for each person,
- * each a whole number or No limit, and how soon calendars sync. It asks for no key: the server
- * makes a new Plan's from its name. `intervals` are the offered ones, plus the Plan's own when a
- * later release saved one this release does not offer. While a save is on its way, every control
- * keeps its focus but ignores changes; a refusal moves focus to the field it names, and so does a
- * name another Plan already has, before anything is sent. A limit typed lower than the Plan's
- * says how many of the people it limits would have more than it allows.
+ * The form in a Plan's panel that adds a Plan or changes one: its name, then its limits for each
+ * person, each No limit or Up to a whole number, and for Integration Tokens None, then how soon
+ * calendars sync, and a footer with Save plan, Cancel, and how many changes are not saved. It asks
+ * for no key: the server makes a new Plan's from its name. While a save is on its way, every
+ * control keeps its focus but ignores changes; a refusal moves focus to the field it names, and so
+ * does a name another Plan already has, before anything is sent. A limit lower than the people on
+ * the Plan use says how many of them it would leave with more than it allows.
  */
 export function PlanEditor({
   plan,
@@ -137,15 +106,14 @@ export function PlanEditor({
   const [draft, setDraft] = useState(() => (plan === null && start ? start : draftOf(plan, intervals)))
   const form = useRef<HTMLFormElement>(null)
   const refusal = useRefusal(error, draft, form)
-  useEffect(() => {
-    focusField(form.current, "name")
-  }, [])
   const id = plan ? `plan-${plan.key}` : "plan-new"
+  // What the Plan has saved, or how a new one started, so the footer counts what changed since.
+  const saved = plan === null && start ? start : draftOf(plan, intervals)
   const errorOf = (field: DraftField) => (refusal.field === field ? refusal.message : null)
   const warningOf = (name: LimitName) => {
-    const count = peopleOver(plan, draft, name)
+    const count = plan ? peopleOver(plan, draft, name) : 0
     const words = LIMIT_WORDS[name]
-    return count > 0 ? t(enabled ? words.lowered : words.loweredLater, { count }) : ""
+    return count > 0 ? t(enabled ? words.lowered : words.loweredLater, { count, name: plan?.name ?? "" }) : ""
   }
 
   function change(next: Partial<PlanDraft>) {
@@ -168,235 +136,71 @@ export function PlanEditor({
   }
 
   return (
-    <form ref={form} className="setting-form" noValidate onSubmit={submit}>
-      <NameField
-        id={id}
-        value={draft.name}
-        pending={pending}
-        error={errorOf("name")}
-        onChange={(name) => change({ name })}
-      />
-      <fieldset className="plan-limits">
-        <legend>{t("people.plans.editor.limitsLegend")}</legend>
-        {LIMIT_NAMES.map((name) => (
-          <LimitField
-            key={name}
+    <form ref={form} id={`${id}-form`} className="plan-panel-form" noValidate onSubmit={submit}>
+      <div className="plan-panel-body">
+        <NameField id={id} value={draft.name} pending={pending} error={errorOf("name")} onChange={(name) => change({ name })} />
+        <fieldset className="plan-limits">
+          <legend>{t("people.plans.editor.limitsLegend")}</legend>
+          {LIMIT_NAMES.map((name) => (
+            <PlanLimitField
+              key={name}
+              id={id}
+              name={name}
+              limit={draft[name]}
+              pending={pending}
+              error={errorOf(name)}
+              warning={warningOf(name)}
+              onChange={(limit) => change({ [name]: limit })}
+            />
+          ))}
+          <SpeedField
             id={id}
-            name={name}
-            limit={draft[name]}
+            intervals={intervals}
+            value={draft.interval}
             pending={pending}
-            error={errorOf(name)}
-            warning={warningOf(name)}
-            onChange={(limit) => change({ [name]: limit })}
+            error={errorOf("interval")}
+            onChange={(interval) => change({ interval })}
           />
-        ))}
-        <IntervalField
-          id={id}
-          intervals={intervals}
-          value={draft.interval}
-          pending={pending}
-          error={errorOf("interval")}
-          onChange={(interval) => change({ interval })}
-        />
-      </fieldset>
-      {refusal.message && refusal.field === null && (
-        <p className="field-error" role="alert">
-          {refusal.message}
-        </p>
-      )}
-      <EditorActions id={id} missing={missingField(draft)} pending={pending} onCancel={onCancel} />
+        </fieldset>
+      </div>
+      <EditorFooter
+        id={id}
+        missing={missingField(draft)}
+        changes={changedFields(draft, saved)}
+        pending={pending}
+        refusal={refusal.field === null ? refusal.message : null}
+        onCancel={onCancel}
+      />
     </form>
   )
 }
 
-/** A refusal under the field it names, announced as it appears. */
-function FieldError({ id, text }: { id: string; text: string | null }) {
-  if (!text) return null
-  return (
-    <p id={id} className="field-error" role="alert">
-      {text}
-    </p>
-  )
-}
-
-function NameField({
-  id,
-  value,
-  pending,
-  error,
-  onChange,
-}: {
-  id: string
-  value: string
-  pending: boolean
-  error: string | null
-  onChange: (name: string) => void
-}) {
-  const { t } = useI18n()
-  const fieldId = `${id}-name`
-  return (
-    <div className="field-stack">
-      <Label htmlFor={fieldId}>{t("people.plans.editor.name")}</Label>
-      <Input
-        id={fieldId}
-        data-field="name"
-        value={value}
-        maxLength={60}
-        autoComplete="off"
-        readOnly={pending}
-        aria-disabled={pending || undefined}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy(error && `${fieldId}-error`)}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <FieldError id={`${fieldId}-error`} text={error} />
-    </div>
-  )
-}
-
 /**
- * One limit for each person: No limit, or the whole number it hides while ticked. No limit comes
- * first, so the number it shows is the next stop. A lower limit that leaves people with more than
- * it allows warns in a status that is always present, so a screen reader announces it as it appears.
+ * Save and Cancel, then how many changes are not saved. Neither button is ever natively disabled,
+ * so focus stays on them while a save is on its way; Save names the field it waits for, and
+ * Cancel waits for Save, so its answer has a form to show in. A refusal that names no field shows
+ * under them.
  */
-function LimitField({
-  id,
-  name,
-  limit,
-  pending,
-  error,
-  warning,
-  onChange,
-}: {
-  id: string
-  name: LimitName
-  limit: LimitDraft
-  pending: boolean
-  error: string | null
-  /** What a lower limit means for the people it leaves with more than it allows; empty when nobody. */
-  warning: string
-  onChange: (next: LimitDraft) => void
-}) {
-  const { t } = useI18n()
-  const words = LIMIT_WORDS[name]
-  const fieldId = `${id}-${name}`
-  return (
-    <div role="group" aria-labelledby={`${fieldId}-label`} aria-describedby={`${fieldId}-hint`} className="field-stack">
-      <Label id={`${fieldId}-label`} htmlFor={limit.unlimited ? undefined : fieldId}>
-        {t(words.label)}
-      </Label>
-      <div className="plan-limit-entry">
-        <label className="checkbox-row" htmlFor={`${fieldId}-unlimited`}>
-          <input
-            id={`${fieldId}-unlimited`}
-            type="checkbox"
-            checked={limit.unlimited}
-            aria-disabled={pending || undefined}
-            onChange={(event) => onChange({ ...limit, unlimited: event.target.checked })}
-          />
-          <span>
-            <strong>{t("people.plans.editor.noLimit")}</strong>
-          </span>
-        </label>
-        {!limit.unlimited && (
-          <Input
-            id={fieldId}
-            data-field={name}
-            type="number"
-            inputMode="numeric"
-            min={LIMIT_MINIMUM[name]}
-            max={COUNT_LIMIT}
-            step={1}
-            value={limit.amount}
-            readOnly={pending}
-            aria-disabled={pending || undefined}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={describedBy(error && `${fieldId}-error`, warning && `${fieldId}-warning`)}
-            onChange={(event) => onChange({ ...limit, amount: event.target.value })}
-          />
-        )}
-      </div>
-      <p id={`${fieldId}-hint`} className="field-hint">
-        {t(words.hint)}
-      </p>
-      <p id={`${fieldId}-warning`} className="field-hint" data-tone="attention" role="status">
-        {warning ? (
-          <>
-            <TriangleAlert aria-hidden="true" />
-            {warning}
-          </>
-        ) : null}
-      </p>
-      <FieldError id={`${fieldId}-error`} text={error} />
-    </div>
-  )
-}
-
-function IntervalField({
-  id,
-  intervals,
-  value,
-  pending,
-  error,
-  onChange,
-}: {
-  id: string
-  intervals: SyncInterval[]
-  value: SyncInterval
-  pending: boolean
-  error: string | null
-  onChange: (interval: SyncInterval) => void
-}) {
-  const i18n = useI18n()
-  const { t } = i18n
-  const fieldId = `${id}-interval`
-  return (
-    <div className="field-stack">
-      <Label htmlFor={fieldId}>{t("people.plans.editor.interval")}</Label>
-      <NativeSelect
-        id={fieldId}
-        data-field="interval"
-        value={value}
-        aria-disabled={pending || undefined}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy(error && `${fieldId}-error`, `${fieldId}-hint`)}
-        onChange={(event) => onChange(event.target.value as SyncInterval)}
-      >
-        {intervals.map((interval) => (
-          <option key={interval} value={interval}>
-            {intervalLabel(i18n, interval)}
-          </option>
-        ))}
-      </NativeSelect>
-      <p id={`${fieldId}-hint`} className="field-hint">
-        {t("people.plans.editor.intervalHint")}
-      </p>
-      <FieldError id={`${fieldId}-error`} text={error} />
-    </div>
-  )
-}
-
-/**
- * Save and Cancel. Neither is ever natively disabled, so focus stays on them while a save is on
- * its way; Save names the field it waits for, and Cancel waits for Save, so its answer has a form
- * to show in.
- */
-function EditorActions({
+function EditorFooter({
   id,
   missing,
+  changes,
   pending,
+  refusal,
   onCancel,
 }: {
   id: string
   missing: "name" | LimitName | null
+  changes: number
   pending: boolean
+  refusal: string | null
   onCancel: () => void
 }) {
   const { t } = useI18n()
   const reasonId = `${id}-save-reason`
   return (
-    <>
-      <div className="setting-form-actions">
+    <div className="plan-panel-foot">
+      <div className="plan-panel-actions">
         <Button
           type="submit"
           aria-disabled={missing !== null || pending || undefined}
@@ -408,6 +212,9 @@ function EditorActions({
         <Button type="button" variant="ghost" aria-disabled={pending || undefined} onClick={() => !pending && onCancel()}>
           {t("people.plans.editor.cancel")}
         </Button>
+        {changes > 0 && (
+          <span className="plan-panel-status plan-panel-changes">{t("people.plans.editor.changes", { count: changes })}</span>
+        )}
       </div>
       {missing && (
         <p id={reasonId} className="field-hint">
@@ -416,6 +223,11 @@ function EditorActions({
             : t(LIMIT_WORDS[missing].missing, { min: LIMIT_MINIMUM[missing], max: COUNT_LIMIT })}
         </p>
       )}
-    </>
+      {refusal && (
+        <p className="field-error" role="alert">
+          {refusal}
+        </p>
+      )}
+    </div>
   )
 }

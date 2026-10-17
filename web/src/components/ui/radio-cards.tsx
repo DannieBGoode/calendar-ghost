@@ -24,7 +24,9 @@ type RadioCardsProps<T extends string> = RadioCardsName & {
   onValueChange: (value: T) => void
   /** A command is on its way: every option keeps focus but ignores choices. */
   pending?: boolean
-  "aria-describedby"?: string
+  "aria-describedby"?: string | undefined
+  /** The choice was refused, as a form's refusal names it. */
+  "aria-invalid"?: boolean | undefined
   className?: string
 }
 

@@ -1,5 +1,5 @@
 import { Clock, Info, TriangleAlert, Zap } from "lucide-react"
-import { useEffect, useRef, type ReactNode, type RefObject } from "react"
+import { useRef, type ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { PlanDetails } from "@/features/people-plan-details"
@@ -7,8 +7,9 @@ import { PlanRowMenu } from "@/features/people-plan-row-menu"
 import type { ShowPeople } from "@/features/people-plans-status"
 import type { ChangeSetting } from "@/features/use-setting-change"
 import { useI18n } from "@/i18n/provider"
+import type { I18n } from "@/i18n/translator"
 import type { PlanSummary, PlansOverview, SyncInterval } from "@/lib/api"
-import { isPlainLeftClick } from "@/lib/navigation"
+import { appPathForPlanPanel, isPlainLeftClick, type PlanPanel } from "@/lib/navigation"
 import { peoplePath, type PeopleFilter } from "@/lib/people-query"
 import { catalogOrder, countCell, speedLabel } from "@/lib/plans-catalog"
 import type { PlanWorkControls } from "@/lib/use-plan-work"
@@ -16,6 +17,8 @@ import type { PlanCommands } from "@/lib/use-plans"
 
 /** Fixed widths, so columns stay put whatever the Plans say. */
 const COLUMN_CLASSES = ["col-plan", "col-count", "col-count", "col-count", "col-speed", "col-people", "col-actions"]
+/** Beside an open panel, only what picks a Plan. */
+const COMPACT_COLUMN_CLASSES = ["col-plan", "col-speed", "col-people"]
 /** The counts each Plan has a column for, by where its limits keep them. */
 const COUNTS = [
   { column: "rules", label: "people.plans.catalog.rules", limit: "rules" },
@@ -30,19 +33,29 @@ type RowContext = {
   work: PlanWorkControls
   onChange: ChangeSetting
   onShowPeople: ShowPeople
-  /** The reader, whom Assign people marks "You". */
-  currentUserId: string
+}
+
+/** What the catalog says under its title: how to use it, or which Plan's panel is open beside it. */
+function catalogIntro({ t }: I18n, plans: readonly PlanSummary[], panel: PlanPanel | null): string {
+  if (panel?.plan === null) return t("people.plans.catalog.newBeside")
+  const open = plans.find((plan) => plan.key === panel?.plan)
+  return open ? t("people.plans.catalog.openBeside", { name: open.name }) : t("people.plans.catalog.intro")
 }
 
 /**
  * The catalog of Plans: a table with a column for each limit, the default first, so Plans compare
- * by column. Each Plan's name opens its form, People opens Everyone filtered by it, and More
- * actions holds the rest. When the catalog itself is narrow, each row becomes a card that labels
- * its values.
+ * by column. Each Plan's name opens its panel, People opens Everyone filtered by it, and More
+ * actions holds the rest. While a panel is open beside it, the catalog keeps only the Plan, its
+ * sync speed, and who has it, and marks the open Plan. When the catalog itself is narrow, each row
+ * becomes a card that labels its values.
  */
 export function PlansCatalog(context: RowContext) {
-  const { t } = useI18n()
+  const i18n = useI18n()
+  const { t } = i18n
   const plans = catalogOrder(context.overview.plans)
+  const { panel } = context.work
+  const compact = panel !== null
+  const columns = compact ? COMPACT_COLUMN_CLASSES : COLUMN_CLASSES
   return (
     <section
       id="plans-catalog"
@@ -52,125 +65,134 @@ export function PlansCatalog(context: RowContext) {
     >
       <div className="plans-catalog-head">
         <h3 id="plans-catalog-title">{t("people.plans.catalog.title", { count: plans.length })}</h3>
-        <p className="plans-catalog-intro">{t("people.plans.catalog.intro")}</p>
+        <p className="plans-catalog-intro">{catalogIntro(i18n, plans, panel)}</p>
       </div>
       <div className="plans-table-wrap">
-        <table className="plans-table" role="table" aria-labelledby="plans-catalog-title">
+        <table className="plans-table" role="table" aria-labelledby="plans-catalog-title" data-compact={compact || undefined}>
           <colgroup>
-            {COLUMN_CLASSES.map((name, index) => (
+            {columns.map((name, index) => (
               <col key={index} className={name} />
             ))}
           </colgroup>
-          <thead role="rowgroup">
-            <tr role="row">
-              <th scope="col" role="columnheader">
-                {t("people.plans.catalog.plan")}
-              </th>
-              {COUNTS.map(({ column, label }) => (
-                <th key={column} scope="col" role="columnheader" className="plans-count">
-                  {t(label)}
-                </th>
-              ))}
-              <th scope="col" role="columnheader">
-                {t("people.plans.catalog.speed")}
-              </th>
-              <th scope="col" role="columnheader">
-                {t("people.plans.catalog.people")}
-              </th>
-              <th scope="col" role="columnheader">
-                <span className="sr-only">{t("people.plans.catalog.actions")}</span>
-              </th>
-            </tr>
-          </thead>
+          <CatalogHead compact={compact} />
           <tbody role="rowgroup">
             {plans.map((plan) => (
-              <PlanRows key={plan.key} plan={plan} {...context} />
+              <PlanRows key={plan.key} plan={plan} compact={compact} columns={columns.length} {...context} />
             ))}
           </tbody>
         </table>
       </div>
       <p className="plans-catalog-note">
         <Info aria-hidden="true" />
-        {t("people.plans.catalog.note")}
+        {t(compact ? "people.plans.catalog.noteOpen" : "people.plans.catalog.note")}
       </p>
     </section>
   )
 }
 
+/** The column headings; beside an open panel, only Plan, Sync speed, and People. */
+function CatalogHead({ compact }: { compact: boolean }) {
+  const { t } = useI18n()
+  return (
+    <thead role="rowgroup">
+      <tr role="row">
+        <th scope="col" role="columnheader">
+          {t("people.plans.catalog.plan")}
+        </th>
+        {!compact &&
+          COUNTS.map(({ column, label }) => (
+            <th key={column} scope="col" role="columnheader" className="plans-count">
+              {t(label)}
+            </th>
+          ))}
+        <th scope="col" role="columnheader">
+          {t("people.plans.catalog.speed")}
+        </th>
+        <th scope="col" role="columnheader">
+          {t("people.plans.catalog.people")}
+        </th>
+        {!compact && (
+          <th scope="col" role="columnheader">
+            <span className="sr-only">{t("people.plans.catalog.actions")}</span>
+          </th>
+        )}
+      </tr>
+    </thead>
+  )
+}
+
 /**
- * One Plan's row, and under it, while open, its form, Assign people, its removal's confirmation,
- * or why a command from its menu was refused. A Plan just added takes focus at its name as it shows.
+ * One Plan's row, and under it, while open, its removal's confirmation, or why a command from its
+ * menu was refused.
  */
-function PlanRows({ plan, ...context }: RowContext & { plan: PlanSummary }) {
+function PlanRows({ plan, compact, columns, ...context }: RowContext & { plan: PlanSummary; compact: boolean; columns: number }) {
   const { work } = context
   const row = useRef<HTMLTableRowElement>(null)
-  const name = useRef<HTMLButtonElement>(null)
-  const justAdded = work.added === plan.key
-  useEffect(() => {
-    if (justAdded) name.current?.focus()
-  }, [justAdded])
-  const open = work.work !== null && work.work.action !== "new" && work.work.key === plan.key ? work.work.action : null
-
+  const removing = work.removing === plan.key
+  const selected = work.panel?.plan === plan.key
   return (
     <>
-      <tr ref={row} role="row" className="plan-row" data-plan={plan.key} data-open={open !== null || undefined}>
-        <NameCell plan={plan} editing={open === "edit"} work={work} name={name} />
-        <CountCells plan={plan} />
+      <tr
+        ref={row}
+        role="row"
+        className="plan-row"
+        data-plan={plan.key}
+        data-open={removing || undefined}
+        data-selected={selected || undefined}
+      >
+        <NameCell plan={plan} selected={selected} work={work} />
+        {!compact && <CountCells plan={plan} />}
         <SpeedCell interval={plan.limits.sync_interval} />
         <PeopleCell plan={plan} enabled={context.overview.enabled} onShowPeople={context.onShowPeople} />
-        <td role="cell" className="plan-col-actions">
-          <PlanRowMenu
-            plan={plan}
-            overview={context.overview}
-            work={work}
-            onMakeDefault={() => context.onChange({ enabled: context.overview.enabled, defaultPlan: plan.key }, context.overview)}
-          />
-        </td>
+        {!compact && (
+          <td role="cell" className="plan-col-actions">
+            <PlanRowMenu
+              plan={plan}
+              overview={context.overview}
+              work={work}
+              onMakeDefault={() => context.onChange({ enabled: context.overview.enabled, defaultPlan: plan.key }, context.overview)}
+            />
+          </td>
+        )}
       </tr>
       <PlanDetails
         plan={plan}
-        open={open}
-        columns={COLUMN_CLASSES.length}
+        removing={removing}
+        columns={columns}
         row={row}
-        name={name}
         overview={context.overview}
         commands={context.commands}
         work={work}
-        currentUserId={context.currentUserId}
       />
     </>
   )
 }
 
-/** The Plan's name, which opens its form, with Default beside it and, under it, whom the default is for. */
-function NameCell({
-  plan,
-  editing,
-  work,
-  name,
-}: {
-  plan: PlanSummary
-  editing: boolean
-  work: PlanWorkControls
-  name: RefObject<HTMLButtonElement | null>
-}) {
+/**
+ * The Plan's name, a link that opens its panel, marked as the page while it is open, with Default
+ * beside it and, under it, whom the default is for.
+ */
+function NameCell({ plan, selected, work }: { plan: PlanSummary; selected: boolean; work: PlanWorkControls }) {
   const { t } = useI18n()
+  const { openPanel } = work
+  const panel = { plan: plan.key, tab: "limits" } as const
   return (
     <td role="cell" className="plan-col-plan">
       <div className="plan-name-row">
-        <button
-          ref={name}
+        <a
           id={`plan-name-${plan.key}`}
-          type="button"
+          href={appPathForPlanPanel(panel)}
           className="plan-name"
-          aria-label={t("people.plans.editLabel", { name: plan.name })}
-          aria-expanded={editing}
-          aria-controls={editing ? `plan-edit-${plan.key}` : undefined}
+          aria-current={selected ? "page" : undefined}
           aria-disabled={work.busy || undefined}
-          onClick={() => (editing ? work.close() : work.open({ action: "edit", key: plan.key }))}
+          onClick={(event) => {
+            if (!isPlainLeftClick(event)) return
+            event.preventDefault()
+            openPanel(panel)
+          }}
         >
           {plan.name}
-        </button>
+        </a>
         {plan.is_default && <Badge variant="outline">{t("people.plans.isDefault")}</Badge>}
       </div>
       {plan.is_default && <p className="plan-sub">{t("people.plans.catalog.defaultFor")}</p>}

@@ -10,6 +10,7 @@ import {
   appPathForLocation,
   appPathForPeopleTab,
   appPathForPerson,
+  appPathForPlanPanel,
   appPathForRule,
   appPathForRulePreview,
   appPathForSettingsTab,
@@ -19,6 +20,7 @@ import {
   isKnownAppPath,
   isPlainLeftClick,
   isViewingRule,
+  planCopyFromSearch,
   yourPlanPath,
 } from "./navigation"
 
@@ -102,6 +104,41 @@ describe("People tab URLs", () => {
     }
     expect(appPathForLocation({ view: "people", ruleId: null, peopleTab: "plans" })).toBe("/people/plans")
     expect(isKnownAppPath("/people/plans")).toBe(true)
+  })
+
+  it("opens one Plan's panel at its own address, with its People tab under it", () => {
+    expect(appPathForPlanPanel({ plan: "free plan", tab: "limits" })).toBe("/people/plans/free%20plan")
+    expect(appPathForPlanPanel({ plan: "free", tab: "people" })).toBe("/people/plans/free/people")
+    for (const [path, tab] of [
+      ["/people/plans/free%20plan", "limits"],
+      ["/people/plans/free%20plan/", "limits"],
+      ["/people/plans/free%20plan/people", "people"],
+    ] as const) {
+      const location = { view: "people", ruleId: null, peopleTab: "plans", planPanel: { plan: "free plan", tab } }
+      expect(appLocationFromPathname(path)).toEqual(location)
+      expect(isKnownAppPath(path)).toBe(true)
+    }
+    expect(
+      appPathForLocation({ view: "people", ruleId: null, peopleTab: "plans", planPanel: { plan: "free", tab: "people" } }),
+    ).toBe("/people/plans/free/people")
+    expect(isKnownAppPath("/people/plans/free/limits")).toBe(false)
+    expect(appLocationFromPathname("/people/plans/%E0").view).toBe("overview")
+  })
+
+  it("opens New plan at /people/plans/new, which no Plan's key can be, carrying the Plan it copies", () => {
+    expect(appPathForPlanPanel({ plan: null, tab: "limits" })).toBe("/people/plans/new")
+    expect(appPathForPlanPanel({ plan: null, tab: "limits" }, "free plan")).toBe("/people/plans/new?copy=free+plan")
+    for (const path of ["/people/plans/new", "/people/plans/new/people"]) {
+      expect(appLocationFromPathname(path)).toEqual({
+        view: "people",
+        ruleId: null,
+        peopleTab: "plans",
+        planPanel: { plan: null, tab: "limits" },
+      })
+    }
+    expect(planCopyFromSearch("?copy=free+plan")).toBe("free plan")
+    expect(planCopyFromSearch("?copy=")).toBeNull()
+    expect(planCopyFromSearch("")).toBeNull()
   })
 })
 

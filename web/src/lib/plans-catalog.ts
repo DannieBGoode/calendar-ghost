@@ -67,6 +67,24 @@ export function statusSentence(i18n: I18n, overview: PlansOverview): string {
   return name === null ? t("people.plans.status.offSentenceNoDefault", parts) : t("people.plans.status.offSentence", parts)
 }
 
+/**
+ * The status card's sentence while a Plan's panel is open beside it, shorter, as the card then
+ * keeps only its title, this, and the switch: "They limit 2 people. People without a plan get No
+ * limits.", and while off what turning Plans on would do.
+ */
+export function compactStatusSentence(i18n: I18n, overview: PlansOverview): string {
+  const { t } = i18n
+  const limited = limitedPeople(overview.plans)
+  if (overview.enabled) {
+    const name = defaultName(overview) ?? ""
+    return limited > 0
+      ? t("people.plans.status.compactOn", { count: limited, name })
+      : t("people.plans.status.compactOnNobody", { name })
+  }
+  if (overview.plans.length === 0) return t("people.plans.status.compactOffNoPlans")
+  return t("people.plans.status.compactOff", { impact: wouldLimit(i18n, limited, overPeople(overview.plans)) })
+}
+
 /** One of the status card's facts; `over` counts who is over a limit, for the fact that shows them. */
 export type PlansFact = {
   id: "limited" | "over" | "default" | "administrators"

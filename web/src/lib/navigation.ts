@@ -23,6 +23,11 @@ export function defaultSettingsTab(search: string): SettingsTab {
 export type PeopleTab = "everyone" | "invitations" | "plans"
 export const DEFAULT_PEOPLE_TAB: PeopleTab = "everyone"
 
+/** A Plan's side panel shows its Limits, the editor, or its People, who has it and who could. */
+export type PlanPanelTab = "limits" | "people"
+/** The side panel open beside the Plans catalog: one Plan's, by key, or a new Plan's with null. */
+export type PlanPanel = { plan: string | null; tab: PlanPanelTab }
+
 /** Activity's tabs: what the rules did, then the Incidents that needed or need attention. */
 export type ActivityTab = "history" | "incidents"
 export const DEFAULT_ACTIVITY_TAB: ActivityTab = "history"
@@ -37,6 +42,8 @@ export type AppLocation = {
   personId?: string
   /** The Invitations or Plans tab of People; People opens at everyone here. */
   peopleTab?: PeopleTab
+  /** The side panel open beside the Plans tab's catalog. */
+  planPanel?: PlanPanel
   /** The Incidents tab of Activity; Activity opens at its history. */
   activityTab?: ActivityTab
   /** One Incident, open beside the Incidents table. */
@@ -96,6 +103,11 @@ const PEOPLE_TAB_PATHS: Record<PeopleTab, string> = {
   invitations: "/people/invitations",
   plans: "/people/plans",
 }
+/** One Plan's panel, or with `new`, which no Plan's key can be, a new Plan's. */
+const PLAN_PATH = /^\/people\/plans\/([^/]+)(\/people)?$/
+const NEW_PLAN = "new"
+/** The query naming the Plan a new one copies, as Duplicate opens it. */
+const PLAN_COPY_PARAM = "copy"
 const INCIDENTS_PATH = "/activity/incidents"
 const INCIDENT_PATH = /^\/activity\/incidents\/([^/]+)$/
 const SETTINGS_TAB_PATH = /^\/settings\/([^/]+)$/
@@ -104,8 +116,8 @@ function normalize(pathname: string): string {
   return pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname
 }
 
-function idFromPath(pattern: RegExp, pathname: string): string | null {
-  const encoded = pattern.exec(pathname)?.[1]
+/** An identifier from one segment of an address, or null when it is blank or not encoded right. */
+function decodedSegment(encoded: string | undefined): string | null {
   if (encoded === undefined) return null
   try {
     const id = decodeURIComponent(encoded)
@@ -115,6 +127,10 @@ function idFromPath(pattern: RegExp, pathname: string): string | null {
   }
 }
 
+function idFromPath(pattern: RegExp, pathname: string): string | null {
+  return decodedSegment(pattern.exec(pathname)?.[1])
+}
+
 function ruleIdFromPath(pathname: string): string | null {
   return idFromPath(RULE_PATH, pathname)
 }
@@ -122,6 +138,14 @@ function ruleIdFromPath(pathname: string): string | null {
 function peopleTabFromPath(pathname: string): PeopleTab | null {
   const tabs = Object.entries(PEOPLE_TAB_PATHS) as [PeopleTab, string][]
   return tabs.find(([tab, path]) => tab !== DEFAULT_PEOPLE_TAB && path === pathname)?.[0] ?? null
+}
+
+function planPanelFromPath(pathname: string): PlanPanel | null {
+  const match = PLAN_PATH.exec(pathname)
+  const plan = decodedSegment(match?.[1])
+  if (!match || plan === null) return null
+  if (plan === NEW_PLAN) return { plan: null, tab: "limits" }
+  return { plan, tab: match[2] ? "people" : "limits" }
 }
 
 function settingsTabFromPath(pathname: string): SettingsTab | null {
@@ -137,6 +161,8 @@ export function appLocationFromPathname(pathname: string): AppLocation {
   if (previewedRuleId !== null) return { view: "rules", ruleId: previewedRuleId, rulePreview: true }
   const peopleTab = peopleTabFromPath(normalized)
   if (peopleTab !== null) return { view: "people", ruleId: null, peopleTab }
+  const planPanel = planPanelFromPath(normalized)
+  if (planPanel !== null) return { view: "people", ruleId: null, peopleTab: "plans", planPanel }
   if (normalized === INCIDENTS_PATH) return { view: "activity", ruleId: null, activityTab: "incidents" }
   const incidentId = idFromPath(INCIDENT_PATH, normalized)
   if (incidentId !== null) return { view: "activity", ruleId: null, activityTab: "incidents", incidentId }
@@ -179,6 +205,25 @@ export function appPathForPeopleTab(tab: PeopleTab): string {
   return PEOPLE_TAB_PATHS[tab]
 }
 
+/**
+ * A Plan's panel: its Limits at `/people/plans/<key>`, its People under it, or New plan at
+ * `/people/plans/new`, carrying the key of the Plan it copies, as Duplicate opens it.
+ */
+export function appPathForPlanPanel({ plan, tab }: PlanPanel, copyOf: string | null = null): string {
+  const plans = PEOPLE_TAB_PATHS.plans
+  if (plan === null) {
+    const search = copyOf ? `?${new URLSearchParams({ [PLAN_COPY_PARAM]: copyOf }).toString()}` : ""
+    return `${plans}/${NEW_PLAN}${search}`
+  }
+  const path = `${plans}/${encodeURIComponent(plan)}`
+  return tab === "people" ? `${path}/people` : path
+}
+
+/** The key of the Plan a new Plan's panel copies, from its address's query; null for none. */
+export function planCopyFromSearch(search: string): string | null {
+  return new URLSearchParams(search).get(PLAN_COPY_PARAM)?.trim() || null
+}
+
 export function appPathForActivityTab(tab: ActivityTab): string {
   return tab === "incidents" ? INCIDENTS_PATH : APP_VIEW_PATHS.activity
 }
@@ -210,10 +255,16 @@ function rulePath(ruleId: string, preview: boolean | undefined): string {
   return preview ? appPathForRulePreview(ruleId) : appPathForRule(ruleId)
 }
 
+/** People's address: one person's page, a Plan's panel, a tab, or Everyone. */
+function peoplePathForLocation({ personId, planPanel, peopleTab }: AppLocation): string {
+  if (personId) return appPathForPerson(personId)
+  if (planPanel) return appPathForPlanPanel(planPanel)
+  return appPathForPeopleTab(peopleTab ?? DEFAULT_PEOPLE_TAB)
+}
+
 export function appPathForLocation(location: AppLocation): string {
   if (location.ruleId !== null) return rulePath(location.ruleId, location.rulePreview)
-  if (location.view === "people" && location.personId) return appPathForPerson(location.personId)
-  if (location.view === "people" && location.peopleTab) return appPathForPeopleTab(location.peopleTab)
+  if (location.view === "people") return peoplePathForLocation(location)
   if (location.view === "activity") return activityPathForLocation(location)
   if (location.view === "settings" && location.settingsTab) return appPathForSettingsTab(location.settingsTab)
   return appPathForView(location.view)
@@ -224,6 +275,7 @@ export function isKnownAppPath(pathname: string): boolean {
   return (
     PATH_VIEWS.has(normalized) ||
     peopleTabFromPath(normalized) !== null ||
+    planPanelFromPath(normalized) !== null ||
     normalized === INCIDENTS_PATH ||
     idFromPath(INCIDENT_PATH, normalized) !== null ||
     ruleIdFromPath(normalized) !== null ||

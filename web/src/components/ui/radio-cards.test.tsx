@@ -98,6 +98,29 @@ describe("RadioCards", () => {
     expect(fiveMinutes.checked).toBe(false)
   })
 
+  it("says on the group what describes the choice, and that it was refused", () => {
+    const container = render(
+      <>
+        <p id="speed-hint">How soon changes reach the other calendars.</p>
+        <p id="speed-error">Choose one of the offered sync intervals.</p>
+        <RadioCards
+          aria-label="Sync speed"
+          aria-describedby="speed-hint speed-error"
+          aria-invalid
+          value="instant"
+          options={SPEEDS}
+          onValueChange={vi.fn()}
+        />
+      </>,
+    )
+    const group = container.querySelector("[role='radiogroup']")!
+    expect(group.getAttribute("aria-invalid")).toBe("true")
+    expect(referenced(group, "aria-describedby")).toEqual([
+      "How soon changes reach the other calendars.",
+      "Choose one of the offered sync intervals.",
+    ])
+  })
+
   it("shares one name, so the arrow keys move the choice and Tab stops once, as a native radio group does", () => {
     const container = render(<Harness />)
     const instant = option(container, "Instant")

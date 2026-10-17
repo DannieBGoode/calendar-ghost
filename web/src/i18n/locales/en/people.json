@@ -441,7 +441,14 @@
       "default": "Default plan",
       "neverLimited": "Never limited",
       "show": "Show",
-      "showLabel": "Show who is over a limit"
+      "showLabel": "Show who is over a limit",
+      "compactOn": {
+        "one": "They limit <strong>{count} person</strong>. People without a plan get <strong>{name}</strong>.",
+        "other": "They limit <strong>{count} people</strong>. People without a plan get <strong>{name}</strong>."
+      },
+      "compactOnNobody": "They limit nobody. People without a plan get <strong>{name}</strong>.",
+      "compactOff": "Everyone can use everything. {impact}",
+      "compactOffNoPlans": "Everyone can use everything, with no limits."
     },
     "catalog": {
       "title": {
@@ -484,7 +491,10 @@
         "one": "{count} would be over on {name}",
         "other": "{count} would be over on {name}"
       },
-      "note": "People counts include administrators, who are never limited. Paused rules and drafts never count as active."
+      "note": "People counts include administrators, who are never limited. Paused rules and drafts never count as active.",
+      "openBeside": "{name} is open beside the list.",
+      "newBeside": "New plan is open beside the list.",
+      "noteOpen": "Changes apply as soon as you save. Nobody loses anything they already have."
     },
     "speed": {
       "instant": "Instant",
@@ -568,7 +578,6 @@
       }
     },
     "isDefault": "Default",
-    "editLabel": "Edit {name}",
     "copyName": "{name} copy",
     "limits": {
       "rules": {
@@ -597,50 +606,86 @@
     },
     "editor": {
       "name": "Name",
+      "nameHint": "People see this name in Your plan.",
       "limitsLegend": "Limits for each person",
-      "rules": "Rules that can sync",
-      "rulesHint": "Paused rules and drafts don't count.",
-      "accounts": "Calendar accounts they can connect",
-      "accountsHint": "Disconnected accounts count. Reconnecting an account is never refused.",
-      "tokens": "Integration Tokens they can have",
+      "rules": "Maximum active rules",
+      "rulesHint": "Running rules count, and rules waiting for an account to be reauthorized. Paused rules and drafts don't.",
+      "accounts": "Maximum calendar accounts",
+      "accountsHint": "Every connected account counts, disconnected ones too. Reconnecting is never refused.",
+      "tokens": "Maximum Integration Tokens",
       "tokensHint": "Revoked tokens don't count.",
       "noLimit": "No limit",
-      "interval": "How soon calendars sync",
+      "upTo": "Up to",
+      "none": "None",
+      "fewer": "Fewer",
+      "more": "More",
+      "unit": {
+        "rules": {
+          "one": "rule",
+          "other": "rules"
+        },
+        "accounts": {
+          "one": "account",
+          "other": "accounts"
+        }
+      },
+      "speed": "Sync speed",
+      "speedHint": "How soon changes reach the other calendars.",
       "intervalHint": "Longer intervals arrive in a later release.",
+      "speedTitle": {
+        "instant": "Instant",
+        "5_minutes": "Every 5 minutes",
+        "10_minutes": "Every 10 minutes",
+        "15_minutes": "Every 15 minutes",
+        "30_minutes": "Every 30 minutes",
+        "60_minutes": "Every hour"
+      },
+      "speedDescription": {
+        "instant": "Changes sync soon after the calendar provider reports them, with a check every 5 minutes as a backup.",
+        "5_minutes": "Calendars are checked for changes every 5 minutes.",
+        "10_minutes": "Calendars are checked for changes every 10 minutes.",
+        "15_minutes": "Calendars are checked for changes every 15 minutes.",
+        "30_minutes": "Calendars are checked for changes every 30 minutes.",
+        "60_minutes": "Calendars are checked for changes every hour."
+      },
       "save": "Save plan",
       "cancel": "Cancel",
+      "changes": {
+        "one": "{count} change not saved",
+        "other": "{count} changes not saved"
+      },
       "missing": {
         "name": "Enter a name to save this plan.",
-        "rules": "Enter how many rules can sync, from {min} to {max}, or choose No limit.",
-        "accounts": "Enter how many calendar accounts they can connect, from {min} to {max}, or choose No limit.",
-        "tokens": "Enter how many Integration Tokens they can have, from {min} to {max}, or choose No limit."
+        "rules": "Enter how many active rules, from {min} to {max}, or choose No limit.",
+        "accounts": "Enter how many calendar accounts, from {min} to {max}, or choose No limit.",
+        "tokens": "Enter how many Integration Tokens, from {min} to {max}, or choose None or No limit."
       },
       "lowered": {
         "rules": {
-          "one": "{count} person on this plan has more rules syncing than this. Their rules keep syncing, but they cannot start another.",
-          "other": "{count} people on this plan have more rules syncing than this. Their rules keep syncing, but they cannot start another."
+          "one": "{count} person on {name} has more active rules than this. Their rules keep syncing, but they can't start another.",
+          "other": "{count} people on {name} have more active rules than this. Their rules keep syncing, but they can't start another."
         },
         "accounts": {
-          "one": "{count} person on this plan has more calendar accounts than this. They keep them, but cannot connect another.",
-          "other": "{count} people on this plan have more calendar accounts than this. They keep them, but cannot connect another."
+          "one": "{count} person on {name} has more calendar accounts than this. They keep them, but can't connect another.",
+          "other": "{count} people on {name} have more calendar accounts than this. They keep them, but can't connect another."
         },
         "tokens": {
-          "one": "{count} person on this plan has more Integration Tokens than this. They keep them, but cannot issue another.",
-          "other": "{count} people on this plan have more Integration Tokens than this. They keep them, but cannot issue another."
+          "one": "{count} person on {name} has more Integration Tokens than this. They keep them, but can't issue another.",
+          "other": "{count} people on {name} have more Integration Tokens than this. They keep them, but can't issue another."
         }
       },
       "loweredLater": {
         "rules": {
-          "one": "{count} person on this plan has more rules syncing than this. Once plans are on, their rules keep syncing, but they cannot start another.",
-          "other": "{count} people on this plan have more rules syncing than this. Once plans are on, their rules keep syncing, but they cannot start another."
+          "one": "{count} person on {name} has more active rules than this. Once plans are on, their rules keep syncing, but they can't start another.",
+          "other": "{count} people on {name} have more active rules than this. Once plans are on, their rules keep syncing, but they can't start another."
         },
         "accounts": {
-          "one": "{count} person on this plan has more calendar accounts than this. Once plans are on, they keep them, but cannot connect another.",
-          "other": "{count} people on this plan have more calendar accounts than this. Once plans are on, they keep them, but cannot connect another."
+          "one": "{count} person on {name} has more calendar accounts than this. Once plans are on, they keep them, but can't connect another.",
+          "other": "{count} people on {name} have more calendar accounts than this. Once plans are on, they keep them, but can't connect another."
         },
         "tokens": {
-          "one": "{count} person on this plan has more Integration Tokens than this. Once plans are on, they keep them, but cannot issue another.",
-          "other": "{count} people on this plan have more Integration Tokens than this. Once plans are on, they keep them, but cannot issue another."
+          "one": "{count} person on {name} has more Integration Tokens than this. Once plans are on, they keep them, but can't issue another.",
+          "other": "{count} people on {name} have more Integration Tokens than this. Once plans are on, they keep them, but can't issue another."
         }
       }
     },
@@ -663,6 +708,81 @@
       "defined": "{name} was added.",
       "changed": "{name} was saved.",
       "removed": "{name} was removed."
+    },
+    "panel": {
+      "label": "Plan",
+      "close": "Close",
+      "missingTitle": "Plan not found",
+      "missing": "No plan has this address. It may have been removed.",
+      "copyOf": "Starts with the limits of {name}.",
+      "meta": "{holders} {allows}",
+      "holders": {
+        "one": "{count} person has {name}.",
+        "other": "{count} people have {name}."
+      },
+      "holdersNone": "Nobody has {name} yet.",
+      "allows": "{limits}.",
+      "unlimited": "Unlimited, {speed}.",
+      "rules": {
+        "one": "{count} active rule",
+        "other": "{count} active rules"
+      },
+      "rulesUnlimited": "unlimited active rules",
+      "accounts": {
+        "one": "{count} calendar account",
+        "other": "{count} calendar accounts"
+      },
+      "accountsUnlimited": "unlimited calendar accounts",
+      "tokens": {
+        "one": "{count} Integration Token",
+        "other": "{count} Integration Tokens"
+      },
+      "tokensNone": "no Integration Tokens",
+      "tokensUnlimited": "unlimited Integration Tokens",
+      "speed": {
+        "instant": "with Instant sync",
+        "5_minutes": "every 5 minutes",
+        "10_minutes": "every 10 minutes",
+        "15_minutes": "every 15 minutes",
+        "30_minutes": "every 30 minutes",
+        "60_minutes": "every hour"
+      },
+      "tabs": {
+        "limits": "Limits",
+        "people": "People",
+        "peopleCount": {
+          "one": "{count} has it",
+          "other": "{count} have it"
+        }
+      }
+    },
+    "holders": {
+      "title": "Have {name} now",
+      "show": "Show in Everyone",
+      "loading": "Looking for who has this plan",
+      "nobody": "Nobody has {name} yet.",
+      "more": {
+        "one": "The first {count} by email. Show in Everyone lists them all.",
+        "other": "The first {count} by email. Show in Everyone lists them all."
+      },
+      "within": "Within every limit",
+      "neverLimited": "Never limited",
+      "change": "Change plan",
+      "changeLabel": "Change plan for {person}"
+    },
+    "change": {
+      "title": "Change plan for {person}",
+      "follow": "Follow the default plan",
+      "followNow": "{name} now. If the default changes, so does theirs.",
+      "followNone": "No plan is the default yet.",
+      "current": "Current",
+      "within": "{person} is within every limit of {name}.",
+      "choose": "Change plan",
+      "chooseReason": "Choose a plan for {person}.",
+      "give": "Give {name} to {person}",
+      "giveDefault": "Move {person} to the default plan",
+      "followed": "{person} now follows the default plan.",
+      "cancel": "Cancel"
     }
   },
   "cause": {

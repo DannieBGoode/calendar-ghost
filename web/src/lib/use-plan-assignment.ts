@@ -20,11 +20,12 @@ export function usePlanCandidates(plan: string, search: string, giving: boolean)
 
 /**
  * What giving the Plan to `userIds` would do, from a dry run that gives nothing: each person's
- * Plan now and what they would be over under it. Asked once for each list of people a Plan could
- * limit while Assign people is open, never while the Plan is being given, and forgotten as it
+ * Plan now and what they would be over under it. `plan` is a Plan's key, or null for the Default
+ * Plan, as Change plan offers it. Asked once for each list of people a Plan could limit while
+ * Assign people or Change plan is open, never while a Plan is being given, and forgotten as it
  * closes, so it is asked afresh each time it opens.
  */
-export function usePlanDryRun(plan: string, userIds: readonly string[], giving: boolean) {
+export function usePlanDryRun(plan: string | null, userIds: readonly string[], giving: boolean) {
   return useQuery({
     queryKey: ["plan-dry-run", plan, userIds],
     queryFn: () => api.assignPlan(plan, [...userIds], true),

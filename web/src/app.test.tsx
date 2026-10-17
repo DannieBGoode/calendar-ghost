@@ -612,6 +612,23 @@ describe("People", () => {
     expect(requested).not.toContain("/api/v1/users/plans/overview")
   })
 
+  it("opens New plan's panel at its own address, and Back closes it", async () => {
+    page.happyDOM.setURL("http://localhost:8000/people/plans/new")
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+    expect(window.location.pathname).toBe("/people/plans/new")
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Plans")
+    expect(container.querySelector("#plan-panel-title")?.textContent).toBe("New plan")
+
+    act(() => {
+      window.history.replaceState(null, "", "/people/plans")
+      window.dispatchEvent(new PopStateEvent("popstate"))
+    })
+    await settle()
+    expect(container.querySelector("#plan-panel")).toBeNull()
+    expect(container.querySelector("#plans-empty")).not.toBeNull()
+  })
+
   it.each([
     ["someone who is not an administrator", "/people", "user", "invitation_only"],
     ["an administrator under Only me", "/people", "installation_administrator", "only_me"],

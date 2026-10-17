@@ -1,5 +1,5 @@
 import { Info, RefreshCw, TriangleAlert } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useState, type ReactNode } from "react"
 
 import { SearchField } from "@/components/search-field"
 import { Badge } from "@/components/ui/badge"
@@ -18,11 +18,13 @@ import type { PlanCommands } from "@/lib/use-plans"
 type Chosen = ReadonlySet<string>
 
 /**
- * Assign people, from a Plan: a search by email, then a checklist of everyone found who does not
- * have the Plan yet, each with the Plan they have and, from a dry run that gives nothing, what they
- * would be over. Administrators come last, never limited. Whom it chose stays chosen while the
- * search changes. Giving the Plan is one command, all or none; while it is on its way every
- * control keeps focus and waits, and a refusal shows under the footer.
+ * The People tab of a Plan's panel. Assign people first: a search by email, then a checklist of
+ * everyone found who does not have the Plan yet, each with the Plan they have and, from a dry run
+ * that gives nothing, what they would be over. Administrators come last, never limited. Whom it
+ * chose stays chosen while the search changes. Then `children`, who has the Plan now. Giving the
+ * Plan is one command, all or none, from the panel's footer; while it is on its way every control
+ * keeps focus and waits, and a refusal of it, or of its Undo, shows under the footer. Once given,
+ * nobody is chosen, ready for more.
  */
 export function PlanAssign({
   plan,
@@ -31,6 +33,7 @@ export function PlanAssign({
   assign,
   onGiven,
   onCancel,
+  children,
 }: {
   plan: PlanSummary
   /** Plans limit people now, so who would be over takes the attention tone. */
@@ -39,6 +42,7 @@ export function PlanAssign({
   assign: PlanCommands["assign"]
   onGiven: (answer: PlanAssignments) => void
   onCancel: () => void
+  children?: ReactNode
 }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -50,10 +54,7 @@ export function PlanAssign({
   const found = candidates.data
   const dryRun = usePlanDryRun(plan.key, found?.members.map((person) => person.id) ?? [], pending)
   const overOf = new Map(dryRun.data?.people.map((person) => [person.user_id, person.over]))
-  const heading = useRef<HTMLHeadingElement>(null)
-  useEffect(() => {
-    heading.current?.focus()
-  }, [])
+  const refused = giveRefusal(assign, plan.key)
 
   function toggle(person: PersonRow, checked: boolean) {
     setChosen((current) => {
@@ -67,52 +68,90 @@ export function PlanAssign({
   function give() {
     if (chosen.size === 0 || pending) return
     assign.mutate(
-      { from: plan.key, moves: [{ plan: plan.key, userIds: [...chosen] }] },
-      { onSuccess: ([answer]) => answer && onGiven(answer) },
+      { from: plan.key, via: "give", moves: [{ plan: plan.key, userIds: [...chosen] }] },
+      {
+        onSuccess: ([answer]) => {
+          setChosen(new Set())
+          if (answer) onGiven(answer)
+        },
+      },
     )
   }
 
-  const overChosen = (found?.members ?? []).filter((person) => chosen.has(person.id) && (overOf.get(person.id)?.length ?? 0) > 0)
-  const note = overNote(i18n, overChosen.map((person) => personName(i18n, person)), plan.name)
   return (
-    <section id={base} className="plan-assign" aria-labelledby={`${base}-title`}>
-      <div className="plan-assign-head">
-        <h3 id={`${base}-title`} ref={heading} tabIndex={-1}>
-          {t("people.plans.assign.title")}
-        </h3>
-        <p className="plan-assign-intro">{t("people.plans.assign.intro", { name: plan.name })}</p>
+    <>
+      <div className="plan-panel-body">
+        <section id={base} className="plan-assign" aria-labelledby={`${base}-title`}>
+          <div className="plan-assign-head">
+            <h4 id={`${base}-title`}>{t("people.plans.assign.title")}</h4>
+            <p className="plan-assign-intro">{t("people.plans.assign.intro", { name: plan.name })}</p>
+          </div>
+          <SearchField
+            id={`${base}-search`}
+            label={t("people.filters.search")}
+            placeholder={t("people.filters.searchPlaceholder")}
+            clearLabel={t("people.filters.clearSearch")}
+            query={search}
+            onSearch={setSearch}
+          />
+          <Candidates
+            base={base}
+            query={candidates}
+            overOf={overOf}
+            enabled={enabled}
+            currentUserId={currentUserId}
+            chosen={chosen}
+            pending={pending}
+            onToggle={toggle}
+          />
+          <OverNote plan={plan} members={found?.members ?? []} chosen={chosen} overOf={overOf} enabled={enabled} />
+        </section>
+        {children}
       </div>
-      <SearchField
-        id={`${base}-search`}
-        label={t("people.filters.search")}
-        placeholder={t("people.filters.searchPlaceholder")}
-        clearLabel={t("people.filters.clearSearch")}
-        query={search}
-        onSearch={setSearch}
-      />
-      <Candidates
+      <AssignFooter
         base={base}
-        query={candidates}
-        overOf={overOf}
-        enabled={enabled}
-        currentUserId={currentUserId}
-        chosen={chosen}
+        plan={plan}
+        count={chosen.size}
         pending={pending}
-        onToggle={toggle}
+        refusal={refused && apiErrorMessage(i18n, refused)}
+        onGive={give}
+        onCancel={onCancel}
       />
-      {note && (
-        <p className="plan-assign-note" data-tone={enabled ? "attention" : undefined}>
-          {enabled ? <TriangleAlert aria-hidden="true" /> : <Info aria-hidden="true" />}
-          <span>{note}</span>
-        </p>
-      )}
-      <AssignFooter base={base} plan={plan} count={chosen.size} pending={pending} onGive={give} onCancel={onCancel} />
-      {assign.error && (
-        <p className="field-error" role="alert">
-          {apiErrorMessage(i18n, assign.error)}
-        </p>
-      )}
-    </section>
+    </>
+  )
+}
+
+/** Why giving the Plan, or its Undo, was refused, to show under the footer; Change plan's shows under it. */
+function giveRefusal(assign: PlanCommands["assign"], key: string): Error | null {
+  return assign.error && assign.variables.from === key && assign.variables.via !== "change" ? assign.error : null
+}
+
+/**
+ * What it means for the people chosen who would be over: they keep everything, but add nothing
+ * more. In Attention Ochre with its icon while Plans are on, neutral while off.
+ */
+function OverNote({
+  plan,
+  members,
+  chosen,
+  overOf,
+  enabled,
+}: {
+  plan: PlanSummary
+  members: readonly PersonRow[]
+  chosen: Chosen
+  overOf: ReadonlyMap<string, OverLimit[]>
+  enabled: boolean
+}) {
+  const i18n = useI18n()
+  const over = members.filter((person) => chosen.has(person.id) && (overOf.get(person.id)?.length ?? 0) > 0)
+  const note = overNote(i18n, over.map((person) => personName(i18n, person)), plan.name)
+  if (!note) return null
+  return (
+    <p className="plan-assign-note" data-tone={enabled ? "attention" : undefined}>
+      {enabled ? <TriangleAlert aria-hidden="true" /> : <Info aria-hidden="true" />}
+      <span>{note}</span>
+    </p>
   )
 }
 
@@ -271,14 +310,16 @@ function CandidateRow({
 }
 
 /**
- * Give the Plan to whoever was chosen, the one primary action; it waits, with why, until someone is
- * chosen. Then Cancel, and how many are chosen.
+ * The panel's footer: give the Plan to whoever was chosen, the one primary action, which waits,
+ * with why, until someone is chosen. Then Cancel, which closes the panel, how many are chosen,
+ * and why the last give or its Undo was refused.
  */
 function AssignFooter({
   base,
   plan,
   count,
   pending,
+  refusal,
   onGive,
   onCancel,
 }: {
@@ -286,6 +327,7 @@ function AssignFooter({
   plan: PlanSummary
   count: number
   pending: boolean
+  refusal: string | null
   onGive: () => void
   onCancel: () => void
 }) {
@@ -293,8 +335,8 @@ function AssignFooter({
   const reasonId = `${base}-give-reason`
   const none = count === 0
   return (
-    <>
-      <div className="plan-assign-foot">
+    <div className="plan-panel-foot">
+      <div className="plan-panel-actions">
         <Button
           type="button"
           aria-disabled={none || pending || undefined}
@@ -307,13 +349,18 @@ function AssignFooter({
         <Button type="button" variant="ghost" aria-disabled={pending || undefined} onClick={() => !pending && onCancel()}>
           {t("people.plans.assign.cancel")}
         </Button>
-        <span className="plan-assign-selected">{t("people.plans.assign.selected", { count })}</span>
+        <span className="plan-panel-status plan-assign-selected">{t("people.plans.assign.selected", { count })}</span>
       </div>
       {none && (
         <p id={reasonId} className="field-hint">
           {t("people.plans.assign.giveReason", { name: plan.name })}
         </p>
       )}
-    </>
+      {refusal && (
+        <p className="field-error" role="alert">
+          {refusal}
+        </p>
+      )}
+    </div>
   )
 }

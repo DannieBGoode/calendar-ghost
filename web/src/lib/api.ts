@@ -289,7 +289,10 @@ export const INCIDENTS_PAGE_SIZE = 100
 const PEOPLE_PAGE_SIZE = 50
 /** How many people the Remove note on a Plan names before "and 2 more". */
 const PLAN_HOLDERS_NAMED = 3
-/** How many people Assign people lists at a time, by email; a search finds the others. */
+/**
+ * How many people Assign people lists at a time, by email, and how many a Plan's panel lists as
+ * having it; a search, or Everyone, finds the others.
+ */
 const PLAN_CANDIDATES_LISTED = 100
 
 export const api = {
@@ -361,6 +364,11 @@ export const api = {
   planHolders: (plan: string) =>
     call("/api/v1/users", "get", {
       query: { plan, sort: "email", order: "asc", page: 1, page_size: PLAN_HOLDERS_NAMED },
+    }),
+  /** Who has a Plan, by email, as its panel lists them under "Have Free now". */
+  planPeople: (plan: string) =>
+    call("/api/v1/users", "get", {
+      query: { plan, sort: "email", order: "asc", page: 1, page_size: PLAN_CANDIDATES_LISTED },
     }),
   /** Everyone Assign people may list, by email, narrowed by part of an email. */
   planCandidates: (search: string) =>

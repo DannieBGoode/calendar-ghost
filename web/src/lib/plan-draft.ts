@@ -1,7 +1,11 @@
+import type { MessageKey } from "@/i18n/types"
 import { ApiError, type PlanChange, type PlanLimits, type PlanSummary, type SyncInterval } from "@/lib/api"
 
-/** One limit as the Plan editor holds it: the number typed, or No limit. */
-export type LimitDraft = { amount: string; unlimited: boolean }
+/**
+ * One limit as the Plan editor holds it: No limit, Up to the number typed, or, for Integration
+ * Tokens, None. The number typed stays while another choice is made, so choosing Up to keeps it.
+ */
+export type LimitDraft = { choice: "none" | "upTo" | "noLimit"; amount: string }
 
 /** The counts a Plan limits, as the editor names its fields. */
 export type LimitName = "rules" | "accounts" | "tokens"
@@ -14,11 +18,57 @@ export type DraftField = "name" | LimitName | "interval"
 
 export const LIMIT_NAMES: readonly LimitName[] = ["rules", "accounts", "tokens"]
 
+/**
+ * How the editor words each limit: its legend, what counts, the word after its number, why Save
+ * waits for it, and what a lower limit does, now or once Plans are on.
+ */
+export const LIMIT_WORDS: Readonly<
+  Record<
+    LimitName,
+    {
+      label: MessageKey
+      hint: MessageKey
+      unit: MessageKey | null
+      missing: MessageKey
+      lowered: MessageKey
+      loweredLater: MessageKey
+    }
+  >
+> = {
+  rules: {
+    label: "people.plans.editor.rules",
+    hint: "people.plans.editor.rulesHint",
+    unit: "people.plans.editor.unit.rules",
+    missing: "people.plans.editor.missing.rules",
+    lowered: "people.plans.editor.lowered.rules",
+    loweredLater: "people.plans.editor.loweredLater.rules",
+  },
+  accounts: {
+    label: "people.plans.editor.accounts",
+    hint: "people.plans.editor.accountsHint",
+    unit: "people.plans.editor.unit.accounts",
+    missing: "people.plans.editor.missing.accounts",
+    lowered: "people.plans.editor.lowered.accounts",
+    loweredLater: "people.plans.editor.loweredLater.accounts",
+  },
+  tokens: {
+    label: "people.plans.editor.tokens",
+    hint: "people.plans.editor.tokensHint",
+    unit: null,
+    missing: "people.plans.editor.missing.tokens",
+    lowered: "people.plans.editor.lowered.tokens",
+    loweredLater: "people.plans.editor.loweredLater.tokens",
+  },
+}
+
 /** The largest count a limit takes, as `COUNT_LIMIT` in domain/plans.py sets it. */
 export const COUNT_LIMIT = 10_000
 
-/** The least each count takes, as `PlanLimits` checks: a Plan may offer no Integration Tokens. */
-export const LIMIT_MINIMUM: Readonly<Record<LimitName, number>> = { rules: 1, accounts: 1, tokens: 0 }
+/**
+ * The least Up to takes for each count. `PlanLimits` lets a Plan offer no Integration Tokens, which
+ * the editor offers as None rather than Up to 0.
+ */
+export const LIMIT_MINIMUM: Readonly<Record<LimitName, number>> = { rules: 1, accounts: 1, tokens: 1 }
 
 /** Where each count is in a saved Plan's limits, and in how much the people it limits use. */
 const SAVED: Readonly<Record<LimitName, Exclude<keyof PlanLimits, "sync_interval">>> = {
@@ -28,7 +78,8 @@ const SAVED: Readonly<Record<LimitName, Exclude<keyof PlanLimits, "sync_interval
 }
 
 function limitDraft(limit: number | null): LimitDraft {
-  return limit === null ? { amount: "", unlimited: true } : { amount: String(limit), unlimited: false }
+  if (limit === null) return { choice: "noLimit", amount: "" }
+  return limit === 0 ? { choice: "none", amount: "" } : { choice: "upTo", amount: String(limit) }
 }
 
 /** A new Plan starts with no limits and the first offered interval; an existing one as saved. */
@@ -57,10 +108,14 @@ export function copyDraft(plan: PlanSummary, name: string, intervals: readonly S
   return { ...copied, name, interval }
 }
 
-/** null for No limit, the whole number typed while it is in range, or undefined when there is none. */
+/**
+ * null for No limit, 0 for None, the whole number typed for Up to while it is in range, or
+ * undefined when there is none.
+ */
 function limitValue(draft: PlanDraft, name: LimitName): number | null | undefined {
-  const { amount, unlimited } = draft[name]
-  if (unlimited) return null
+  const { choice, amount } = draft[name]
+  if (choice === "noLimit") return null
+  if (choice === "none") return 0
   const value = Number(amount)
   const whole = amount.trim() !== "" && Number.isInteger(value)
   return whole && value >= LIMIT_MINIMUM[name] && value <= COUNT_LIMIT ? value : undefined
@@ -97,6 +152,20 @@ export function peopleOver(plan: PlanSummary | null, draft: PlanDraft, name: Lim
   return plan.use[SAVED[name]].reduce((total, { in_use, people }) => (in_use > next ? total + people : total), 0)
 }
 
+/** How one field of a draft would save, so drafts that would save alike compare equal. */
+function savedAs(draft: PlanDraft, field: DraftField): string {
+  if (field === "name") return draft.name.trim()
+  if (field === "interval") return draft.interval
+  const { choice, amount } = draft[field]
+  return choice === "upTo" ? `${choice}:${amount.trim()}` : choice
+}
+
+/** How many fields of `draft` would save other than `saved` has them, as the editor's footer counts. */
+export function changedFields(draft: PlanDraft, saved: PlanDraft): number {
+  const fields: DraftField[] = ["name", ...LIMIT_NAMES, "interval"]
+  return fields.filter((field) => savedAs(draft, field) !== savedAs(saved, field)).length
+}
+
 /** What two Plan names that read as one have in common, as `_name_key` in domain/plans.py compares them. */
 function nameKey(name: string): string {
   return name.normalize("NFKC").trim().toLowerCase()
@@ -115,8 +184,8 @@ export function nameRefusal(draft: PlanDraft, others: readonly string[]): ApiErr
 
 /**
  * The field a refusal of the Plan sent as `draft` names, or null when it names none, as when the
- * Plan was removed meanwhile. The server does not say which limit it refused, and No limit is
- * always allowed, so a limit refusal names the first limit with a number.
+ * Plan was removed meanwhile. The server does not say which limit it refused, and No limit and
+ * None are always allowed, so a limit refusal names the first limit with a number.
  */
 export function refusedField(error: unknown, draft: PlanDraft): DraftField | null {
   if (!(error instanceof ApiError)) return null
@@ -124,6 +193,6 @@ export function refusedField(error: unknown, draft: PlanDraft): DraftField | nul
   if (error.code !== "invalid_plan") return null
   const { reason } = error.params
   if (reason === "name" || reason === "interval") return reason
-  if (reason === "limit") return LIMIT_NAMES.find((name) => !draft[name].unlimited) ?? null
+  if (reason === "limit") return LIMIT_NAMES.find((name) => draft[name].choice === "upTo") ?? null
   return null
 }

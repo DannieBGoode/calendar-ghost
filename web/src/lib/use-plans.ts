@@ -47,14 +47,24 @@ export function usePlanHolders(plan: string, enabled = true) {
   return useQuery({ queryKey: ["people", "plan-holders", plan], queryFn: () => api.planHolders(plan), enabled })
 }
 
+/**
+ * Who has a Plan, by email, as its panel lists them, kept under People's key, so every change to
+ * someone's Plan reads them again.
+ */
+export function usePlanPeople(plan: string) {
+  return useQuery({ queryKey: ["people", "plan-people", plan], queryFn: () => api.planPeople(plan) })
+}
+
 /** The Plans setting's change: whether Plans limit people now, and the Default Plan. */
 export type SettingChange = { enabled: boolean; defaultPlan: string | null }
 
 /**
- * Giving Plans to people from one Plan's row, `from`, its key: Assign people's one move, or Undo's,
- * one for each Plan the people had. Each move names other people and is all or none.
+ * Giving Plans to people from one Plan's panel, `from`, its key, `via` Assign people's one move
+ * (`give`), Change plan's for someone who has it (`change`), or Undo's, one for each Plan the people
+ * had; a refusal shows where the command came from. Each move names other people and is all or
+ * none.
  */
-export type AssignCommand = { from: string; moves: readonly AssignMove[] }
+export type AssignCommand = { from: string; via: "give" | "change" | "undo"; moves: readonly AssignMove[] }
 
 function sendMoves(moves: readonly AssignMove[]): Promise<PlanAssignments[]> {
   return Promise.all(moves.map(({ plan, userIds }) => api.assignPlan(plan, userIds, false)))

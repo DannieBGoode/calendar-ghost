@@ -9,8 +9,9 @@ import type { PlanWorkControls } from "@/lib/use-plan-work"
 import { usePlanHolders } from "@/lib/use-plans"
 
 /**
- * A Plan's More actions: Edit; Assign people; Make default, which says whom it moves; Duplicate;
- * and, set apart, Remove. Remove is disabled on the default and on a Plan people have, with why as its
+ * A Plan's More actions: Edit and Assign people, which open its panel at Limits and People; Make
+ * default, which says whom it moves; Duplicate, which opens New plan with its limits; and, set
+ * apart, Remove. Remove is disabled on the default and on a Plan people have, with why as its
  * description, naming the first three who have it once the menu opens and their names arrive.
  * Every item waits while a Plan command is on its way.
  */
@@ -38,14 +39,14 @@ export function PlanRowMenu({
       label: t("people.plans.menu.edit"),
       icon: <Pencil aria-hidden="true" />,
       disabled: busy,
-      onSelect: () => work.open({ action: "edit", key: plan.key }),
+      onSelect: () => work.openPanel({ plan: plan.key, tab: "limits" }),
     },
     {
       id: "assign",
       label: t("people.plans.menu.assign"),
       icon: <UserPlus aria-hidden="true" />,
       disabled: busy,
-      onSelect: () => work.open({ action: "assign", key: plan.key }),
+      onSelect: () => work.openPanel({ plan: plan.key, tab: "people" }),
     },
     ...(plan.is_default
       ? []
@@ -64,7 +65,7 @@ export function PlanRowMenu({
       label: t("people.plans.menu.duplicate"),
       icon: <Copy aria-hidden="true" />,
       disabled: busy,
-      onSelect: () => work.open({ action: "new", copyOf: plan.key }),
+      onSelect: () => work.openPanel({ plan: null, tab: "limits" }, plan.key),
     },
     {
       id: "remove",
@@ -73,7 +74,7 @@ export function PlanRowMenu({
       icon: <Trash2 aria-hidden="true" />,
       disabled: busy || refusal !== null,
       separated: true,
-      onSelect: () => work.open({ action: "remove", key: plan.key }),
+      onSelect: () => work.openRemoval(plan.key),
     },
   ]
   return (

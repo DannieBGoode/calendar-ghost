@@ -736,14 +736,14 @@ This is for administrators. After you lower a limit, or give someone a smaller P
 can have more than their Plan allows. Nothing stops for them: their rules keep syncing, and their
 calendar accounts and Integration Tokens keep working. But they cannot start another rule, connect
 another calendar account, or issue another token until they are within the limit. Before you save
-a lower limit, the Plan form says how many people it would leave with more: "1 person on this plan
-has more calendar accounts than this. They keep them, but cannot connect another."
+a lower limit, the Plan form says how many people it would leave with more: "1 person on Free has
+more calendar accounts than this. They keep them, but can't connect another."
 
 **People** shows who they are, in Attention Ochre with an icon:
 
 - On **Plans**, the card at the top counts everyone over a limit, with **Show** to list them, and
   each Plan's row says how many of the people it limits are over: "1 over a limit", which lists
-  them too.
+  them too. A Plan's **People** tab lists who has it now, each with any limit they are over.
 - On **Everyone**, the **Plan** column names each limit a person is over: "Family. 2 calendar
   accounts, 1 allowed". Choose the Plan in the **Plan** filter to list only the people who have it,
   and **Over a limit** in the **Limits** filter to list only the people over one.
@@ -758,8 +758,9 @@ same marks show what turning them on would do.
 
 To fix it, do one of these:
 
-- Give the person a larger Plan with **Change plan** on their page.
-- Raise the limit with **Edit** on the Plan.
+- Give the person a larger Plan with **Change plan** on their page, or beside them in the Plan's
+  **People** tab.
+- Raise the limit on the Plan's **Limits** tab, which **Edit** in its menu opens.
 - Ask the person to make room: pause a rule, delete a calendar account they no longer use, or
   revoke a token.
 

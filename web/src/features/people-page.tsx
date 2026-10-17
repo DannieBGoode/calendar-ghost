@@ -133,7 +133,14 @@ function PeopleContent({
         />
       )}
       {tab === "invitations" && <InvitationsSection commands={invitations} now={now} />}
-      {plans && <PlansSection currentUserId={currentUserId} headingAction={headingAction} onShowPeople={showPeople} />}
+      {plans && (
+        <PlansSection
+          currentUserId={currentUserId}
+          headingAction={headingAction}
+          onShowPeople={showPeople}
+          onOpenPerson={onOpenPerson}
+        />
+      )}
       <p className="sr-only" role="status">
         {invitations.message}
       </p>

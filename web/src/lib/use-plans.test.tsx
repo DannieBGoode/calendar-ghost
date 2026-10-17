@@ -187,6 +187,7 @@ describe("usePlans", () => {
     await run((plans) =>
       plans.assign.mutate({
         from: "free",
+        via: "undo",
         moves: [
           { plan: null, userIds: ["user-alex"] },
           { plan: "family", userIds: ["user-sam", "user-lee"] },
