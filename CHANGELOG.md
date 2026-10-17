@@ -39,9 +39,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   Plans are off by default, and while they are off nothing changes. Administrators are never
   limited, and under **Only me** Plans stay hidden. Once Plans are on, starting a rule, connecting a
   new calendar account, and issuing a token respect the person's Plan: each control says so at the
-  limit and links to **Settings → Your account → Your plan**, which gives one row per limit with how
-  much of it is in use, marks any count past its limit, and says to ask the administrator for a
-  change. **Create sync rule** says how many rules the Plan lets sync at once. Reauthorization is
+  limit and links to **Settings → Your account → Your plan**: a card titled with the Plan's name,
+  **Over a limit** beside it when a count is past its limit, and whether it is the default or the
+  administrator set it. Each limit has a meter with "1 of 1" and **Limit reached** at it, or **Over**
+  with an icon past it and a sentence that says what keeps working and links to **Connections**
+  where an account or token can be removed; a limit the Plan does not set reads **No limit** with
+  how many are in use. The card ends by saying to ask the administrator for a change. **Create sync rule** says how many rules the Plan lets sync at once. Reauthorization is
   never refused. A lowered rule limit refuses new Starts and stops nothing: rules beyond it keep
   syncing, and existing calendar accounts and tokens keep working. Returning to setup turns Plans
   off and keeps their definitions. In the API, a Plan's key is made from its name unless

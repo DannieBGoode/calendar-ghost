@@ -823,7 +823,19 @@ describe("Settings tabs", () => {
   it("shows Your plan between the account section and Appearance once a plan limits you", async () => {
     await renderSettings(testI18n(), { tab: "account", ownPlan: jsonResponse(familyPlan) })
     expect(sections()).toEqual(["own-account-title", "your-plan-title", "appearance-title"])
-    expect(container.querySelector("#your-plan")?.textContent).toContain("You have Family, chosen by your administrator.")
+    expect(container.querySelector("#your-plan h3")?.textContent).toBe("Family")
+  })
+
+  it("opens Connections from Your plan's sentence about calendar accounts past the limit", async () => {
+    await renderSettings(testI18n(), { tab: "account", ownPlan: jsonResponse(atEveryLimit) })
+    const link = [...container.querySelectorAll<HTMLAnchorElement>("#your-plan .plan-usage-note a")].find(
+      (anchor) => anchor.textContent === "Connections",
+    )
+    expect(link?.getAttribute("href")).toBe("/settings/connections")
+    await click(link!)
+    expect(openTab).toHaveBeenCalledWith("connections")
+    // The sentence goes with Your account, so focus moves to the tab it opened, not to the page.
+    expect(document.activeElement).toBe(tabs().find((tab) => tab.textContent === "Connections"))
   })
 
   it("keeps the rest of Your account working when Your plan cannot load", async () => {

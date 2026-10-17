@@ -132,7 +132,6 @@ const TEMPLATE_VALUES: TemplateValues = {
     "not_reaching",
   ],
   "settings.ownAccount.instantSync.blocked.*": ["not_in_plan", "no_public_address", "not_reaching", "unknown"],
-  "people.plans.interval.*": ["instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"],
   "people.plans.speed.*": ["instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"],
   "people.plans.editor.speedTitle.*": ["instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"],
   "people.plans.editor.speedDescription.*": [

@@ -1,27 +1,34 @@
-import { Clock, TriangleAlert, Zap } from "lucide-react"
+import { Clock, Info, TriangleAlert, Zap } from "lucide-react"
+import type { ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Meter } from "@/components/ui/meter"
+import { rich } from "@/i18n/rich"
 import type { UsageRow } from "@/lib/plan-usage"
+
+/** Renders the `<link>` in a note, to where room is made, such as Connections. */
+type NoteLink = (text: string) => ReactNode
 
 /**
  * How much of a Plan someone uses: one row per limit with its name and what counts, a meter where
  * the limit is a number, the count against it ("1 of 1"), and a chip at or past it. Past an
  * enforced limit the meter turns Attention Ochre with stripes, the chip carries the attention icon,
- * and a sentence below says what keeps working, so color is never the only sign.
+ * and a sentence below says what keeps working, so color is never the only sign. At a limit, a
+ * quiet sentence with an information icon may say what to do before adding another.
  */
-export function PlanUsage({ rows }: { rows: readonly UsageRow[] }) {
+export function PlanUsage({ rows, noteLink }: { rows: readonly UsageRow[]; noteLink?: NoteLink }) {
   return (
     <div className="plan-usage">
       {rows.map((row) => (
-        <UsageLine key={row.limit} row={row} />
+        <UsageLine key={row.limit} row={row} noteLink={noteLink} />
       ))}
     </div>
   )
 }
 
-function UsageLine({ row }: { row: UsageRow }) {
+function UsageLine({ row, noteLink }: { row: UsageRow; noteLink: NoteLink | undefined }) {
   const over = row.chip?.tone === "attention"
+  const { note } = row
   return (
     <div className="plan-usage-row" data-over={over || undefined}>
       <div className="plan-usage-what">
@@ -32,10 +39,10 @@ function UsageLine({ row }: { row: UsageRow }) {
         <UsageGauge row={row} />
       </div>
       <UsageState row={row} over={over} />
-      {row.note && (
-        <p className="plan-usage-note" data-tone="attention">
-          <TriangleAlert aria-hidden="true" />
-          <span>{row.note}</span>
+      {note && (
+        <p className="plan-usage-note" data-tone={note.tone}>
+          {note.tone === "attention" ? <TriangleAlert aria-hidden="true" /> : <Info aria-hidden="true" />}
+          <span>{rich(note.text, noteLink ? { link: noteLink } : {})}</span>
         </p>
       )}
     </div>

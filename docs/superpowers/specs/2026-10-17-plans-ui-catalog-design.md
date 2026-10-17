@@ -224,9 +224,9 @@ A Plan card follows the Synchronization card once any Plan exists.
   "Disconnected accounts count", "Revoked tokens don't count", "How soon changes reach other
   calendars"), a meter, "1 of 1", and a chip: neutral "Limit reached" at the limit, Attention Ochre
   "Over" with an icon past it, with a sentence: "robin@example.test has 2 calendar accounts and Free
-  allows 1. Both keep syncing, but they can't connect another until one is removed. They see the
-  same on Your plan." While Plans are off, a count past its limit stays neutral with "Would be
-  over". Unlimited reads "3 in use" and "No limit" with no meter; Integration Tokens that the Plan
+  allows 1. Their accounts keep syncing, but they can't connect another until one is removed. They
+  see the same on Your plan." While Plans are off, a count past its limit stays neutral with "Would
+  be over". Unlimited reads "3 in use" and "No limit" with no meter; Integration Tokens that the Plan
   does not include read "Free includes none." and "Not included"; Sync speed reads "Instant sync is
   not part of Free." and "Every 5 minutes".
 - The privacy footnote becomes "You see whether their synchronization works and how much of their
@@ -239,7 +239,7 @@ now." One card titled with the Plan's name and an "Over a limit" chip when it ap
 your administrator" or "The default plan". Then the person page's rows, in the person's words:
 "Running rules, and rules waiting for you to reauthorize an account. Paused rules and drafts don't
 count."; "To start another rule, pause one first." at the rule limit; past the account limit, "You
-have 2 calendar accounts and your plan allows 1. Both keep syncing, but you can't connect another
+have 2 calendar accounts and your plan allows 1. They keep syncing, but you can't connect another
 until you remove one in Connections.", linking to Connections; "Your plan does not include
 Integration Tokens."; and "Instant sync is not part of your plan." It closes with "To change your
 plan, ask your administrator." An administrator reads "You administer this installation, so no plan

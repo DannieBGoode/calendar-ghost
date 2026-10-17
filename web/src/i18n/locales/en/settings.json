@@ -79,27 +79,37 @@
   },
   "ownPlan": {
     "title": "Your plan",
-    "intro": "You have {name}, chosen by your administrator.",
+    "intro": "What you can use here, and how much of it you use now.",
     "administrator": "You administer this installation, so no plan limits you.",
     "loadError": "Your plan could not load.",
-    "rules": "Rules that can sync",
-    "rulesHint": "Paused rules and drafts don't count.",
-    "accounts": "Calendar accounts you can connect",
-    "accountsHint": "Disconnected accounts count. Reconnecting an account is never refused.",
-    "tokens": "Integration Tokens you can have",
+    "setByAdministrator": "Set by your administrator",
+    "default": "The default plan",
+    "rulesHint": "Running rules, and rules waiting for you to reauthorize an account. Paused rules and drafts don't count.",
+    "accountsHint": "Every account you connected counts, disconnected ones too.",
     "tokensHint": "Revoked tokens don't count.",
-    "interval": "How soon calendars sync",
-    "use": {
-      "within": "{used} of {limit} in use",
-      "over": "{used} in use, {limit} allowed",
-      "unlimited": "No limit, {used} in use",
-      "none": "Not included",
-      "noneOver": "Not included, {used} in use"
+    "speedHint": "How soon changes reach your other calendars.",
+    "includesNone": "Your plan does not include Integration Tokens.",
+    "noInstant": "Instant sync is not part of your plan.",
+    "reached": {
+      "rules": "To start another rule, pause one first."
     },
-    "over": {
-      "rules": "You have more rules in use than your plan allows. They keep syncing, but you cannot start another until you pause or remove one.",
-      "accounts": "You have more calendar accounts than your plan allows. They keep working, but you cannot connect another until you delete one.",
-      "tokens": "You have more Integration Tokens than your plan allows. They keep working, but you cannot issue another until you revoke one."
+    "note": {
+      "rules": {
+        "one": "You have {count} active rule and your plan allows {allowed}. It keeps syncing, but you can't start another until fewer are active.",
+        "other": "You have {count} active rules and your plan allows {allowed}. They keep syncing, but you can't start another until fewer are active."
+      },
+      "accounts": {
+        "one": "You have {count} calendar account and your plan allows {allowed}. It keeps syncing, but you can't connect another until you remove it in <link>Connections</link>.",
+        "other": "You have {count} calendar accounts and your plan allows {allowed}. They keep syncing, but you can't connect another until you remove one in <link>Connections</link>."
+      },
+      "tokens": {
+        "one": "You have {count} Integration Token and your plan allows {allowed}. It keeps working, but you can't create another until you revoke it in <link>Connections</link>.",
+        "other": "You have {count} Integration Tokens and your plan allows {allowed}. They keep working, but you can't create another until you revoke one in <link>Connections</link>."
+      },
+      "tokensNone": {
+        "one": "You have {count} Integration Token and your plan includes none. It keeps working, but you can't create another.",
+        "other": "You have {count} Integration Tokens and your plan includes none. They keep working, but you can't create another."
+      }
     },
     "close": "To change your plan, ask your administrator."
   },

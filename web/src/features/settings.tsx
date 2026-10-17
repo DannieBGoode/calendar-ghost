@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { CheckCircle2, ShieldAlert } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
@@ -10,6 +10,7 @@ import { api, type CalendarProvider, type SessionStatus } from "@/lib/api"
 import {
   DEFAULT_SETTINGS_TAB,
   SETTINGS_ARRIVAL_PARAMS,
+  appPathForSettingsTab,
   type OpenSettingsTab,
   type SettingsTab,
   yourPlanPath,
@@ -119,36 +120,49 @@ function SettingsView({ session, tab, onOpenTab, onOpenPeople, ...connections }:
   const administrator = isAdministrator(user)
   // Someone else opening Administration's address sees Your account, as Settings itself shows.
   const shown = tab === "administration" && !administrator ? DEFAULT_SETTINGS_TAB : tab
+  const page = useRef<HTMLDivElement>(null)
+  // A link in Your plan's sentences goes with Your account, so focus moves to the tab it opens.
+  const openConnections = () => {
+    onOpenTab("connections")
+    page.current?.querySelector<HTMLElement>(`.page-tabs a[href="${appPathForSettingsTab("connections")}"]`)?.focus()
+  }
 
   return (
-    <div className="page-section settings-page">
+    <div ref={page} className="page-section settings-page">
       <div>
         <h1>{t("settings.page.title")}</h1>
         <p className="page-intro">{t(administrator ? "settings.page.introAdministrator" : "settings.page.intro")}</p>
       </div>
       <SettingsTabs current={shown} administrator={administrator} onOpen={onOpenTab} />
-      {shown === "account" && <AccountTab session={session} administrator={administrator} onOpenPeople={onOpenPeople} />}
+      {shown === "account" && (
+        <AccountTab session={session} administrator={administrator} onOpenConnections={openConnections} onOpenPeople={onOpenPeople} />
+      )}
       {shown === "connections" && <ConnectionsTab providers={connections.providers} administrator={administrator} />}
       {shown === "administration" && <AdministrationTab />}
     </div>
   )
 }
 
-/** The signed-in User's own sign-in and sync, Your plan once a Plan applies, and how the app looks. */
+/**
+ * The signed-in User's own sign-in and sync, Your plan once a Plan applies, and how the app looks.
+ * Your plan opens Connections where it says to remove a calendar account or revoke a token.
+ */
 function AccountTab({
   session,
   administrator,
+  onOpenConnections,
   onOpenPeople,
 }: {
   session: SessionStatus
   administrator: boolean
+  onOpenConnections: () => void
   onOpenPeople: () => void
 }) {
   const { user } = session
   return (
     <>
       {user && <OwnAccountSection user={user} sendsEmail={session.installation_sends_email} onOpenPeople={onOpenPeople} />}
-      <OwnPlanSection administrator={administrator} />
+      <OwnPlanSection administrator={administrator} onOpenConnections={onOpenConnections} />
       <AppearanceSection />
     </>
   )

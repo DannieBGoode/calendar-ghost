@@ -1,12 +1,13 @@
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
-import type { LimitUse, PersonPlanOverview, SyncInterval } from "@/lib/api"
+import type { LimitUse, OwnPlan, PersonPlanOverview, SyncInterval } from "@/lib/api"
+import type { PlanChip } from "@/lib/plans"
 
 /**
- * The words of a person's Plan card: who gave the Plan and whether it limits them now, then one
- * row per limit with how much of it they use. Counts come from the Operator Overview's `use`;
- * nothing here counts on its own. Rows hold nouns and numbers; sentences are the card's summary
- * and the note under a limit they are over.
+ * The words of a person's Plan card and of Your plan: who gave the Plan and whether it limits them
+ * now, then one row per limit with how much of it they use. Counts come from the Operator
+ * Overview's `use`, or from Your plan's own counts; nothing here counts on its own. Rows hold nouns
+ * and numbers; sentences are the card's summary and the note under a limit.
  */
 
 /** Which limit a usage row shows. */
@@ -17,6 +18,13 @@ type UsageMeter = { value: number; max: number; valueText: string; tone: "neutra
 
 /** A chip beside a count: "Limit reached" and "Would be over" neutral, "Over" in Attention Ochre. */
 type UsageChip = { text: string; tone: "neutral" | "attention" }
+
+/**
+ * A sentence under a limit: past an enforced one, what keeps working and how to make room, in
+ * Attention Ochre; at one, what to do before adding another, quietly. It may hold a `<link>` to
+ * where room is made.
+ */
+type UsageNote = { text: string; tone: "attention" | "info" }
 
 export type UsageRow = {
   limit: UsageLimit
@@ -33,24 +41,71 @@ export type UsageRow = {
   chip: UsageChip | null
   /** How soon the Plan syncs, on the Sync speed row, for its icon. */
   speed: SyncInterval | null
-  /** Past an enforced limit: what keeps working and how to make room. */
-  note: string | null
+  note: UsageNote | null
 }
 
 type CountLimit = Exclude<UsageLimit, "speed">
 
-const TITLES: Record<CountLimit, { title: MessageKey; hint: MessageKey; note: MessageKey }> = {
-  rules: { title: "people.usage.rules", hint: "people.usage.rulesHint", note: "people.usage.note.rules" },
-  accounts: { title: "people.usage.accounts", hint: "people.usage.accountsHint", note: "people.usage.note.accounts" },
-  tokens: { title: "people.usage.tokens", hint: "people.usage.tokensHint", note: "people.usage.note.tokens" },
+type Use = NonNullable<PersonPlanOverview["use"]>
+
+const TITLES: Record<CountLimit, MessageKey> = {
+  rules: "people.usage.rules",
+  accounts: "people.usage.accounts",
+  tokens: "people.usage.tokens",
 }
 
-/** Whose row it is and what their Plan is called, for the sentences, and whether Plans are on. */
-type RowContext = { person: string; name: string; enforced: boolean }
+/** Whom a row speaks about: someone, on their page, or the reader, on Your plan. */
+type UsageWords = {
+  hints: Record<UsageLimit, MessageKey>
+  /** Past a limit; `tokensNone` for tokens kept under a Plan that includes none. */
+  notes: Record<CountLimit | "tokensNone", MessageKey>
+  includesNone: MessageKey
+  noInstant: MessageKey
+  /** At a limit, what to do before adding another, where the reader can do it themselves. */
+  reached: Partial<Record<CountLimit, MessageKey>>
+}
 
-function emptyRow(i18n: I18n, limit: CountLimit): Omit<UsageRow, "meter" | "value" | "chip" | "note" | "detail"> {
-  const words = TITLES[limit]
-  return { limit, title: i18n.t(words.title), hint: i18n.t(words.hint), quiet: false, speed: null }
+const ABOUT_THEM: UsageWords = {
+  hints: {
+    rules: "people.usage.rulesHint",
+    accounts: "people.usage.accountsHint",
+    tokens: "people.usage.tokensHint",
+    speed: "people.usage.speedHint",
+  },
+  notes: {
+    rules: "people.usage.note.rules",
+    accounts: "people.usage.note.accounts",
+    tokens: "people.usage.note.tokens",
+    tokensNone: "people.usage.note.tokensNone",
+  },
+  includesNone: "people.usage.includesNone",
+  noInstant: "people.usage.noInstant",
+  reached: {},
+}
+
+const TO_THE_READER: UsageWords = {
+  hints: {
+    rules: "settings.ownPlan.rulesHint",
+    accounts: "settings.ownPlan.accountsHint",
+    tokens: "settings.ownPlan.tokensHint",
+    speed: "settings.ownPlan.speedHint",
+  },
+  notes: {
+    rules: "settings.ownPlan.note.rules",
+    accounts: "settings.ownPlan.note.accounts",
+    tokens: "settings.ownPlan.note.tokens",
+    tokensNone: "settings.ownPlan.note.tokensNone",
+  },
+  includesNone: "settings.ownPlan.includesNone",
+  noInstant: "settings.ownPlan.noInstant",
+  reached: { rules: "settings.ownPlan.reached.rules" },
+}
+
+/** Whose row it is and what their Plan is called, for the sentences, whether Plans are on, and in whose words. */
+type RowContext = { person: string; name: string; enforced: boolean; words: UsageWords }
+
+function emptyRow(i18n: I18n, limit: CountLimit, { words }: RowContext): Omit<UsageRow, "meter" | "value" | "chip" | "note" | "detail"> {
+  return { limit, title: i18n.t(TITLES[limit]), hint: i18n.t(words.hints[limit]), quiet: false, speed: null }
 }
 
 /** Past a limit: "Over" while Plans are on, "Would be over" while off, with what keeps working only when on. */
@@ -58,10 +113,17 @@ function pastLimit(i18n: I18n, limit: CountLimit, { in_use, allowed }: LimitUse,
   const { t } = i18n
   const none = limit === "tokens" && allowed === 0
   const params = { person: context.person, name: context.name, count: in_use, allowed: allowed ?? 0 }
+  const note = context.words.notes[none ? "tokensNone" : limit]
   return {
     chip: context.enforced ? { text: t("people.usage.over"), tone: "attention" as const } : { text: t("people.usage.wouldBeOver"), tone: "neutral" as const },
-    note: context.enforced ? t(none ? "people.usage.note.tokensNone" : TITLES[limit].note, params) : null,
+    note: context.enforced ? { text: t(note, params), tone: "attention" as const } : null,
   }
+}
+
+/** At an enforced limit, what to do before adding another, where the words have something to say. */
+function atLimit(i18n: I18n, limit: CountLimit, context: RowContext): UsageNote | null {
+  const key = context.words.reached[limit]
+  return context.enforced && key ? { text: i18n.t(key), tone: "info" } : null
 }
 
 /** What a meter says in words: "1 of 1, limit reached", "2 of 1, over the limit", or "0 of 1". */
@@ -80,12 +142,12 @@ function meteredRow(i18n: I18n, limit: CountLimit, use: LimitUse & { allowed: nu
   const valueText = meterWords(i18n, use, context.enforced)
   const past = over ? pastLimit(i18n, limit, use, context) : null
   return {
-    ...emptyRow(i18n, limit),
+    ...emptyRow(i18n, limit, context),
     detail: null,
     meter: { value: use.in_use, max: use.allowed, valueText, tone: over && context.enforced ? "over" : "neutral" },
     value: t("people.usage.of", numbers),
     chip: past?.chip ?? (reached ? { text: t("people.usage.limitReached"), tone: "neutral" } : null),
-    note: past?.note ?? null,
+    note: past?.note ?? (reached ? atLimit(i18n, limit, context) : null),
   }
 }
 
@@ -93,14 +155,15 @@ function meteredRow(i18n: I18n, limit: CountLimit, use: LimitUse & { allowed: nu
 function countRow(i18n: I18n, limit: CountLimit, use: LimitUse, context: RowContext): UsageRow {
   const { t } = i18n
   const { allowed, in_use } = use
+  const empty = emptyRow(i18n, limit, context)
   if (allowed === null) {
-    return { ...emptyRow(i18n, limit), detail: t("people.usage.noLimit"), meter: null, value: t("people.usage.inUse", { used: in_use }), chip: null, note: null }
+    return { ...empty, detail: t("people.usage.noLimit"), meter: null, value: t("people.usage.inUse", { used: in_use }), chip: null, note: null }
   }
   if (allowed === 0) {
     const past = in_use > 0 ? pastLimit(i18n, limit, use, context) : null
     return {
-      ...emptyRow(i18n, limit),
-      detail: t("people.usage.includesNone", { name: context.name }),
+      ...empty,
+      detail: t(context.words.includesNone, { name: context.name }),
       meter: null,
       value: past ? t("people.usage.inUse", { used: in_use }) : t("people.usage.notIncluded"),
       quiet: past === null,
@@ -112,13 +175,13 @@ function countRow(i18n: I18n, limit: CountLimit, use: LimitUse, context: RowCont
 }
 
 /** How soon their calendars sync, and when Instant sync is not part of the Plan. */
-function speedRow(i18n: I18n, speed: SyncInterval, name: string): UsageRow {
+function speedRow(i18n: I18n, speed: SyncInterval, { name, words }: RowContext): UsageRow {
   const { t } = i18n
   return {
     limit: "speed",
     title: t("people.usage.speed"),
-    hint: t("people.usage.speedHint"),
-    detail: speed === "instant" ? null : t("people.usage.noInstant", { name }),
+    hint: t(words.hints.speed),
+    detail: speed === "instant" ? null : t(words.noInstant, { name }),
     meter: null,
     value: t(`people.usage.interval.${speed}`),
     quiet: false,
@@ -128,21 +191,51 @@ function speedRow(i18n: I18n, speed: SyncInterval, name: string): UsageRow {
   }
 }
 
-/**
- * One row per limit of the Plan someone has, with how much of it they use: Active rules, Calendar
- * accounts, Integration Tokens, then Sync speed. None without a Plan or its use. `person` names
- * them in the sentence under a limit they are over.
- */
-export function planUsageRows(i18n: I18n, plan: PersonPlanOverview, person: string): UsageRow[] {
-  const { use, has } = plan
-  if (!use || !has) return []
-  const context: RowContext = { person, name: has.name, enforced: plan.basis === "plan" }
+/** One row per limit, in order: Active rules, Calendar accounts, Integration Tokens, then Sync speed. */
+function usageRows(i18n: I18n, use: Use, context: RowContext): UsageRow[] {
   return [
     countRow(i18n, "rules", use.rules, context),
     countRow(i18n, "accounts", use.connected_accounts, context),
     countRow(i18n, "tokens", use.integration_tokens, context),
-    speedRow(i18n, use.sync_interval, has.name),
+    speedRow(i18n, use.sync_interval, context),
   ]
+}
+
+/**
+ * One row per limit of the Plan someone has, with how much of it they use. None without a Plan or
+ * its use. `person` names them in the sentence under a limit they are over.
+ */
+export function planUsageRows(i18n: I18n, plan: PersonPlanOverview, person: string): UsageRow[] {
+  const { use, has } = plan
+  if (!use || !has) return []
+  return usageRows(i18n, use, { person, name: has.name, enforced: plan.basis === "plan", words: ABOUT_THEM })
+}
+
+/**
+ * Your plan: the Plan's name, whether it is the default or the reader's administrator set it, an
+ * "Over a limit" chip past any limit, then the person page's rows in the reader's own words. Null
+ * when no Plan limits the reader.
+ */
+export type OwnPlanCard = { name: string; origin: string; chips: PlanChip[]; rows: UsageRow[] }
+
+export function ownPlanCard(i18n: I18n, plan: OwnPlan): OwnPlanCard | null {
+  const { t } = i18n
+  const { limits, plan: applied } = plan
+  if (plan.basis !== "plan" || !limits || !applied) return null
+  const use: Use = {
+    rules: { in_use: plan.rules_counted, allowed: limits.rules },
+    connected_accounts: { in_use: plan.connected_accounts, allowed: limits.connected_accounts },
+    integration_tokens: { in_use: plan.integration_tokens, allowed: limits.integration_tokens },
+    sync_interval: limits.sync_interval,
+  }
+  const rows = usageRows(i18n, use, { person: "", name: applied.name, enforced: true, words: TO_THE_READER })
+  const over = rows.some((row) => row.chip?.tone === "attention")
+  return {
+    name: applied.name,
+    origin: t(applied.on_default ? "settings.ownPlan.default" : "settings.ownPlan.setByAdministrator"),
+    chips: over ? [{ id: "over", text: t("people.plan.chips.over"), tone: "attention" }] : [],
+    rows,
+  }
 }
 
 /** When the Plan was given, as "Oct 12", with the year when it was another year. */

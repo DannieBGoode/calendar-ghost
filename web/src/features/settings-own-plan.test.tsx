@@ -73,6 +73,7 @@ const UNREADABLE = { detail: "database is locked", code: null, params: {} }
 
 type Call = { method: string; path: string }
 let calls: Call[] = []
+let openConnections: ReturnType<typeof vi.fn<() => void>>
 
 /** Answers by "METHOD /path", reading `answers` at each call so a test can change one. */
 function serve(answers: Record<string, Response>) {
@@ -126,13 +127,14 @@ async function renderSection(i18n: I18n, { ownPlan, registration = invitationOnl
     "GET /api/v1/registration": "policy" in registration ? jsonResponse(registration) : registration,
   }
   serve(answers)
+  openConnections = vi.fn<() => void>()
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   act(() => {
     root?.render(
       <StaticI18nProvider i18n={i18n}>
         <QueryClientProvider client={queryClient}>
-          <OwnPlanSection administrator={administrator} />
+          <OwnPlanSection administrator={administrator} onOpenConnections={openConnections} />
         </QueryClientProvider>
       </StaticI18nProvider>,
     )
@@ -156,17 +158,54 @@ async function click(target: HTMLElement) {
   await settle()
 }
 
-/** Each limit's row as a person reads it: its title, how much is in use, and what it says past the limit. */
+/**
+ * Each limit's row as a person reads it: its name, what counts, the meter's words, the count or
+ * what the row says instead, its chip, and the sentence under it.
+ */
 function rows() {
-  return [...(section()?.querySelectorAll<HTMLElement>(".own-plan-row") ?? [])].map((row) => ({
-    title: row.querySelector("h3")?.textContent,
-    value: row.querySelector(".setting-state")?.textContent,
-    over: row.querySelector(".field-hint[data-tone='attention']")?.textContent ?? null,
+  return usageRows().map((row) => ({
+    title: textOf(row, ".plan-usage-name"),
+    meter: row.querySelector("meter")?.getAttribute("aria-valuetext") ?? null,
+    detail: textOf(row, ".plan-usage-detail"),
+    value: textOf(row, ".plan-usage-value"),
+    chip: textOf(row, ".plan-usage-chip"),
+    note: textOf(row, ".plan-usage-note"),
   }))
+}
+
+function usageRows(): HTMLElement[] {
+  return [...(section()?.querySelectorAll<HTMLElement>(".plan-usage-row") ?? [])]
+}
+
+function textOf(within: Element, selector: string): string | null {
+  return within.querySelector(selector)?.textContent ?? null
+}
+
+/** A row's chip and note tones, and whether each carries its icon, hidden from screen readers. */
+function tones(row: Element | undefined) {
+  const tone = (selector: string) => row?.querySelector(selector)?.getAttribute("data-tone") ?? null
+  const icon = (selector: string) => row?.querySelector(`${selector} svg`)?.getAttribute("aria-hidden") ?? null
+  return {
+    chip: tone(".plan-usage-chip"),
+    chipIcon: icon(".plan-usage-chip"),
+    note: tone(".plan-usage-note"),
+    noteIcon: icon(".plan-usage-note"),
+    meter: tone("[data-tone='over']"),
+  }
 }
 
 function intro(): string | undefined {
   return section()?.querySelector(".section-heading p")?.textContent
+}
+
+/** The card's head: the plan's name as its title, its chips, and who set it. */
+function head() {
+  const card = section()?.querySelector(".own-plan-card")
+  return {
+    title: card?.querySelector("h3")?.textContent,
+    chips: [...(card?.querySelectorAll(".own-plan-head .person-plan-chip") ?? [])].map((chip) => chip.textContent),
+    origin: card?.querySelector(".own-plan-origin")?.textContent,
+  }
 }
 
 describe("OwnPlanSection", () => {
@@ -192,6 +231,7 @@ describe("OwnPlanSection", () => {
     expect(section()?.getAttribute("aria-labelledby")).toBe("your-plan-title")
     expect(intro()).toBe("You administer this installation, so no plan limits you.")
     expect(rows()).toEqual([])
+    expect(section()?.querySelector(".own-plan-card")).toBeNull()
     expect(section()?.textContent).not.toContain("ask your administrator")
   })
 
@@ -205,66 +245,109 @@ describe("OwnPlanSection", () => {
     expect(calls.map((call) => call.path)).toContain("/api/v1/registration")
   })
 
-  it("names the plan, then gives one row per limit with how much is in use, then how to change it", async () => {
+  it("names the plan and who set it, then one row per limit with a meter and its numbers, then how to change it", async () => {
     await renderSection(testI18n(), { ownPlan: jsonResponse(family) })
-    expect(intro()).toBe("You have Family, chosen by your administrator.")
+    expect(intro()).toBe("What you can use here, and how much of it you use now.")
+    expect(head()).toEqual({ title: "Family", chips: [], origin: "Set by your administrator" })
     expect(rows()).toEqual([
-      { title: "Rules that can sync", value: "3 of 5 in use", over: null },
-      { title: "Calendar accounts you can connect", value: "2 of 3 in use", over: null },
-      { title: "Integration Tokens you can have", value: "0 of 2 in use", over: null },
-      { title: "How soon calendars sync", value: "Instant sync, and a check every 5 minutes", over: null },
+      { title: "Active rules", meter: "3 of 5", detail: null, value: "3 of 5", chip: null, note: null },
+      { title: "Calendar accounts", meter: "2 of 3", detail: null, value: "2 of 3", chip: null, note: null },
+      { title: "Integration Tokens", meter: "0 of 2", detail: null, value: "0 of 2", chip: null, note: null },
+      { title: "Sync speed", meter: null, detail: null, value: "Instant", chip: null, note: null },
     ])
-    // What counts toward each limit, in the words of the plan's editor.
-    expect(section()?.querySelector(".own-plan-row p:not(.setting-state)")?.textContent).toBe("Paused rules and drafts don't count.")
-    const rowsAndClose = [...section()!.querySelectorAll(".own-plan-row, .own-plan-close")]
-    expect(rowsAndClose.at(-1)?.textContent).toBe("To change your plan, ask your administrator.")
+    // Each meter is named by its limit, so a screen reader hears which limit a value is for.
+    expect([...section()!.querySelectorAll("meter")].map((meter) => meter.getAttribute("aria-label"))).toEqual([
+      "Active rules",
+      "Calendar accounts",
+      "Integration Tokens",
+    ])
+    expect(section()?.querySelector(".plan-usage-hint")?.textContent).toBe(
+      "Running rules, and rules waiting for you to reauthorize an account. Paused rules and drafts don't count.",
+    )
+    const closing = [...section()!.querySelectorAll(".plan-usage-row, .own-plan-close")]
+    expect(closing.at(-1)?.textContent).toBe("To change your plan, ask your administrator.")
   })
 
-  it("names the default plan by its name alone, with a plan that includes no tokens and a slower sync", async () => {
-    await renderSection(testI18n(), { ownPlan: jsonResponse({ ...freeOverLimit, rules_counted: 2, over_rule_limit: false }) })
-    expect(intro()).toBe("You have Free, chosen by your administrator.")
-    expect(rows().map((row) => row.value)).toEqual(["2 of 2 in use", "1 of 1 in use", "Not included", "Every 5 minutes"])
+  it("says the default plan, a plan that includes no tokens, and a slower sync in words", async () => {
+    await renderSection(testI18n(), { ownPlan: jsonResponse({ ...freeOverLimit, rules_counted: 1, over_rule_limit: false }) })
+    expect(head()).toEqual({ title: "Free", chips: [], origin: "The default plan" })
+    expect(rows().slice(2)).toEqual([
+      { title: "Integration Tokens", meter: null, detail: "Your plan does not include Integration Tokens.", value: "Not included", chip: null, note: null },
+      { title: "Sync speed", meter: null, detail: "Instant sync is not part of your plan.", value: "Every 5 minutes", chip: null, note: null },
+    ])
   })
 
-  it("says No limit where the plan sets none", async () => {
+  it("says No limit where the plan sets none, with how many are in use and no meter", async () => {
     const unlimited: OwnPlan = {
       ...family,
       limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" },
     }
     await renderSection(testI18n(), { ownPlan: jsonResponse(unlimited) })
-    expect(rows().map((row) => row.value)).toEqual([
-      "No limit, 3 in use",
-      "No limit, 2 in use",
-      "No limit, 0 in use",
-      "Instant sync, and a check every 5 minutes",
+    expect(rows().map((row) => [row.detail, row.value, row.meter])).toEqual([
+      ["No limit", "3 in use", null],
+      ["No limit", "2 in use", null],
+      ["No limit", "0 in use", null],
+      [null, "Instant", null],
     ])
   })
 
-  it("marks a limit in use past what the plan allows with words, an icon, and its tone, never color alone", async () => {
+  it("says Limit reached at a limit, and how to start another rule", async () => {
+    await renderSection(testI18n(), { ownPlan: jsonResponse({ ...freeOverLimit, rules_counted: 2, over_rule_limit: false }) })
+    const [rulesRow] = usageRows()
+    expect(rows()[0]).toEqual({
+      title: "Active rules",
+      meter: "2 of 2, limit reached",
+      detail: null,
+      value: "2 of 2",
+      chip: "Limit reached",
+      note: "To start another rule, pause one first.",
+    })
+    // At the limit nothing is wrong: the chip and the note stay neutral, with an icon beside the note.
+    expect(tones(rulesRow)).toEqual({ chip: "neutral", chipIcon: null, note: "info", noteIcon: "true", meter: null })
+    expect(head().chips).toEqual([])
+  })
+
+  it("marks a limit past what the plan allows with words, an icon, and its tone, never color alone", async () => {
     await renderSection(testI18n(), { ownPlan: jsonResponse({ ...freeOverLimit, connected_accounts: 3 }) })
-    const [rulesRow, accountsRow, tokensRow] = [...section()!.querySelectorAll<HTMLElement>(".own-plan-row")]
+    expect(head().chips).toEqual(["Over a limit"])
+    expect(section()?.querySelector(".own-plan-head .person-plan-chip svg")?.getAttribute("aria-hidden")).toBe("true")
     expect(rows().slice(0, 2)).toEqual([
       {
-        title: "Rules that can sync",
-        value: "3 in use, 2 allowed",
-        over: "You have more rules in use than your plan allows. They keep syncing, but you cannot start another until you pause or remove one.",
+        title: "Active rules",
+        meter: "3 of 2, over the limit",
+        detail: null,
+        value: "3 of 2",
+        chip: "Over",
+        note: "You have 3 active rules and your plan allows 2. They keep syncing, but you can't start another until fewer are active.",
       },
       {
-        title: "Calendar accounts you can connect",
-        value: "3 in use, 1 allowed",
-        over: "You have more calendar accounts than your plan allows. They keep working, but you cannot connect another until you delete one.",
+        title: "Calendar accounts",
+        meter: "3 of 1, over the limit",
+        detail: null,
+        value: "3 of 1",
+        chip: "Over",
+        note: "You have 3 calendar accounts and your plan allows 1. They keep syncing, but you can't connect another until you remove one in Connections.",
       },
     ])
-    for (const row of [rulesRow, accountsRow]) {
-      expect(row?.querySelector(".setting-state")?.getAttribute("data-tone")).toBe("attention")
-      expect(row?.querySelector(".field-hint[data-tone='attention'] svg")?.getAttribute("aria-hidden")).toBe("true")
-    }
-    expect(tokensRow?.querySelector("[data-tone]")).toBeNull()
+    const [rulesRow, accountsRow, tokensRow] = usageRows()
+    const over = { chip: "attention", chipIcon: "true", note: "attention", noteIcon: "true", meter: "over" }
+    expect(tones(rulesRow)).toEqual(over)
+    expect(tones(accountsRow)).toEqual(over)
+    expect(tokensRow?.querySelector("[data-tone='attention'], [data-tone='over']")).toBeNull()
+  })
+
+  it("opens Connections from the sentence under calendar accounts, where one can be removed", async () => {
+    await renderSection(testI18n(), { ownPlan: jsonResponse({ ...freeOverLimit, connected_accounts: 2 }) })
+    const link = section()?.querySelector<HTMLAnchorElement>(".plan-usage-note a")
+    expect(link?.textContent).toBe("Connections")
+    expect(link?.getAttribute("href")).toBe("/settings/connections")
+    await click(link!)
+    expect(openConnections).toHaveBeenCalledOnce()
   })
 
   it("marks nothing while every count fits", async () => {
     await renderSection(testI18n(), { ownPlan: jsonResponse(family) })
-    expect(section()?.querySelector("[data-tone]")).toBeNull()
+    expect(section()?.querySelector("[data-tone='attention'], [data-tone='over'], .plan-usage-note")).toBeNull()
   })
 
   it("moves focus to its heading when the address names it, as See your plan does", async () => {
@@ -315,7 +398,7 @@ describe("OwnPlanSection", () => {
     answers["GET /api/v1/account/plan"] = jsonResponse(family)
     await click(button("Try again"))
     expect(section()?.querySelector("[role='alert']")).toBeNull()
-    expect(intro()).toBe("You have Family, chosen by your administrator.")
+    expect(head().title).toBe("Family")
   })
 
   it("hides a failed load from an administrator under Only Me, where plans have no effect", async () => {
@@ -346,6 +429,8 @@ describe("OwnPlanSection", () => {
 
   const SHOWN: [string, Scenario][] = [
     ["a limited person over their rule limit", { ownPlan: jsonResponse(freeOverLimit) }],
+    ["a limited person over every limit", { ownPlan: jsonResponse({ ...freeOverLimit, connected_accounts: 2, integration_tokens: 1 }) }],
+    ["a limited person with room left", { ownPlan: jsonResponse(family) }],
     ["an administrator under Invitation Only", { ownPlan: jsonResponse(administering), administrator: true }],
     ["a plan that cannot load", { ownPlan: jsonResponse(UNREADABLE, 500) }],
   ]

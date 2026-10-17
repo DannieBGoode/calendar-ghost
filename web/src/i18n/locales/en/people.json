@@ -632,14 +632,6 @@
     },
     "isDefault": "Default",
     "copyName": "{name} copy",
-    "interval": {
-      "instant": "Instant sync, and a check every 5 minutes",
-      "5_minutes": "Every 5 minutes",
-      "10_minutes": "Every 10 minutes",
-      "15_minutes": "Every 15 minutes",
-      "30_minutes": "Every 30 minutes",
-      "60_minutes": "Every hour"
-    },
     "editor": {
       "name": "Name",
       "nameHint": "People see this name in Your plan.",

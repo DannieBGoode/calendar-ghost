@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import { testI18n } from "@/i18n/testing"
-import type { PersonPlanOverview } from "@/lib/api"
-import { planCardSummary, planUsageRows } from "@/lib/plan-usage"
+import type { OwnPlan, PersonPlanOverview } from "@/lib/api"
+import { ownPlanCard, planCardSummary, planUsageRows } from "@/lib/plan-usage"
 
 const i18n = testI18n()
 const NOW = Date.parse("2026-10-17T12:00:00Z")
@@ -97,7 +97,10 @@ describe("planUsageRows", () => {
       meter: { value: 2, max: 1, valueText: "2 of 1, over the limit", tone: "over" },
       value: "2 of 1",
       chip: { text: "Over", tone: "attention" },
-      note: "robin@example.test has 2 calendar accounts and Free allows 1. Their accounts keep syncing, but they can't connect another until one is removed. They see the same on Your plan.",
+      note: {
+        text: "robin@example.test has 2 calendar accounts and Free allows 1. Their accounts keep syncing, but they can't connect another until one is removed. They see the same on Your plan.",
+        tone: "attention",
+      },
     })
   })
 
@@ -118,7 +121,10 @@ describe("planUsageRows", () => {
       detail: "Free includes none.",
       value: "1 in use",
       chip: { text: "Over", tone: "attention" },
-      note: "robin@example.test has 1 Integration Token and Free includes none. Their tokens keep working, but they can't create another. They see the same on Your plan.",
+      note: {
+        text: "robin@example.test has 1 Integration Token and Free includes none. Their tokens keep working, but they can't create another. They see the same on Your plan.",
+        tone: "attention",
+      },
     })
   })
 
@@ -137,10 +143,10 @@ describe("planUsageRows", () => {
       ...robin,
       use: { ...robin.use!, rules: { in_use: 3, allowed: 1 }, integration_tokens: { in_use: 2, allowed: 1 } },
     })
-    expect(over[0]?.note).toBe(
+    expect(over[0]?.note?.text).toBe(
       "robin@example.test has 3 active rules and Free allows 1. Their rules keep syncing, but they can't start another until fewer are active. They see the same on Your plan.",
     )
-    expect(over[2]?.note).toBe(
+    expect(over[2]?.note?.text).toBe(
       "robin@example.test has 2 Integration Tokens and Free allows 1. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan.",
     )
   })
@@ -154,5 +160,108 @@ describe("planUsageRows", () => {
   it("has no rows without a plan's use", () => {
     expect(rows({ ...robin, use: null })).toEqual([])
     expect(rows({ ...robin, has: null })).toEqual([])
+  })
+})
+
+describe("ownPlanCard", () => {
+  /** Robin's own Free, as Your plan reads it: at the rule limit, over on calendar accounts, no tokens. */
+  const own: OwnPlan = {
+    basis: "plan",
+    plan: FREE,
+    limits: { rules: 1, connected_accounts: 1, integration_tokens: 0, sync_interval: "5_minutes" },
+    rules_counted: 1,
+    connected_accounts: 2,
+    integration_tokens: 0,
+    instant: false,
+    poll_every_minutes: 5,
+    may_connect_account: false,
+    may_issue_token: false,
+    over_rule_limit: false,
+  }
+
+  it("names the plan, who set it, and an Over a limit chip with its icon tone", () => {
+    expect(ownPlanCard(i18n, own)).toMatchObject({
+      name: "Free",
+      origin: "Set by your administrator",
+      chips: [{ id: "over", text: "Over a limit", tone: "attention" }],
+    })
+    const asDefault = ownPlanCard(i18n, { ...own, plan: DEFAULT_FREE, connected_accounts: 1 })
+    expect(asDefault).toMatchObject({ origin: "The default plan", chips: [] })
+  })
+
+  it("gives the person page's rows in the reader's own words", () => {
+    const rows = ownPlanCard(i18n, own)?.rows ?? []
+    expect(rows.map((row) => [row.title, row.hint])).toEqual([
+      ["Active rules", "Running rules, and rules waiting for you to reauthorize an account. Paused rules and drafts don't count."],
+      ["Calendar accounts", "Every account you connected counts, disconnected ones too."],
+      ["Integration Tokens", "Revoked tokens don't count."],
+      ["Sync speed", "How soon changes reach your other calendars."],
+    ])
+    expect(rows[0]).toMatchObject({
+      meter: { value: 1, max: 1, valueText: "1 of 1, limit reached", tone: "neutral" },
+      value: "1 of 1",
+      chip: { text: "Limit reached", tone: "neutral" },
+      note: { text: "To start another rule, pause one first.", tone: "info" },
+    })
+    expect(rows[1]).toMatchObject({
+      meter: { value: 2, max: 1, valueText: "2 of 1, over the limit", tone: "over" },
+      value: "2 of 1",
+      chip: { text: "Over", tone: "attention" },
+      note: {
+        text: "You have 2 calendar accounts and your plan allows 1. They keep syncing, but you can't connect another until you remove one in <link>Connections</link>.",
+        tone: "attention",
+      },
+    })
+    expect(rows[2]).toMatchObject({ meter: null, detail: "Your plan does not include Integration Tokens.", value: "Not included", quiet: true, note: null })
+    expect(rows[3]).toMatchObject({ detail: "Instant sync is not part of your plan.", value: "Every 5 minutes", speed: "5_minutes" })
+  })
+
+  it("says rules and tokens past their limits to the reader", () => {
+    const rows =
+      ownPlanCard(i18n, {
+        ...own,
+        limits: { ...own.limits!, integration_tokens: 1 },
+        rules_counted: 3,
+        connected_accounts: 1,
+        integration_tokens: 2,
+      })?.rows ?? []
+    expect(rows.map((row) => row.note)).toEqual([
+      {
+        text: "You have 3 active rules and your plan allows 1. They keep syncing, but you can't start another until fewer are active.",
+        tone: "attention",
+      },
+      null,
+      {
+        text: "You have 2 Integration Tokens and your plan allows 1. They keep working, but you can't create another until you revoke one in <link>Connections</link>.",
+        tone: "attention",
+      },
+      null,
+    ])
+    const kept = ownPlanCard(i18n, { ...own, integration_tokens: 1 })?.rows[2]
+    expect(kept).toMatchObject({
+      value: "1 in use",
+      chip: { text: "Over", tone: "attention" },
+      note: { text: "You have 1 Integration Token and your plan includes none. It keeps working, but you can't create another.", tone: "attention" },
+    })
+  })
+
+  it("says No limit and Instant where the plan sets none, with no meter or note", () => {
+    const rows =
+      ownPlanCard(i18n, {
+        ...own,
+        limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" },
+        rules_counted: 4,
+      })?.rows ?? []
+    expect(rows.map((row) => [row.detail, row.value, row.meter, row.note])).toEqual([
+      ["No limit", "4 in use", null, null],
+      ["No limit", "2 in use", null, null],
+      ["No limit", "0 in use", null, null],
+      [null, "Instant", null, null],
+    ])
+  })
+
+  it("has no card when no plan limits the reader", () => {
+    expect(ownPlanCard(i18n, { ...own, basis: "plans_off", plan: null, limits: null })).toBeNull()
+    expect(ownPlanCard(i18n, { ...own, basis: "administrator", plan: null, limits: null })).toBeNull()
   })
 })

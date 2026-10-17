@@ -309,8 +309,10 @@ nobody, as the default, so nothing changes until someone has a smaller Plan; you
 change it like any Plan. Administrators are never limited, and while Plans are off, which is the
 default, nobody is. A lower limit stops nothing: rules beyond it keep syncing, and accounts and
 tokens keep working, but nobody can start a rule, connect a new calendar account, or issue a token
-past it. Each person sees what their Plan allows under **Settings → Your account → Your plan**
-([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
+past it. Each person sees what their Plan allows under **Settings → Your account → Your plan**:
+the Plan's name, a meter for each limit with how much of it they use ("1 of 1", **Limit reached**,
+or **Over** with what keeps working), and that changing it is for their administrator, whom it
+does not name ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 
 The card counts how many people Plans limit, how many of them are over a limit, with **Show** to
 list them, the default Plan, and how many administrators are never limited. Below it, a table

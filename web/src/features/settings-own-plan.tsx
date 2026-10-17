@@ -1,10 +1,13 @@
 import { useQuery } from "@tanstack/react-query"
-import { TriangleAlert } from "lucide-react"
 
+import { PlanChips } from "@/components/plan-chips"
+import { PlanUsage } from "@/components/plan-usage"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import { api, type OwnPlan } from "@/lib/api"
-import { ownPlanRows, ownPlanShown, type OwnPlanRow } from "@/lib/plans"
+import { connectionsPath, isPlainLeftClick } from "@/lib/navigation"
+import { ownPlanCard } from "@/lib/plan-usage"
+import { ownPlanShown } from "@/lib/plans"
 import { useOwnPlan } from "@/lib/use-own-plan"
 
 /** Where links beside each limit land: `yourPlanPath()` names this anchor. */
@@ -24,13 +27,13 @@ function revealOnArrival(section: HTMLElement | null) {
 }
 
 /**
- * Which Plan limits the signed-in User, then one row per limit with how much of it they use, and
- * how to change it. An administrator reads that no plan limits them. Hidden while Plans are off
- * and for an administrator under Only Me, where Plans have no effect. A failed load shows its own
- * error; an administrator sees it only once the Registration Policy loads and is not Only Me. The
- * server still checks every limit.
+ * Which Plan limits the signed-in User, then one row per limit with a meter and how much of it they
+ * use, and how to change it. An administrator reads that no plan limits them. Hidden while Plans
+ * are off and for an administrator under Only Me, where Plans have no effect. A failed load shows
+ * its own error; an administrator sees it only once the Registration Policy loads and is not Only
+ * Me. The server still checks every limit.
  */
-export function OwnPlanSection({ administrator }: { administrator: boolean }) {
+export function OwnPlanSection({ administrator, onOpenConnections }: { administrator: boolean; onOpenConnections: () => void }) {
   const { t } = useI18n()
   const { shown, failed, plan, retry } = useShownOwnPlan(administrator)
   if (!shown) return null
@@ -44,7 +47,7 @@ export function OwnPlanSection({ administrator }: { administrator: boolean }) {
           {plan && <OwnPlanIntro plan={plan} />}
         </div>
       </div>
-      {plan && <OwnPlanLimits plan={plan} />}
+      {plan && <OwnPlanCard plan={plan} onOpenConnections={onOpenConnections} />}
       {failed && (
         <div className="inline-error integration-load-error" role="alert">
           <span>{t("settings.ownPlan.loadError")}</span>
@@ -75,48 +78,46 @@ function useShownOwnPlan(administrator: boolean) {
   }
 }
 
-/** Which Plan limits the User, or why no plan limits an administrator. */
+/** What Your plan shows, or why no plan limits an administrator. */
 function OwnPlanIntro({ plan }: { plan: OwnPlan }) {
   const { t } = useI18n()
-  if (plan.basis !== "plan" || !plan.plan) return <p>{t("settings.ownPlan.administrator")}</p>
-  return <p>{t("settings.ownPlan.intro", { name: plan.plan.name })}</p>
-}
-
-/** One row per limit, then the one way to change them: the User's administrator chooses their Plan. */
-function OwnPlanLimits({ plan }: { plan: OwnPlan }) {
-  const i18n = useI18n()
-  const rows = ownPlanRows(i18n, plan)
-  if (rows.length === 0) return null
-  return (
-    <div className="settings-list own-plan-list">
-      {rows.map((row) => (
-        <OwnPlanLimit key={row.limit} row={row} />
-      ))}
-      <p className="own-plan-close">{i18n.t("settings.ownPlan.close")}</p>
-    </div>
-  )
+  return <p>{t(plan.basis === "plan" && plan.plan ? "settings.ownPlan.intro" : "settings.ownPlan.administrator")}</p>
 }
 
 /**
- * A limit and how much of it is in use. Past it, the count takes Attention Ochre and a sentence
- * with an icon says what keeps working and how to make room, so color is never the only sign.
+ * The Plan as a card: its name with an "Over a limit" chip past any limit, whether it is the
+ * default or the User's administrator set it, one row per limit, then the one way to change it:
+ * the administrator chooses, named by role and never by person.
  */
-function OwnPlanLimit({ row }: { row: OwnPlanRow }) {
+function OwnPlanCard({ plan, onOpenConnections }: { plan: OwnPlan; onOpenConnections: () => void }) {
+  const i18n = useI18n()
+  const card = ownPlanCard(i18n, plan)
+  if (!card) return null
   return (
-    <div className="setting-row own-plan-row" id={`${ANCHOR}-${row.limit}`}>
-      <div className="setting-copy">
-        <h3>{row.title}</h3>
-        <p className="setting-state" data-tone={row.over ? "attention" : undefined}>
-          {row.value}
-        </p>
-        {row.hint && <p>{row.hint}</p>}
-        {row.over && (
-          <p className="field-hint" data-tone="attention">
-            <TriangleAlert aria-hidden="true" />
-            {row.over}
-          </p>
-        )}
+    <div className="page-card own-plan-card">
+      <div className="own-plan-head">
+        <div className="own-plan-held">
+          <h3 className="own-plan-name">{card.name}</h3>
+          <PlanChips chips={card.chips} />
+        </div>
+        <p className="own-plan-origin">{card.origin}</p>
       </div>
+      <PlanUsage
+        rows={card.rows}
+        noteLink={(text) => (
+          <a
+            href={connectionsPath()}
+            onClick={(event) => {
+              if (!isPlainLeftClick(event)) return
+              event.preventDefault()
+              onOpenConnections()
+            }}
+          >
+            {text}
+          </a>
+        )}
+      />
+      <p className="own-plan-close">{i18n.t("settings.ownPlan.close")}</p>
     </div>
   )
 }

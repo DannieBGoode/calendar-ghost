@@ -550,7 +550,8 @@ Accounts too: connecting one of them again is Reauthorization, which a Plan neve
 limit, **Connect an account** is unavailable and says why, but Reauthorization is never refused
 by the account limit: an account that needs it still offers **Reauthorize account**.
 **Settings → Your account → Your plan** shows how many
-calendar accounts your Plan allows. Installation Administrators are never limited.
+calendar accounts you have and how many your Plan allows, as "2 of 1" beside a meter, and past the
+limit a sentence that links to **Connections**. Installation Administrators are never limited.
 
 Calendar Ghost learns an account's address only after the provider's consent. So when you choose
 an address you have not connected, and your Plan has no room for it, you return to Connections
@@ -696,9 +697,9 @@ sends email. Until then that page says who can set email up, and every incident 
 
 Start syncing is unavailable on a rule's preview page, or starting it answers that your plan's
 limit is reached, when an administrator turned Plans on and the rules that count toward your Plan
-already reach its rule limit. Under **Settings → Your account → Your plan**, **Rules that can
-sync** shows how many rules count and how many your Plan allows, and beside **Create sync rule**
-on Rules a note says how many your Plan lets sync at once.
+already reach its rule limit. Under **Settings → Your account → Your plan**, **Active rules**
+shows how many rules count and how many your Plan allows, as "1 of 1" with **Limit reached**, and
+beside **Create sync rule** on Rules a note says how many your Plan lets sync at once.
 
 - Rules that count are enabled rules and rules stopped only because an account's access lapsed.
   Draft, previewed, and paused rules do not count, and creating or previewing a rule is never
@@ -725,7 +726,9 @@ unrevoked Integration Tokens reach your Plan's token limit, and the form says wh
 allows 2 Integration Tokens, and all are in use. Revoke one to issue another." Revoke a token you
 no longer use, then issue the new one: revoked tokens do not count. A Plan may include no
 Integration Tokens at all; the form then says "Your plan does not include Integration Tokens. To
-get one, ask your administrator." Tokens you already have keep working when a limit is lowered,
+get one, ask your administrator." **Integration Tokens** under **Settings → Your account → Your
+plan** shows how many you have against the limit, or **Not included**. Tokens you already have
+keep working when a limit is lowered,
 so no monitor stops on its own. A token that reads Installation Health is for administrators, who
 are never limited. An API client receives `409` with the code `plan_limit_reached` and the reason
 `integration_tokens`.
@@ -751,6 +754,10 @@ more calendar accounts than this. They keep them, but can't connect another."
   "2 of 1" and **Over** past it, and says under it what keeps working: "robin@example.test has 2
   calendar accounts and Free allows 1. Their accounts keep syncing, but they can't connect another
   until one is removed."
+
+The person sees the same under **Settings → Your account → Your plan**, in their own words, with
+**Over a limit** beside their Plan's name: "You have 2 calendar accounts and your plan allows 1.
+They keep syncing, but you can't connect another until you remove one in Connections."
 
 Each count is made as the limit counts it: rules that count toward the Plan ([Start syncing is
 unavailable](#start-syncing-is-unavailable-your-plans-rule-limit) says which), every calendar
