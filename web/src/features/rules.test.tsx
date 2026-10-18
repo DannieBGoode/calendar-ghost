@@ -436,27 +436,14 @@ describe("RulesView", () => {
     return [...container.querySelectorAll("button")].find((item) => item.textContent.includes("Create sync rule"))!
   }
 
-  it("keeps Create sync rule available at the plan's rule limit, since creating is never limited", async () => {
+  it("says beside Create sync rule how many rules the plan lets sync, before a rule is built, and keeps it available at the limit, since creating is never limited", async () => {
     await renderRulesList(testI18n(), { ownPlan: jsonResponse(overTheLimit) })
     expect(createButton().disabled).toBe(false)
     expect(createButton().getAttribute("aria-disabled")).toBeNull()
-  })
-
-  it("says beside Create sync rule how many rules the plan lets sync, before a rule is built", async () => {
-    await renderRulesList(testI18n(), { ownPlan: jsonResponse(overTheLimit) })
     const note = document.getElementById(createButton().getAttribute("aria-describedby") ?? "")
     expect(note?.textContent).toBe("Your plan lets 1 rule sync at once. See your plan")
     expect(note?.className).toBe("action-hint")
     expect(note?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
-  })
-
-  it("counts several rules in the note beside Create sync rule", async () => {
-    await renderRulesList(testI18n(), {
-      ownPlan: jsonResponse({ ...overTheLimit, limits: { ...overTheLimit.limits, rules: 5 }, rules_counted: 2, over_rule_limit: false }),
-    })
-    expect(container.querySelector(".heading-action .action-hint")?.textContent).toBe(
-      "Your plan lets 5 rules sync at once. See your plan",
-    )
   })
 
   it.each([

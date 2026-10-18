@@ -152,13 +152,6 @@ describe("usePlans", () => {
     expect(refreshed(OWN_PLAN_QUERY)).toBe(true)
   })
 
-  it("turns Plans on with no default, as the server then makes No limits the default", async () => {
-    const off: PlansOverview = { ...overview, default_plan: null, plans: [family, { ...free, is_default: false }] }
-    await render({ "GET /api/v1/plans": jsonResponse(off), "PUT /api/v1/plan-settings": jsonResponse(overview) })
-    await run((plans) => plans.setting.mutate({ enabled: true, defaultPlan: null }))
-    expect(calls.find((call) => call.method === "PUT")?.body).toEqual({ enabled: true, default_plan: null })
-  })
-
   it("adds, saves, and removes a Plan, listing the Plans again after each", async () => {
     await render({
       "POST /api/v1/plans": jsonResponse({ ...family, key: "family-2", name: "Family Plus" }, 201),

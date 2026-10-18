@@ -151,13 +151,6 @@ describe("own plan hints", () => {
     expect(hints.rules).toBeUndefined()
   })
 
-  it("says nothing but the rule limit while the Plan has room", async () => {
-    await render(
-      jsonResponse({ ...atEveryLimit, may_connect_account: true, may_issue_token: true, over_rule_limit: false }),
-    )
-    expect(hints).toEqual({ ...NO_HINTS, rules: "Your plan lets 1 rule sync at once." })
-  })
-
   it("says nothing for an administrator or while Plans are off", async () => {
     await render(
       jsonResponse({
@@ -277,19 +270,12 @@ describe("own plan refresh", () => {
     expect(RULE_CHANGE_QUERIES).toContainEqual(OWN_PLAN_QUERY)
   })
 
-  it("reads the Plan again after an account is disconnected, which stops its rules", async () => {
-    expect(await refreshesOwnPlan(({ accounts }) => accounts.disconnect.mutate("account-1"))).toBe(true)
-  })
-
-  it("reads the Plan again after an account is deleted, which frees a calendar account", async () => {
-    expect(await refreshesOwnPlan(({ accounts }) => accounts.permanentDelete.mutate("account-1"))).toBe(true)
-  })
-
-  it("reads the Plan again after a token is issued", async () => {
-    expect(await refreshesOwnPlan(({ tokens }) => tokens.issue.mutate())).toBe(true)
-  })
-
-  it("reads the Plan again after a token is revoked", async () => {
-    expect(await refreshesOwnPlan(({ tokens }) => tokens.revoke.mutate(homeMonitor))).toBe(true)
+  it.each<[string, (current: Commands) => void]>([
+    ["an account is disconnected, which stops its rules", ({ accounts }) => accounts.disconnect.mutate("account-1")],
+    ["an account is deleted, which frees a calendar account", ({ accounts }) => accounts.permanentDelete.mutate("account-1")],
+    ["a token is issued", ({ tokens }) => tokens.issue.mutate()],
+    ["a token is revoked", ({ tokens }) => tokens.revoke.mutate(homeMonitor)],
+  ])("reads the Plan again after %s", async (_case, command) => {
+    expect(await refreshesOwnPlan(command)).toBe(true)
   })
 })

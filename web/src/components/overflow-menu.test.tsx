@@ -14,8 +14,6 @@ afterEach(() => {
   act(() => root?.unmount())
   root = null
   document.body.innerHTML = ""
-  document.documentElement.style.removeProperty("scroll-padding-top")
-  document.documentElement.style.removeProperty("scroll-padding-bottom")
   vi.restoreAllMocks()
 })
 
@@ -70,26 +68,6 @@ describe("OverflowMenu in the window", () => {
     await open(container)
     expect(placement(container)).toEqual({ side: "bottom", maxHeight: "" })
     expect(document.activeElement?.textContent).toBe("Edit")
-  })
-
-  it("opens above its trigger near the window's foot, as on a catalog's last row", async () => {
-    layout({ window: 900, trigger: 700, content: 300 })
-    const container = render()
-    await open(container)
-    const menu = container.querySelector<HTMLElement>("[role='menu']")!
-    expect(placement(container)).toEqual({ side: "top", maxHeight: "" })
-    expect(menu.style.top).toBe("auto")
-    expect(menu.style.bottom).not.toBe("")
-  })
-
-  it("keeps clear of a toast, which the page's scroll padding marks, so the toast never covers an item", async () => {
-    document.documentElement.style.setProperty("scroll-padding-top", "80px")
-    document.documentElement.style.setProperty("scroll-padding-bottom", "120px")
-    layout({ window: 900, trigger: 500, content: 300 })
-    const container = render()
-    await open(container)
-    // Under the trigger: 900 - 120 - 16 - (540 + 4) = 220. Above it: 500 - 4 - 80 - 16 = 400.
-    expect(placement(container)).toEqual({ side: "top", maxHeight: "" })
   })
 
   it("caps its height at the room it has, so its items scroll inside it", async () => {

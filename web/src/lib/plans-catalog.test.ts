@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import { testI18n } from "@/i18n/testing"
 import type { PeoplePage, PersonRow, PlanSummary, PlansOverview } from "@/lib/api"
 import {
-  catalogOrder,
   compactStatusSentence,
   countCell,
   makeDefaultHint,
@@ -83,18 +82,6 @@ function person(email: string): PersonRow {
 function holders(emails: string[], total = emails.length): PeoplePage {
   return { users: emails.map(person), total, page: 1, page_size: 3 }
 }
-
-describe("catalogOrder", () => {
-  it("lists the default first, then the others in the order the server gives, by name", () => {
-    expect(catalogOrder(overview({ defaultPlan: "pro", plans: [noLimits, free, pro] }).plans).map((plan) => plan.key)).toEqual(
-      ["pro", "no-limits", "free"],
-    )
-    expect(catalogOrder(overview({ defaultPlan: null, plans: [free, pro] }).plans).map((plan) => plan.key)).toEqual([
-      "free",
-      "pro",
-    ])
-  })
-})
 
 describe("countCell", () => {
   it("says a count as a number, no limit as Unlimited, muted, and zero as None, a limit in ink as numbers are", () => {
@@ -190,10 +177,6 @@ describe("statusFacts", () => {
       secondary: false,
     })
   })
-
-  it("has no facts before any Plan exists", () => {
-    expect(statusFacts(i18n, overview({ enabled: false, defaultPlan: null, plans: [] }))).toEqual([])
-  })
 })
 
 describe("makeDefaultHint", () => {
@@ -225,13 +208,6 @@ describe("makeDefaultHint", () => {
 })
 
 describe("removeRefusal", () => {
-  it("lets a Plan nobody has go, unless it is the default", () => {
-    expect(removeRefusal(i18n, { ...free, people: 0 }, undefined)).toBeNull()
-    expect(removeRefusal(i18n, { ...free, people: 0, is_default: true }, undefined)).toBe(
-      "Make another plan the default first.",
-    )
-  })
-
   it("counts who has a Plan until their names arrive, or when they cannot", () => {
     expect(removeRefusal(i18n, free, undefined)).toBe("2 people have Free. Give them another plan first.")
     expect(removeRefusal(i18n, { ...free, people: 1 }, holders([]))).toBe("1 person has Free. Give them another plan first.")

@@ -322,19 +322,7 @@ describe("OverviewView", () => {
       cause_anchors: {},
     }
     // A disconnected account still counts, so even the first step can meet the limit.
-    const atAccountLimit: OwnPlan = {
-      basis: "plan",
-      plan: { key: "free", name: "Free", on_default: true },
-      limits: { rules: 1, connected_accounts: 1, integration_tokens: 0, sync_interval: "5_minutes" },
-      rules_counted: 0,
-      connected_accounts: 1,
-      integration_tokens: 0,
-      instant: false,
-      poll_every_minutes: 5,
-      may_connect_account: false,
-      may_issue_token: false,
-      over_rule_limit: false,
-    }
+    const atAccountLimit: OwnPlan = { ...atRuleLimit, limits: { ...atRuleLimit.limits!, connected_accounts: 1 }, rules_counted: 0, connected_accounts: 1 }
     const { container } = await renderOverview(testI18n(), {
       dashboard: {
         ...attentionDashboard,

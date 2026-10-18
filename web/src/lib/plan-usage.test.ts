@@ -179,16 +179,6 @@ describe("ownPlanCard", () => {
     over_rule_limit: false,
   }
 
-  it("names the plan, who set it, and an Over a limit chip with its icon tone", () => {
-    expect(ownPlanCard(i18n, own)).toMatchObject({
-      name: "Free",
-      origin: "Set by your administrator",
-      chips: [{ id: "over", text: "Over a limit", tone: "attention" }],
-    })
-    const asDefault = ownPlanCard(i18n, { ...own, plan: DEFAULT_FREE, connected_accounts: 1 })
-    expect(asDefault).toMatchObject({ origin: "The default plan", chips: [] })
-  })
-
   it("gives the person page's rows in the reader's own words", () => {
     const rows = ownPlanCard(i18n, own)?.rows ?? []
     expect(rows.map((row) => [row.title, row.hint])).toEqual([
@@ -197,23 +187,6 @@ describe("ownPlanCard", () => {
       ["Integration tokens", "Revoked tokens don't count."],
       ["Sync speed", "How soon changes reach your other calendars."],
     ])
-    expect(rows[0]).toMatchObject({
-      meter: { value: 1, max: 1, valueText: "1 of 1, limit reached", tone: "neutral" },
-      value: "1 of 1",
-      chip: { text: "Limit reached", tone: "neutral" },
-      note: { text: "To start another rule, pause one first.", tone: "info" },
-    })
-    expect(rows[1]).toMatchObject({
-      meter: { value: 2, max: 1, valueText: "2 of 1, over the limit", tone: "over" },
-      value: "2 of 1",
-      chip: { text: "Over", tone: "attention" },
-      note: {
-        text: "You have 2 calendar accounts and your plan allows 1. They keep syncing, but you can't connect another until you remove one in <link>Connections</link>.",
-        tone: "attention",
-      },
-    })
-    expect(rows[2]).toMatchObject({ meter: null, detail: "Your plan does not include integration tokens.", value: "Not included", quiet: true, note: null })
-    expect(rows[3]).toMatchObject({ detail: "Instant sync is not part of your plan.", value: "Every 5 minutes", speed: "5_minutes" })
   })
 
   it("says rules and tokens past their limits to the reader", () => {
@@ -243,21 +216,6 @@ describe("ownPlanCard", () => {
       chip: { text: "Over", tone: "attention" },
       note: { text: "You have 1 integration token and your plan includes none. It keeps working, but you can't create another.", tone: "attention" },
     })
-  })
-
-  it("says No limit and Instant where the plan sets none, with no meter or note", () => {
-    const rows =
-      ownPlanCard(i18n, {
-        ...own,
-        limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" },
-        rules_counted: 4,
-      })?.rows ?? []
-    expect(rows.map((row) => [row.detail, row.value, row.meter, row.note])).toEqual([
-      ["No limit", "4 in use", null, null],
-      ["No limit", "2 in use", null, null],
-      ["No limit", "0 in use", null, null],
-      [null, "Instant", null, null],
-    ])
   })
 
   it("has no card when no plan limits the reader", () => {

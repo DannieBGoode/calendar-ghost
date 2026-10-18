@@ -209,20 +209,21 @@ function head() {
 }
 
 describe("OwnPlanSection", () => {
-  it("stays hidden while plans are off", async () => {
-    await renderSection(testI18n(), { ownPlan: jsonResponse(plansOff) })
+  const HIDDEN: [string, Scenario][] = [
+    ["while plans are off", { ownPlan: jsonResponse(plansOff) }],
+    ["for an answer that names no basis", { ownPlan: jsonResponse({}) }],
+    ["for an administrator under Only Me, where plans have no effect", { ownPlan: jsonResponse(administering), registration: onlyMe, administrator: true }],
+    ["when it cannot load, for an administrator under Only Me", { ownPlan: jsonResponse(UNREADABLE, 500), registration: onlyMe, administrator: true }],
+    [
+      "when it cannot load, for an administrator while the Registration Policy cannot load either",
+      { ownPlan: jsonResponse(UNREADABLE, 500), registration: jsonResponse(UNREADABLE, 500), administrator: true },
+    ],
+  ]
+
+  it.each(HIDDEN)("stays hidden %s", async (_case, scenario) => {
+    await renderSection(testI18n(), scenario)
     expect(section()).toBeNull()
     expect(container.textContent).toBe("")
-  })
-
-  it("stays hidden for an answer that names no basis", async () => {
-    await renderSection(testI18n(), { ownPlan: jsonResponse({}) })
-    expect(section()).toBeNull()
-  })
-
-  it("stays hidden for an administrator under Only Me, where plans have no effect", async () => {
-    await renderSection(testI18n(), { ownPlan: jsonResponse(administering), registration: onlyMe, administrator: true })
-    expect(section()).toBeNull()
   })
 
   it("tells an administrator under Invitation Only that no plan limits them", async () => {
@@ -255,6 +256,7 @@ describe("OwnPlanSection", () => {
       { title: "Integration tokens", meter: "0 of 2", detail: null, value: "0 of 2", chip: null, note: null },
       { title: "Sync speed", meter: null, detail: null, value: "Instant", chip: null, note: null },
     ])
+    expect(section()?.querySelector("[data-tone='attention'], [data-tone='over'], .plan-usage-note")).toBeNull()
     // Each meter is named by its limit, so a screen reader hears which limit a value is for.
     expect([...section()!.querySelectorAll("meter")].map((meter) => meter.getAttribute("aria-label"))).toEqual([
       "Active rules",
@@ -283,11 +285,11 @@ describe("OwnPlanSection", () => {
       limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" },
     }
     await renderSection(testI18n(), { ownPlan: jsonResponse(unlimited) })
-    expect(rows().map((row) => [row.detail, row.value, row.meter])).toEqual([
-      ["No limit", "3 in use", null],
-      ["No limit", "2 in use", null],
-      ["No limit", "0 in use", null],
-      [null, "Instant", null],
+    expect(rows().map((row) => [row.detail, row.value, row.meter, row.note])).toEqual([
+      ["No limit", "3 in use", null, null],
+      ["No limit", "2 in use", null, null],
+      ["No limit", "0 in use", null, null],
+      [null, "Instant", null, null],
     ])
   })
 
@@ -345,18 +347,17 @@ describe("OwnPlanSection", () => {
     expect(openConnections).toHaveBeenCalledOnce()
   })
 
-  it("marks nothing while every count fits", async () => {
-    await renderSection(testI18n(), { ownPlan: jsonResponse(family) })
-    expect(section()?.querySelector("[data-tone='attention'], [data-tone='over'], .plan-usage-note")).toBeNull()
-  })
-
-  it("moves focus to its heading when the address names it, as See your plan does", async () => {
+  it("moves focus to its heading and scrolls itself into view once when the address names it, as See your plan does", async () => {
     window.history.replaceState(null, "", "/settings/account#your-plan")
-    vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
+    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
     await renderSection(testI18n(), { ownPlan: jsonResponse(family) })
     const heading = section()?.querySelector("h2")
     expect(heading?.getAttribute("tabindex")).toBe("-1")
     expect(document.activeElement).toBe(heading)
+
+    await settle()
+    expect(scrolled).toHaveBeenCalledOnce()
+    expect(scrolled.mock.contexts[0]).toBe(section())
   })
 
   it("moves focus to its heading on arrival even when it cannot load, so the error is read next", async () => {
@@ -366,27 +367,12 @@ describe("OwnPlanSection", () => {
     expect(document.activeElement).toBe(section()?.querySelector("h2"))
   })
 
-  it("leaves focus alone when the address names something else", async () => {
-    window.history.replaceState(null, "", "/settings/account")
-    await renderSection(testI18n(), { ownPlan: jsonResponse(family) })
-    expect(document.activeElement).not.toBe(section()?.querySelector("h2"))
-  })
-
-  it("scrolls itself into view once when the address names it, as a link beside a limit does", async () => {
-    window.history.replaceState(null, "", "/settings/account#your-plan")
-    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
-    await renderSection(testI18n(), { ownPlan: jsonResponse(family) })
-    await settle()
-
-    expect(scrolled).toHaveBeenCalledOnce()
-    expect(scrolled.mock.contexts[0]).toBe(section())
-  })
-
-  it("does not scroll when the address names something else", async () => {
+  it("leaves focus alone and does not scroll when the address names something else", async () => {
     window.history.replaceState(null, "", "/settings/account")
     const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
     await renderSection(testI18n(), { ownPlan: jsonResponse(family) })
     expect(section()).not.toBeNull()
+    expect(document.activeElement).not.toBe(section()?.querySelector("h2"))
     expect(scrolled).not.toHaveBeenCalled()
   })
 
@@ -401,11 +387,6 @@ describe("OwnPlanSection", () => {
     expect(head().title).toBe("Family")
   })
 
-  it("hides a failed load from an administrator under Only Me, where plans have no effect", async () => {
-    await renderSection(testI18n(), { ownPlan: jsonResponse(UNREADABLE, 500), registration: onlyMe, administrator: true })
-    expect(section()).toBeNull()
-  })
-
   it("shows its own error with Try again to an administrator under Invitation Only when it cannot load", async () => {
     await renderSection(testI18n(), {
       ownPlan: jsonResponse(UNREADABLE, 500),
@@ -414,17 +395,6 @@ describe("OwnPlanSection", () => {
     })
     expect(section()?.querySelector("[role='alert']")?.textContent).toBe("Your plan could not load.Try again")
     expect(button("Try again")).not.toBeNull()
-  })
-
-  it("hides a failed load from an administrator while the Registration Policy cannot load either", async () => {
-    await renderSection(testI18n(), {
-      ownPlan: jsonResponse(UNREADABLE, 500),
-      registration: jsonResponse(UNREADABLE, 500),
-      administrator: true,
-    })
-    expect(section()).toBeNull()
-    expect(container.querySelector("#your-plan-title")).toBeNull()
-    expect(container.textContent).not.toContain("Your plan could not load.")
   })
 
   const SHOWN: [string, Scenario][] = [

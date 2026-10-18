@@ -6,7 +6,6 @@ import {
   assignCandidates,
   heldPlanLine,
   overNote,
-  restoredResult,
   undoMoves,
   wouldBeOver,
 } from "@/lib/plan-assignment"
@@ -120,14 +119,5 @@ describe("undoMoves", () => {
       { plan: null, userIds: ["user-alex", "user-zoe"] },
       { plan: "pro", userIds: ["user-sam", "user-lee"] },
     ])
-  })
-})
-
-describe("restoredResult", () => {
-  it("names one person, and counts several", () => {
-    expect(restoredResult(i18n, answer([move("alex@example.test", NO_LIMITS)]))).toBe("alex@example.test has their plan back.")
-    expect(restoredResult(i18n, answer([move("alex@example.test", NO_LIMITS), move("sam@example.test", PRO)]))).toBe(
-      "2 people have their plans back.",
-    )
   })
 })

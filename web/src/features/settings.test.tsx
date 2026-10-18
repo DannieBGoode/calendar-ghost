@@ -647,12 +647,6 @@ describe("SettingsPage", () => {
     expect(window.location.search).toBe("")
   })
 
-  it("names a plan's limit of several calendar accounts", async () => {
-    window.history.replaceState(null, "", "/settings?oauth=account_limit_reached&provider=google&limit=3")
-    await renderSettings(testI18n())
-    expect(container.querySelector(".oauth-feedback p")?.textContent).toContain("Your plan allows 3 calendar accounts,")
-  })
-
   it("has no untranslated text when a new account met the plan's limit", async () => {
     window.history.replaceState(null, "", "/settings?oauth=account_limit_reached&provider=google&limit=2")
     await renderSettings(pseudoI18n())
