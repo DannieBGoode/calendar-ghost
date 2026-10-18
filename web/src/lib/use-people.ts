@@ -2,7 +2,6 @@ import { keepPreviousData, useIsMutating, useMutation, useQuery, useQueryClient 
 import { useState } from "react"
 
 import { useI18n } from "@/i18n/provider"
-import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
 import { api, type IssuedLink, type PeopleQuery, type Person, type UserDeletion } from "@/lib/api"
 import { deletionMessage, personName } from "@/lib/people"
@@ -29,12 +28,6 @@ const CHANGED: Partial<Record<PersonAction, MessageKey>> = {
   demote: "people.status.notAdministrator",
   disable: "people.status.disabled",
   enable: "people.status.enabled",
-}
-
-/** What a command on someone says once it is done, or null for one that says nothing beside them. */
-function changedMessage(i18n: I18n, name: string, { action }: SentCommand): string | null {
-  const changed = CHANGED[action]
-  return changed ? i18n.t(changed, { email: name }) : null
 }
 
 // Every person command shares this key, so the query client, which outlives the People page,
@@ -105,10 +98,9 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     },
   })
 
-  function finish({ link, deletion }: Outcome, done: SentCommand) {
-    const { person } = done
+  function finish({ link, deletion }: Outcome, { person, action }: SentCommand) {
     const name = personName(i18n, person)
-    const changed = changedMessage(i18n, name, done)
+    const changed = CHANGED[action]
     if (link) setResetLink({ personId: person.id, link })
     if (deletion) {
       const deleted = deletionMessage(i18n, name, deletion)
@@ -116,9 +108,10 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
       setMessage(deleted)
       setDeletedMessage(deleted)
     }
-    if (changed !== null) {
-      setMessage(changed)
-      setResult({ personId: person.id, text: changed })
+    if (changed) {
+      const text = i18n.t(changed, { email: name })
+      setMessage(text)
+      setResult({ personId: person.id, text })
     }
   }
 

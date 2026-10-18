@@ -96,7 +96,7 @@ export function changeMove(plans: readonly PlanSummary[], choice: string): strin
 }
 
 /** The one person a change is for, when it is for one; their name then says who. */
-function onlyOne(i18n: I18n, people: readonly PlanPerson[]): string | null {
+function onlyOne(i18n: I18n, people: readonly Pick<Person, "email">[]): string | null {
   const [first] = people
   return people.length === 1 && first ? personName(i18n, first) : null
 }
@@ -134,7 +134,7 @@ export function changeTitle(i18n: I18n, people: readonly PlanPerson[]): string {
 }
 
 /** What a change did: "robin@example.test now has Pro.", "2 people now have Pro.", or that they have no Plan now. */
-export function changedResult(i18n: I18n, people: readonly PlanPerson[], plan: PlanSummary | null): string {
+export function changedResult(i18n: I18n, people: readonly Pick<Person, "email">[], plan: PlanSummary | null): string {
   const { t } = i18n
   const one = onlyOne(i18n, people)
   if (plan === null) {

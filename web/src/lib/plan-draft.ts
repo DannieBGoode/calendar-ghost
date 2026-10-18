@@ -64,11 +64,8 @@ export const LIMIT_WORDS: Readonly<
 /** The largest count a limit takes, as `COUNT_LIMIT` in domain/plans.py sets it. */
 export const COUNT_LIMIT = 10_000
 
-/**
- * The least Up to takes for each count. `PlanLimits` lets a Plan offer no Integration Tokens, which
- * the editor offers as None rather than Up to 0.
- */
-export const LIMIT_MINIMUM: Readonly<Record<LimitName, number>> = { rules: 1, accounts: 1, tokens: 1 }
+/** The least Up to takes; None, not Up to 0, offers no Integration Tokens. */
+export const LIMIT_MINIMUM = 1
 
 /** Where each count is in a saved Plan's limits, and in how much the people it limits use. */
 const SAVED: Readonly<Record<LimitName, Exclude<keyof PlanLimits, "sync_interval">>> = {
@@ -118,7 +115,7 @@ function limitValue(draft: PlanDraft, name: LimitName): number | null | undefine
   if (choice === "none") return 0
   const value = Number(amount)
   const whole = amount.trim() !== "" && Number.isInteger(value)
-  return whole && value >= LIMIT_MINIMUM[name] && value <= COUNT_LIMIT ? value : undefined
+  return whole && value >= LIMIT_MINIMUM && value <= COUNT_LIMIT ? value : undefined
 }
 
 /** The first field Save waits for: an empty name, or a limit with no whole number in its range. */

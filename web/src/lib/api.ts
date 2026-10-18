@@ -295,6 +295,11 @@ const PLAN_HOLDERS_NAMED = 3
  */
 const PLAN_CANDIDATES_LISTED = 100
 
+/** The first `pageSize` people a query finds, by email. */
+function peopleByEmail(query: { plan: string } | { search?: string }, pageSize: number) {
+  return call("/api/v1/users", "get", { query: { ...query, sort: "email", order: "asc", page: 1, page_size: pageSize } })
+}
+
 export const api = {
   setup: () => call("/api/v1/setup", "get"),
   session: () => call("/api/v1/session", "get"),
@@ -361,26 +366,11 @@ export const api = {
       },
     }),
   /** The first people who have a Plan, by email, and how many have it, for its Remove note. */
-  planHolders: (plan: string) =>
-    call("/api/v1/users", "get", {
-      query: { plan, sort: "email", order: "asc", page: 1, page_size: PLAN_HOLDERS_NAMED },
-    }),
+  planHolders: (plan: string) => peopleByEmail({ plan }, PLAN_HOLDERS_NAMED),
   /** Who has a Plan, by email, as its panel lists them under "Have Free now". */
-  planPeople: (plan: string) =>
-    call("/api/v1/users", "get", {
-      query: { plan, sort: "email", order: "asc", page: 1, page_size: PLAN_CANDIDATES_LISTED },
-    }),
+  planPeople: (plan: string) => peopleByEmail({ plan }, PLAN_CANDIDATES_LISTED),
   /** Everyone Assign people may list, by email, narrowed by part of an email. */
-  planCandidates: (search: string) =>
-    call("/api/v1/users", "get", {
-      query: {
-        ...(search ? { search } : {}),
-        sort: "email",
-        order: "asc",
-        page: 1,
-        page_size: PLAN_CANDIDATES_LISTED,
-      },
-    }),
+  planCandidates: (search: string) => peopleByEmail(search ? { search } : {}, PLAN_CANDIDATES_LISTED),
   /**
    * Gives one Plan, or the Default Plan with null, to up to 100 people at once, all or none; with
    * `dryRun`, gives nothing and answers what it would do.

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { useI18n } from "@/i18n/provider"
 import { api, type OwnPlan, type RuleSummary } from "@/lib/api"
-import { planWarning, previewedStartRefusal } from "@/lib/plans"
+import { previewedStartRefusal } from "@/lib/plans"
 
 /** The signed-in User's own Plan; a change to their rules, accounts, or tokens refreshes it. */
 export const OWN_PLAN_QUERY = ["own-plan"] as const
@@ -23,9 +23,13 @@ function usePlanHints(): OwnPlan | undefined {
   return isError ? undefined : data
 }
 
-/** Whether a note should say that a change may keep a rule from starting again. */
+/**
+ * Whether a note should say that a privacy edit, a Pause, or a Disconnect may keep a rule from
+ * starting again: only Rule Replacement keeps a rule's place under the rule limit, and the User
+ * has more rules counted than their Plan allows (ADR 0038).
+ */
 export function usePlanWarning(): boolean {
-  return planWarning(usePlanHints())
+  return usePlanHints()?.over_rule_limit === true
 }
 
 /**

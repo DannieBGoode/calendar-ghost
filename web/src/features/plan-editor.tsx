@@ -303,7 +303,7 @@ function EditorFooter({
         <p id={reasonId} className="field-hint">
           {missing === "name"
             ? t("people.plans.editor.missing.name")
-            : t(LIMIT_WORDS[missing].missing, { min: LIMIT_MINIMUM[missing], max: COUNT_LIMIT })}
+            : t(LIMIT_WORDS[missing].missing, { min: LIMIT_MINIMUM, max: COUNT_LIMIT })}
         </p>
       )}
       {refusal && (

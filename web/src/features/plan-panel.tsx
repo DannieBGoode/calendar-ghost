@@ -11,7 +11,8 @@ import type { ShowPeople } from "@/features/people-plans-status"
 import { useI18n } from "@/i18n/provider"
 import type { PlanAssignments, PlanSummary, PlansOverview, SyncInterval } from "@/lib/api"
 import { appPathForPlanPanel, type OpenPerson, type PlanPanel as Panel, type PlanPanelTab } from "@/lib/navigation"
-import { assignedResult, restoredResult, undoMoves } from "@/lib/plan-assignment"
+import { restoredResult, undoMoves } from "@/lib/plan-assignment"
+import { changedResult } from "@/lib/plan-change"
 import { copyDraft } from "@/lib/plan-draft"
 import { planPanelMeta } from "@/lib/plan-panel"
 import type { PlanWorkControls } from "@/lib/use-plan-work"
@@ -291,7 +292,7 @@ function PlanPeople({ plan, overview, commands, work, currentUserId, onShowPeopl
       enabled={overview.enabled}
       currentUserId={currentUserId}
       assign={assign}
-      onGiven={(answer) => given(answer, assignedResult(i18n, answer, plan.name))}
+      onGiven={(answer) => given(answer, changedResult(i18n, answer.people, plan))}
       onCancel={work.closePanel}
     >
       <PlanHolders

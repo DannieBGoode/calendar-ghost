@@ -4,7 +4,6 @@ import { testI18n } from "@/i18n/testing"
 import type { PeoplePage, PersonRow, PlanAssignments, PlanMove } from "@/lib/api"
 import {
   assignCandidates,
-  assignedResult,
   heldPlanLine,
   overNote,
   restoredResult,
@@ -103,15 +102,6 @@ describe("overNote", () => {
     expect(overNote(i18n, ["alex@example.test", "sam@example.test"], "Free")).toBe(
       "2 people you chose will have more than Free allows. Everything they have keeps working, but they can't add more until they are within it.",
     )
-  })
-})
-
-describe("assignedResult", () => {
-  it("names one person, and counts several", () => {
-    expect(assignedResult(i18n, answer([move("alex@example.test", NO_LIMITS)]), "Free")).toBe("alex@example.test now has Free.")
-    expect(
-      assignedResult(i18n, answer([move("alex@example.test", NO_LIMITS), move("sam@example.test", PRO)]), "Free"),
-    ).toBe("2 people now have Free.")
   })
 })
 

@@ -4,7 +4,6 @@ import { NativeSelect } from "@/components/ui/native-select"
 import { useI18n } from "@/i18n/provider"
 import type { PeopleQuery, PlanSummary } from "@/lib/api"
 import { VERDICTS } from "@/lib/operator-overview"
-import { heldPlanName } from "@/lib/plans"
 
 type Filters = Pick<PeopleQuery, "search" | "role" | "state" | "verdict" | "plan" | "over">
 
@@ -93,7 +92,7 @@ function LimitsFilter({ over, onChange }: { over: boolean; onChange: (over: bool
 
 /**
  * Narrows to the people who have one Plan, their own or as the default, as the Plans tab counts
- * them, named as their Plan column names it. A Plan the address names that no longer exists stays
+ * them, the default marked as the default. A Plan the address names that no longer exists stays
  * chosen, and says so, so the select never shows a filter other than the one in use.
  */
 function PlanFilter({
@@ -105,8 +104,7 @@ function PlanFilter({
   plan: string
   onChange: (plan: string) => void
 }) {
-  const i18n = useI18n()
-  const { t } = i18n
+  const { t } = useI18n()
   const missing = plan !== "" && !plans.some((listed) => listed.key === plan)
   return (
     <div className="field-stack">
@@ -115,7 +113,7 @@ function PlanFilter({
         <option value="">{t("people.filters.anyPlan")}</option>
         {plans.map(({ key, name, is_default }) => (
           <option key={key} value={key}>
-            {heldPlanName(i18n, { name, on_default: is_default })}
+            {is_default ? t("people.plan.held.default", { name }) : name}
           </option>
         ))}
         {missing && <option value={plan}>{t("people.filters.missingPlan")}</option>}

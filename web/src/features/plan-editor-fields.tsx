@@ -101,7 +101,7 @@ export function PlanLimitField({
           more: t("people.plans.editor.more"),
         }}
         unit={words.unit ? t(words.unit, { count: Number(limit.amount) || 0 }) : undefined}
-        min={LIMIT_MINIMUM[name]}
+        min={LIMIT_MINIMUM}
         max={COUNT_LIMIT}
         value={limit}
         pending={pending}

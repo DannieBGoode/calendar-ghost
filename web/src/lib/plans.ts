@@ -23,15 +23,6 @@ export function ownPlanShown(plan: OwnPlan | undefined, policy: RegistrationPoli
   return false
 }
 
-/**
- * Whether a privacy edit, a Pause, or a Disconnect may keep a rule from starting again: only Rule
- * Replacement keeps a rule's place under the rule limit, and the User has more rules counted than
- * their Plan allows (ADR 0038).
- */
-export function planWarning(plan: OwnPlan | undefined): boolean {
-  return plan?.over_rule_limit === true
-}
-
 /** The refusal Start would meet, or null when the rule may start; a refused Start shows the same text. */
 export function startRefusal(
   { t }: I18n,
@@ -84,16 +75,6 @@ export function overLimitText({ t }: I18n, { limit, in_use, allowed }: OverLimit
   // A Plan may include no Integration Tokens; one lowered to none still counts those kept.
   if (limit === "integration_tokens" && allowed === 0) return t("people.plan.over.tokensNone", { count: in_use })
   return t(OVER_WORDS[limit], { count: in_use, allowed })
-}
-
-type HeldPlan = NonNullable<PersonPlanOverview["has"]>
-
-/**
- * A Plan by name, "(default)" when it is someone's as the default: "Free (default)". People's Plan
- * filter names the default Plan the same way.
- */
-export function heldPlanName({ t }: I18n, { name, on_default }: Pick<HeldPlan, "name" | "on_default">): string {
-  return on_default ? t("people.plan.held.default", { name }) : name
 }
 
 /** Whether no Plan limits this person because they administer, whether or not Plans are on. */

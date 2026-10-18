@@ -14,7 +14,6 @@ import {
   limitedPeople,
   limitsNothing,
   ownPlanShown,
-  planWarning,
   previewedStartRefusal,
   startRefusal,
 } from "@/lib/plans"
@@ -61,19 +60,6 @@ describe("ownPlanShown", () => {
     ["an empty answer", {} as OwnPlan, "invitation_only", false],
   ])("for %s", (_case, plan, policy, shown) => {
     expect(ownPlanShown(plan, policy)).toBe(shown)
-  })
-})
-
-describe("planWarning", () => {
-  it("warns only while more rules count than the Plan allows", () => {
-    expect(planWarning({ ...family, rules_counted: 6, over_rule_limit: true })).toBe(true)
-    expect(planWarning({ ...family, rules_counted: 5 })).toBe(false)
-    expect(planWarning(plansOff)).toBe(false)
-  })
-
-  it("never warns without an answer", () => {
-    expect(planWarning(undefined)).toBe(false)
-    expect(planWarning({} as OwnPlan)).toBe(false)
   })
 })
 

@@ -1,5 +1,6 @@
 import type { I18n } from "@/i18n/translator"
-import type { OverLimit, PeoplePage, PersonRow, PlanAssignments, PlanMove } from "@/lib/api"
+import type { OverLimit, PeoplePage, PersonRow, PlanAssignments } from "@/lib/api"
+import { personName } from "@/lib/people"
 import { overLimitText } from "@/lib/plans"
 
 /**
@@ -48,20 +49,6 @@ export function overNote({ t }: I18n, over: readonly string[], plan: string): st
     : t("people.plans.assign.overNote", { count: over.length, name: plan })
 }
 
-/** Someone given a Plan, by email, as People names them; the upgraded first User may have none. */
-function movedName({ t }: I18n, person: PlanMove): string {
-  return person.email ?? t("people.noEmail")
-}
-
-/** What giving the Plan did: "alex@example.test now has Free." or "2 people now have Free." */
-export function assignedResult(i18n: I18n, answer: PlanAssignments, plan: string): string {
-  const [only] = answer.people
-  if (answer.people.length === 1 && only) {
-    return i18n.t("people.plans.assign.givenOne", { person: movedName(i18n, only), name: plan })
-  }
-  return i18n.t("people.plans.assign.given", { count: answer.people.length, name: plan })
-}
-
 /** One call that gives one Plan, or the Default Plan with null, to some people. */
 export type AssignMove = { plan: string | null; userIds: string[] }
 
@@ -82,7 +69,7 @@ export function undoMoves(answer: PlanAssignments): AssignMove[] {
 export function restoredResult(i18n: I18n, answer: PlanAssignments): string {
   const [only] = answer.people
   if (answer.people.length === 1 && only) {
-    return i18n.t("people.plans.assign.restoredOne", { person: movedName(i18n, only) })
+    return i18n.t("people.plans.assign.restoredOne", { person: personName(i18n, only) })
   }
   return i18n.t("people.plans.assign.restored", { count: answer.people.length })
 }
