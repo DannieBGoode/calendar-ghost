@@ -294,8 +294,8 @@ which opens the Plan's **People** tab. Calendar Ghost makes the Plan's key, whic
 API, from its name. Everyone without a Plan of their own has the default, including people who join
 later; the default carries a **Default** badge, and **Make default** in another Plan's **More
 actions** menu says how many people it moves, and who keeps the default because it was given to
-them as their own Plan. Giving the default from its own **People** tab means they follow it. To
-limit only some people, open the Plan's
+them as their own Plan. Giving someone the default, here or through the API, means they follow
+it. To limit only some people, open the Plan's
 **People** tab, or choose **Assign people** in its menu: search by email, tick each person, and
 give it, as **Give Free to 2 people** does. Before you do, the list shows the Plan each person has
 now and any limit they would be over, and administrators come last, since no Plan limits them.

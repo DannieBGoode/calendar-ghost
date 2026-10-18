@@ -384,14 +384,15 @@ def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
 ) -> None:
     store.people(ADMIN, MEMBER, NEWCOMER)
     plans_on(store.plans, FREE, FAMILY)
-    store.plans.assign(MEMBER.id, FREE.key, BY_ADMIN)
+    store.plans.assign(MEMBER.id, FAMILY.key, BY_ADMIN)
 
     store.plans.change_settings(True, FAMILY.key, LATER)
     joined_later = User(UserId("joined"), "joined@example.test", Role.USER, UserState.ACTIVE, LATER)
     store.people(joined_later)
 
     assert store.plans.of_users([MEMBER.id, NEWCOMER.id, joined_later.id]) == {
-        MEMBER.id: Allowance(AllowanceBasis.PLAN, plan=FREE, assigned=FREE),
+        # Given the new default before it was the default, so it stays their own.
+        MEMBER.id: Allowance(AllowanceBasis.PLAN, plan=FAMILY, assigned=FAMILY),
         NEWCOMER.id: Allowance(AllowanceBasis.PLAN, plan=FAMILY, on_default=True),
         joined_later.id: Allowance(AllowanceBasis.PLAN, plan=FAMILY, on_default=True),
     }
@@ -430,7 +431,7 @@ def test_a_plan_counts_everyone_who_has_it_and_the_people_it_limits(store: Plans
 def test_everyone_without_a_plan_of_their_own_is_counted_whatever_their_role_or_state(
     store: PlansStore,
 ) -> None:
-    """Whom Make default moves: people given the default itself keep it as their own."""
+    """Whom Make default moves: people given the default follow it, as None does."""
     other_admin = replace(ADMIN, id=UserId("other-admin"), email="other-admin@example.test")
     store.people(ADMIN, other_admin, MEMBER, NEWCOMER, AWAY)
     before = store.plans.followers()
@@ -442,10 +443,10 @@ def test_everyone_without_a_plan_of_their_own_is_counted_whatever_their_role_or_
     store.plans.assign(MEMBER.id, None, BY_ADMIN)
 
     assert before == 5
-    # The administrator and the disabled member follow the default; whether Plans are on or a
-    # default exists changes nothing.
-    assert given == 2
-    assert store.plans.followers() == 3
+    # The administrator, the disabled member, and the newcomer given the default follow it;
+    # whether Plans are on or a default exists changes nothing.
+    assert given == 3
+    assert store.plans.followers() == 4
 
 
 def _sqlite(tmp_path: Path) -> tuple[Path, SqlitePlans]:

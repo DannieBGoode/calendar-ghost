@@ -153,17 +153,20 @@ def test_giving_a_plan_moves_everyone_at_once_and_records_who_gave_it_and_when()
     assert [move.after.allowance.basis for move in moves] == [AllowanceBasis.PLAN] * 2
 
 
-def test_none_returns_people_to_the_default_plan() -> None:
+@pytest.mark.parametrize("plan", [None, FAMILY.key], ids=["none", "the default"])
+def test_none_or_the_default_returns_people_to_the_default_plan(plan: PlanKey | None) -> None:
+    """Giving the default means following it, so they move with it when it changes."""
     installation = _installation()
     installation.assign.execute(ADMIN.id, [ALICE.id], FREE.key)
 
-    planned = installation.assign.execute(ADMIN.id, [ALICE.id], None, dry_run=True)
-    moved = installation.assign.execute(ADMIN.id, [ALICE.id], None)
+    planned = installation.assign.execute(ADMIN.id, [ALICE.id], plan, dry_run=True)
+    moved = installation.assign.execute(ADMIN.id, [ALICE.id], plan)
 
     expected = [(ALICE.id, FREE, False, FAMILY, True, ())]
     assert _moves(planned) == expected
     assert _moves(moved) == expected
     assert installation.own_plan(ALICE) is None
+    assert installation.plans.changes == {ALICE.id: GIVEN}
 
 
 def test_while_plans_are_off_a_dry_run_still_says_who_would_be_over() -> None:

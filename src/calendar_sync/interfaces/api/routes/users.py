@@ -335,9 +335,9 @@ def change_state(
 def assign_plan(
     user_id: str, payload: AssignPlanRequest, services: Services, actor: Administrator
 ) -> PersonPlanResponse:
-    """Give a User their own Plan, or with null return them to the Default Plan. Allowed while
-    Plans are off, so an administrator can prepare; an administrator's own Plan limits them only
-    once they stop administering."""
+    """Give a User their own Plan, or with null return them to the Default Plan, as giving the
+    Default Plan's key does. Allowed while Plans are off, so an administrator can prepare; an
+    administrator's own Plan limits them only once they stop administering."""
     subject = _named_user(user_id)
     plan = named_plan(payload.plan) if payload.plan is not None else None
     try:

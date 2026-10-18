@@ -176,6 +176,9 @@ class SqlitePlans:
             connection.execute("BEGIN IMMEDIATE")
             if plan is not None:
                 _require_plan(connection, plan)
+            if plan == _setting(connection).default:
+                # Giving the Default Plan is following it, as None is (ADR 0038).
+                plan = None
             if sum(_existing(connection, chunk) for chunk in chunks) != len(ordered):
                 return False
             values = (

@@ -602,6 +602,8 @@ def test_what_people_would_have_under_another_plan_is_read_without_giving_it() -
     """Bob has 2 calendar accounts and 3 Integration Tokens, where Free allows 1 and none."""
     overview = _installation()
     _bob_on_family(overview)
+    # Family becomes the default, and Bob keeps it as his own.
+    _plans(overview).change_settings(True, FAMILY_PLAN.key, NOW)
     _database(overview).unrevoked_tokens[BOB.id] = 3
     people = [ADMIN, ALICE, BOB]
 
@@ -628,11 +630,13 @@ def test_what_people_would_have_under_another_plan_is_read_without_giving_it() -
         ),
     }
     assert given_default[BOB.id] == PersonPlan(
-        Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True),
-        FREE,
-        (accounts, tokens),
+        Allowance(AllowanceBasis.PLAN, plan=FAMILY_PLAN, on_default=True),
+        FAMILY_PLAN,
+        (OverLimit(LimitedResource.INTEGRATION_TOKENS, in_use=3, allowed=2),),
         PlanUse(1, 2, 3),
     )
+    # Giving the default's key is following it, as None is.
+    assert overview.plans_given(ADMIN.id, people, FAMILY_PLAN.key) == given_default
     # Nothing was given: Bob still has Family, and the page says so.
     assert overview.plans_of(ADMIN.id, people)[BOB.id] == _person_plans(overview)[BOB.id]
     assert _person_plans(overview)[BOB.id] == PersonPlan(

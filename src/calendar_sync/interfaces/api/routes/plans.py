@@ -187,8 +187,9 @@ def assign_plans(
     payload: PlanAssignmentsRequest, services: Services, actor: Administrator
 ) -> PlanAssignmentsResponse:
     """Give one Plan, or with null the Default Plan, to up to 100 people at once, all or none,
-    and answer each person's Plan before and after and what they are over. With `dry_run`,
-    give nothing and answer the same, so who would be over is known before anyone confirms."""
+    and answer each person's Plan before and after and what they are over. The Default Plan's
+    key is given as null is, so they follow it. With `dry_run`, give nothing and answer the
+    same, so who would be over is known before anyone confirms."""
     plan = named_plan(payload.plan) if payload.plan is not None else None
     assign = services.plans.assign_plans
     try:

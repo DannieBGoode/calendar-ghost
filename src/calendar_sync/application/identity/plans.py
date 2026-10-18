@@ -167,7 +167,8 @@ class SetPlansSetting:
 
 @dataclass(slots=True)
 class AssignPlan:
-    """Give a User their own Plan, or None to return them to the Default Plan.
+    """Give a User their own Plan, or None to return them to the Default Plan; giving the
+    Default Plan does the same, so they follow it.
 
     Allowed while Plans are off, so an administrator can prepare them. An administrator's own
     Plan is stored and limits them only once they stop administering.

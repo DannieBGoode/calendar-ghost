@@ -16,6 +16,8 @@ end. Amended again 2026-10-16: administrators see who is over a limit, computed 
 Overview, Plan names are unique, and People finds people by their Plan; see the second amendment.
 Amended again 2026-10-17: the catalog, with one switch, Make default, giving a Plan to many people
 at once after a dry run, and how much of their Plan a person uses; see the third amendment.
+Amended again 2026-10-18: giving the Default Plan means following it, for every client; see the
+fourth amendment.
 
 ## Context
 
@@ -334,7 +336,7 @@ limits, what they count, and how they are enforced do not change.
   `administrators` is every User who holds the role, active or not. It also counts `followers`,
   every User with no Plan of their own, whatever their role or state, for the count Make default
   says it moves ("People without a plan of their own (2 now) move to Free."). The default's
-  `people` cannot say it, since it also counts those given the default as their own.
+  `people` cannot say it, since it also counts those whose own Plan became the default.
 - **No Plan has the key `new`.** The New plan panel's address is `/people/plans/new`, beside each
   Plan's `/people/plans/<key>`, so a key made from a name treats `new` as taken (a Plan named New
   gets `new-2`), and `POST /api/v1/plans` refuses a request that names it with 422 `invalid_plan`.
@@ -348,3 +350,17 @@ a time and needs the most focus and announcement handling; giving a Plan to many
 one `PUT /api/v1/users/{user_id}/plan` each, where a failure halfway leaves some moved and nothing
 says beforehand who would be over; and keeping "No default" while Plans are off, a choice that
 stops working the moment they turn on.
+
+## Amendment: giving the default is following it (2026-10-18)
+
+The Web UI gave the Default Plan as following it, but the API stored the default's key as a
+User's own Plan, so one choice meant two things. Now `PlanAssignments` stores a Plan that is the
+Default Plan, read in the same write transaction, as `None`, recording the same
+`AssignmentChange`, and a dry run answers the same. This holds for `PUT /api/v1/users/{user_id}/plan` and
+`POST /api/v1/plan-assignments`, from the Web UI, the API, and billing later; the MCP server gives
+no Plans. Make default does not change: people whose own Plan becomes the default keep it, and it
+names them. So Undo, which gives back each person's own Plan, makes someone whose own Plan is the
+default by then follow it.
+
+Rejected: also making Make default turn people whose own Plan becomes the default into followers,
+which changes an administrator's choice without asking.

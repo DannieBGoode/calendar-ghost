@@ -566,8 +566,9 @@ export interface paths {
         /**
          * Assign Plans
          * @description Give one Plan, or with null the Default Plan, to up to 100 people at once, all or none,
-         *     and answer each person's Plan before and after and what they are over. With `dry_run`,
-         *     give nothing and answer the same, so who would be over is known before anyone confirms.
+         *     and answer each person's Plan before and after and what they are over. The Default Plan's
+         *     key is given as null is, so they follow it. With `dry_run`, give nothing and answer the
+         *     same, so who would be over is known before anyone confirms.
          */
         post: operations["assign_plans_api_v1_plan_assignments_post"];
         delete?: never;
@@ -1075,9 +1076,9 @@ export interface paths {
         get?: never;
         /**
          * Assign Plan
-         * @description Give a User their own Plan, or with null return them to the Default Plan. Allowed while
-         *     Plans are off, so an administrator can prepare; an administrator's own Plan limits them only
-         *     once they stop administering.
+         * @description Give a User their own Plan, or with null return them to the Default Plan, as giving the
+         *     Default Plan's key does. Allowed while Plans are off, so an administrator can prepare; an
+         *     administrator's own Plan limits them only once they stop administering.
          */
         put: operations["assign_plan_api_v1_users__user_id__plan_put"];
         post?: never;

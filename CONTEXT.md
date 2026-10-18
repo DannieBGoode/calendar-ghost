@@ -56,10 +56,10 @@ already has that name), which limits nobody, the default, so turning Plans on ch
 an administrator gives someone a smaller Plan. Plans are never on without a default: it cannot be
 cleared while they are on, nor removed while it is the default. An administrator chooses it with
 Make default on another Plan; "no default" is never offered as a choice. Giving someone the Default
-Plan from the Web UI, by Change plan or by Assign people on its panel, means they follow it: they
-have no Plan of their own, so they move with the default when it changes. A User given it as their
-own Plan before, or through the API, keeps it when another Plan becomes the default, and Make
-default says so. Billing will return a User to it when a payment ends.
+Plan, from the Web UI or the API, means they follow it: they have no Plan of their own, so they
+move with the default when it changes. A User whose own Plan became the default keeps it when
+another Plan becomes the default, and Make default says so. Billing will return a User to it when
+a payment ends.
 _Avoid_: Base plan, fallback plan
 
 **Allowance**:

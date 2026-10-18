@@ -6652,7 +6652,7 @@
     },
     "/api/v1/plan-assignments": {
       "post": {
-        "description": "Give one Plan, or with null the Default Plan, to up to 100 people at once, all or none,\nand answer each person's Plan before and after and what they are over. With `dry_run`,\ngive nothing and answer the same, so who would be over is known before anyone confirms.",
+        "description": "Give one Plan, or with null the Default Plan, to up to 100 people at once, all or none,\nand answer each person's Plan before and after and what they are over. The Default Plan's\nkey is given as null is, so they follow it. With `dry_run`, give nothing and answer the\nsame, so who would be over is known before anyone confirms.",
         "operationId": "assign_plans_api_v1_plan_assignments_post",
         "parameters": [
           {
@@ -8668,7 +8668,7 @@
     },
     "/api/v1/users/{user_id}/plan": {
       "put": {
-        "description": "Give a User their own Plan, or with null return them to the Default Plan. Allowed while\nPlans are off, so an administrator can prepare; an administrator's own Plan limits them only\nonce they stop administering.",
+        "description": "Give a User their own Plan, or with null return them to the Default Plan, as giving the\nDefault Plan's key does. Allowed while Plans are off, so an administrator can prepare; an\nadministrator's own Plan limits them only once they stop administering.",
         "operationId": "assign_plan_api_v1_users__user_id__plan_put",
         "parameters": [
           {

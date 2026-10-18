@@ -340,12 +340,15 @@ class OperatorOverview:
     def plans_given(
         self, actor: UserId, users: Sequence[User], plan: PlanKey | None
     ) -> dict[UserId, PersonPlan]:
-        """What each of `users`' Plan would be were `plan` their own, None for the Default
-        Plan, read now and changing nothing: so an administrator sees who would be over before
-        giving it. Raises PlanNotFound before anything is counted, and fails when Plans cannot
-        be read."""
+        """What each of `users`' Plan would be were `plan` their own, None or the default's key
+        for the Default Plan, read now and changing nothing: so an administrator sees who would
+        be over before giving it. Raises PlanNotFound before anything is counted, and fails when
+        Plans cannot be read."""
         require_administrator(self.users, actor)
         setting = self.plans.settings()
+        if plan == setting.default:
+            # Giving the Default Plan is following it, as the store records it (ADR 0038).
+            plan = None
         own = self.plans.get(plan) if plan is not None else None
         if plan is not None and own is None:
             raise PlanNotFound(f"plan {plan.value} does not exist")

@@ -198,7 +198,7 @@ def test_the_overview_counts_every_administrator_whom_no_plan_limits() -> None:
 
 def test_the_overview_counts_everyone_make_default_would_move() -> None:
     """Everyone with no Plan of their own, whatever their role or state; someone given the
-    default itself keeps it as their own."""
+    default follows it, as None does."""
     plans = _plans(RETIRED, NEIGHBOUR, LATECOMER)
     plans_on(plans, FREE, FAMILY)
     _assign(plans).execute(ADMIN.id, NEIGHBOUR.id, FAMILY.key)
@@ -206,7 +206,7 @@ def test_the_overview_counts_everyone_make_default_would_move() -> None:
 
     overview = ShowPlans(plans.users, plans).execute(ADMIN.id)
 
-    assert overview.followers == 3
+    assert overview.followers == 4
 
 
 def test_a_new_installation_shows_no_plans_and_plans_off() -> None:
@@ -431,7 +431,7 @@ def test_turning_plans_off_is_always_allowed_and_keeps_every_plan(default: PlanK
 def test_a_new_default_applies_at_once_to_everyone_without_a_plan_of_their_own() -> None:
     plans = _plans(NEIGHBOUR)
     plans_on(plans, FREE, FAMILY)
-    _assign(plans).execute(ADMIN.id, NEIGHBOUR.id, FREE.key)
+    _assign(plans).execute(ADMIN.id, NEIGHBOUR.id, FAMILY.key)
 
     _setting(plans).execute(ADMIN.id, True, FAMILY.key)
     # Someone who joins later has no Plan of their own either.
@@ -440,7 +440,8 @@ def test_a_new_default_applies_at_once_to_everyone_without_a_plan_of_their_own()
     on_default = Allowance(AllowanceBasis.PLAN, plan=FAMILY, on_default=True)
     assert plans.of(MEMBER.id) == on_default
     assert plans.of(LATECOMER.id) == on_default
-    assert plans.of(NEIGHBOUR.id) == Allowance(AllowanceBasis.PLAN, plan=FREE, assigned=FREE)
+    # Given the new default before it was the default, so it stays their own.
+    assert plans.of(NEIGHBOUR.id) == Allowance(AllowanceBasis.PLAN, plan=FAMILY, assigned=FAMILY)
     assert set(plans.changes) == {NEIGHBOUR.id}
 
 
@@ -485,12 +486,16 @@ def test_a_plan_assigned_while_plans_are_off_applies_once_they_are_on() -> None:
     assert plans.of(MEMBER.id) == Allowance(AllowanceBasis.PLAN, plan=FAMILY, assigned=FAMILY)
 
 
-def test_assigning_none_returns_the_user_to_the_default_plan() -> None:
+@pytest.mark.parametrize("given", [None, FREE.key], ids=["none", "the default"])
+def test_assigning_none_or_the_default_returns_the_user_to_the_default_plan(
+    given: PlanKey | None,
+) -> None:
+    """Giving the default means following it, so they move with it when it changes."""
     plans = _plans()
     plans_on(plans, FREE, FAMILY)
     _assign(plans).execute(ADMIN.id, MEMBER.id, FAMILY.key)
 
-    allowance = _assign(plans).execute(ADMIN.id, MEMBER.id, None)
+    allowance = _assign(plans).execute(ADMIN.id, MEMBER.id, given)
 
     assert allowance == Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True)
     assert _own_plan(plans, MEMBER.id) is None

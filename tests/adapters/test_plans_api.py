@@ -730,6 +730,25 @@ def test_an_administrator_assigns_plans_even_while_plans_are_off(
     assert (listed["free"]["people"], listed["free"]["limited_people"]) == (1, 1)
 
 
+def test_giving_someone_the_default_plan_means_following_it(installation: Installation) -> None:
+    """As null does, whichever client gives it, so they move with the default."""
+    client, member = installation.client, installation.member.value
+    installation.define(FREE_BODY, FAMILY_BODY)
+    installation.turn_on("free")
+    client.put(f"/api/v1/users/{member}/plan", json={"plan": "family"})
+
+    given = client.put(f"/api/v1/users/{member}/plan", json={"plan": "free"})
+    followers = client.get("/api/v1/plans").json()["followers"]
+
+    assert given.status_code == 200, given.text
+    assert given.json() == {
+        "basis": "plan",
+        "plan": {"key": "free", "name": "Free", "on_default": True},
+        "assigned": None,
+    }
+    assert followers == 2
+
+
 def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
     installation: Installation,
 ) -> None:
@@ -864,6 +883,29 @@ def test_an_administrator_gives_a_plan_to_many_people_after_a_dry_run(
             "over": [],
         }
     ]
+
+
+def test_giving_people_the_default_plan_means_following_it(installation: Installation) -> None:
+    """As null does, after a dry run that says so, so they move with the default."""
+    member = installation.member
+    installation.define(FREE_BODY, FAMILY_BODY)
+    installation.turn_on("family")
+    _assign(installation, "free", member)
+
+    planned = _assign(installation, "family", member, dry_run=True)
+    given = _assign(installation, "family", member)
+    followers = installation.client.get("/api/v1/plans").json()["followers"]
+
+    move = {
+        "user_id": member.value,
+        "email": MEMBER_EMAIL,
+        "had": {"key": "free", "name": "Free", "on_default": False},
+        "has": {"key": "family", "name": "Family", "on_default": True},
+        "over": [],
+    }
+    assert planned == {"dry_run": True, "people": [move]}
+    assert given == {"dry_run": False, "people": [move]}
+    assert followers == 2
 
 
 def test_a_plan_given_to_nobody_too_many_or_someone_unknown_is_refused_with_its_reason(

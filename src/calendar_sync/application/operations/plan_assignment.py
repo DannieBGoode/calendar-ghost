@@ -46,6 +46,7 @@ class PlanMove:
 @dataclass(slots=True)
 class AssignPlans:
     """Give one Plan, or None for the Default Plan, to up to 100 people at once, all or none.
+    Giving the Default Plan does as None does, so they follow it.
 
     With a dry run it writes nothing and answers the same, read now. Allowed while Plans are
     off, as giving one person a Plan is; administrators keep the Plan they are given, and no

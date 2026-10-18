@@ -432,6 +432,8 @@ class MemoryPlans:
     ) -> bool:
         if plan is not None:
             self._require(plan)
+        if plan == self.default:
+            plan = None
         found = [self.users.get(user) for user in users]
         if any(user is None for user in found):
             return False

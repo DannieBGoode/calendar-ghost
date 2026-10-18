@@ -66,7 +66,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   a limit of the Plan they have. `POST /api/v1/plan-assignments` gives one Plan, or with `null`
   the default, to up to 100 people at once, all or none, and answers each person's Plan before and
   after and what they are over; with `dry_run` it gives nothing and answers the same (422
-  `invalid_assignment` for nobody, more than 100 people, or someone who is not a User). A person's
+  `invalid_assignment` for nobody, more than 100 people, or someone who is not a User). Giving
+  the default's key, there or with `PUT /api/v1/users/{user_id}/plan`, does as `null` does: the
+  person follows the default. A person's
   `plan` also gains `assigned_by` and `assigned_at`, who gave their own Plan and when, and `use`,
   each count beside its limit; `GET /api/v1/plans` gains `administrators` and `followers`, how
   many people have no Plan of their own. No Plan has the key
