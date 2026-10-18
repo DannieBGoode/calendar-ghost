@@ -1337,6 +1337,15 @@ describe("Changing plans from Everyone", () => {
     )
   })
 
+  it("leaves the popover where it placed itself: its chooser does not scroll the page as it opens", async () => {
+    await renderPlanned(testI18n())
+    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
+    await click(checkbox("Select robin@example.test"))
+    await click(button("Change plan", bulkBar()))
+    const dialog = popover()!
+    expect(scrolled.mock.contexts.filter((element) => dialog.contains(element as Node))).toEqual([])
+  })
+
   it("closes the popover on Escape or Cancel, changing nothing, with focus back on Change plan", async () => {
     await renderPlanned(testI18n(), { "POST /api/v1/plan-assignments": given([robin, sam]) })
     await click(checkbox("Select robin@example.test"))

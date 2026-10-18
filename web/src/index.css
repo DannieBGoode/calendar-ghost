@@ -4642,6 +4642,13 @@ p {
   background: var(--destructive-soft);
 }
 
+/* What opens in place scrolls into view a little clear of the top bar and the window's edge, as
+   menus and popovers keep. */
+.delete-confirmation,
+.person-plan-card .plan-change {
+  scroll-margin-block: 1rem;
+}
+
 .delete-confirmation h3,
 .delete-confirmation h4 {
   color: var(--destructive-soft-foreground);

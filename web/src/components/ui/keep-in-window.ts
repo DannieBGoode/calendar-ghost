@@ -19,6 +19,18 @@ function clearWindow(): { top: number; bottom: number } {
   }
 }
 
+/**
+ * Scrolls what just opened in the page's flow, such as a confirmation under a row or a choice in a
+ * card, fully into the clear part of the window, or its start just under the top bar when it is
+ * taller than that: smoothly, or at once under reduced motion. Focus stays where it is.
+ */
+export function scrollFullyIntoView(element: HTMLElement) {
+  const clear = clearWindow()
+  const tall = element.getBoundingClientRect().height > clear.bottom - clear.top
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  element.scrollIntoView({ block: tall ? "start" : "nearest", behavior: reduced ? "instant" : "smooth" })
+}
+
 /** The room in that clear part of the window above and below the control's box, `gap` away from it. */
 function roomAround(anchor: HTMLElement, gap: number): { above: number; below: number } {
   const clear = clearWindow()

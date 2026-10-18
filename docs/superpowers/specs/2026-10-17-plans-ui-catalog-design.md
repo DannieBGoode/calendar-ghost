@@ -138,7 +138,8 @@ empty state.
    given to them."; Duplicate; and, after a divider, Remove. Remove is disabled with its reason as its description
    on the default ("Make another plan the default first.") and on a Plan someone has, which names
    them, the first three by email and then how many more, the count alone until the names arrive
-   ("2 people have Free. Give them another plan first."). On any other Plan it confirms inline. A
+   ("2 people have Free. Give them another plan first."). On any other Plan it confirms inline, the
+   confirmation scrolling fully into view as it opens. A
    refused removal reads the Plans again; when someone has the Plan now, the confirmation gives way
    to the refusal under the row, focus goes to More actions, and its Remove says who has it. The
    menu, like a popover, opens above its button when there is more room there, and stays clear of
@@ -273,10 +274,10 @@ A Plan card follows the Synchronization card once any Plan exists.
   12. Plans are on, so it limits robin@example.test now.", "The default plan. Plans are off, so it
   limits nobody yet.", or, for an administrator, "No plan limits administrators." Change plan
   (outline) opens the same chooser as Everyone's inside the card, in place of the Plan's name,
-  titled "Change plan", since the page names them, so their usage stays in view under it. Save
-  or Cancel closes it and returns focus to Change plan; the result is a toast with Undo
-  ("robin@example.test now has Free."). (Amended on 2026-10-18; it used to be a popover over the
-  card and the footer.)
+  titled "Change plan", since the page names them, so their usage stays in view under it. It
+  scrolls fully into view as it opens, with focus on the Plan chosen. Save or Cancel closes it and
+  returns focus to Change plan; the result is a toast with Undo ("robin@example.test now has
+  Free."). (Amended on 2026-10-18; it used to be a popover over the card and the footer.)
 - The Plan's name as an object title, with "Default" and "Over a limit" chips as in Everyone.
 - One row per limit: its name and what counts ("Running, or waiting for reauthorization",
   "Disconnected accounts count", "Revoked tokens don't count", "How soon changes reach other

@@ -850,6 +850,16 @@ describe("A person's page", () => {
       expect(chooser()!.querySelector("[data-tone='attention']")).toBeNull()
     })
 
+    it("scrolls the chooser fully into view as it opens in the card, with focus staying on the plan they have", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily))
+      const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
+      await click(changePlan())
+      expect(scrolled).toHaveBeenCalledOnce()
+      expect(scrolled.mock.contexts[0]).toBe(chooser())
+      expect(scrolled.mock.calls[0]?.[0]).toMatchObject({ block: "nearest" })
+      expect(document.activeElement).toBe(choice("Family"))
+    })
+
     it("closes, changing nothing, on Save with the plan they have, Cancel, or Escape, with focus back on Change plan", async () => {
       await renderPerson(testI18n(), "user-robin", withPlan(onFamily, { "POST /api/v1/plan-assignments": given(hasFree) }))
       await click(changePlan())

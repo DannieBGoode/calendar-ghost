@@ -17,8 +17,9 @@ import { usePlanList } from "@/lib/use-plans"
 
 /**
  * Change plan inside a person's Plan card, open while their command is Change plan. Its title is
- * "Change plan", since the page names them. Once the change is made, or it closes, focus returns
- * to Change plan, then the page's toast says what the change did, with Undo.
+ * "Change plan", since the page names them, and it scrolls fully into view as it opens. Once the
+ * change is made, or it closes, focus returns to Change plan, then the page's toast says what the
+ * change did, with Undo.
  */
 function PersonPlanChange({
   person,
@@ -50,6 +51,7 @@ function PersonPlanChange({
     <ChooserWithPlans
       id={`plan-change-${person.id}`}
       title={t("people.plans.change.heading")}
+      inPlace
       people={[person]}
       pending={changes.pending}
       refusal={refusal}

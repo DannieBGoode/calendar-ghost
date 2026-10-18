@@ -2,11 +2,12 @@ import { Trash2 } from "lucide-react"
 import { useEffect, useRef, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import { scrollFullyIntoView } from "@/components/ui/keep-in-window"
 import { cn } from "@/lib/utils"
 
 /**
  * A destructive change confirmed inline: its title, which takes focus, its consequence, and a
- * neutral way back beside the button that names the effect. While the change is on its way both
+ * neutral way back beside the button that names the effect. It scrolls fully into view as it opens. While the change is on its way both
  * buttons stay focusable but ignore presses, so focus never falls to the page; `confirmDisabled`
  * holds the confirm button back until a prerequisite, such as a password, is met.
  */
@@ -39,12 +40,15 @@ export function DestructiveConfirmation({
   /** Choices the confirmation needs, such as a password, shown between the body and the buttons. */
   children?: ReactNode
 }) {
+  const group = useRef<HTMLDivElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
-    heading.current?.focus()
+    heading.current?.focus({ preventScroll: true })
+    if (group.current) scrollFullyIntoView(group.current)
   }, [])
   return (
     <div
+      ref={group}
       className={cn("disconnect-confirmation delete-confirmation", children !== undefined && "confirmation-with-fields")}
       id={id}
       role="group"

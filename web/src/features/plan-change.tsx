@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { RadioRows, type RadioRowOption } from "@/components/ui/radio-rows"
+import { scrollFullyIntoView } from "@/components/ui/keep-in-window"
 import { Skeleton } from "@/components/ui/skeleton"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
@@ -35,6 +36,8 @@ export type PlanChooserProps = {
   overview: PlansOverview
   /** Its title's level: 3 on a page or in a popover, 5 under a person in a Plan's panel. */
   level: 3 | 5
+  /** It opens in place in a card, rather than in a popover, so it scrolls fully into view as it opens. */
+  inPlace?: boolean
   /** The change is on its way: every control keeps focus and waits. */
   pending: boolean
   /** Why the last change was refused, shown under the choice; null without one. */
@@ -108,13 +111,17 @@ function describedBy(...ids: (string | false)[]): string | undefined {
  * shows here. Escape or Cancel closes it.
  */
 function PlanChooser(props: PlanChooserProps) {
-  const { id, title, overview, level, pending, refusal, onSave, onCancel } = props
+  const { id, title, overview, level, inPlace, pending, refusal, onSave, onCancel } = props
   const { t } = useI18n()
   const state = useChoice(props)
+  const chooser = useRef<HTMLDivElement>(null)
   const options = useRef<HTMLDivElement>(null)
   useEffect(() => {
     focusChoice(options.current)
   }, [])
+  useEffect(() => {
+    if (inPlace && chooser.current) scrollFullyIntoView(chooser.current)
+  }, [inPlace])
   const Title = level === 3 ? "h3" : "h5"
   const hasDefault = overview.plans.some((plan) => plan.is_default)
   const cancel = () => !pending && onCancel()
@@ -139,7 +146,7 @@ function PlanChooser(props: PlanChooserProps) {
   }
 
   return (
-    <div id={id} className="plan-change" onKeyDown={escape}>
+    <div ref={chooser} id={id} className="plan-change" onKeyDown={escape}>
       <Title id={`${id}-title`}>{title}</Title>
       <div ref={options} className="plan-change-options">
         <RadioRows

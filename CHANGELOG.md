@@ -107,6 +107,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   buttons, fields, and selects are 44 pixels tall. Links that fill a table cell, such as a Plan's
   name or a person's email, are underlined only under the pointer or keyboard focus, and each
   names its row for a screen reader. The footer keeps the space before **AGPLv3+ license**.
+- What opens in place scrolls fully into view as it opens: a confirmation under a row, such as
+  **Remove** on the last Plan or **Delete** on a person's page, and **Change plan** in a person's
+  **Plan** card, so its buttons are never below the window. It scrolls at once when the device
+  asks for reduced motion, and focus stays where it was put.
 - **Replace calendars…** creates the new draft rule in the same step that begins the previous
   rule's removal, once that rule's run ends, instead of before it. A duplicate relationship found
   meanwhile, or a calendar account that is gone, now leaves the previous rule as it was and

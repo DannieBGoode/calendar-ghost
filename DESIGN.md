@@ -352,6 +352,11 @@ opens under its trigger, or above it when there is more room there, below the to
 toast, and its items scroll inside it once its height is capped, so a toast never covers an item. A
 disabled item dims its label and icon; the reason it gives stays in readable muted text.
 
+What opens in place, such as a confirmation under a row or a choice in a card, scrolls fully into
+view as it opens. It moves as little as it can between the top bar and a toast, or brings its start
+just under the top bar when it is taller than the window, at once under reduced motion; focus stays
+where the opening put it.
+
 ### Data Tables
 
 When people compare like things, such as Plans, a data table gives each comparable value a column:
