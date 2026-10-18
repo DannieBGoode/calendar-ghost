@@ -1,4 +1,4 @@
-import { TriangleAlert } from "lucide-react"
+import { ChevronRight, TriangleAlert } from "lucide-react"
 import { useEffect, useRef } from "react"
 
 import { Switch } from "@/components/ui/switch"
@@ -96,20 +96,18 @@ function PlansSwitch({ overview, commands, onChange }: { overview: PlansOverview
 
 /**
  * Whom Plans limit, who is over a limit, the Default Plan, and who is never limited, as nouns and
- * numbers. Who is over takes Attention Ochre and its icon while Plans are on, and Show, which opens
- * Everyone narrowed to them.
+ * numbers, the last two secondary. Who is over takes Attention Ochre and its icon while Plans are
+ * on, and its number is the link that opens Everyone narrowed to them.
  */
 function PlansFacts({ facts, onShowPeople }: { facts: PlansFact[]; onShowPeople: ShowPeople }) {
   if (facts.length === 0) return null
   return (
     <dl className="plans-facts">
       {facts.map((fact) => (
-        <div key={fact.id} className="plans-fact" data-fact={fact.id}>
+        <div key={fact.id} className="plans-fact" data-fact={fact.id} data-secondary={fact.secondary || undefined}>
           <dt>{fact.label}</dt>
           <dd data-tone={fact.attention ? "attention" : undefined}>
-            {fact.attention && <TriangleAlert aria-hidden="true" />}
-            <span>{fact.value}</span>
-            {fact.id === "over" && fact.over > 0 && <ShowOver onShowPeople={onShowPeople} />}
+            {fact.id === "over" && fact.over > 0 ? <ShowOver fact={fact} onShowPeople={onShowPeople} /> : <span>{fact.value}</span>}
           </dd>
         </div>
       ))}
@@ -117,20 +115,24 @@ function PlansFacts({ facts, onShowPeople }: { facts: PlansFact[]; onShowPeople:
   )
 }
 
-function ShowOver({ onShowPeople }: { onShowPeople: ShowPeople }) {
+/** Who is over a limit, "⚠ 1 person ›", as the link that opens Everyone narrowed to them. */
+function ShowOver({ fact, onShowPeople }: { fact: PlansFact; onShowPeople: ShowPeople }) {
   const { t } = useI18n()
+  const label = fact.attention ? "people.plans.status.showOver" : "people.plans.status.showWouldBeOver"
   return (
     <a
       className="plans-fact-link"
       href={peoplePath({ over: true })}
-      aria-label={t("people.plans.status.showLabel")}
+      aria-label={t(label, { count: fact.over })}
       onClick={(event) => {
         if (!isPlainLeftClick(event)) return
         event.preventDefault()
         onShowPeople({ over: true })
       }}
     >
-      {t("people.plans.status.show")}
+      {fact.attention && <TriangleAlert aria-hidden="true" data-attention="" />}
+      <span>{fact.value}</span>
+      <ChevronRight aria-hidden="true" />
     </a>
   )
 }

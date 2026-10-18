@@ -91,13 +91,15 @@ function PlansLoadError({ onRetry }: { onRetry: () => void }) {
 }
 
 /**
- * Once the panel closes, or a removed Plan's confirmation does, focus returns to the Plan's name
- * in the catalog, or to New plan, wherever it shows now, as when a new Plan is not listed yet;
- * then what follows, such as the save's toast, which returns focus there as it closes.
+ * Once the panel closes, or a removed Plan's confirmation does, the page returns to where it was
+ * before the panel opened, and focus to the Plan's name in the catalog, or to New plan, wherever it
+ * shows now, as when a new Plan is not listed yet; then what follows, such as the save's toast,
+ * which returns focus there as it closes.
  */
 function useFocusReturn({ focusReturn, focusReturned }: PlanWorkControls) {
   useEffect(() => {
     if (focusReturn === null) return
+    if (focusReturn.scrollY !== undefined) window.scrollTo({ top: focusReturn.scrollY })
     const name = focusReturn.plan === null ? null : document.getElementById(`plan-name-${focusReturn.plan}`)
     ;(name ?? document.getElementById("plans-new"))?.focus()
     focusReturn.afterwards?.()

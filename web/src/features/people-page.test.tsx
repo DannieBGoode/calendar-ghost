@@ -285,7 +285,7 @@ function personRow(email: string): HTMLTableRowElement {
 }
 
 function cells(row: HTMLTableRowElement): string[] {
-  return [...row.querySelectorAll("td")].map((cell) => cell.textContent.trim())
+  return [...row.querySelectorAll("th, td")].map((cell) => cell.textContent.trim())
 }
 
 function header(label: string): HTMLTableCellElement {
@@ -398,6 +398,11 @@ describe("People page", () => {
       "",
     ])
     expect(personRow("dana@example.test").querySelector("[aria-haspopup='menu']")).toBeNull()
+    // Each person's email heads their row, so a screen reader names them as it moves down a column.
+    const heading = personRow("robin@example.test").querySelector("th")!
+    expect(heading.getAttribute("scope")).toBe("row")
+    expect(heading.getAttribute("role")).toBe("rowheader")
+    expect(heading.querySelector(".person-email")?.textContent).toBe("robin@example.test")
     expect(cells(personRow("robin@example.test")).slice(1, 6)).toEqual([
       "Stopped2 problems",
       "User",
@@ -431,11 +436,15 @@ describe("People page", () => {
     expect(planCell("dana@example.test")).toEqual(["Free", "Default", "Not limited"])
     expect(planCell("sam@example.test")).toEqual(["Free", "Default"])
     expect(planCell("robin@example.test")).toEqual(["Family", "Over a limit"])
-    // Over a limit: a chip in Attention Ochre with its icon, and each limit in words for a screen reader.
+    // Over a limit: a chip in Attention Ochre with its icon, and which limit, in words, on a muted
+    // line under it, for every reader.
     const over = plan("robin@example.test").querySelector("[data-tone='attention']")!
     expect(over.textContent).toBe("Over a limit")
     expect(over.querySelector("svg[aria-hidden='true']")).not.toBeNull()
-    expect(plan("robin@example.test").querySelector(".sr-only")?.textContent).toBe("2 calendar accounts, 1 allowed")
+    const detail = plan("robin@example.test").querySelector(".person-plan-detail")!
+    expect(detail.textContent).toBe("2 calendar accounts, 1 allowed")
+    expect(detail.closest(".sr-only")).toBeNull()
+    expect(plan("robin@example.test").querySelector(".sr-only")).toBeNull()
     expect(plan("sam@example.test").getAttribute("data-label")).toBe("Plan")
   })
 
@@ -450,6 +459,7 @@ describe("People page", () => {
     })
     expect(planCell("robin@example.test")).toEqual(["Family", "Would be over"])
     expect(plan("robin@example.test").querySelector("[data-tone='attention']")).toBeNull()
+    expect(plan("robin@example.test").querySelector(".person-plan-detail")?.textContent).toBe("2 calendar accounts, 1 allowed")
   })
 
   it("shows no Plan column or filter, and asks for no plans, while no plan exists", async () => {
@@ -1303,6 +1313,8 @@ describe("Changing plans from Everyone", () => {
       expect(toast()).toBe("2 people now have Free.")
       expect(rows()).toHaveLength(0)
       expect(container.querySelector(".people-bulk-bar")).toBeNull()
+      // The bar left with the people; focus stays on the list's heading rather than nowhere.
+      expect(document.activeElement?.id).toBe("people-list-title")
     }
 
     await giveEveryoneFree()

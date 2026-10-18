@@ -187,7 +187,7 @@ function ToastAction({
   onKeyDown: (event: KeyboardEvent) => void
 }) {
   return (
-    <Button variant="outline" size="sm" className="shrink-0 pointer-coarse:h-11" onClick={onClick} onKeyDown={onKeyDown}>
+    <Button variant="outline" size="sm" className="shrink-0" onClick={onClick} onKeyDown={onKeyDown}>
       {action.icon ?? <Undo2 aria-hidden="true" />}
       {action.label}
     </Button>

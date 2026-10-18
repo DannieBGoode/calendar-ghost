@@ -73,7 +73,8 @@ function wholeNumber(amount: string): number | null {
  * scroll wheel never changes it, and a WAI-ARIA spin button: the arrow keys step it by one, Page
  * Up and Page Down by ten, and Home and End go to its bounds. While another option is chosen, the
  * number stays visible, dimmed, so choosing Up to again keeps it; it is out of the tab sequence
- * then, and pointing at it chooses Up to.
+ * then, and pointing at it chooses Up to. Where the field is narrow, as on a phone, the options
+ * stack as a list, each a full-width row; wider, an option that wraps to its own line fills it.
  */
 function LimitField({
   legend,
@@ -98,7 +99,7 @@ function LimitField({
     <Segment id={`${id}-${choice}`} name={id} label={label} checked={value.choice === choice} pending={pending} onChoose={() => change({ choice })} />
   )
   return (
-    <fieldset className="m-0 min-w-0 border-0 p-0" aria-describedby={hint ? hintId : undefined}>
+    <fieldset className="@container m-0 min-w-0 border-0 p-0" aria-describedby={hint ? hintId : undefined}>
       <legend id={legendId} className="p-0 text-sm font-semibold leading-snug text-foreground">
         {legend}
       </legend>
@@ -107,7 +108,7 @@ function LimitField({
           {hint}
         </p>
       )}
-      <div className="mt-2 flex w-fit max-w-full flex-wrap items-stretch gap-[3px] rounded-[0.625rem] border border-input bg-background p-[3px]">
+      <div className="mt-2 flex w-fit max-w-full flex-wrap items-stretch gap-[3px] rounded-[0.625rem] border border-input bg-background p-[3px] @max-[22rem]:w-full @max-[22rem]:flex-col">
         {labels.none === undefined ? segment("noLimit", labels.noLimit) : segment("none", labels.none)}
         <Segment
           id={`${id}-upTo`}
@@ -138,7 +139,8 @@ function LimitField({
 
 /**
  * One option of the segmented control; a label stretched over it makes the whole option choose it.
- * Up to wraps its number and unit onto a second line when the field is too narrow for one.
+ * It grows to fill a line it wraps to. Up to wraps its number and unit onto a second line when the
+ * field is too narrow for one.
  */
 function Segment({
   id,
@@ -158,7 +160,7 @@ function Segment({
   children?: React.ReactNode
 }) {
   return (
-    <span className="relative inline-flex min-h-[2.125rem] flex-wrap items-center gap-x-2 gap-y-1 rounded-[0.4375rem] border border-transparent px-3 text-sm font-semibold text-muted-foreground transition-colors duration-200 has-checked:border-border has-checked:bg-muted has-checked:text-foreground has-checked:shadow-[0_1px_0_color-mix(in_oklch,var(--foreground)_6%,transparent)] pointer-coarse:min-h-11">
+    <span className="relative inline-flex min-h-[2.125rem] flex-auto flex-wrap items-center gap-x-2 gap-y-1 rounded-[0.4375rem] border border-transparent px-3 text-sm font-semibold text-muted-foreground transition-colors duration-200 has-checked:border-border has-checked:bg-muted has-checked:text-foreground has-checked:shadow-[0_1px_0_color-mix(in_oklch,var(--foreground)_6%,transparent)] pointer-coarse:min-h-11">
       <Radio id={id} name={name} checked={checked} aria-disabled={pending || undefined} onChange={onChoose} />
       <label
         htmlFor={id}

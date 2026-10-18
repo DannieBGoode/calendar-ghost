@@ -46,25 +46,15 @@ function wouldLimit({ t }: I18n, limited: number, over: number): string {
 }
 
 /**
- * The status card's one sentence, with `<strong>` around the counts and the Plan it names: what
- * Plans do now while on, and while off what turning them on would do, keeping every Plan, and
- * adding No limits as the default when there is none.
+ * The status card's one sentence, which says what its facts cannot, never a count or a name they
+ * show: while on, what a limit does and who gets the default; while off, what the switch does,
+ * and that it adds No limits as the default when there is none; before any Plan, what Plans would
+ * start with. `<strong>` marks the Plan it names.
  */
-export function statusSentence(i18n: I18n, overview: PlansOverview): string {
-  const { t } = i18n
-  const limited = limitedPeople(overview.plans)
-  const name = defaultName(overview)
-  if (overview.enabled) {
-    return limited > 0
-      ? t("people.plans.status.onLimits", { count: limited, name: name ?? "" })
-      : t("people.plans.status.onNobody", { name: name ?? "" })
-  }
+export function statusSentence({ t }: I18n, overview: PlansOverview): string {
+  if (overview.enabled) return t("people.plans.status.on")
   if (overview.plans.length === 0) return t("people.plans.status.offNoPlans")
-  const parts = {
-    kept: t("people.plans.status.kept", { count: overview.plans.length }),
-    impact: wouldLimit(i18n, limited, overPeople(overview.plans)),
-  }
-  return name === null ? t("people.plans.status.offSentenceNoDefault", parts) : t("people.plans.status.offSentence", parts)
+  return defaultName(overview) === null ? t("people.plans.status.offNoDefault") : t("people.plans.status.off")
 }
 
 /**
@@ -93,6 +83,8 @@ export type PlansFact = {
   /** In Attention Ochre with an icon: people are over a limit Plans enforce now. */
   attention: boolean
   over: number
+  /** Context rather than whom Plans limit, so it folds into one quieter line where the card is narrow. */
+  secondary: boolean
 }
 
 function peopleCount({ t }: I18n, count: number): string {
@@ -101,10 +93,10 @@ function peopleCount({ t }: I18n, count: number): string {
 
 /**
  * The status card's facts: whom Plans limit, who is over a limit, the Default Plan, and who is
- * never limited. While Plans are off they say what turning them on would do, and nothing takes the
- * attention tone, since nothing is enforced. None before any Plan exists. Who is never limited is
- * left out when the answer has no count of them, as a server older than the page sends, rather
- * than shown without its number.
+ * never limited, the last two secondary. While Plans are off they say what turning them on would
+ * do, and nothing takes the attention tone, since nothing is enforced. None before any Plan exists.
+ * Who is never limited is left out when the answer has no count of them, as a server older than
+ * the page sends, rather than shown without its number.
  */
 export function statusFacts(i18n: I18n, overview: PlansOverview): PlansFact[] {
   const { t } = i18n
@@ -117,6 +109,7 @@ export function statusFacts(i18n: I18n, overview: PlansOverview): PlansFact[] {
     value,
     attention: enabled && count > 0,
     over: count,
+    secondary: id === "default" || id === "administrators",
   })
   const facts = [
     fact(
@@ -134,14 +127,29 @@ export function statusFacts(i18n: I18n, overview: PlansOverview): PlansFact[] {
 
 /**
  * What Make default says it does: whom it moves, everyone without a Plan of their own, and how many
- * they are now. Without a count, as a server older than the page sends, it names whom it moves and
- * never says that nobody moves.
+ * they are now; then who keeps the default now because they were given it as their own Plan, as
+ * Make default moves only those without one. Without a count, as a server older than the page
+ * sends, it names whom it moves and never says that nobody moves.
  */
-export function makeDefaultHint({ t }: I18n, { name }: Pick<PlanSummary, "name">, followers: number): string {
+export function makeDefaultHint({ t }: I18n, { name }: Pick<PlanSummary, "name">, overview: PlansOverview): string {
+  const { followers } = overview
   if (!Number.isFinite(followers)) return t("people.plans.menu.makeDefaultMovesUncounted", { name })
-  return followers > 0
-    ? t("people.plans.menu.makeDefaultMoves", { count: followers, name })
-    : t("people.plans.menu.makeDefaultNobody", { name })
+  const moves =
+    followers > 0
+      ? t("people.plans.menu.makeDefaultMoves", { count: followers, name })
+      : t("people.plans.menu.makeDefaultNobody", { name })
+  const current = overview.plans.find((plan) => plan.is_default)
+  const given = current ? current.people - followers : 0
+  if (!current || given <= 0) return moves
+  return t("people.plans.menu.makeDefaultAnd", {
+    moves,
+    keeps: t("people.plans.menu.makeDefaultKeeps", { count: given, name: current.name }),
+  })
+}
+
+/** Whether Remove can remove the Plan now: nobody has it and it is not the default. */
+export function removable(plan: Pick<PlanSummary, "people" | "is_default">): boolean {
+  return plan.people === 0 && !plan.is_default
 }
 
 /**

@@ -284,7 +284,9 @@ A limit that may be unlimited is one segmented radio group, never a checkbox bes
 `No limit | Up to [- 3 +] rules`, and, where zero is a real choice, `None | Up to [- 2 +] |
 No limit`. The number stays visible, dimmed, while another option is chosen, so switching back
 keeps it. The number is a text field with a numeric keyboard and a stepper on each side, so a
-scroll wheel never changes it. Its hint, above the control, says in one line what counts.
+scroll wheel never changes it. Its hint, above the control, says in one line what counts. Where the
+field is too narrow for its options on one line, as on a phone, they stack as a list, each a
+full-width row with Up to and its stepper on one line; wider, an option that wraps fills its line.
 
 ### Radio Cards
 
@@ -344,16 +346,25 @@ window: it opens under its control, or above it when there is more room there, b
 and above a toast, with its height capped at the room it has. Its list then scrolls inside it
 while its title and action stay in view. A control with little room on either side is first
 scrolled up. Anything longer is a side panel, and a choice about what a page already shows, such
-as one person's Plan on their page, opens in place in its card.
+as one person's Plan on their page, opens in place in its card. A menu follows the same rule: it
+opens under its trigger, or above it when there is more room there, below the top bar and above a
+toast, and its items scroll inside it once its height is capped, so a toast never covers an item. A
+disabled item dims its label and icon; the reason it gives stays in readable muted text.
 
 ### Data Tables
 
 When people compare like things, such as Plans, a data table gives each comparable value a column:
-a header row, one row per thing with its name as a link, counts right-aligned in tabular numerals,
-"Unlimited" and "None" in muted text, chips beside a value they qualify, and a More actions menu
-whose items carry descriptions and say why an item is disabled. Columns keep fixed widths, and
-when the table itself is narrow each row becomes a card that labels its values, as People's
-Everyone does. A data table is how an administration surface compares; it is not a chart wall.
+a header row, one row per thing headed by its name (a row header, so a screen reader names the
+thing as it moves down a column) as a link, counts right-aligned in tabular numerals under
+right-aligned headings that wrap rather than overhang, "Unlimited" and "None" in muted text, chips
+beside a value they qualify, and a More actions menu whose items carry descriptions and say why an
+item is disabled. A press anywhere else on a row opens what its name opens, as Activity's rows do;
+the name stays the row's one keyboard target. A link that is a cell's whole content reads as ink,
+underlined only under the pointer or keyboard focus. The name's column takes the room the others
+leave, and the others keep fixed widths, so no gap opens before the row's menu; when the table
+itself is narrow each row becomes a card that labels its values, as People's Everyone does. A data
+table states each fact once, in its cell, with no instruction above it. A data table is how an
+administration surface compares; it is not a chart wall.
 
 ### Side Panels
 
@@ -361,8 +372,10 @@ A side panel opens the selected row of a table beside it, at its own address, ne
 Activity's entry and incident panels, and a Plan's panel on People. It may hold the form that
 creates or edits the selected thing, with a footer holding its one primary action, Cancel, and how
 many changes are not saved, and tabs when the thing has more than one side. While it is open the
-table drops the columns it no longer has room for, and marks the open row as selected. Opening it
-moves focus to its title; Close returns to the table's address and focus to the row it came from.
+table drops the columns it no longer has room for, and marks the open row as selected. It fits the
+window below where it starts, so its footer with the one primary action is in view as it opens,
+and only its body scrolls. Opening it moves focus to its title; Close returns to the table's
+address, the page to where it was before the panel opened, and focus to the row it came from.
 Saving closes it too, once the server answers and without asking: the table's address replaces
 the panel's, focus goes to the saved row, and a toast says what was saved. A refusal keeps it open,
 under the field it names. While its form has changes not saved, leaving it in any way (Close,
@@ -474,16 +487,20 @@ footer holds the one primary action. Plans sit beside the people they limit, so 
 each person's own Your plan.
 
 The Plans tab leads with a status card: the state as an object title ("Plans are on"), one
-sentence on what Plans do now or, while they are off, would do once on, and the switch, which
-applies at once and answers in a toast with Undo. Below them sit four facts: Limited now, Over a
-limit (in Attention Ochre with an icon, and Show, which opens Everyone narrowed to those people),
-Default plan, and Never limited, which explains why People counts include people Plans do not
-limit. While Plans are off the facts say what turning on would do, and every over-limit chip on
-the page turns neutral, because nothing is enforced. With no Plan, the card is followed by one
+sentence that says what the facts cannot (what a limit does and who gets the default while on,
+what the switch does while off), never a count or a name a fact shows, and the switch, which
+applies at once and answers in a toast with Undo. Below them sit the facts, one equal column each
+for as many as the server counted: Limited now, Over a limit (in Attention Ochre with an icon,
+its number the link that opens Everyone narrowed to those people: "⚠ 1 person ›"), Default plan,
+and Never limited, which explains why People counts include people Plans do not limit. On a narrow
+card the first two lead side by side and the other two follow on one quieter line. While Plans are
+off the facts say what turning on would do, and every over-limit chip on the page turns neutral,
+because nothing is enforced. With no Plan, the card is followed by one
 empty state whose action is New plan. Otherwise the catalog follows: a data table of Plans with one
 column per limit, the default first with a "Default" badge, and People as a link to Everyone
 filtered by the Plan, with an Attention Ochre "1 over a limit" chip linking to those of them over
-it. Each row's More actions holds Edit, Assign people, Make default, which says whom it moves,
+it. A press anywhere on a row opens its Plan. Each row's More actions holds Edit, Assign people,
+Make default, which says whom it moves and who keeps the default they were given as their own,
 Duplicate, and Remove. Remove on the default, or on a Plan someone has, is disabled with its reason
 as its description, naming the first three who have it by email and then how many more, instead
 of a confirmation the server would refuse. There is no Default plan select and no "No default": a
@@ -495,6 +512,8 @@ with what counts as its hint; Sync speed as radio cards; and, under a limit type
 people on the Plan use, how many people it would leave with more, in Attention Ochre with an icon.
 People is a searchable checklist of the people who do not have the Plan, each saying before anyone
 confirms what they would be over, administrators last as never limited, then who has the Plan now.
+Whoever is chosen stays chosen, and warned about, while a search hides them. On the default's
+panel, giving it means following it, as Change plan's default does.
 While a Plan command is on its way, its controls stay focusable and wait, so focus never drops to
 the page; a refusal shows under the field it names, which takes focus.
 
@@ -512,7 +531,8 @@ Disabled is a neutral chip, because disabling is a choice, not an emergency. Tab
 fixed widths, and the list becomes cards when the list itself is narrow, not the window. A
 command's result appears beside the person it changed. Once a Plan exists, the table has a Plan
 column, the Plan's name with chips ("Default", "Over a limit" in Attention Ochre with an icon, "Not
-limited" for an administrator), and the filters a Plan filter and a Limits filter, kept in the
+limited" for an administrator) and, on a muted line under them, which limit someone is over ("2
+calendar accounts, 1 allowed"), and the filters a Plan filter and a Limits filter, kept in the
 address like the others. Rows can be selected; the bulk bar's Change plan opens a popover of radio
 rows, one per Plan, the default first, where choosing the default means following it, with what
 they have now chosen and marked "Current", and a dry run under the choice that says who would be

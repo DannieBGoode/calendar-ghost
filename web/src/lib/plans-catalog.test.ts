@@ -128,37 +128,23 @@ describe("overPeople", () => {
 })
 
 describe("statusSentence", () => {
-  it("says whom Plans limit now, and which Plan everyone else gets, while on", () => {
-    // Pro and No limits limit nothing, so only Free's people are limited.
-    expect(statusSentence(i18n, overview())).toBe(
-      "Plans limit <strong>2 people</strong> right now. Everyone without a plan of their own gets <strong>No limits</strong>, the default plan, including people who join later.",
-    )
-    expect(statusSentence(i18n, overview({ plans: [noLimits, { ...free, limited_people: 1 }] }))).toBe(
-      "Plans limit <strong>1 person</strong> right now. Everyone without a plan of their own gets <strong>No limits</strong>, the default plan, including people who join later.",
-    )
-    expect(statusSentence(i18n, overview({ plans: [noLimits] }))).toBe(
-      "Plans limit nobody right now. Everyone without a plan of their own gets <strong>No limits</strong>, the default plan, including people who join later.",
-    )
+  it("says what a limit does while on, and who gets the default, never a count or a name the facts show", () => {
+    const on = "People can't add more than their plan allows. Anyone without a plan of their own, including people who join later, gets the default plan."
+    expect(statusSentence(i18n, overview())).toBe(on)
+    expect(statusSentence(i18n, overview({ plans: [noLimits, { ...free, limited_people: 1 }] }))).toBe(on)
+    expect(statusSentence(i18n, overview({ plans: [noLimits] }))).toBe(on)
   })
 
-  it("says what turning plans on would do while off, and that the plans are kept", () => {
-    expect(statusSentence(i18n, overview({ enabled: false }))).toBe(
-      "Everyone can use everything. Your 3 plans are kept. Turning plans on limits <strong>2 people</strong> right away, and 1 of them has more than their plan allows.",
-    )
-    expect(statusSentence(i18n, overview({ enabled: false, plans: [noLimits, { ...free, over_people: 2 }] }))).toBe(
-      "Everyone can use everything. Your 2 plans are kept. Turning plans on limits <strong>2 people</strong> right away, and 2 of them have more than their plan allows.",
-    )
-    expect(statusSentence(i18n, overview({ enabled: false, plans: [{ ...free, over_people: 0, limited_people: 1 }], defaultPlan: "free" }))).toBe(
-      "Everyone can use everything. Your 1 plan is kept. Turning plans on limits <strong>1 person</strong> right away.",
-    )
-    expect(statusSentence(i18n, overview({ enabled: false, plans: [noLimits] }))).toBe(
-      "Everyone can use everything. Your 1 plan is kept. Turning plans on limits nobody yet.",
-    )
+  it("says what the switch does while off, whatever the facts count", () => {
+    const off = "Nobody is limited. Turning plans on applies each person's plan at once."
+    expect(statusSentence(i18n, overview({ enabled: false }))).toBe(off)
+    expect(statusSentence(i18n, overview({ enabled: false, plans: [noLimits, { ...free, over_people: 2 }] }))).toBe(off)
+    expect(statusSentence(i18n, overview({ enabled: false, plans: [noLimits] }))).toBe(off)
   })
 
   it("says turning plans on adds No limits when there is no default", () => {
     expect(statusSentence(i18n, overview({ enabled: false, defaultPlan: null, plans: [{ ...free, over_people: 0 }] }))).toBe(
-      "Everyone can use everything. Your 1 plan is kept. Turning plans on limits <strong>2 people</strong> right away. It also adds a plan named <strong>No limits</strong> as the default for everyone without a plan of their own.",
+      "Nobody is limited. Turning plans on applies each person's plan at once, and adds a plan named <strong>No limits</strong> as the default for everyone without a plan of their own.",
     )
     expect(statusSentence(i18n, overview({ enabled: false, defaultPlan: null, plans: [] }))).toBe(
       "Everyone can use everything, with no limits. Turning plans on adds a plan named <strong>No limits</strong> as the default, so nobody is limited until you give someone a smaller plan.",
@@ -186,19 +172,19 @@ describe("compactStatusSentence", () => {
 describe("statusFacts", () => {
   it("states whom Plans limit, who is over, the default, and who is never limited, while on", () => {
     expect(statusFacts(i18n, overview({ administrators: 2 }))).toEqual([
-      { id: "limited", label: "Limited now", value: "2 people", attention: false, over: 0 },
-      { id: "over", label: "Over a limit", value: "1 person", attention: true, over: 1 },
-      { id: "default", label: "Default plan", value: "No limits", attention: false, over: 0 },
-      { id: "administrators", label: "Never limited", value: "2 administrators", attention: false, over: 0 },
+      { id: "limited", label: "Limited now", value: "2 people", attention: false, over: 0, secondary: false },
+      { id: "over", label: "Over a limit", value: "1 person", attention: true, over: 1, secondary: false },
+      { id: "default", label: "Default plan", value: "No limits", attention: false, over: 0, secondary: true },
+      { id: "administrators", label: "Never limited", value: "2 administrators", attention: false, over: 0, secondary: true },
     ])
   })
 
   it("says what Plans would do while off, all neutral, and when nobody is limited or over", () => {
     expect(statusFacts(i18n, overview({ enabled: false, defaultPlan: null, plans: [noLimits] }))).toEqual([
-      { id: "limited", label: "Would limit", value: "Nobody", attention: false, over: 0 },
-      { id: "over", label: "Would be over a limit", value: "Nobody", attention: false, over: 0 },
-      { id: "default", label: "Default plan", value: "None yet", attention: false, over: 0 },
-      { id: "administrators", label: "Never limited", value: "1 administrator", attention: false, over: 0 },
+      { id: "limited", label: "Would limit", value: "Nobody", attention: false, over: 0, secondary: false },
+      { id: "over", label: "Would be over a limit", value: "Nobody", attention: false, over: 0, secondary: false },
+      { id: "default", label: "Default plan", value: "None yet", attention: false, over: 0, secondary: true },
+      { id: "administrators", label: "Never limited", value: "1 administrator", attention: false, over: 0, secondary: true },
     ])
     expect(statusFacts(i18n, overview({ enabled: false }))[1]).toEqual({
       id: "over",
@@ -206,6 +192,7 @@ describe("statusFacts", () => {
       value: "1 person",
       attention: false,
       over: 1,
+      secondary: false,
     })
   })
 
@@ -221,16 +208,30 @@ describe("statusFacts", () => {
 })
 
 describe("makeDefaultHint", () => {
+  /** No limits is the default, which `followers` follow and `given` were given as their own plan. */
+  function given(followers: number, given = 0): PlansOverview {
+    return overview({ plans: [{ ...noLimits, people: followers + given }, free, pro], followers })
+  }
+
   it("says whom Make default moves, and how many they are now", () => {
-    expect(makeDefaultHint(i18n, free, 2)).toBe("People without a plan of their own (2 now) move to Free.")
-    expect(makeDefaultHint(i18n, free, 1)).toBe("People without a plan of their own (1 now) move to Free.")
-    expect(makeDefaultHint(i18n, free, 0)).toBe("Everyone has a plan of their own now. People who join later get Free.")
+    expect(makeDefaultHint(i18n, free, given(2))).toBe("People without a plan of their own (2 now) move to Free.")
+    expect(makeDefaultHint(i18n, free, given(1))).toBe("People without a plan of their own (1 now) move to Free.")
+    expect(makeDefaultHint(i18n, free, given(0))).toBe("Everyone has a plan of their own now. People who join later get Free.")
+  })
+
+  it("names who keeps the default they were given as their own plan, since only those without one move", () => {
+    expect(makeDefaultHint(i18n, free, given(2, 1))).toBe(
+      "People without a plan of their own (2 now) move to Free. 1 person keeps No limits, which was given to them.",
+    )
+    expect(makeDefaultHint(i18n, free, given(0, 2))).toBe(
+      "Everyone has a plan of their own now. People who join later get Free. 2 people keep No limits, which was given to them.",
+    )
   })
 
   it("says whom it moves without a number, never that nobody is moved, when the server did not count them", () => {
-    const older: Partial<PlansOverview> = overview()
+    const older: Partial<PlansOverview> = given(2, 1)
     delete older.followers
-    expect(makeDefaultHint(i18n, free, (older as PlansOverview).followers)).toBe("People without a plan of their own move to Free.")
+    expect(makeDefaultHint(i18n, free, older as PlansOverview)).toBe("People without a plan of their own move to Free.")
   })
 })
 

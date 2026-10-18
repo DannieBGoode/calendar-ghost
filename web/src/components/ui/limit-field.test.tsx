@@ -117,6 +117,21 @@ describe("LimitField", () => {
     expect(chosen(container)).toBe("None")
   })
 
+  it("stacks its options as a list where the field is narrow, as on a phone, and fills each line it wraps to", () => {
+    for (const tokens of [false, true]) {
+      const container = render(<Harness tokens={tokens} initial={{ choice: "upTo", amount: "3" }} />)
+      const field = container.querySelector("fieldset")!
+      // The field's own width decides, not the window's.
+      expect(field.classList.contains("@container")).toBe(true)
+      const options = field.querySelector(":scope > div")!
+      expect(options.classList.contains("@max-[22rem]:flex-col")).toBe(true)
+      expect(options.classList.contains("@max-[22rem]:w-full")).toBe(true)
+      for (const segment of options.children) expect(segment.classList.contains("flex-auto")).toBe(true)
+      act(() => root?.unmount())
+      root = null
+    }
+  })
+
   it("puts its options in one native radio group, so the arrow keys move the choice and Tab stops once", () => {
     const options = radios(render(<Harness tokens initial={{ choice: "none", amount: "2" }} />))
     expect(new Set(options.map((option) => option.name)).size).toBe(1)

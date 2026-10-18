@@ -2,6 +2,7 @@ import { ChevronDown, MoreHorizontal } from "lucide-react"
 import { Fragment, useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import { useKeptInWindow } from "@/components/ui/keep-in-window"
 
 export type OverflowMenuItem = {
   id: string
@@ -27,11 +28,15 @@ export type OverflowMenuTrigger = {
 
 const MENU_WIDTH = 336
 const VIEWPORT_MARGIN = 16
+/** The menu opens under its trigger, or above it when there is more room there, this far from it (0.25rem). */
+const PLACEMENT = { gap: 4, sideways: false }
 
 /**
  * A menu button for secondary commands, or for choosing how to do one main action, following the WAI-ARIA menu button pattern: arrow
  * keys move between items, Escape and Tab close it, and focus returns to the trigger. Disabled
- * items stay focusable so a running command never strands keyboard focus.
+ * items stay focusable so a running command never strands keyboard focus. The menu never leaves
+ * the window: it opens under its trigger, or above it when there is more room there, below the
+ * top bar and above a toast, and its items scroll inside it when it is capped.
  */
 export function OverflowMenu({
   label,
@@ -50,7 +55,9 @@ export function OverflowMenu({
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const itemRefs = useRef<(HTMLElement | null)[]>([])
+  const list = useRef<HTMLDivElement>(null)
   const menuId = useId()
+  useKeptInWindow(list, open, PLACEMENT)
 
   useEffect(() => {
     if (!open) return
@@ -138,6 +145,7 @@ export function OverflowMenu({
       </Button>
       {open && (
         <div
+          ref={list}
           className="overflow-menu-list"
           style={placement ? { left: placement.left, right: "auto", width: placement.width } : undefined}
           id={menuId}

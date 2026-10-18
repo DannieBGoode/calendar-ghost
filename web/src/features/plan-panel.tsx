@@ -1,5 +1,5 @@
 import { UserPlus, X } from "lucide-react"
-import { useEffect, useRef, type KeyboardEvent } from "react"
+import { useEffect, useLayoutEffect, useRef, type KeyboardEvent, type RefObject } from "react"
 
 import { PageTabs } from "@/components/page-tabs"
 import { Button } from "@/components/ui/button"
@@ -28,15 +28,46 @@ type PanelProps = {
 }
 
 /**
+ * Keeps `--plan-panel-top` on the panel: how far below the window's top it starts now, which the
+ * stylesheet caps its height by, so its footer with the one primary action is in the window from
+ * where it opens until it sticks under the top bar, and only its body scrolls.
+ */
+function usePanelTop(aside: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const element = aside.current
+    if (!element) return
+    const measure = () => {
+      element.style.setProperty("--plan-panel-top", `${Math.max(0, Math.round(element.getBoundingClientRect().top))}px`)
+    }
+    measure()
+    let frame = 0
+    const later = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(measure)
+    }
+    window.addEventListener("scroll", later, { passive: true })
+    window.addEventListener("resize", later)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener("scroll", later)
+      window.removeEventListener("resize", later)
+    }
+  }, [aside])
+}
+
+/**
  * The side panel beside the Plans catalog, at its own address and never a modal, as Activity's
  * entry panel is: "Plan", Close, the Plan's name as its title with who has it and what it allows,
  * then its Limits and People tabs. New plan has the editor alone. Opening it from the page moves
- * focus to its title; Escape anywhere in it, Close, and each tab's Cancel close it.
+ * focus to its title; Escape anywhere in it, Close, and each tab's Cancel close it. It fits the
+ * window below where it starts, so its footer is always in view.
  */
 export function PlanPanel({ panel, ...props }: PanelProps & { panel: Panel }) {
   const { t } = useI18n()
   const { overview, work } = props
   const plan = panel.plan === null ? null : overview.plans.find((item) => item.key === panel.plan)
+  const aside = useRef<HTMLElement>(null)
+  usePanelTop(aside)
 
   function escape(event: KeyboardEvent<HTMLElement>) {
     // A control inside that closes something of its own on Escape, such as a search, comes first.
@@ -46,7 +77,7 @@ export function PlanPanel({ panel, ...props }: PanelProps & { panel: Panel }) {
   }
 
   return (
-    <aside id="plan-panel" className="plan-panel" aria-labelledby="plan-panel-title" onKeyDown={escape}>
+    <aside ref={aside} id="plan-panel" className="plan-panel" aria-labelledby="plan-panel-title" onKeyDown={escape}>
       <div className="plan-panel-bar">
         <span className="plan-panel-label">{t("people.plans.panel.label")}</span>
         <Button

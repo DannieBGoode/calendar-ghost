@@ -1,5 +1,5 @@
 import { Clock, Info, TriangleAlert, Zap } from "lucide-react"
-import { useRef, type ReactNode } from "react"
+import { useRef, type MouseEvent, type ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { PlanDetails } from "@/features/people-plan-details"
@@ -7,11 +7,10 @@ import { PlanRowMenu } from "@/features/people-plan-row-menu"
 import type { ShowPeople } from "@/features/people-plans-status"
 import type { ChangeSetting } from "@/features/use-setting-change"
 import { useI18n } from "@/i18n/provider"
-import type { I18n } from "@/i18n/translator"
 import type { PlanSummary, PlansOverview, SyncInterval } from "@/lib/api"
-import { appPathForPlanPanel, isPlainLeftClick, type PlanPanel } from "@/lib/navigation"
+import { appPathForPlanPanel, isPlainLeftClick } from "@/lib/navigation"
 import { peoplePath, type PeopleFilter } from "@/lib/people-query"
-import { catalogOrder, countCell, speedLabel } from "@/lib/plans-catalog"
+import { catalogOrder, countCell, removable, speedLabel } from "@/lib/plans-catalog"
 import type { PlanWorkControls } from "@/lib/use-plan-work"
 import type { PlanCommands } from "@/lib/use-plans"
 
@@ -35,23 +34,15 @@ type RowContext = {
   onShowPeople: ShowPeople
 }
 
-/** What the catalog says under its title: how to use it, or which Plan's panel is open beside it. */
-function catalogIntro({ t }: I18n, plans: readonly PlanSummary[], panel: PlanPanel | null): string {
-  if (panel?.plan === null) return t("people.plans.catalog.newBeside")
-  const open = plans.find((plan) => plan.key === panel?.plan)
-  return open ? t("people.plans.catalog.openBeside", { name: open.name }) : t("people.plans.catalog.intro")
-}
-
 /**
  * The catalog of Plans: a table with a column for each limit, the default first, so Plans compare
- * by column. Each Plan's name opens its panel, People opens Everyone filtered by it, and More
- * actions holds the rest. While a panel is open beside it, the catalog keeps only the Plan, its
- * sync speed, and who has it, and marks the open Plan. When the catalog itself is narrow, each row
- * becomes a card that labels its values.
+ * by column. Each Plan's name heads its row and opens its panel, as a press anywhere else on the
+ * row does; People opens Everyone filtered by it, and More actions holds the rest. While a panel is
+ * open beside it, the catalog keeps only the Plan, its sync speed, and who has it, and marks the
+ * open Plan. When the catalog itself is narrow, each row becomes a card that labels its values.
  */
 export function PlansCatalog(context: RowContext) {
-  const i18n = useI18n()
-  const { t } = i18n
+  const { t } = useI18n()
   const plans = catalogOrder(context.overview.plans)
   const { panel } = context.work
   const compact = panel !== null
@@ -65,7 +56,6 @@ export function PlansCatalog(context: RowContext) {
     >
       <div className="plans-catalog-head">
         <h3 id="plans-catalog-title">{t("people.plans.catalog.title", { count: plans.length })}</h3>
-        <p className="plans-catalog-intro">{catalogIntro(i18n, plans, panel)}</p>
       </div>
       <div className="plans-table-wrap">
         <table className="plans-table" role="table" aria-labelledby="plans-catalog-title" data-compact={compact || undefined}>
@@ -105,7 +95,7 @@ function CatalogHead({ compact }: { compact: boolean }) {
               {t(label)}
             </th>
           ))}
-        <th scope="col" role="columnheader">
+        <th scope="col" role="columnheader" className="plans-speed">
           {t("people.plans.catalog.speed")}
         </th>
         <th scope="col" role="columnheader">
@@ -121,14 +111,21 @@ function CatalogHead({ compact }: { compact: boolean }) {
   )
 }
 
+/** A press on a Plan's row that its links, buttons, and menu do not answer themselves. */
+function pressesRow(event: MouseEvent<HTMLTableRowElement>): boolean {
+  return !(event.target as HTMLElement).closest("a, button, .plan-col-actions")
+}
+
 /**
  * One Plan's row, and under it, while open, its removal's confirmation, or why a command from its
- * menu was refused.
+ * menu was refused. The name is the row's keyboard target; the rest of the row is a larger
+ * pointer target that opens the same panel, as Activity's rows do.
  */
 function PlanRows({ plan, compact, columns, ...context }: RowContext & { plan: PlanSummary; compact: boolean; columns: number }) {
   const { work } = context
   const row = useRef<HTMLTableRowElement>(null)
   const removing = work.removing === plan.key
+  const confirming = removing && removable(plan)
   const selected = work.panel?.plan === plan.key
   return (
     <>
@@ -137,8 +134,11 @@ function PlanRows({ plan, compact, columns, ...context }: RowContext & { plan: P
         role="row"
         className="plan-row"
         data-plan={plan.key}
-        data-open={removing || undefined}
+        data-open={confirming || undefined}
         data-selected={selected || undefined}
+        onClick={(event) => {
+          if (pressesRow(event)) work.openPanel({ plan: plan.key, tab: "limits" })
+        }}
       >
         <NameCell plan={plan} selected={selected} work={work} />
         {!compact && <CountCells plan={plan} />}
@@ -169,15 +169,15 @@ function PlanRows({ plan, compact, columns, ...context }: RowContext & { plan: P
 }
 
 /**
- * The Plan's name, a link that opens its panel, marked as the page while it is open, with Default
- * beside it and, under it, whom the default is for.
+ * The Plan's name, which heads its row: a link that opens its panel, marked as the page while it
+ * is open, with Default beside it.
  */
 function NameCell({ plan, selected, work }: { plan: PlanSummary; selected: boolean; work: PlanWorkControls }) {
   const { t } = useI18n()
   const { openPanel } = work
   const panel = { plan: plan.key, tab: "limits" } as const
   return (
-    <td role="cell" className="plan-col-plan">
+    <th scope="row" role="rowheader" className="plan-col-plan">
       <div className="plan-name-row">
         <a
           id={`plan-name-${plan.key}`}
@@ -195,8 +195,7 @@ function NameCell({ plan, selected, work }: { plan: PlanSummary; selected: boole
         </a>
         {plan.is_default && <Badge variant="outline">{t("people.plans.isDefault")}</Badge>}
       </div>
-      {plan.is_default && <p className="plan-sub">{t("people.plans.catalog.defaultFor")}</p>}
-    </td>
+    </th>
   )
 }
 
@@ -219,7 +218,7 @@ function CountCells({ plan }: { plan: PlanSummary }) {
   })
 }
 
-/** How soon the Plan's rules sync, with a lightning bolt for Instant and a clock otherwise. */
+/** How soon the Plan's rules sync, with a lightning bolt for Instant and a clock otherwise, on the row's line of text. */
 function SpeedCell({ interval }: { interval: SyncInterval }) {
   const i18n = useI18n()
   const Icon = interval === "instant" ? Zap : Clock

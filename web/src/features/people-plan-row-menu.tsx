@@ -10,7 +10,7 @@ import { usePlanHolders } from "@/lib/use-plans"
 
 /**
  * A Plan's More actions: Edit and Assign people, which open its panel at Limits and People; Make
- * default, which says whom it moves; Duplicate, which opens New plan with its limits; and, set
+ * default, which says whom it moves and who keeps the default they were given; Duplicate, which opens New plan with its limits; and, set
  * apart, Remove. Remove is disabled on the default and on a Plan people have, with why as its
  * description, naming the first three who have it once the menu opens and their names arrive.
  * Every item waits while a Plan command is on its way.
@@ -54,7 +54,7 @@ export function PlanRowMenu({
           {
             id: "default",
             label: t("people.plans.menu.makeDefault"),
-            description: makeDefaultHint(i18n, plan, overview.followers),
+            description: makeDefaultHint(i18n, plan, overview),
             icon: <Star aria-hidden="true" />,
             disabled: busy,
             onSelect: onMakeDefault,

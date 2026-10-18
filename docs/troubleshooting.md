@@ -744,11 +744,11 @@ more calendar accounts than this. They keep them, but can't connect another."
 
 **People** shows who they are, in Attention Ochre with an icon:
 
-- On **Plans**, the card at the top counts everyone over a limit, with **Show** to list them, and
+- On **Plans**, the card at the top counts everyone over a limit, a number you select to list them, and
   each Plan's row says how many of the people it limits are over: "1 over a limit", which lists
   them too. A Plan's **People** tab lists who has it now, each with any limit they are over.
 - On **Everyone**, the **Plan** column marks a person over a limit with **Over a limit** beside
-  their Plan. Choose the Plan in the **Plan** filter to list only the people who have it, and
+  their Plan, and says which limit under it ("2 calendar accounts, 1 allowed"). Choose the Plan in the **Plan** filter to list only the people who have it, and
   **Over a limit** in the **Limits** filter to list only the people over one.
 - On the person's page, the **Plan** card shows a meter for each limit with how much they use,
   "2 of 1" and **Over** past it, and says under it what keeps working: "robin@example.test has 2

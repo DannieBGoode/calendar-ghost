@@ -287,13 +287,15 @@ switch, which applies at once; a message at the bottom of the window says what c
 table, at its own address, never over the page: the Plan's name, then the most active rules,
 calendar accounts, and Integration Tokens a person may have, each **No limit** or **Up to** a
 number (Integration Tokens may also be **None**), and **Sync speed**, Instant or every 5 minutes.
-Selecting a Plan's name in the table opens the same panel to change it; its footer counts the
+Selecting a Plan's name, or anywhere else on its row, opens the same panel to change it; its footer counts the
 changes not saved, and **Escape** or **Cancel** closes it. **Save plan** closes it too, and a
 message at the bottom of the window says what was saved; for a new Plan it offers **Assign people**,
 which opens the Plan's **People** tab. Calendar Ghost makes the Plan's key, which names it in the
 API, from its name. Everyone without a Plan of their own has the default, including people who join
 later; the default carries a **Default** badge, and **Make default** in another Plan's **More
-actions** menu says how many people it moves. To limit only some people, open the Plan's
+actions** menu says how many people it moves, and who keeps the default because it was given to
+them as their own Plan. Giving the default from its own **People** tab means they follow it. To
+limit only some people, open the Plan's
 **People** tab, or choose **Assign people** in its menu: search by email, tick each person, and
 give it, as **Give Free to 2 people** does. Before you do, the list shows the Plan each person has
 now and any limit they would be over, and administrators come last, since no Plan limits them.
@@ -318,13 +320,13 @@ the Plan's name, a meter for each limit with how much of it they use ("1 of 1", 
 or **Over** with what keeps working), and that changing it is for their administrator, whom it
 does not name ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 
-The card counts how many people Plans limit, how many of them are over a limit, with **Show** to
-list them, the default Plan, and how many administrators are never limited. Below it, a table
+The card counts how many people Plans limit, how many of them are over a limit, which you select
+to list them, the default Plan, and how many administrators are never limited. Below it, a table
 compares the Plans by limit: active rules, calendar accounts, Integration Tokens, sync speed, and
 how many people have each Plan, which lists them under **Everyone**, with how many of them are over
 a limit. Before you save a lower limit, the panel says how many people it would leave with more.
 **Everyone** shows each person's Plan in its own column, with **Default**, **Over a limit**, or
-**Not limited** beside it, and the **Plan** and **Limits** filters list only the people who have
+**Not limited** beside it and which limit someone is over under it, and the **Plan** and **Limits** filters list only the people who have
 one Plan, or who are over a limit. A person's page has a **Plan** card: who gave the Plan and when,
 whether it limits them now, and a meter for each limit with how much of it they use ("2 of 1",
 **Over**), saying under a limit they are over what keeps working. The default,

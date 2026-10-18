@@ -450,21 +450,13 @@
     "status": {
       "titleOn": "Plans are on",
       "titleOff": "Plans are off",
-      "offSentence": "Everyone can use everything. {kept} {impact}",
+      "on": "People can't add more than their plan allows. Anyone without a plan of their own, including people who join later, gets the default plan.",
+      "off": "Nobody is limited. Turning plans on applies each person's plan at once.",
+      "offNoDefault": "Nobody is limited. Turning plans on applies each person's plan at once, and adds a plan named <strong>No limits</strong> as the default for everyone without a plan of their own.",
       "switch": "Plans",
       "stateOn": "On",
       "stateOff": "Off",
-      "onLimits": {
-        "one": "Plans limit <strong>{count} person</strong> right now. Everyone without a plan of their own gets <strong>{name}</strong>, the default plan, including people who join later.",
-        "other": "Plans limit <strong>{count} people</strong> right now. Everyone without a plan of their own gets <strong>{name}</strong>, the default plan, including people who join later."
-      },
-      "onNobody": "Plans limit nobody right now. Everyone without a plan of their own gets <strong>{name}</strong>, the default plan, including people who join later.",
       "offNoPlans": "Everyone can use everything, with no limits. Turning plans on adds a plan named <strong>No limits</strong> as the default, so nobody is limited until you give someone a smaller plan.",
-      "offSentenceNoDefault": "Everyone can use everything. {kept} {impact} It also adds a plan named <strong>No limits</strong> as the default for everyone without a plan of their own.",
-      "kept": {
-        "one": "Your {count} plan is kept.",
-        "other": "Your {count} plans are kept."
-      },
       "wouldLimit": {
         "one": "Turning plans on limits <strong>{count} person</strong> right away.",
         "other": "Turning plans on limits <strong>{count} people</strong> right away."
@@ -490,8 +482,14 @@
       "wouldBeOver": "Would be over a limit",
       "default": "Default plan",
       "neverLimited": "Never limited",
-      "show": "Show",
-      "showLabel": "Show who is over a limit",
+      "showOver": {
+        "one": "Show the {count} person over a limit",
+        "other": "Show the {count} people over a limit"
+      },
+      "showWouldBeOver": {
+        "one": "Show the {count} person who would be over a limit",
+        "other": "Show the {count} people who would be over a limit"
+      },
       "compactOn": {
         "one": "They limit <strong>{count} person</strong>. People without a plan get <strong>{name}</strong>.",
         "other": "They limit <strong>{count} people</strong>. People without a plan get <strong>{name}</strong>."
@@ -505,7 +503,6 @@
         "one": "{count} plan",
         "other": "{count} plans"
       },
-      "intro": "Select a plan to edit it or give it to people.",
       "plan": "Plan",
       "rules": "Active rules",
       "accounts": "Calendar accounts",
@@ -513,7 +510,6 @@
       "speed": "Sync speed",
       "people": "People",
       "actions": "Actions",
-      "defaultFor": "Everyone without a plan of their own",
       "unlimited": "Unlimited",
       "none": "None",
       "holders": {
@@ -541,9 +537,7 @@
         "one": "{count} would be over on {name}",
         "other": "{count} would be over on {name}"
       },
-      "note": "People counts include administrators, who are never limited. Paused rules and drafts never count as active.",
-      "openBeside": "{name} is open beside the list.",
-      "newBeside": "New plan is open beside the list.",
+      "note": "People counts include administrators. Paused rules and drafts are not active.",
       "noteOpen": "Changes apply as soon as you save. Nobody loses anything they already have."
     },
     "speed": {
@@ -565,6 +559,11 @@
       },
       "makeDefaultNobody": "Everyone has a plan of their own now. People who join later get {name}.",
       "makeDefaultMovesUncounted": "People without a plan of their own move to {name}.",
+      "makeDefaultKeeps": {
+        "one": "{count} person keeps {name}, which was given to them.",
+        "other": "{count} people keep {name}, which was given to them."
+      },
+      "makeDefaultAnd": "{moves} {keeps}",
       "duplicate": "Duplicate",
       "remove": "Remove",
       "removeDefault": "Make another plan the default first.",
@@ -584,6 +583,7 @@
     "assign": {
       "title": "Assign people",
       "intro": "They move to {name} at once. Administrators are listed last; no plan limits them.",
+      "introDefault": "They follow {name}, the default plan, at once, and move with it when the default changes. Administrators are listed last; no plan limits them.",
       "loading": "Looking for people",
       "loadError": "People could not load.",
       "found": {

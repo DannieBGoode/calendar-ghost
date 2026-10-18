@@ -5,7 +5,7 @@ import { PlanRemoval } from "@/features/people-plan-removal"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { PlanSummary, PlansOverview } from "@/lib/api"
-import { switchedBy } from "@/lib/plans-catalog"
+import { removable, switchedBy } from "@/lib/plans-catalog"
 import type { PlanWorkControls } from "@/lib/use-plan-work"
 import type { PlanCommands } from "@/lib/use-plans"
 
@@ -22,22 +22,25 @@ type PlanDetailsProps = {
 
 /**
  * What a Plan's row has open under it: the confirmation of its removal, which returns focus to
- * More actions, and why a command from the row was refused, as Make default, or the Undo of a Plan
- * given from its panel once the panel no longer shows it.
+ * More actions, and why a command from the row was refused, as Make default, a removal once the
+ * Plans read again show someone has the Plan, or the Undo of a Plan given from its panel once the
+ * panel no longer shows it.
  */
 export function PlanDetails({ plan, removing, columns, row, overview, commands, work }: PlanDetailsProps) {
   const i18n = useI18n()
   const toasts = useToast()
-  const refused = rowRefusal(commands, overview, work, plan.key)
-  if (!removing && !refused) return null
+  const confirming = removing && removable(plan)
+  const refused = removalRefusal(commands, plan.key, confirming) ?? rowRefusal(commands, overview, work, plan.key)
+  if (!confirming && !refused) return null
   const toMenu = () => row.current?.querySelector<HTMLButtonElement>("[aria-haspopup='menu']")?.focus()
   return (
     <tr role="row" className="plan-details-row">
       <td role="cell" colSpan={columns}>
-        {removing && (
+        {confirming && (
           <PlanRemoval
             plan={plan}
             commands={commands}
+            onLeft={toMenu}
             onRemoved={() => {
               toasts.show({ message: i18n.t("people.plans.results.removed", { name: plan.name }) })
               work.removed()
@@ -58,13 +61,17 @@ export function PlanDetails({ plan, removing, columns, row, overview, commands, 
   )
 }
 
+/** Why removing the Plan was refused, once its confirmation, which shows it otherwise, no longer holds. */
+function removalRefusal({ remove }: PlanCommands, key: string, confirming: boolean): Error | null {
+  return remove.error && remove.variables === key && !confirming ? remove.error : null
+}
+
 /**
- * Why a command from a Plan's row was refused, to show under it: Make default, which the switch's
- * refusal is not, or the Undo of a Plan given from its panel, while the panel does not show its
- * People, where that refusal shows otherwise.
+ * Why another command from a Plan's row was refused, to show under it: Make default, which the
+ * switch's refusal is not, or the Undo of a Plan given from its panel, while the panel does not
+ * show its People, where that refusal shows otherwise.
  */
-function rowRefusal(commands: PlanCommands, overview: PlansOverview, work: PlanWorkControls, key: string): Error | null {
-  const { setting, assign } = commands
+function rowRefusal({ setting, assign }: PlanCommands, overview: PlansOverview, work: PlanWorkControls, key: string): Error | null {
   if (setting.error && !switchedBy(setting.variables, overview) && setting.variables.defaultPlan === key) {
     return setting.error
   }

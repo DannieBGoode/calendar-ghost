@@ -13,19 +13,23 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   Instant or every 5 minutes. The form says what counts toward each limit, and before a lower limit
   is saved, how many people it would leave with more than it allows. The Plans tab starts with a card that says
   whether Plans are on and what they do now, or would do, beside the one **Plans** switch, which
-  applies at once, and counts whom Plans limit, who is over a limit, the default Plan, and the
-  administrators no Plan limits. A table then compares the Plans by limit, with how many people
+  applies at once, and counts whom Plans limit, who is over a limit, which you select to list them,
+  the default Plan, and the administrators no Plan limits; its sentence says what a limit does, or
+  what the switch would do, and never repeats a count. A table then compares the Plans by limit, with how many people
   have each and how many of them are over a limit, each linking to them under **Everyone**.
-  Selecting a Plan opens it in a side panel beside the table, at its own address
+  Selecting a Plan, anywhere on its row, opens it in a side panel beside the table, sized so its
+  **Save** is in view, at its own address
   (`/people/plans/{key}`, its People tab under it, and `/people/plans/new` for New plan), never a
   modal: **Limits** is the form, with how many changes are not saved, and **People** gives the
   Plan to people found by email after a dry run says who would be over, then lists who has it now,
   each with **Change plan**. Saving closes the panel; the message for a new Plan offers **Assign
   people**, which opens its People tab. Each Plan's **More actions** menu offers **Edit** and
-  **Assign people**, which open its panel, **Make default**, which says whom it moves,
+  **Assign people**, which open its panel, **Make default**, which says whom it moves and who keeps
+  the default because it was given to them,
   **Duplicate**, which opens New plan with its limits, and **Remove**. Results show at the bottom
   of the window, most with **Undo**. **Everyone** shows each person's Plan in its own column, its
-  name with **Default**, **Over a limit**, or **Not limited** beside it, and can list only the
+  name with **Default**, **Over a limit**, or **Not limited** beside it and which limit they are
+  over under it, and can list only the
   people who have one Plan, or who are over a limit. Its rows can be selected, a page at a time,
   and **Change plan** in the bar above the table gives the people selected another Plan from a
   popover that stays inside the window: one line per Plan with its limits in short, the default
@@ -93,6 +97,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Menus never leave the window: a **More actions** menu near the foot of the window, or above a
+  message at the bottom of it, opens above its button and scrolls inside itself when it must, so
+  the message never covers an item. A disabled item's reason stays readable. On a touch screen,
+  buttons, fields, and selects are 44 pixels tall. Links that fill a table cell, such as a Plan's
+  name or a person's email, are underlined only under the pointer or keyboard focus, and each
+  names its row for a screen reader. The footer keeps the space before **AGPLv3+ license**.
 - **Replace calendars…** creates the new draft rule in the same step that begins the previous
   rule's removal, once that rule's run ends, instead of before it. A duplicate relationship found
   meanwhile, or a calendar account that is gone, now leaves the previous rule as it was and

@@ -97,40 +97,55 @@ New plan lives only in the empty state.
 
 ### Plans tab
 
-1. **Status card.** Its title is the state, "Plans are on" or "Plans are off", with one sentence on
-   what Plans do now or would do, and the switch, labelled "On" or "Off" beside it:
-   - On: "Plans limit 2 people right now. Everyone without a plan of their own gets No limits, the
-     default plan, including people who join later."
-   - Off, with Plans: "Everyone can use everything. Your 3 plans are kept. Turning plans on limits 2
-     people right away, and 1 of them has more than their plan allows."
+1. **Status card.** Its title is the state, "Plans are on" or "Plans are off", with one sentence
+   that says what the facts cannot, never a count or a name a fact shows, and the switch, labelled
+   "On" or "Off" beside it:
+   - On: "People can't add more than their plan allows. Anyone without a plan of their own,
+     including people who join later, gets the default plan."
+   - Off, with Plans: "Nobody is limited. Turning plans on applies each person's plan at once.", and
+     with no default ", and adds a plan named No limits as the default for everyone without a plan
+     of their own."
    - Off, with no Plan: "Everyone can use everything, with no limits. Turning plans on adds a plan
      named No limits as the default, so nobody is limited until you give someone a smaller plan."
 
-   Below, four facts in a row (two by two on a narrow screen): "Limited now", "Over a limit" (with
-   an icon in Attention Ochre and "Show", which opens Everyone narrowed to people over a limit),
-   "Default plan", and "Never limited" ("1 administrator"). While Plans are off they read "Would
-   limit" and "Would be over a limit", neutral, because nothing is enforced. With no Plan, the card
-   has no facts.
-2. **Catalog table,** titled "3 plans" with "Select a plan to edit it or give it to people."
-   Columns: Plan, Active rules, Calendar accounts, Integration Tokens, Sync speed, People, and More
-   actions. The default comes first, then the others by name. The Plan cell is the Plan's name, a
-   link that opens its panel, with a "Default" badge and "Everyone without a plan of their own"
-   under the default's name. Counts are right-aligned in tabular numerals; "Unlimited" and "None"
-   are muted. Sync speed is "Instant" with a lightning icon or "Every 5 min" with a clock. People is
+   Below, the facts, one equal column each for as many as the server counted, so a fact it left
+   out leaves no hole: "Limited now", "Over a limit" (in Attention Ochre with an icon, its number
+   the link that opens Everyone narrowed to people over a limit, "⚠ 1 person ›", named "Show the 1
+   person over a limit"), "Default plan", and "Never limited" ("1 administrator"). On a narrow card
+   the first two lead side by side and the other two follow on one quieter line. While Plans are
+   off they read "Would limit" and "Would be over a limit", neutral, because nothing is enforced.
+   With no Plan, the card has no facts.
+2. **Catalog table,** titled "3 plans", with no instruction under it. Columns: Plan, Active rules,
+   Calendar accounts, Integration Tokens, Sync speed, People, and More actions. The default comes
+   first, then the others by name. The Plan cell heads its row: the Plan's name, a link that opens
+   its panel, with a "Default" badge beside the default's name. A press anywhere else on the row
+   opens the same panel, as Activity's rows do. Names and People counts read as ink, underlined
+   only under the pointer or keyboard focus. The Plan column takes what the fixed columns leave;
+   counts are right-aligned in tabular numerals under right-aligned headings that wrap rather than
+   overhang; "Unlimited" and "None" are muted. Sync speed is "Instant" with a lightning icon or
+   "Every 5 min" with a clock, on the row's line of text, a little apart from the counts. People is
    a link, "2 people", to Everyone filtered by the Plan, with a chip "1 over a limit" in Attention
-   Ochre with an icon that links to the same list narrowed to people over ("1 would be over",
-   neutral, while Plans are off). A footnote says "People counts include administrators, who are
-   never limited. Paused rules and drafts never count as active."
+   Ochre with an icon on the same line that links to the same list narrowed to people over ("1
+   would be over", neutral, while Plans are off). Rows are 48 px. A footnote, its icon on its first
+   line, says "People counts include administrators. Paused rules and drafts are not active."
 3. **Row menu** (the existing More actions menu, whose items carry descriptions): Edit; Assign
-   people; Make default, described "People without a plan of their own (2 now) move to Free.";
-   Duplicate; and, after a divider, Remove. Remove is disabled with its reason as its description
+   people; Make default, described "People without a plan of their own (2 now) move to Free.", and,
+   for people given the current default as their own Plan, "1 person keeps No limits, which was
+   given to them."; Duplicate; and, after a divider, Remove. Remove is disabled with its reason as its description
    on the default ("Make another plan the default first.") and on a Plan someone has, which names
    them, the first three by email and then how many more, the count alone until the names arrive
-   ("2 people have Free. Give them another plan first."). On any other Plan it confirms inline.
+   ("2 people have Free. Give them another plan first."). On any other Plan it confirms inline. A
+   refused removal reads the Plans again; when someone has the Plan now, the confirmation gives way
+   to the refusal under the row, focus goes to More actions, and its Remove says who has it. The
+   menu, like a popover, opens above its button when there is more room there, and stays clear of
+   the top bar and a toast.
 4. **Results** of the switch, Make default, and Remove are toasts: "Plans are on. They limit 2
    people." with Undo, "Plans are off. Nobody is limited." with Undo, "Free is the default plan
    now." with Undo, and "Free was removed."
-5. **Narrow screens.** Each row becomes a card that labels its values, as Everyone's rows do.
+5. **Narrow screens.** Below a 56rem catalog, each row becomes a card that labels its values, as
+   Everyone's rows do.
+
+(Items 1, 2, 3, and 5 amended on 2026-10-18 after the owner's review of the Plans tab.)
 
 ### Plan panel: Limits
 
@@ -142,7 +157,11 @@ save. Nobody loses anything they already have."
 
 - **Head.** "Plan" as a label, the Plan's name as an object title, and one line on who has it and
   what it allows ("1 person has Pro. Unlimited, with Instant sync."), then Close, which returns to
-  `/people/plans` and focus to the Plan's row. Tabs: Limits and People, with how many have it.
+  `/people/plans`, the page to where it was before the panel opened, and focus to the Plan's row.
+  Tabs: Limits and People, with how many have it.
+- **Fit.** The panel fits the window below where it starts, so its footer with Save is in view as
+  it opens, and only its body scrolls; once it sticks under the top bar it is as tall as the room
+  there. (Amended on 2026-10-18.)
 - **Name,** with "People see this name in Your plan."
 - **"Limits for each person",** each limit with its hint and a segmented control:
   - "Maximum active rules": "Running rules count, and rules waiting for an account to be
@@ -152,6 +171,8 @@ save. Nobody loses anything they already have."
   - "Maximum Integration Tokens": "Revoked tokens don't count." `None | Up to [- 2 +] | No limit`.
   - The number stays visible, dimmed, while No limit or None is chosen, so switching back keeps
     it. It is a text field with a numeric keyboard, so a scroll wheel never changes a limit.
+  - Where the field is too narrow for its options on one line, as on a phone, they stack as a list,
+    each a full-width row; wider, an option that wraps fills its line. (Amended on 2026-10-18.)
   - A limit lower than the people on the Plan use warns under it, in Attention Ochre with an icon,
     counted from `use` and naming nobody: "1 person on Pro has more active rules than this. Their
     rules keep syncing, but they can't start another." While Plans are off it starts "Once plans
@@ -181,11 +202,15 @@ save. Nobody loses anything they already have."
 At `/people/plans/<key>/people`, which Assign people in the row menu opens.
 
 - **Assign people,** "They move to Free at once. Administrators are listed last; no plan limits
-  them." A search field by email with how many it found, then a checklist of the people who do not
+  them." On the default's panel it gives the default as following it, as Change plan does: "They
+  follow Free, the default plan, at once, and move with it when the default changes.", and sends
+  no Plan of their own. A search field by email with how many it found, then a checklist of the people who do not
   have the Plan. Each shows their email, the Plan they have ("Has No limits, the default", "Has
   Pro"), and, from a dry run before anyone confirms, what they would be over in Attention Ochre
   with an icon ("Would be over: 3 active rules, Free allows 1"). Administrators follow under
   "Administrators", each "Never limited, whatever plan they have", the reader marked "You".
+- Whoever is checked stays checked while a search hides them, and the dry run still asks about
+  them, so the note below still names them. (Amended on 2026-10-18.)
 - When a checked person would be over, a note says what that means: "alex@example.test will have
   more than Free allows. Their 3 active rules keep syncing, but they can't start another until only
   1 is active."
@@ -204,7 +229,10 @@ At `/people/plans/<key>/people`, which Assign people in the row menu opens.
   the default as "No limits (default)"), and Limits ("Anyone", "Over a limit"), each kept in the
   address.
 - The Plan column is the Plan's name with chips: "Default", "Over a limit" in Attention Ochre with
-  an icon ("Would be over", neutral, while Plans are off), and "Not limited" for an administrator.
+  an icon ("Would be over", neutral, while Plans are off), and "Not limited" for an administrator,
+  then which limit someone is over on a muted line under them ("2 calendar accounts, 1 allowed").
+  Each email heads its row, in ink, underlined only under the pointer or keyboard focus. (Amended
+  on 2026-10-18; which limit used to be said only to a screen reader.)
 - Row checkboxes, with one in the header for the page that can be mixed. Selecting shows a bulk bar
   above the table: "2 selected", Change plan, and Clear selection.
 - **Change plan** opens a popover, "Change plan for 2 people", with the one compact chooser
@@ -307,7 +335,9 @@ behavior and roles, and DESIGN.md describes them:
   for a Plan just added, and no timeout shorter than a person needs: it stays until closed or
   replaced.
 - **Popover** for the Change plan chooser in Everyone: it takes focus, Escape or Cancel returns it,
-  and it stays inside the window, flipping above its control and capping its height.
+  and it stays inside the window, flipping above its control and capping its height. The row menu
+  shares its placement (`keep-in-window.ts`), so a menu never runs under the window's foot, the
+  footer, or a toast, and a disabled item's reason stays readable. (Amended on 2026-10-18.)
 
 The side panel reuses Activity's layout and `DetailToolbar`; the row menu reuses `OverflowMenu`;
 search reuses `SearchField`. The popover, the person page's card, and a Plan's People tab share
@@ -336,7 +366,10 @@ one Change plan component.
 ## Accessibility
 
 - Every status combines color with text and an icon; meters always have their numbers beside them.
-- Controls reach 44 px on a coarse pointer.
+- Controls reach 44 px on a coarse pointer, the base Button, Input, and NativeSelect included
+  (amended on 2026-10-18).
+- A Plan's name heads its row in the catalog, and a person's email in Everyone, so a screen reader
+  names the row as it moves down a column (amended on 2026-10-18).
 - The panel is not modal: opening it moves focus to its title, Close returns it to the row, and the
   rest of the page stays usable. Change plan moves focus to the Plan chosen, the arrow keys move
   the choice, and Escape or Cancel closes it and returns focus to its button.

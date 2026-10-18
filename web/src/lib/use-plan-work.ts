@@ -15,9 +15,10 @@ import type { PlanCommands } from "@/lib/use-plans"
 /**
  * Where focus returns once the panel closes: a Plan's name in the catalog, or New plan with null,
  * and what follows once it has, such as saying what a save did, so the result's toast returns
- * focus there too.
+ * focus there too. `scrollY` is where the page was before the panel opened, to return it there
+ * first, rather than leave it scrolled as the panel left it.
  */
-export type FocusReturn = { plan: string | null; afterwards?: (() => void) | undefined }
+export type FocusReturn = { plan: string | null; afterwards?: (() => void) | undefined; scrollY?: number | undefined }
 
 function samePanel(a: PlanPanel, b: PlanPanel): boolean {
   return a.plan === b.plan && a.tab === b.tab
@@ -36,9 +37,10 @@ function panelAtAddress(): PlanPanel | null {
  * or New plan. While a Plan command is on its way, nothing opens or closes, so its answer has a
  * place to show. Opening something forgets the refusals of the last. While the open panel has
  * changes not saved, opening, switching, or closing it asks first (`leaveThen`); once they are
- * saved, the panel closes without asking. What outlives the Plans tab, such as a toast, opens a
- * panel through `elsewhere` once the tab is gone; arriving so (`arrivalFocus`), the panel the
- * address opens takes focus as from the page, while one opened by its address alone does not.
+ * saved, the panel closes without asking. Closing returns the page to where it was before the
+ * panel opened from it. What outlives the Plans tab, such as a toast, opens a panel through
+ * `elsewhere` once the tab is gone; arriving so (`arrivalFocus`), the panel the address opens takes
+ * focus as from the page, while one opened by its address alone does not.
  */
 export function usePlanWork(
   { setting, define, change, remove, assign }: PlanCommands,
@@ -50,6 +52,8 @@ export function usePlanWork(
   const [removing, setRemoving] = useState<string | null>(null)
   const [titleFocus, setTitleFocus] = useState(arrivalFocus && panel !== null)
   const [focusReturn, setFocusReturn] = useState<FocusReturn | null>(null)
+  // Where the page was as the panel opened from it, to return there as it closes.
+  const scrolledFrom = useRef<number | undefined>(undefined)
   const busy = [setting, define, change, remove, assign].some((command) => command.isPending)
 
   function forget() {
@@ -76,6 +80,7 @@ export function usePlanWork(
   function openPanel(next: PlanPanel, copy: string | null = null) {
     if (busy || (panel !== null && samePanel(panel, next) && copy === copyOf)) return
     leaveThen(() => {
+      if (panel === null) scrolledFrom.current = window.scrollY
       show(next, copy, panel === null || panel.plan === next.plan ? "push" : "replace")
       setTitleFocus(true)
     })
@@ -93,7 +98,8 @@ export function usePlanWork(
     const { plan } = panel
     leaveThen(() => {
       window.history.pushState(null, "", appPathForPeopleTab("plans"))
-      setFocusReturn({ plan })
+      setFocusReturn({ plan, scrollY: scrolledFrom.current })
+      scrolledFrom.current = undefined
       setPanel(null)
       setCopyOf(null)
     })
@@ -125,7 +131,8 @@ export function usePlanWork(
      */
     closeSaved: (plan: string, afterwards?: () => void) => {
       window.history.replaceState(null, "", appPathForPeopleTab("plans"))
-      setFocusReturn({ plan, afterwards })
+      setFocusReturn({ plan, afterwards, scrollY: scrolledFrom.current })
+      scrolledFrom.current = undefined
       setPanel(null)
       setCopyOf(null)
     },

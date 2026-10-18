@@ -9,13 +9,24 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { OverLimit, PersonRow, PlanAssignments, PlanSummary } from "@/lib/api"
-import { personName } from "@/lib/people"
+import { isAdministrator, personName } from "@/lib/people"
 import { heldPlanLine, overNote, wouldBeOver, type AssignCandidates } from "@/lib/plan-assignment"
 import { usePlanCandidates, usePlanDryRun } from "@/lib/use-plan-assignment"
 import type { PlanCommands } from "@/lib/use-plans"
 
-/** Whom Assign people has chosen, by id. */
-type Chosen = ReadonlySet<string>
+/** Whom Assign people has chosen, by id, kept whole while a search hides them. */
+type Chosen = ReadonlyMap<string, PersonRow>
+
+/**
+ * Whom the dry run asks about: everyone found whom a Plan could limit, then anyone chosen whom the
+ * search hides now, so what they would be over is still said.
+ */
+function dryRunIds(found: readonly PersonRow[], chosen: Chosen): string[] {
+  const ids = found.map((person) => person.id)
+  const shown = new Set(ids)
+  const hidden = [...chosen.values()].filter((person) => !isAdministrator(person) && !shown.has(person.id))
+  return [...ids, ...hidden.map((person) => person.id)]
+}
 
 /**
  * The People tab of a Plan's panel. Assign people first: a search by email, then a checklist of
@@ -24,7 +35,8 @@ type Chosen = ReadonlySet<string>
  * chose stays chosen while the search changes. Then `children`, who has the Plan now. Giving the
  * Plan is one command, all or none, from the panel's footer; while it is on its way every control
  * keeps focus and waits, and a refusal of it, or of its Undo, shows under the footer. Once given,
- * nobody is chosen, ready for more.
+ * nobody is chosen, ready for more. Giving the Default Plan means following it, so it leaves them
+ * with no Plan of their own, as Change plan does, and they move with it when the default changes.
  */
 export function PlanAssign({
   plan,
@@ -48,18 +60,20 @@ export function PlanAssign({
   const { t } = i18n
   const base = `plan-assign-${plan.key}`
   const [search, setSearch] = useState("")
-  const [chosen, setChosen] = useState<Chosen>(new Set())
+  const [chosen, setChosen] = useState<Chosen>(new Map())
   const pending = assign.isPending
+  // The Default Plan is given as following it: no Plan of their own.
+  const given = plan.is_default ? null : plan.key
   const candidates = usePlanCandidates(plan.key, search, pending)
   const found = candidates.data
-  const dryRun = usePlanDryRun(plan.key, found?.members.map((person) => person.id) ?? [], pending)
+  const dryRun = usePlanDryRun(given, dryRunIds(found?.members ?? [], chosen), pending)
   const overOf = new Map(dryRun.data?.people.map((person) => [person.user_id, person.over]))
   const refused = giveRefusal(assign, plan.key)
 
   function toggle(person: PersonRow, checked: boolean) {
     setChosen((current) => {
-      const next = new Set(current)
-      if (checked) next.add(person.id)
+      const next = new Map(current)
+      if (checked) next.set(person.id, person)
       else next.delete(person.id)
       return next
     })
@@ -68,10 +82,10 @@ export function PlanAssign({
   function give() {
     if (chosen.size === 0 || pending) return
     assign.mutate(
-      { from: plan.key, via: "give", moves: [{ plan: plan.key, userIds: [...chosen] }] },
+      { from: plan.key, via: "give", moves: [{ plan: given, userIds: [...chosen.keys()] }] },
       {
         onSuccess: ([answer]) => {
-          setChosen(new Set())
+          setChosen(new Map())
           if (answer) onGiven(answer)
         },
       },
@@ -84,7 +98,9 @@ export function PlanAssign({
         <section id={base} className="plan-assign" aria-labelledby={`${base}-title`}>
           <div className="plan-assign-head">
             <h4 id={`${base}-title`}>{t("people.plans.assign.title")}</h4>
-            <p className="plan-assign-intro">{t("people.plans.assign.intro", { name: plan.name })}</p>
+            <p className="plan-assign-intro">
+              {t(plan.is_default ? "people.plans.assign.introDefault" : "people.plans.assign.intro", { name: plan.name })}
+            </p>
           </div>
           <SearchField
             id={`${base}-search`}
@@ -104,7 +120,7 @@ export function PlanAssign({
             pending={pending}
             onToggle={toggle}
           />
-          <OverNote plan={plan} members={found?.members ?? []} chosen={chosen} overOf={overOf} enabled={enabled} />
+          <OverNote plan={plan} chosen={chosen} overOf={overOf} enabled={enabled} />
         </section>
         {children}
       </div>
@@ -127,24 +143,23 @@ function giveRefusal(assign: PlanCommands["assign"], key: string): Error | null 
 }
 
 /**
- * What it means for the people chosen who would be over: they keep everything, but add nothing
- * more. In Attention Ochre with its icon while Plans are on, neutral while off.
+ * What it means for the people chosen who would be over, whether or not the search shows them now:
+ * they keep everything, but add nothing more. In Attention Ochre with its icon while Plans are on,
+ * neutral while off.
  */
 function OverNote({
   plan,
-  members,
   chosen,
   overOf,
   enabled,
 }: {
   plan: PlanSummary
-  members: readonly PersonRow[]
   chosen: Chosen
   overOf: ReadonlyMap<string, OverLimit[]>
   enabled: boolean
 }) {
   const i18n = useI18n()
-  const over = members.filter((person) => chosen.has(person.id) && (overOf.get(person.id)?.length ?? 0) > 0)
+  const over = [...chosen.values()].filter((person) => (overOf.get(person.id)?.length ?? 0) > 0)
   const note = overNote(i18n, over.map((person) => personName(i18n, person)), plan.name)
   if (!note) return null
   return (

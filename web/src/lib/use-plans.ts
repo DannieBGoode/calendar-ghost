@@ -97,7 +97,8 @@ export function usePlans() {
     mutationFn: ({ key, payload }: { key: string; payload: PlanChange }) => api.changePlan(key, payload),
     onSuccess: saved,
   })
-  const remove = useMutation({ mutationFn: (key: string) => api.removePlan(key), onSuccess: saved })
+  // A refused removal reads the Plans again too: the refusal usually means someone has it now.
+  const remove = useMutation({ mutationFn: (key: string) => api.removePlan(key), onSuccess: saved, onError: saved })
   const assign = useMutation({ mutationFn: ({ moves }: AssignCommand) => sendMoves(moves), onSuccess: saved })
   return { plans, setting, define, change, remove, assign }
 }

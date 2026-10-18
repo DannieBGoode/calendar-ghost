@@ -37,7 +37,7 @@ const SORT_ICONS = { asc: ArrowUp, desc: ArrowDown }
 
 /**
  * One page of people as a table. Email, Sync, Joined, and Last sign-in sort when their heading is
- * pressed; each email opens that person's page. Once a Plan exists, each row has a box that
+ * pressed; each email heads its row and opens that person's page. Once a Plan exists, each row has a box that
  * selects it, the header one that selects the page, and each person's Plan has a column: its name
  * with chips. On a narrow screen each row becomes a card that labels its own values, and the
  * sortable headings and the box for the page stay above the cards.
@@ -166,7 +166,7 @@ function SelectAllHeader({ people, selection }: { people: readonly PersonRow[]; 
 /**
  * A person's Plan: its name, and chips for the default, a limit they are over in Attention Ochre
  * with an icon ("Would be over", neutral, while Plans are off), and an administrator, whom no Plan
- * limits. What they are over follows in words for a screen reader.
+ * limits. Which limit they are over follows on a muted line under them.
  */
 function PlanCell({ person }: { person: PersonRow }) {
   const i18n = useI18n()
@@ -178,7 +178,7 @@ function PlanCell({ person }: { person: PersonRow }) {
           <span className="person-plan-name" data-none={plan.has ? undefined : true}>
             {plan.has?.name ?? i18n.t("people.table.noPlan")}
           </span>
-          <PlanChips chips={heldPlanChips(i18n, plan, isAdministrator(person))} />
+          <PlanChips chips={heldPlanChips(i18n, plan, isAdministrator(person))} shown />
         </span>
       )}
     </td>
@@ -225,7 +225,7 @@ function PersonRows({
             />
           </td>
         )}
-        <td role="cell" className="person-col-email">
+        <th scope="row" role="rowheader" className="person-col-email">
           <a
             className="person-email"
             data-missing={person.email === null}
@@ -240,7 +240,7 @@ function PersonRows({
             {name}
           </a>
           {you && <Badge variant="outline">{t("people.you")}</Badge>}
-        </td>
+        </th>
         <td role="cell" className="person-col-sync" data-label={t("people.table.sync")}>
           <VerdictBadge verdict={person.verdict} />
           {person.problems > 0 && (
