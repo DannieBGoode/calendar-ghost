@@ -109,6 +109,9 @@ function describedBy(...ids: (string | false)[]): string | undefined {
   return ids.filter(Boolean).join(" ") || undefined
 }
 
+/** Each level's title, and the size of Save and Cancel under it. */
+const LEVELS = { 3: { title: "h3", buttons: "default" }, 5: { title: "h5", buttons: "sm" } } as const
+
 /**
  * Change plan for one or more people: one compact row per Plan, the default first, where choosing
  * the default means they follow it, with a note that they then move with it. What they all have
@@ -130,7 +133,7 @@ function PlanChooser(props: PlanChooserProps) {
   useEffect(() => {
     if (inPlace && chooser.current) scrollFullyIntoView(chooser.current)
   }, [inPlace])
-  const Title = level === 3 ? "h3" : "h5"
+  const { title: Title, buttons } = LEVELS[level]
   const hasDefault = overview.plans.some((plan) => plan.is_default)
   const cancel = () => !pending && onCancel()
 
@@ -179,10 +182,10 @@ function PlanChooser(props: PlanChooserProps) {
       )}
       <ChangeRefusal refusal={refusal} />
       <div className="plan-change-actions">
-        <Button type="button" size="sm" aria-disabled={pending || undefined} aria-busy={pending || undefined} onClick={save}>
+        <Button type="button" size={buttons} aria-disabled={pending || undefined} aria-busy={pending || undefined} onClick={save}>
           {t("people.plans.change.save")}
         </Button>
-        <Button type="button" size="sm" variant="ghost" aria-disabled={pending || undefined} onClick={cancel}>
+        <Button type="button" size={buttons} variant="ghost" aria-disabled={pending || undefined} onClick={cancel}>
           {t("people.plans.change.cancel")}
         </Button>
       </div>

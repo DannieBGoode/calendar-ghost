@@ -433,8 +433,10 @@ p {
   color: var(--warning-foreground);
 }
 
-/* An attention hint names its state with an icon as well as its colour. */
-.field-hint[data-tone="attention"] > svg {
+/* An attention hint, or an attention fact on a person's page, names its state with an icon as well
+   as its colour. */
+.field-hint[data-tone="attention"] > svg,
+.person-facts li[data-tone="attention"] > svg {
   display: inline;
   width: 0.875rem;
   height: 0.875rem;
@@ -1843,14 +1845,6 @@ p {
   gap: 0.75rem;
 }
 
-/* A Plan's name, with Default beside it rather than on a line of its own. */
-.plan-title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.5rem;
-}
-
 /* People's Plans tab: the status card with the one switch first, then the catalog of Plans, or with
    no Plan yet one empty state. The tab's own width, not the window's, decides its layout. */
 .plans-tab {
@@ -1872,7 +1866,8 @@ p {
   padding: 0;
 }
 
-.plans-status-main {
+.plans-status-main,
+.page-card.plans-skeleton-status {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1880,8 +1875,12 @@ p {
   padding: 1.25rem var(--panel-padding);
 }
 
-/* The state leads as an object title, between the page title and section titles. */
-.plans-status-text h3 {
+/* The state leads as an object title, between the page title and section titles, as a Plan's name
+   does in its panel, in Your plan, and on a person's page. */
+.plans-status-text h3,
+.plan-panel-head h3,
+.own-plan-name,
+.person-plan-held .person-plan-name {
   font-size: 1.25rem;
   font-weight: 650;
   line-height: 1.3;
@@ -1971,7 +1970,8 @@ p {
   text-decoration: none;
 }
 
-.plans-fact-link:hover > span {
+.plans-fact-link:hover > span,
+.plan-over:hover > span {
   text-decoration: underline;
   text-underline-offset: 0.2em;
 }
@@ -2085,8 +2085,9 @@ p {
   vertical-align: middle;
 }
 
-/* A Plan's name heads its row in the table's own type. */
-.plans-table tbody th {
+/* A Plan's name, or a person's email, heads its row in the table's own type. */
+.plans-table tbody th,
+.people-table tbody th {
   font-weight: inherit;
   text-align: left;
 }
@@ -2139,13 +2140,16 @@ p {
   background: color-mix(in oklch, var(--muted) 55%, transparent);
 }
 
-/* The Plan whose form or confirmation is open under it. */
+/* The Plan whose form or confirmation is open under it, or whose panel is open. */
 .plan-row[data-open="true"] > td,
-.plan-row[data-open="true"] > th {
+.plan-row[data-open="true"] > th,
+.plan-row[data-selected="true"] > td,
+.plan-row[data-selected="true"] > th {
   background: color-mix(in oklch, var(--primary-soft) 55%, transparent);
 }
 
-.plan-name-row {
+.plan-name-row,
+.plan-people {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2186,13 +2190,6 @@ p {
   vertical-align: -0.1875em;
 }
 
-.plan-people {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.375rem 0.5rem;
-}
-
 .plan-holders {
   border-radius: var(--radius-sm);
   color: var(--foreground);
@@ -2208,11 +2205,6 @@ p {
 .plan-over {
   border-radius: 999px;
   text-decoration: none;
-}
-
-.plan-over:hover > span {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
 }
 
 /* A Plan's form, its removal's confirmation, or a refusal, under its row across every column. */
@@ -2287,14 +2279,6 @@ p {
   gap: 1.5rem;
 }
 
-.page-card.plans-skeleton-status {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding: 1.25rem var(--panel-padding);
-}
-
 .plans-skeleton-lines {
   display: flex;
   width: 60%;
@@ -2317,7 +2301,8 @@ p {
   gap: 0.875rem;
 }
 
-.plan-assign-head h4 {
+.plan-assign-head h4,
+.plan-have-head h4 {
   font-size: 0.9375rem;
   font-weight: 650;
   line-height: 1.35;
@@ -2330,7 +2315,9 @@ p {
   line-height: 1.5;
 }
 
-.plan-assign-list {
+.plan-assign-list,
+.plan-assign-loading,
+.plan-have {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -2374,7 +2361,8 @@ p {
   background: color-mix(in oklch, var(--primary-soft) 55%, transparent);
 }
 
-.plan-assign-who {
+.plan-assign-who,
+.plan-holder-who {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -2412,7 +2400,8 @@ p {
 }
 
 .plan-assign-over svg,
-.plan-assign-note svg {
+.plan-assign-note svg,
+.plan-holder-state svg {
   width: 0.875rem;
   height: 0.875rem;
   flex: none;
@@ -2448,12 +2437,6 @@ p {
 
 .plan-assign-note[data-tone="attention"] svg {
   color: var(--warning-foreground);
-}
-
-.plan-assign-loading {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
 }
 
 .plan-assign-error {
@@ -2523,17 +2506,15 @@ p {
   padding: 0 1.25rem 1rem;
 }
 
-/* The Plan's name as an object title, between the page title and section titles. Brought into
-   view as it takes focus, it keeps the panel's Close in view above it too. */
+/* Brought into view as it takes focus, the Plan's name keeps the panel's Close in view above it
+   too. */
 .plan-panel-head h3 {
   scroll-margin-top: 3rem;
-  font-size: 1.25rem;
-  font-weight: 650;
-  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
-.plan-panel-head h3:focus-visible {
+.plan-panel-head h3:focus-visible,
+.plan-have-head h4:focus-visible {
   border-radius: 0.25rem;
   outline: 3px solid var(--ring);
   outline-offset: 3px;
@@ -2625,16 +2606,9 @@ p {
   gap: 0.5rem;
 }
 
-.plan-field .field-hint,
-.plan-field .field-error {
+.plan-field fieldset > .field-hint,
+.plan-field fieldset > .field-error {
   margin-top: 0.5rem;
-}
-
-.plan-field.field-stack .field-hint,
-.plan-field.field-stack .field-error,
-.plan-speed-field .field-hint,
-.plan-speed-field .field-error {
-  margin-top: 0;
 }
 
 .plan-field-label {
@@ -2651,30 +2625,12 @@ p {
 }
 
 /* Who has the Plan now, under Assign people: each person, what they are over, and Change plan. */
-.plan-have {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
 .plan-have-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.25rem 1rem;
-}
-
-.plan-have-head h4 {
-  font-size: 0.9375rem;
-  font-weight: 650;
-  line-height: 1.35;
-}
-
-.plan-have-head h4:focus-visible {
-  border-radius: 0.25rem;
-  outline: 3px solid var(--ring);
-  outline-offset: 3px;
 }
 
 .plan-have-show {
@@ -2706,13 +2662,6 @@ p {
 
 .plan-holder:first-child {
   border-top: 0;
-}
-
-.plan-holder-who {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 0.125rem;
 }
 
 .plan-holder-who > a {
@@ -2747,12 +2696,6 @@ p {
 /* Over a limit Plans enforce now: Attention Ochre with its icon, never the tone alone. */
 .plan-holder-state[data-tone="attention"] {
   color: var(--warning-foreground);
-}
-
-.plan-holder-state svg {
-  width: 0.875rem;
-  height: 0.875rem;
-  flex: none;
 }
 
 /* Change plan for one person, under their row, across it. */
@@ -2802,7 +2745,8 @@ p {
   background: transparent;
 }
 
-.person-plan-card .plan-change h3 {
+.person-plan-card .plan-change h3,
+.plan-change-popover h3 {
   font-size: 0.9375rem;
   font-weight: 650;
   line-height: 1.4;
@@ -2843,30 +2787,6 @@ p {
   mask-image: linear-gradient(to bottom, black calc(100% - 2rem), transparent);
 }
 
-.plan-change-popover h3 {
-  font-size: 0.9375rem;
-  font-weight: 650;
-  line-height: 1.4;
-}
-
-.plan-change-popover:focus {
-  outline: none;
-}
-
-.plan-change-popover .plan-change-actions button,
-.person-plan-card .plan-change-actions button {
-  height: 2.5rem;
-  padding: 0 1rem;
-  font-size: 0.875rem;
-}
-
-@media (pointer: coarse) {
-  .plan-change-popover .plan-change-actions button,
-  .person-plan-card .plan-change-actions button {
-    height: 2.75rem;
-  }
-}
-
 /* Beside an open panel the catalog keeps only what picks a Plan, and marks the open one. */
 .plans-table[data-compact="true"] .col-plan {
   width: 44%;
@@ -2888,11 +2808,6 @@ p {
 .plans-table[data-compact="true"] thead th.plans-speed,
 .plans-table[data-compact="true"] .plan-col-speed {
   padding-left: 0.75rem;
-}
-
-.plan-row[data-selected="true"] > td,
-.plan-row[data-selected="true"] > th {
-  background: color-mix(in oklch, var(--primary-soft) 55%, transparent);
 }
 
 /* Plans could not be read: one line saying nothing changed, and Try again. */
@@ -3172,12 +3087,6 @@ p {
   gap: 0.5rem;
 }
 
-.own-plan-name {
-  font-size: 1.25rem;
-  font-weight: 650;
-  line-height: 1.3;
-}
-
 .own-plan-origin {
   color: var(--muted-foreground);
   font-size: 0.8125rem;
@@ -3350,7 +3259,6 @@ p {
 }
 
 .person-plan-change {
-  position: relative;
   flex: none;
 }
 
@@ -3360,12 +3268,6 @@ p {
   align-items: center;
   gap: 0.5rem;
   margin-top: 0.25rem;
-}
-
-.person-plan-held .person-plan-name {
-  font-size: 1.25rem;
-  font-weight: 650;
-  line-height: 1.3;
 }
 
 .plan-usage {
@@ -3747,14 +3649,6 @@ p {
   color: var(--muted-foreground);
 }
 
-.person-facts li[data-tone="attention"] > svg {
-  display: inline;
-  width: 0.875rem;
-  height: 0.875rem;
-  margin-right: 0.375rem;
-  vertical-align: -0.125em;
-}
-
 /* People: a search and three filters above a table that pages through everyone here, and two
    more, Plan and Limits, once a Plan exists, all on one line while the list is wide. */
 .people-filters {
@@ -3809,12 +3703,6 @@ p {
   padding: 0.75rem;
   border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
   vertical-align: middle;
-}
-
-/* A person's email heads their row in the table's own type. */
-.people-table tbody th {
-  font-weight: inherit;
-  text-align: left;
 }
 
 .people-table th:first-child,
@@ -5518,15 +5406,6 @@ a.recent-change-rule:focus-visible {
 .checkbox-row input:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
-}
-
-/* A box waiting for its change keeps focus, so it reads as unavailable without being disabled. */
-.checkbox-row:has(> input[aria-disabled="true"]) {
-  cursor: not-allowed;
-}
-
-.checkbox-row input[aria-disabled="true"] {
-  opacity: 0.5;
 }
 
 .checkbox-row span {
