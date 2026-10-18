@@ -688,7 +688,7 @@ describe("A person's page", () => {
       expect(usage()).toEqual([
         ["Active rules", "5 of 5", "Limit reached"],
         ["Calendar accounts", "4 of 3", "Over"],
-        ["Integration Tokens", "0 of 2", ""],
+        ["Integration tokens", "0 of 2", ""],
         ["Sync speed", "Instant", ""],
       ])
       const meters = [...card().querySelectorAll("meter")]
@@ -700,7 +700,7 @@ describe("A person's page", () => {
       expect(meters.map((meter) => meter.getAttribute("aria-label"))).toEqual([
         "Active rules",
         "Calendar accounts",
-        "Integration Tokens",
+        "Integration tokens",
       ])
       const over = card().querySelectorAll(".plan-usage-row")[1]!
       expect(over.querySelector(".plan-usage-chip svg[aria-hidden='true']")).not.toBeNull()
@@ -722,7 +722,7 @@ describe("A person's page", () => {
       expect([...card().querySelectorAll(".person-plan-chip")].map((chip) => chip.textContent)).toEqual(["Default", "Would be over"])
       expect(card().querySelector("[data-tone='attention']")).toBeNull()
       expect(usage()[1]).toEqual(["Calendar accounts", "2 of 1", "Would be over"])
-      expect(usage()[2]).toEqual(["Integration Tokens", "Not included", ""])
+      expect(usage()[2]).toEqual(["Integration tokens", "Not included", ""])
       expect(card().querySelector(".plan-usage-note")).toBeNull()
     })
 

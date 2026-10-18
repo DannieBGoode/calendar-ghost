@@ -245,7 +245,7 @@ describe("PlanEditor", () => {
       "Every connected account counts, disconnected ones too. Reconnecting is never refused.",
       { choices: ["No limit", "Up to"], unit: "accounts" },
     ],
-    ["tokens", "Maximum Integration Tokens", "Revoked tokens don't count.", { choices: ["None", "Up to", "No limit"], unit: "" }],
+    ["tokens", "Maximum integration tokens", "Revoked tokens don't count.", { choices: ["None", "Up to", "No limit"], unit: "" }],
   ])("puts the %s limit under Limits for each person as one choice, saying what counts", (limit, legend, hint, { choices, unit }) => {
     edit()
     const limits = form().querySelector("fieldset.plan-limits")!
@@ -349,7 +349,7 @@ describe("PlanEditor", () => {
     expect(reason()).toEqual(["Enter how many calendar accounts, from 1 to 10,000, or choose No limit."])
     type(field("plan-new-accounts"), "1")
     click(option("plan-new-tokens", "Up to"))
-    const tokensReason = "Enter how many Integration Tokens, from 1 to 10,000, or choose None or No limit."
+    const tokensReason = "Enter how many integration tokens, from 1 to 10,000, or choose None or No limit."
     expect(reason()).toEqual([tokensReason])
     type(field("plan-new-tokens"), "0")
     expect(reason()).toEqual([tokensReason])
@@ -640,8 +640,8 @@ describe("PlanEditor", () => {
     ["rules", "2", "1 person on Family has more active rules than this. Their rules keep syncing, but they can't start another."],
     ["rules", "1", "3 people on Family have more active rules than this. Their rules keep syncing, but they can't start another."],
     ["accounts", "1", "2 people on Family have more calendar accounts than this. They keep them, but can't connect another."],
-    ["tokens", "None", "2 people on Family have more Integration Tokens than this. They keep them, but can't issue another."],
-    ["tokens", "1", "1 person on Family has more Integration Tokens than this. They keep them, but can't issue another."],
+    ["tokens", "None", "2 people on Family have more integration tokens than this. They keep them, but can't issue another."],
+    ["tokens", "1", "1 person on Family has more integration tokens than this. They keep them, but can't issue another."],
   ])("warns, and announces, how many people a lower %s limit of %s leaves with more", (limit, lower, warning) => {
     edit()
     const status = element(`plan-family-${limit}-warning`)
@@ -692,7 +692,7 @@ describe("PlanEditor", () => {
     )
     click(option("plan-family-tokens", "None"))
     expect(element("plan-family-tokens-warning").textContent).toBe(
-      "2 people on Family have more Integration Tokens than this. Once plans are on, they keep them, but can't issue another.",
+      "2 people on Family have more integration tokens than this. Once plans are on, they keep them, but can't issue another.",
     )
   })
 

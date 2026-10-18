@@ -577,7 +577,7 @@ describe("People's Plans tab", () => {
     const empty = element("plans-empty")
     expect(empty.querySelector("h3")?.textContent).toBe("No plans yet")
     expect(empty.querySelector("p")?.textContent).toBe(
-      "A plan sets how many rules, calendar accounts, and Integration Tokens a person can have, and how soon their calendars sync. Make one, then give it to people or make it the default.",
+      "A plan sets how many rules, calendar accounts, and integration tokens a person can have, and how soon their calendars sync. Make one, then give it to people or make it the default.",
     )
     expect([...empty.querySelectorAll("button")].map((item) => item.textContent.trim())).toEqual(["New plan"])
     expect(container.querySelector(".heading-action")).toBeNull()
@@ -786,7 +786,7 @@ describe("The catalog", () => {
       "Plan",
       "Active rules",
       "Calendar accounts",
-      "Integration Tokens",
+      "Integration tokens",
       "Sync speed",
       "People",
       "Actions",
@@ -1084,7 +1084,7 @@ describe("A plan's panel", () => {
     expect(panelTitle().textContent).toBe("Family")
     expect(document.activeElement).toBe(panelTitle())
     expect(panel().querySelector(".plan-panel-meta")?.textContent).toBe(
-      "4 people have Family. 5 active rules, 3 calendar accounts, 2 Integration Tokens, with Instant sync.",
+      "4 people have Family. 5 active rules, 3 calendar accounts, 2 integration tokens, with Instant sync.",
     )
     expect(panelTabs()).toEqual([
       ["Limits", "/people/plans/family", "page"],
@@ -1245,7 +1245,7 @@ describe("A plan's panel", () => {
     expect(panelTitle().textContent).toBe("Free")
     expect(document.activeElement).toBe(panelTitle())
     expect(panel().querySelector(".plan-panel-meta")?.textContent).toBe(
-      "2 people have Free. 1 active rule, 1 calendar account, no Integration Tokens, every 5 minutes.",
+      "2 people have Free. 1 active rule, 1 calendar account, no integration tokens, every 5 minutes.",
     )
   })
 

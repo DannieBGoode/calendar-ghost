@@ -76,7 +76,7 @@ describe("planUsageRows", () => {
     expect(rows(robin).map((row) => [row.limit, row.title, row.hint])).toEqual([
       ["rules", "Active rules", "Running, or waiting for reauthorization"],
       ["accounts", "Calendar accounts", "Disconnected accounts count"],
-      ["tokens", "Integration Tokens", "Revoked tokens don't count"],
+      ["tokens", "Integration tokens", "Revoked tokens don't count"],
       ["speed", "Sync speed", "How soon changes reach other calendars"],
     ])
   })
@@ -122,7 +122,7 @@ describe("planUsageRows", () => {
       value: "1 in use",
       chip: { text: "Over", tone: "attention" },
       note: {
-        text: "robin@example.test has 1 Integration Token and Free includes none. Their tokens keep working, but they can't create another. They see the same on Your plan.",
+        text: "robin@example.test has 1 integration token and Free includes none. Their tokens keep working, but they can't create another. They see the same on Your plan.",
         tone: "attention",
       },
     })
@@ -147,7 +147,7 @@ describe("planUsageRows", () => {
       "robin@example.test has 3 active rules and Free allows 1. Their rules keep syncing, but they can't start another until fewer are active. They see the same on Your plan.",
     )
     expect(over[2]?.note?.text).toBe(
-      "robin@example.test has 2 Integration Tokens and Free allows 1. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan.",
+      "robin@example.test has 2 integration tokens and Free allows 1. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan.",
     )
   })
 
@@ -194,7 +194,7 @@ describe("ownPlanCard", () => {
     expect(rows.map((row) => [row.title, row.hint])).toEqual([
       ["Active rules", "Running rules, and rules waiting for you to reauthorize an account. Paused rules and drafts don't count."],
       ["Calendar accounts", "Every account you connected counts, disconnected ones too."],
-      ["Integration Tokens", "Revoked tokens don't count."],
+      ["Integration tokens", "Revoked tokens don't count."],
       ["Sync speed", "How soon changes reach your other calendars."],
     ])
     expect(rows[0]).toMatchObject({
@@ -212,7 +212,7 @@ describe("ownPlanCard", () => {
         tone: "attention",
       },
     })
-    expect(rows[2]).toMatchObject({ meter: null, detail: "Your plan does not include Integration Tokens.", value: "Not included", quiet: true, note: null })
+    expect(rows[2]).toMatchObject({ meter: null, detail: "Your plan does not include integration tokens.", value: "Not included", quiet: true, note: null })
     expect(rows[3]).toMatchObject({ detail: "Instant sync is not part of your plan.", value: "Every 5 minutes", speed: "5_minutes" })
   })
 
@@ -232,7 +232,7 @@ describe("ownPlanCard", () => {
       },
       null,
       {
-        text: "You have 2 Integration Tokens and your plan allows 1. They keep working, but you can't create another until you revoke one in <link>Connections</link>.",
+        text: "You have 2 integration tokens and your plan allows 1. They keep working, but you can't create another until you revoke one in <link>Connections</link>.",
         tone: "attention",
       },
       null,
@@ -241,7 +241,7 @@ describe("ownPlanCard", () => {
     expect(kept).toMatchObject({
       value: "1 in use",
       chip: { text: "Over", tone: "attention" },
-      note: { text: "You have 1 Integration Token and your plan includes none. It keeps working, but you can't create another.", tone: "attention" },
+      note: { text: "You have 1 integration token and your plan includes none. It keeps working, but you can't create another.", tone: "attention" },
     })
   })
 

@@ -1036,7 +1036,7 @@ describe("IntegrationsSection", () => {
     expect(submit.disabled).toBe(false)
     const reason = container.querySelector("#integration-limit")
     expect(reason?.textContent).toBe(
-      "Your plan does not include Integration Tokens. To get one, ask your administrator. See your plan",
+      "Your plan does not include integration tokens. To get one, ask your administrator. See your plan",
     )
     expect(reason?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
     expect(input.getAttribute("aria-describedby")).toBe("integration-name-hint integration-limit")
@@ -1065,7 +1065,7 @@ describe("IntegrationsSection", () => {
 
     expect(labelledButton("Issue token").getAttribute("aria-disabled")).toBe("true")
     expect(container.querySelector("#integration-limit")?.textContent).toBe(
-      "Your plan allows 2 Integration Tokens, and all are in use. Revoke one to issue another. See your plan",
+      "Your plan allows 2 integration tokens, and all are in use. Revoke one to issue another. See your plan",
     )
   })
 

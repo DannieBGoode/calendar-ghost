@@ -39,8 +39,9 @@ place, which compares only one Plan at a time and carries the most accessibility
 ## The owner's decisions
 
 1. **Labels.** The editor's limits are "Maximum active rules", "Maximum calendar accounts",
-   "Maximum Integration Tokens", and "Sync speed"; columns and usage say "Active rules", "Calendar
-   accounts", "Integration Tokens", and "Sync speed". Calendar accounts are never "active":
+   "Maximum integration tokens", and "Sync speed"; columns and usage say "Active rules", "Calendar
+   accounts", "Integration tokens", and "Sync speed" (sentence case, the glossary term too, since
+   2026-10-18). Calendar accounts are never "active":
    Disconnected Accounts count. CONTEXT.md defines Active Rule.
 2. **One switch, first.** One Plans on and off switch, at the top of the Plans tab in a status
    card, which applies at once and says the result in a toast.
@@ -117,7 +118,7 @@ empty state.
    off they read "Would limit" and "Would be over a limit", neutral, because nothing is enforced.
    With no Plan, the card has no facts.
 2. **Catalog table,** titled "3 plans", with New plan at the right of its head and no instruction
-   under it. Columns: Plan, Active rules, Calendar accounts, Integration Tokens, Sync speed, People,
+   under it. Columns: Plan, Active rules, Calendar accounts, Integration tokens, Sync speed, People,
    and More actions. The default comes first, then the others by name. The Plan cell heads its row: the Plan's name, a link that opens
    its panel, with a "Default" badge beside the default's name. A press anywhere else on the row
    opens the same panel, as Activity's rows do. Names and People counts read as ink, underlined
@@ -171,7 +172,7 @@ save. Nobody loses anything they already have."
     reauthorized. Paused rules and drafts don't." `No limit | Up to [- 3 +] rules`.
   - "Maximum calendar accounts": "Every connected account counts, disconnected ones too.
     Reconnecting is never refused." `No limit | Up to [- 3 +] accounts`.
-  - "Maximum Integration Tokens": "Revoked tokens don't count." `None | Up to [- 2 +] | No limit`.
+  - "Maximum integration tokens": "Revoked tokens don't count." `None | Up to [- 2 +] | No limit`.
   - The number stays visible, dimmed, while No limit or None is chosen, so switching back keeps
     it. It is a text field with a numeric keyboard, so a scroll wheel never changes a limit.
   - Where the field is too narrow for its options on one line, as on a phone, they stack as a list,
@@ -298,7 +299,7 @@ your administrator" or "The default plan". Then the person page's rows, in the p
 count."; "To start another rule, pause one first." at the rule limit; past the account limit, "You
 have 2 calendar accounts and your plan allows 1. They keep syncing, but you can't connect another
 until you remove one in Connections.", linking to Connections; "Your plan does not include
-Integration Tokens."; and "Instant sync is not part of your plan." It closes with "To change your
+integration tokens."; and "Instant sync is not part of your plan." It closes with "To change your
 plan, ask your administrator." An administrator reads "You administer this installation, so no plan
 limits you." Your plan stays hidden while Plans are off and under Only Me, and arriving by "See your
 plan" still moves focus to its heading.
@@ -311,7 +312,7 @@ it after they join." With no default, or when Plans cannot be read, it says noth
 ### States
 
 - **First visit** (Plans off, no Plan): the status card with its switch, then one empty state with
-  the ghost: "No plans yet", "A plan sets how many rules, calendar accounts, and Integration Tokens
+  the ghost: "No plans yet", "A plan sets how many rules, calendar accounts, and integration tokens
   a person can have, and how soon their calendars sync. Make one, then give it to people or make
   it the default.", and New plan, the page's one primary action.
 - **Off, with Plans:** the status card says what turning on would do, and over-limit chips are

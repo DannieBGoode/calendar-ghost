@@ -52,13 +52,13 @@ describe("apiErrorMessage", () => {
     const tokens = (limit: number) => coded("plan_limit_reached", { reason: "integration_tokens", limit, count: limit })
     // A Plan that includes no tokens says so, never "0 Integration Tokens".
     expect(apiErrorMessage(i18n, tokens(0))).toBe(
-      "Your plan does not include Integration Tokens. To get one, ask your administrator.",
+      "Your plan does not include integration tokens. To get one, ask your administrator.",
     )
     expect(apiErrorMessage(i18n, tokens(1))).toBe(
-      "Your plan allows 1 Integration Token, and it is in use. Revoke it to issue another.",
+      "Your plan allows 1 integration token, and it is in use. Revoke it to issue another.",
     )
     expect(apiErrorMessage(i18n, tokens(2))).toBe(
-      "Your plan allows 2 Integration Tokens, and all are in use. Revoke one to issue another.",
+      "Your plan allows 2 integration tokens, and all are in use. Revoke one to issue another.",
     )
     // A limit of none with no message of its own reads as any other.
     expect(apiErrorMessage(i18n, rules(0))).toBe("Your plan lets 0 rules sync. Pause or remove one to start this rule.")

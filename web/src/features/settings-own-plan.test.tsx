@@ -252,14 +252,14 @@ describe("OwnPlanSection", () => {
     expect(rows()).toEqual([
       { title: "Active rules", meter: "3 of 5", detail: null, value: "3 of 5", chip: null, note: null },
       { title: "Calendar accounts", meter: "2 of 3", detail: null, value: "2 of 3", chip: null, note: null },
-      { title: "Integration Tokens", meter: "0 of 2", detail: null, value: "0 of 2", chip: null, note: null },
+      { title: "Integration tokens", meter: "0 of 2", detail: null, value: "0 of 2", chip: null, note: null },
       { title: "Sync speed", meter: null, detail: null, value: "Instant", chip: null, note: null },
     ])
     // Each meter is named by its limit, so a screen reader hears which limit a value is for.
     expect([...section()!.querySelectorAll("meter")].map((meter) => meter.getAttribute("aria-label"))).toEqual([
       "Active rules",
       "Calendar accounts",
-      "Integration Tokens",
+      "Integration tokens",
     ])
     expect(section()?.querySelector(".plan-usage-hint")?.textContent).toBe(
       "Running rules, and rules waiting for you to reauthorize an account. Paused rules and drafts don't count.",
@@ -272,7 +272,7 @@ describe("OwnPlanSection", () => {
     await renderSection(testI18n(), { ownPlan: jsonResponse({ ...freeOverLimit, rules_counted: 1, over_rule_limit: false }) })
     expect(head()).toEqual({ title: "Free", chips: [], origin: "The default plan" })
     expect(rows().slice(2)).toEqual([
-      { title: "Integration Tokens", meter: null, detail: "Your plan does not include Integration Tokens.", value: "Not included", chip: null, note: null },
+      { title: "Integration tokens", meter: null, detail: "Your plan does not include integration tokens.", value: "Not included", chip: null, note: null },
       { title: "Sync speed", meter: null, detail: "Instant sync is not part of your plan.", value: "Every 5 minutes", chip: null, note: null },
     ])
   })

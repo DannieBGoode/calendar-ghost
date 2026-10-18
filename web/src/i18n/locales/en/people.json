@@ -350,7 +350,7 @@
     "rulesHint": "Running, or waiting for reauthorization",
     "accounts": "Calendar accounts",
     "accountsHint": "Disconnected accounts count",
-    "tokens": "Integration Tokens",
+    "tokens": "Integration tokens",
     "tokensHint": "Revoked tokens don't count",
     "speed": "Sync speed",
     "speedHint": "How soon changes reach other calendars",
@@ -384,12 +384,12 @@
         "other": "{person} has {count} calendar accounts and {name} allows {allowed}. Their accounts keep syncing, but they can't connect another until one is removed. They see the same on Your plan."
       },
       "tokens": {
-        "one": "{person} has {count} Integration Token and {name} allows {allowed}. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan.",
-        "other": "{person} has {count} Integration Tokens and {name} allows {allowed}. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan."
+        "one": "{person} has {count} integration token and {name} allows {allowed}. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan.",
+        "other": "{person} has {count} integration tokens and {name} allows {allowed}. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan."
       },
       "tokensNone": {
-        "one": "{person} has {count} Integration Token and {name} includes none. Their tokens keep working, but they can't create another. They see the same on Your plan.",
-        "other": "{person} has {count} Integration Tokens and {name} includes none. Their tokens keep working, but they can't create another. They see the same on Your plan."
+        "one": "{person} has {count} integration token and {name} includes none. Their tokens keep working, but they can't create another. They see the same on Your plan.",
+        "other": "{person} has {count} integration tokens and {name} includes none. Their tokens keep working, but they can't create another. They see the same on Your plan."
       }
     }
   },
@@ -407,12 +407,12 @@
         "other": "{count} calendar accounts, {allowed} allowed"
       },
       "tokens": {
-        "one": "{count} Integration Token, {allowed} allowed",
-        "other": "{count} Integration Tokens, {allowed} allowed"
+        "one": "{count} integration token, {allowed} allowed",
+        "other": "{count} integration tokens, {allowed} allowed"
       },
       "tokensNone": {
-        "one": "{count} Integration Token, none allowed",
-        "other": "{count} Integration Tokens, none allowed"
+        "one": "{count} integration token, none allowed",
+        "other": "{count} integration tokens, none allowed"
       }
     },
     "chips": {
@@ -445,7 +445,7 @@
     "tryAgain": "Try again",
     "empty": {
       "title": "No plans yet",
-      "body": "A plan sets how many rules, calendar accounts, and Integration Tokens a person can have, and how soon their calendars sync. Make one, then give it to people or make it the default."
+      "body": "A plan sets how many rules, calendar accounts, and integration tokens a person can have, and how soon their calendars sync. Make one, then give it to people or make it the default."
     },
     "status": {
       "titleOn": "Plans are on",
@@ -501,7 +501,7 @@
       "plan": "Plan",
       "rules": "Active rules",
       "accounts": "Calendar accounts",
-      "tokens": "Integration Tokens",
+      "tokens": "Integration tokens",
       "speed": "Sync speed",
       "people": "People",
       "actions": "Actions",
@@ -633,7 +633,7 @@
       "rulesHint": "Running rules count, and rules waiting for an account to be reauthorized. Paused rules and drafts don't.",
       "accounts": "Maximum calendar accounts",
       "accountsHint": "Every connected account counts, disconnected ones too. Reconnecting is never refused.",
-      "tokens": "Maximum Integration Tokens",
+      "tokens": "Maximum integration tokens",
       "tokensHint": "Revoked tokens don't count.",
       "noLimit": "No limit",
       "upTo": "Up to",
@@ -687,7 +687,7 @@
         "name": "Enter a name to save this plan.",
         "rules": "Enter how many active rules, from {min} to {max}, or choose No limit.",
         "accounts": "Enter how many calendar accounts, from {min} to {max}, or choose No limit.",
-        "tokens": "Enter how many Integration Tokens, from {min} to {max}, or choose None or No limit."
+        "tokens": "Enter how many integration tokens, from {min} to {max}, or choose None or No limit."
       },
       "lowered": {
         "rules": {
@@ -699,8 +699,8 @@
           "other": "{count} people on {name} have more calendar accounts than this. They keep them, but can't connect another."
         },
         "tokens": {
-          "one": "{count} person on {name} has more Integration Tokens than this. They keep them, but can't issue another.",
-          "other": "{count} people on {name} have more Integration Tokens than this. They keep them, but can't issue another."
+          "one": "{count} person on {name} has more integration tokens than this. They keep them, but can't issue another.",
+          "other": "{count} people on {name} have more integration tokens than this. They keep them, but can't issue another."
         }
       },
       "loweredLater": {
@@ -713,8 +713,8 @@
           "other": "{count} people on {name} have more calendar accounts than this. Once plans are on, they keep them, but can't connect another."
         },
         "tokens": {
-          "one": "{count} person on {name} has more Integration Tokens than this. Once plans are on, they keep them, but can't issue another.",
-          "other": "{count} people on {name} have more Integration Tokens than this. Once plans are on, they keep them, but can't issue another."
+          "one": "{count} person on {name} has more integration tokens than this. Once plans are on, they keep them, but can't issue another.",
+          "other": "{count} people on {name} have more integration tokens than this. Once plans are on, they keep them, but can't issue another."
         }
       }
     },
@@ -764,11 +764,11 @@
       },
       "accountsUnlimited": "unlimited calendar accounts",
       "tokens": {
-        "one": "{count} Integration Token",
-        "other": "{count} Integration Tokens"
+        "one": "{count} integration token",
+        "other": "{count} integration tokens"
       },
-      "tokensNone": "no Integration Tokens",
-      "tokensUnlimited": "unlimited Integration Tokens",
+      "tokensNone": "no integration tokens",
+      "tokensUnlimited": "unlimited integration tokens",
       "speed": {
         "instant": "with Instant sync",
         "5_minutes": "every 5 minutes",

@@ -90,7 +90,7 @@ describe("wouldBeOver", () => {
         { limit: "rules", in_use: 4, allowed: 1 },
         { limit: "integration_tokens", in_use: 1, allowed: 0 },
       ]),
-    ).toBe("Would be over: 4 active rules, 1 allowed and 1 Integration Token, none allowed")
+    ).toBe("Would be over: 4 active rules, 1 allowed and 1 integration token, none allowed")
   })
 })
 

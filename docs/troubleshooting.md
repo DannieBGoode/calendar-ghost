@@ -723,10 +723,10 @@ An API client receives `409` with the code `plan_limit_reached` and the reason `
 
 Under **Settings → Connections → Integrations**, **Issue token** is unavailable when your
 unrevoked Integration Tokens reach your Plan's token limit, and the form says why: "Your plan
-allows 2 Integration Tokens, and all are in use. Revoke one to issue another." Revoke a token you
+allows 2 integration tokens, and all are in use. Revoke one to issue another." Revoke a token you
 no longer use, then issue the new one: revoked tokens do not count. A Plan may include no
-Integration Tokens at all; the form then says "Your plan does not include Integration Tokens. To
-get one, ask your administrator." **Integration Tokens** under **Settings → Your account → Your
+Integration Tokens at all; the form then says "Your plan does not include integration tokens. To
+get one, ask your administrator." **Integration tokens** under **Settings → Your account → Your
 plan** shows how many you have against the limit, or **Not included**. Tokens you already have
 keep working when a limit is lowered,
 so no monitor stops on its own. A token that reads Installation Health is for administrators, who

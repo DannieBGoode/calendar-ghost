@@ -117,14 +117,14 @@ describe("own plan hints", () => {
       loaded: true,
       warning: true,
       account: "Your plan allows 2 calendar accounts, and disconnected accounts count too.",
-      token: "Your plan does not include Integration Tokens. To get one, ask your administrator.",
+      token: "Your plan does not include integration tokens. To get one, ask your administrator.",
       rules: "Your plan lets 1 rule sync at once.",
     })
   })
 
   it.each([
-    [1, "Your plan allows 1 Integration Token, and it is in use. Revoke it to issue another."],
-    [3, "Your plan allows 3 Integration Tokens, and all are in use. Revoke one to issue another."],
+    [1, "Your plan allows 1 integration token, and it is in use. Revoke it to issue another."],
+    [3, "Your plan allows 3 integration tokens, and all are in use. Revoke one to issue another."],
   ])("says a limit of %i tokens is in use, and how to make room", async (limit, reason) => {
     await render(
       jsonResponse({ ...atEveryLimit, limits: { ...atEveryLimit.limits, integration_tokens: limit }, integration_tokens: limit }),

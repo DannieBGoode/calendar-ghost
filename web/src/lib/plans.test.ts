@@ -198,7 +198,7 @@ describe("heldPlanChips", () => {
     const over: OverLimit[] = [{ limit: "integration_tokens", in_use: 1, allowed: 0 }]
     expect(chips(person({ basis: "plans_off", has: hasFree, over }))).toEqual([
       ["Default", "neutral", null],
-      ["Would be over", "neutral", "1 Integration Token, none allowed"],
+      ["Would be over", "neutral", "1 integration token, none allowed"],
     ])
   })
 
