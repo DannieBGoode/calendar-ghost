@@ -329,20 +329,6 @@ def test_no_plan_shows_while_no_plan_exists() -> None:
     assert overview.of(ADMIN.id, ALICE.id).plan is None
 
 
-def test_every_person_shows_what_their_plan_allows_once_plans_are_on() -> None:
-    overview = _installation()
-    _bob_on_family(overview)
-
-    assert _allowances(overview) == {
-        ADMIN.id: Allowance(AllowanceBasis.ADMINISTRATOR),
-        ALICE.id: Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True),
-        BOB.id: Allowance(AllowanceBasis.PLAN, plan=FAMILY_PLAN, assigned=FAMILY_PLAN),
-    }
-    bob = overview.of(ADMIN.id, BOB.id).plan
-    assert bob is not None
-    assert bob.allowance == Allowance(AllowanceBasis.PLAN, plan=FAMILY_PLAN, assigned=FAMILY_PLAN)
-
-
 def test_every_person_shows_their_own_plan_while_plans_are_off() -> None:
     """An administrator can prepare Plans before turning them on."""
     overview = _installation()

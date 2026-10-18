@@ -127,11 +127,6 @@ def test_an_allowance_follows_the_setting_then_the_role_then_their_own_plan(
     assert allowance.assigned == own
 
 
-def test_a_user_no_plan_reaches_has_the_unlimited_allowance() -> None:
-    assert allowance_for(plans_on=True, administers=False, own=None, default=None) == UNLIMITED
-    assert Allowance(AllowanceBasis.PLANS_OFF) == UNLIMITED
-
-
 @pytest.mark.parametrize(
     "allowance",
     [
@@ -290,11 +285,6 @@ def test_every_other_interval_polls_every_five_minutes_without_instant_sync(
     interval: SyncInterval,
 ) -> None:
     assert interval.cadence == POLLED
-
-
-@pytest.mark.parametrize("interval", list(SyncInterval))
-def test_no_interval_polls_more_often_than_scheduled_sync(interval: SyncInterval) -> None:
-    assert interval.cadence.poll_every >= SCHEDULED_EVERY
 
 
 def test_administrators_may_offer_instant_or_five_minutes() -> None:

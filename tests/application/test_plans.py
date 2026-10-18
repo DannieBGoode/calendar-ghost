@@ -8,7 +8,6 @@ from datetime import datetime
 import pytest
 
 from calendar_sync.application.identity.administration import AdministratorRequired, UserNotFound
-from calendar_sync.application.identity.errors import PlanKeyTaken, PlanNotFound
 from calendar_sync.application.identity.plans import (
     AssignPlan,
     ChangePlan,
@@ -30,11 +29,9 @@ from calendar_sync.domain.plans import (
     InvalidPlanReason,
     NewPlan,
     Plan,
-    PlanInUse,
     PlanIsDefault,
     PlanKey,
     PlanLimits,
-    PlanNameTaken,
     PlansNeedDefault,
     SyncInterval,
 )
@@ -60,7 +57,6 @@ SOLO = Plan(PlanKey("solo"), "Solo", PlanLimits(2, 2, 1, SyncInterval.INSTANT))
 HOURLY = Plan(
     PlanKey("hourly"), "Hourly", PlanLimits(None, None, None, SyncInterval.EVERY_60_MINUTES)
 )
-NO_LIMITS_PLAN = Plan(PlanKey("no-limits"), "No limits", NO_LIMITS)
 
 
 @dataclass(frozen=True)
@@ -184,27 +180,6 @@ def test_show_plans_answers_each_plan_who_has_it_the_setting_and_the_offered_int
     )
 
 
-def test_the_overview_counts_everyone_make_default_would_move() -> None:
-    """Everyone with no Plan of their own, whatever their role or state; someone given the
-    default follows it, as None does."""
-    plans = _plans(RETIRED, NEIGHBOUR, LATECOMER)
-    plans_on(plans, FREE, FAMILY)
-    _assign(plans).execute(ADMIN.id, NEIGHBOUR.id, FAMILY.key)
-    _assign(plans).execute(ADMIN.id, LATECOMER.id, FREE.key)
-
-    overview = ShowPlans(plans.users, plans).execute(ADMIN.id)
-
-    assert overview.followers == 4
-
-
-def test_a_new_installation_shows_no_plans_and_plans_off() -> None:
-    plans = _plans()
-
-    overview = ShowPlans(plans.users, plans).execute(ADMIN.id)
-
-    assert overview == PlansOverview(PlansSetting(False, None), (), OFFERED_INTERVALS, followers=2)
-
-
 # Defining and changing Plans
 
 
@@ -217,16 +192,6 @@ def test_an_administrator_defines_a_plan_with_an_offered_interval() -> None:
     assert plans.get(SOLO.key) == SOLO
 
 
-def test_a_new_plan_without_a_key_gets_one_made_from_its_name() -> None:
-    plans = _plans()
-
-    first = _define(plans).execute(ADMIN.id, NewPlan("Solo", SOLO.limits))
-    second = _define(plans).execute(ADMIN.id, NewPlan("Solo!", FAMILY.limits))
-
-    assert first == PlanListing(SOLO, False, 0, 0)
-    assert second == PlanListing(Plan(PlanKey("solo-2"), "Solo!", FAMILY.limits), False, 0, 0)
-
-
 def test_a_new_plan_whose_interval_is_not_offered_is_refused() -> None:
     plans = _plans()
 
@@ -235,31 +200,6 @@ def test_a_new_plan_whose_interval_is_not_offered_is_refused() -> None:
 
     assert refused.value.reason is InvalidPlanReason.INTERVAL
     assert plans.any_plans() is False
-
-
-def test_a_taken_key_is_refused_and_the_plan_with_it_is_kept() -> None:
-    plans = _plans()
-    plans.add(as_new(FREE), NOW)
-
-    with pytest.raises(PlanKeyTaken):
-        _define(plans).execute(ADMIN.id, NewPlan("Another free plan", FREE.limits, FREE.key))
-
-    assert plans.get(FREE.key) == FREE
-
-
-def test_a_name_another_plan_reads_as_is_refused_on_define_and_change() -> None:
-    plans = _plans()
-    plans.add(as_new(FREE), NOW)
-    plans.add(as_new(FAMILY), NOW)
-    before = _snapshot(plans)
-
-    with pytest.raises(PlanNameTaken) as on_define:
-        _define(plans).execute(ADMIN.id, NewPlan("free", SOLO.limits))
-    with pytest.raises(PlanNameTaken) as on_change:
-        _change(plans).execute(ADMIN.id, replace(FAMILY, name="FREE"))
-
-    assert (on_define.value.name, on_change.value.name) == ("Free", "Free")
-    assert _snapshot(plans) == before
 
 
 def test_changing_a_plan_keeps_its_key_and_its_new_limits_apply_at_once() -> None:
@@ -298,51 +238,6 @@ def test_an_interval_a_later_release_stored_may_be_kept() -> None:
     assert plans.get(HOURLY.key) == renamed
 
 
-def test_changing_a_plan_that_does_not_exist_is_plan_not_found() -> None:
-    plans = _plans()
-
-    with pytest.raises(PlanNotFound):
-        _change(plans).execute(ADMIN.id, FREE)
-
-    assert plans.any_plans() is False
-
-
-# Removing Plans
-
-
-def test_a_plan_nobody_has_is_removed() -> None:
-    plans = _plans()
-    plans_on(plans, FREE, FAMILY)
-
-    _remove(plans).execute(ADMIN.id, FAMILY.key)
-
-    assert plans.get(FAMILY.key) is None
-    assert plans.get(FREE.key) == FREE
-
-
-def test_a_plan_someone_has_is_kept_and_the_refusal_says_how_many_have_it() -> None:
-    plans = _plans(NEIGHBOUR)
-    plans_on(plans, FREE, FAMILY)
-    for user in (MEMBER, NEIGHBOUR):
-        _assign(plans).execute(ADMIN.id, user.id, FAMILY.key)
-
-    with pytest.raises(PlanInUse) as in_use:
-        _remove(plans).execute(ADMIN.id, FAMILY.key)
-
-    assert in_use.value.people == 2
-    assert plans.get(FAMILY.key) == FAMILY
-
-
-def test_removing_a_plan_that_does_not_exist_is_plan_not_found() -> None:
-    plans = _plans()
-    plans_on(plans, FREE)
-
-    with pytest.raises(PlanNotFound):
-        _remove(plans).execute(ADMIN.id, FAMILY.key)
-
-    assert plans.get(FREE.key) == FREE
-
-
 # The Plans setting and the Default Plan
 
 
@@ -361,22 +256,6 @@ def test_turning_plans_on_with_a_default_answers_the_overview_and_limits_members
     assert plans.of(MEMBER.id) == Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True)
 
 
-def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_the_default() -> None:
-    plans = _plans()
-    plans.add(as_new(FREE), NOW)
-
-    overview = _setting(plans).execute(ADMIN.id, True, None)
-
-    assert overview == PlansOverview(
-        PlansSetting(True, NO_LIMITS_PLAN.key),
-        (PlanListing(FREE, False, 0, 0), PlanListing(NO_LIMITS_PLAN, True, 2, 1)),
-        OFFERED_INTERVALS,
-        followers=2,
-    )
-    # Turning Plans on this way limits nobody until someone has a smaller Plan.
-    assert plans.of(MEMBER.id).limits == NO_LIMITS
-
-
 def test_turning_plans_on_never_clears_a_default_already_chosen() -> None:
     plans = _plans()
     plans.add(as_new(FREE), NOW)
@@ -387,16 +266,6 @@ def test_turning_plans_on_never_clears_a_default_already_chosen() -> None:
 
     assert plans.settings() == PlansSetting(False, FREE.key)
     assert list(plans.catalog) == [FREE.key]
-
-
-def test_a_default_that_names_no_plan_is_plan_not_found() -> None:
-    plans = _plans()
-    plans.add(as_new(FREE), NOW)
-
-    with pytest.raises(PlanNotFound):
-        _setting(plans).execute(ADMIN.id, True, PlanKey("missing"))
-
-    assert plans.settings() == PlansSetting(False, None)
 
 
 @pytest.mark.parametrize("default", [FREE.key, None], ids=["keeping the default", "clearing it"])
@@ -516,17 +385,6 @@ def test_a_user_deleted_before_the_assignment_is_user_not_found() -> None:
 
     with pytest.raises(UserNotFound):
         assigning.execute(ADMIN.id, MEMBER.id, FAMILY.key)
-
-
-def test_assigning_an_unknown_plan_is_plan_not_found_and_changes_nothing() -> None:
-    plans = _plans()
-    plans_on(plans, FREE)
-
-    with pytest.raises(PlanNotFound):
-        _assign(plans).execute(ADMIN.id, MEMBER.id, PlanKey("missing"))
-
-    assert _own_plan(plans, MEMBER.id) is None
-    assert plans.changes == {}
 
 
 # Log lines

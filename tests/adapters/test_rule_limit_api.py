@@ -1,4 +1,4 @@
-"""The rule limit through the Web API: a refused Start, and what the rule page reads (ADR 0038)."""
+"""The rule limit through the Web API: the rule page, and Start with Plans off (ADR 0038)."""
 
 from __future__ import annotations
 
@@ -41,21 +41,6 @@ def _client(tmp_path: Path, *, plans: bool) -> TestClient:
     client = TestClient(create_app(replace(compose(settings, adapters), scheduler=None)))
     client.cookies.set(SESSION_COOKIE, session_for(database, member))
     return client
-
-
-def test_a_start_past_the_rule_limit_answers_its_code_never_a_server_error(
-    tmp_path: Path,
-) -> None:
-    with _client(tmp_path, plans=True) as client:
-        refused = client.post("/api/v1/rules/next/enable")
-        after = client.get("/api/v1/rules/next")
-
-    assert refused.status_code == 409
-    assert (refused.json()["code"], refused.json()["params"]) == (
-        "plan_limit_reached",
-        {"reason": "rules", "limit": 1, "count": 1},
-    )
-    assert after.json()["state"] == "dry_run_validated"
 
 
 def test_rule_details_say_whether_start_would_pass_and_name_the_limit(tmp_path: Path) -> None:

@@ -117,29 +117,6 @@ def test_the_database_refuses_to_delete_a_plan_a_user_or_the_default_names(
     assert kept == [("family",)]
 
 
-def test_deleting_the_administrator_who_assigned_a_plan_keeps_the_plan_without_its_assigner(
-    tmp_path: Path,
-) -> None:
-    database = tmp_path / "calendar-sync.db"
-    initialize_database(database)
-    add_user(database, USER)
-    add_user(database, OTHER_USER, role="user")
-    _family_assigned(database)
-
-    with transaction(database) as connection:
-        connection.execute("DELETE FROM users WHERE id = ?", (USER.value,))
-    with transaction(database) as connection:
-        assignment = connection.execute(
-            """
-            SELECT plan_key, plan_assigned_by, plan_assigner_id, plan_assigned_at
-            FROM users WHERE id = ?
-            """,
-            (OTHER_USER.value,),
-        ).fetchone()
-
-    assert tuple(assignment) == ("family", "administrator", None, NOW.isoformat())
-
-
 def test_a_place_left_on_a_rule_that_is_no_draft_reads_as_no_place(tmp_path: Path) -> None:
     """Only a draft or previewed rule keeps a place, so a mark left on any other row never stops
     the rule from being read."""

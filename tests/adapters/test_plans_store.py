@@ -542,6 +542,7 @@ def test_an_assignment_names_nobody_once_its_administrator_is_deleted(
         changes = plans.last_changes([MEMBER.id, NEWCOMER.id])
 
     assert changes == {MEMBER.id: AssignmentChange(AssignmentSource.ADMINISTRATOR, None, NOW)}
+    assert users.get(MEMBER.id) == replace(MEMBER, plan=FAMILY.key)
     assert caplog.messages == [
         "User newcomer's Plan was given by a source this release does not know; it is left out"
     ]

@@ -9,11 +9,10 @@ does meanwhile.
 from __future__ import annotations
 
 import sqlite3
-import time
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from threading import Barrier, Event, Thread
+from threading import Event, Thread
 
 import pytest
 
@@ -228,40 +227,6 @@ def _rule_state(units: UnitOfWorkFactory, rule_id: SyncRuleId) -> SyncRuleState:
     return stored.state
 
 
-@dataclass
-class SlowAllowanceReads:
-    """Reads the Allowance, then holds the Start a moment longer, writer lock and all, so the
-    other Start reaches its own save meanwhile."""
-
-    inner: Allowances
-
-    def of(self, user: UserId) -> Allowance:
-        allowance = self.inner.of(user)
-        time.sleep(0.2)
-        return allowance
-
-    def of_users(self, users: Collection[UserId]) -> Mapping[UserId, Allowance]:
-        return self.inner.of_users(users)
-
-
-@dataclass
-class GatedAllowanceReads:
-    """Reads the Allowance, says so, then holds the Start, writer lock and all, until released."""
-
-    inner: Allowances
-    read: Event = field(default_factory=Event)
-    release: Event = field(default_factory=Event)
-
-    def of(self, user: UserId) -> Allowance:
-        allowance = self.inner.of(user)
-        self.read.set()
-        assert self.release.wait(5)
-        return allowance
-
-    def of_users(self, users: Collection[UserId]) -> Mapping[UserId, Allowance]:
-        return self.inner.of_users(users)
-
-
 def test_two_starts_for_the_last_place_admit_exactly_one(tmp_path: Path) -> None:
     plans, units = _member_with_rules(
         tmp_path / "calendar-sync.db",
@@ -269,30 +234,37 @@ def test_two_starts_for_the_last_place_admit_exactly_one(tmp_path: Path) -> None
         _previewed_rule(NEXT_RULE),
         _previewed_rule(LATER_RULE),
     )
-    enable = EnableSyncRule(units, RuleLocks(), SlowAllowanceReads(plans), USER)
-    start = Barrier(2)
+    locks = RuleLocks()
+    first = HeldAllowances(plans)
+    second = released(plans)
     started: list[SyncRuleId] = []
     refused: list[SyncRuleId] = []
 
-    def start_rule(rule_id: SyncRuleId) -> None:
-        start.wait()
+    def start_rule(rule_id: SyncRuleId, allowances: Allowances) -> None:
         try:
-            enable.execute(rule_id)
+            EnableSyncRule(units, locks, allowances, USER).execute(rule_id)
         except PlanLimitReached:
             refused.append(rule_id)
         else:
             started.append(rule_id)
 
-    threads = [Thread(target=start_rule, args=(rule_id,)) for rule_id in (NEXT_RULE, LATER_RULE)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(10)
+    holding = Thread(target=start_rule, args=(NEXT_RULE, first))
+    holding.start()
+    assert first.reading.wait(5)
+    waiting = Thread(target=start_rule, args=(LATER_RULE, second))
+    waiting.start()
+    try:
+        # The second Start waits for the first one's write lock, so it cannot read the limit
+        # while the first holds the last place.
+        assert not second.reading.wait(WAIT)
+    finally:
+        first.released.set()
+        holding.join()
+        waiting.join()
 
-    assert len(started) == 1
-    assert len(refused) == 1
-    assert _rule_state(units, started[0]) is SyncRuleState.ENABLED
-    assert _rule_state(units, refused[0]) is SyncRuleState.PREVIEWED
+    assert (started, refused) == ([NEXT_RULE], [LATER_RULE])
+    assert _rule_state(units, NEXT_RULE) is SyncRuleState.ENABLED
+    assert _rule_state(units, LATER_RULE) is SyncRuleState.PREVIEWED
 
 
 def test_a_plan_lowered_during_a_start_waits_for_the_start_to_commit(tmp_path: Path) -> None:
@@ -302,7 +274,7 @@ def test_a_plan_lowered_during_a_start_waits_for_the_start_to_commit(tmp_path: P
     )
     actor = add_user(database, UserId("admin-1"))
     lowered = replace(TWO_RULES, limits=replace(TWO_RULES.limits, rules=1))
-    gate = GatedAllowanceReads(plans)
+    gate = HeldAllowances(plans)
     start = Thread(target=EnableSyncRule(units, RuleLocks(), gate, USER).execute, args=(NEXT_RULE,))
     lowering = Thread(
         target=ChangePlan(SqliteUserDirectory(database), plans, SystemClock()).execute,
@@ -310,11 +282,11 @@ def test_a_plan_lowered_during_a_start_waits_for_the_start_to_commit(tmp_path: P
     )
 
     start.start()
-    assert gate.read.wait(5)
+    assert gate.reading.wait(5)
     lowering.start()
     lowering.join(0.3)
     lowered_during_the_start = not lowering.is_alive()
-    gate.release.set()
+    gate.released.set()
     start.join(5)
     lowering.join(5)
 

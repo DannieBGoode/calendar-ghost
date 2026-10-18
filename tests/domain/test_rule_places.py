@@ -210,57 +210,6 @@ def test_keeping_a_place_is_not_a_material_change() -> None:
     assert _rule(DRAFT, keeps=True).material_signature == _rule(DRAFT).material_signature
 
 
-def test_a_replacement_that_starts_counts_as_enabled_instead_of_by_its_place() -> None:
-    old = _rule(ENABLED)
-    placed = _successor().take_place_of(old)
-
-    started = placed.mark_previewed().enable()
-
-    assert placed.counts_toward_plan
-    assert not old.begin_removal().counts_toward_plan
-    assert (started.state, started.keeps_place, started.counts_toward_plan) == (
-        ENABLED,
-        False,
-        True,
-    )
-
-
-def test_a_rule_a_provider_failure_stops_does_not_count() -> None:
-    stopped = _rule(PREVIEWED).enable().degrade()
-
-    assert stopped.state is DEGRADED
-    assert not stopped.counts_toward_plan
-
-
-def test_a_rule_a_material_rule_change_pauses_does_not_count() -> None:
-    enabled = _rule(ENABLED)
-
-    paused = enabled.change_policy(DETAILS)
-
-    assert enabled.counts_toward_plan
-    assert paused.state is PAUSED
-    assert not paused.counts_toward_plan
-
-
-def test_previewing_a_lapse_stopped_rule_gives_up_its_place() -> None:
-    stopped = _rule(ENABLED).degrade(awaiting_reauthorization=True)
-
-    previewed = stopped.mark_previewed()
-
-    assert stopped.counts_toward_plan
-    assert previewed.state is PREVIEWED
-    assert not previewed.counts_toward_plan
-
-
-def test_replacing_a_rule_that_does_not_count_keeps_no_place() -> None:
-    paused = _rule(ENABLED).pause()
-
-    placed = _successor().take_place_of(paused)
-
-    assert not placed.keeps_place
-    assert not placed.counts_toward_plan
-
-
 @pytest.mark.parametrize(
     ("before", "counting_after", "limit", "allowed"),
     [

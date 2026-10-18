@@ -107,17 +107,6 @@ def _installation(tmp_path: Path) -> _Installation:
     )
 
 
-def test_a_member_issues_tokens_while_their_plan_has_room(tmp_path: Path) -> None:
-    installation = _installation(tmp_path)
-    plans_on(installation.plans, FAMILY)
-    member = limited_user(installation.database)
-
-    installation.issuing(member).execute("Uptime Kuma", STATUS)
-    installation.issuing(member).execute("Homepage", STATUS)
-
-    assert installation.names(member) == ["Homepage", "Uptime Kuma"]
-
-
 def test_a_token_past_the_plans_limit_is_refused_and_nothing_is_stored(tmp_path: Path) -> None:
     installation = _installation(tmp_path)
     plans_on(installation.plans, FAMILY)

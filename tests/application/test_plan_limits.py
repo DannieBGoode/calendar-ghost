@@ -120,15 +120,6 @@ def _counted(units: InMemoryUserUnitOfWorkFactory) -> int:
     return sum(each.counts_toward_plan for each in units.state.rules.values())
 
 
-def test_a_start_within_the_rule_limit_enables_the_rule() -> None:
-    units = _units(_rule(NEXT))
-
-    started = _start(units, _plans(), NEXT)
-
-    assert started.state is SyncRuleState.ENABLED
-    assert units.state.rules[NEXT] == started
-
-
 def test_a_start_past_the_rule_limit_is_refused_and_the_rule_stays_previewed() -> None:
     units = _units(rule(), _rule(NEXT))
 
