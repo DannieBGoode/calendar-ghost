@@ -111,6 +111,14 @@ describe("Menus", () => {
   })
 })
 
+describe("Popovers", () => {
+  it("fade a capped chooser's rows at the cut edge while more sit below, and not at their end", () => {
+    const fade = declarations(".plan-change-popover[data-capped] .plan-change-options:not([data-end])")
+    expect(fade.get("mask-image")).toMatch(/^linear-gradient\(to bottom, .*transparent\)$/)
+    expect(declarations(".plan-change-popover .plan-change-options").has("mask-image")).toBe(false)
+  })
+})
+
 describe("Side panels", () => {
   it("cap a Plan's panel at the window below where it starts, so its footer with Save is in view", () => {
     expect(declarations(".plan-panel").get("max-height")).toContain("var(--plan-panel-top")

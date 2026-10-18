@@ -90,6 +90,14 @@ function optionRows(options: readonly ChangeOption[], choice: string | null, ver
   }))
 }
 
+/**
+ * Marks the options once scrolled to their end, where a capped popover's fade at their cut edge
+ * goes; the fade is only drawn, so a screen reader still reads every option.
+ */
+function markEnd(list: HTMLElement) {
+  list.toggleAttribute("data-end", list.scrollTop + list.clientHeight >= list.scrollHeight - 1)
+}
+
 /** Moves focus to the option chosen, or to the first when none is. */
 function focusChoice(options: HTMLElement | null) {
   const radio = options?.querySelector<HTMLInputElement>("input[type='radio']:checked") ?? options?.querySelector<HTMLInputElement>("input[type='radio']")
@@ -148,7 +156,7 @@ function PlanChooser(props: PlanChooserProps) {
   return (
     <div ref={chooser} id={id} className="plan-change" onKeyDown={escape}>
       <Title id={`${id}-title`}>{title}</Title>
-      <div ref={options} className="plan-change-options">
+      <div ref={options} className="plan-change-options" onScroll={(event) => markEnd(event.currentTarget)}>
         <RadioRows
           aria-labelledby={`${id}-title`}
           aria-describedby={describedBy(hasDefault && `${id}-note`, state.missing && `${id}-missing`)}

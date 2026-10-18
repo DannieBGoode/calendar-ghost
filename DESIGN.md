@@ -345,7 +345,8 @@ above the page as a menu does, takes focus when it opens, and Escape or Cancel c
 returns focus to its control. It never blocks the rest of the page, and it never leaves the
 window: it opens under its control, or above it when there is more room there, below the top bar
 and above a toast, with its height capped at the room it has. Its list then scrolls inside it
-while its title and action stay in view. A control with little room on either side is first
+while its title and action stay in view, and fades out at its cut edge while more sits below,
+until it reaches its end. A control with little room on either side is first
 scrolled up. Anything longer is a side panel, and a choice about what a page already shows, such
 as one person's Plan on their page, opens in place in its card. A menu follows the same rule: it
 opens under its trigger, or above it when there is more room there, below the top bar and above a

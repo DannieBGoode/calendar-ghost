@@ -257,7 +257,9 @@ At `/people/plans/<key>/people`, which Assign people in the row menu opens.
 - The popover never leaves the window: it opens under its control, or above it when there is more
   room there, below the top bar and above a toast. Its height is capped at the room it has and its
   rows scroll inside it, while its title, note, and Save stay in view; a control with little room
-  on both sides is first scrolled up, as far as the page scrolls.
+  on both sides is first scrolled up, as far as the page scrolls. While rows sit below the cut
+  edge, they fade out at it, and the fade is gone at the end of the list; a screen reader still has
+  every row. (Amended on 2026-10-18: the owner kept the capped popover on a phone.)
 - Each row's More actions holds Change plan, which opens the same chooser for that person, titled
   "Change plan for robin@example.test".
 - A change for one person or several answers in a toast, "robin@example.test now has Pro." or "2

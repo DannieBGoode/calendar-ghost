@@ -2837,6 +2837,12 @@ p {
   min-height: 5.75rem;
 }
 
+/* While options sit below the cut edge of a capped popover, they fade out there, so the list shows
+   there is more; scrolled to its end, the fade goes. */
+.plan-change-popover[data-capped] .plan-change-options:not([data-end]) {
+  mask-image: linear-gradient(to bottom, black calc(100% - 2rem), transparent);
+}
+
 .plan-change-popover h3 {
   font-size: 0.9375rem;
   font-weight: 650;

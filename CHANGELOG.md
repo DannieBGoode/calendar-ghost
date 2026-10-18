@@ -34,7 +34,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   over under it, and can list only the
   people who have one Plan, or who are over a limit. Its rows can be selected, a page at a time,
   and **Change plan** in the bar above the table gives the people selected another Plan from a
-  popover that stays inside the window: one line per Plan with its limits in short, the default
+  popover that stays inside the window, its list fading at the cut edge while more Plans sit below: one line per Plan with its limits in short, the default
   first, where choosing the default means they follow it, what they have now marked **Current**,
   and, under the Plan chosen, a dry run's word on who would be over which limit, then **Save**,
   with **Undo** once done. Each row's **More actions** offers the same for one person. A person's
