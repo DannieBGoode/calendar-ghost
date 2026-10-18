@@ -91,9 +91,10 @@ administers.
 
 People's sentence and primary action follow the tab, as Activity's title does. Everyone and
 Invitations keep the privacy sentence and Invite someone. Plans says "Plans set how much each person
-can use and how soon their calendars sync." with New plan, which is outline while a panel is open,
-so the panel's footer holds the one primary action. With no Plan, New plan lives only in the empty
-state.
+can use and how soon their calendars sync." and has no action in the header: New plan sits at the
+right of the catalog's head, beside "3 plans", on the list it adds to, and is outline while a panel
+is open, so the panel's footer holds the one primary action. With no Plan, New plan lives in the
+empty state.
 
 ### Plans tab
 
@@ -115,9 +116,9 @@ state.
    While Plans are
    off they read "Would limit" and "Would be over a limit", neutral, because nothing is enforced.
    With no Plan, the card has no facts.
-2. **Catalog table,** titled "3 plans", with no instruction under it. Columns: Plan, Active rules,
-   Calendar accounts, Integration Tokens, Sync speed, People, and More actions. The default comes
-   first, then the others by name. The Plan cell heads its row: the Plan's name, a link that opens
+2. **Catalog table,** titled "3 plans", with New plan at the right of its head and no instruction
+   under it. Columns: Plan, Active rules, Calendar accounts, Integration Tokens, Sync speed, People,
+   and More actions. The default comes first, then the others by name. The Plan cell heads its row: the Plan's name, a link that opens
    its panel, with a "Default" badge beside the default's name. A press anywhere else on the row
    opens the same panel, as Activity's rows do. Names and People counts read as ink, underlined
    only under the pointer or keyboard focus. The Plan column takes what the fixed columns leave;

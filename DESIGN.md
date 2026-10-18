@@ -478,12 +478,13 @@ Settings sections run from what the installation depends on to what only this br
 ### People
 
 People is the Installation Administrator's view of everyone here, laid out like Rules and Activity:
-a Fraunces title with one sentence and one primary action, then link tabs (Everyone first, then
-Invitations with a count of those waiting, hidden at zero, then Plans). The sentence and the action
-follow the tab, as Activity's title does: Everyone and Invitations say what an administrator sees
-and offer "Invite someone", which says which Plan the person will get once a Plan is the default;
-Plans says what Plans do and offers "New plan", outline while a side panel is open so the panel's
-footer holds the one primary action. Plans sit beside the people they limit, so Settings keeps only
+a Fraunces title with one sentence, then link tabs (Everyone first, then Invitations with a count
+of those waiting, hidden at zero, then Plans). The sentence follows the tab, as Activity's title
+does: Everyone and Invitations say what an administrator sees and offer "Invite someone" beside it,
+which says which Plan the person will get once a Plan is the default; Plans says what Plans do, and
+its header has no action: "New plan" sits on the list it adds to, at the right of the catalog's
+head ("5 plans"), or in the empty state, outline while a side panel is open so the panel's footer
+holds the one primary action. Plans sit beside the people they limit, so Settings keeps only
 each person's own Your plan.
 
 The Plans tab leads with a status card: the state as an object title ("Plans are on"), one

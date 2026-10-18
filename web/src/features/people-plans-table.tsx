@@ -35,13 +35,14 @@ type RowContext = {
 }
 
 /**
- * The catalog of Plans: a table with a column for each limit, the default first, so Plans compare
- * by column. Each Plan's name heads its row and opens its panel, as a press anywhere else on the
- * row does; People opens Everyone filtered by it, and More actions holds the rest. While a panel is
- * open beside it, the catalog keeps only the Plan, its sync speed, and who has it, and marks the
- * open Plan. When the catalog itself is narrow, each row becomes a card that labels its values.
+ * The catalog of Plans: how many there are, with `action`, New plan, beside them, then a table
+ * with a column for each limit, the default first, so Plans compare by column. Each Plan's name
+ * heads its row and opens its panel, as a press anywhere else on the row does; People opens
+ * Everyone filtered by it, and More actions holds the rest. While a panel is open beside it, the
+ * catalog keeps only the Plan, its sync speed, and who has it, and marks the open Plan. When the
+ * catalog itself is narrow, each row becomes a card that labels its values.
  */
-export function PlansCatalog(context: RowContext) {
+export function PlansCatalog({ action, ...context }: RowContext & { action: ReactNode }) {
   const { t } = useI18n()
   const plans = catalogOrder(context.overview.plans)
   const { panel } = context.work
@@ -56,6 +57,7 @@ export function PlansCatalog(context: RowContext) {
     >
       <div className="plans-catalog-head">
         <h3 id="plans-catalog-title">{t("people.plans.catalog.title", { count: plans.length })}</h3>
+        {action}
       </div>
       <div className="plans-table-wrap">
         <table className="plans-table" role="table" aria-labelledby="plans-catalog-title" data-compact={compact || undefined}>

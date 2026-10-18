@@ -472,8 +472,9 @@ function detailsOf(key: string): HTMLElement | null {
   return next?.classList.contains("plan-details-row") ? (next as HTMLElement) : null
 }
 
-function headerAction(): HTMLElement {
-  return container.querySelector<HTMLElement>(".heading-action")!
+/** The catalog's head: how many plans there are, and New plan. */
+function catalogHead(): HTMLElement {
+  return container.querySelector<HTMLElement>(".plans-catalog-head")!
 }
 
 /** Someone the assign checklist may list, with the Plan they have now. */
@@ -551,7 +552,7 @@ describe("People's Plans tab", () => {
     expect(calls.some((call) => call.path === "/api/v1/plans")).toBe(false)
   })
 
-  it("is the Plans tab of People, whose sentence and one action follow the tab", async () => {
+  it("is the Plans tab of People, whose sentence follows the tab, with New plan in the catalog's head", async () => {
     await renderPlans(testI18n())
     expect(container.querySelector("h1")?.textContent).toBe("People")
     expect(container.querySelector(".page-intro")?.textContent).toBe(
@@ -560,7 +561,10 @@ describe("People's Plans tab", () => {
     expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Plans")
     expect(element("plans-title").textContent).toBe("Plans")
     expect(element("plans-title").classList.contains("sr-only")).toBe(true)
-    expect([...headerAction().querySelectorAll("button")].map((item) => item.textContent.trim())).toEqual(["New plan"])
+    // The page header has no action on Plans: New plan sits on the list it adds to.
+    expect(container.querySelector(".heading-action")).toBeNull()
+    expect(catalogHead().querySelector("h3")?.textContent).toBe("2 plans")
+    expect([...catalogHead().querySelectorAll("button")].map((item) => item.textContent.trim())).toEqual(["New plan"])
     expect(buttonOrNull("Invite someone", container)).toBeNull()
   })
 
@@ -576,7 +580,7 @@ describe("People's Plans tab", () => {
       "A plan sets how many rules, calendar accounts, and Integration Tokens a person can have, and how soon their calendars sync. Make one, then give it to people or make it the default.",
     )
     expect([...empty.querySelectorAll("button")].map((item) => item.textContent.trim())).toEqual(["New plan"])
-    expect(headerAction().querySelector("button")).toBeNull()
+    expect(container.querySelector(".heading-action")).toBeNull()
     expect(container.querySelector("#plans-catalog")).toBeNull()
   })
 
@@ -994,7 +998,7 @@ describe("A plan's row menu", () => {
     expect(calls.some((call) => call.method === "DELETE" && call.path === "/api/v1/plans/family")).toBe(true)
     expect(toast()).toBe("Family was removed.")
     expect(listed()).toEqual(["free"])
-    expect(document.activeElement).toBe(button("New plan", headerAction()))
+    expect(document.activeElement).toBe(button("New plan", catalogHead()))
   })
 
   it("keeps Remove plan and Keep plan focusable while the removal is on its way, then says why it was refused", async () => {
@@ -1101,7 +1105,7 @@ describe("A plan's panel", () => {
     expect(planRow("free").hasAttribute("data-selected")).toBe(false)
     expect(container.querySelector("[aria-haspopup='menu']")).toBeNull()
     // The panel's footer holds the one primary action, so New plan turns outline.
-    expect(button("New plan", headerAction()).className).not.toContain("bg-primary")
+    expect(button("New plan", catalogHead()).className).not.toContain("bg-primary")
   })
 
   it.each([
@@ -1346,7 +1350,7 @@ describe("Leaving a plan's changes not saved", () => {
 
   it("asks before People's other tabs, or a link to Everyone, leave a new plan", async () => {
     await renderPlans(testI18n(), { plans: overview({ enabled: true, defaultPlan: "free" }) })
-    await click(button("New plan", headerAction()))
+    await click(button("New plan", catalogHead()))
     type(field("plan-new-name"), "Team")
     await settle()
 
@@ -1466,13 +1470,13 @@ describe("Editing a plan", () => {
       expect(waiting.disabled).toBe(false)
       expect(waiting.getAttribute("aria-disabled")).toBe("true")
     }
-    for (const waiting of [nameLink("free"), button("New plan", headerAction()), panelTab("People")]) {
+    for (const waiting of [nameLink("free"), button("New plan", catalogHead()), panelTab("People")]) {
       expect(waiting.getAttribute("aria-disabled")).toBe("true")
     }
 
     // Another plan, New plan, another tab, Close, and Escape change nothing while the save is on its way.
     await click(nameLink("free"))
-    await click(button("New plan", headerAction()))
+    await click(button("New plan", catalogHead()))
     await click(panelTab("People"))
     await click(closeButton())
     await escape(field("plan-family-name"))
@@ -1526,7 +1530,7 @@ describe("A new plan", () => {
 
   it("adds a plan from New plan in the panel, without a key, then closes it with focus on the new plan's name", async () => {
     await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse(added, 201) } })
-    const open = button("New plan", headerAction())
+    const open = button("New plan", catalogHead())
     expect(open.className).toContain("bg-primary")
     await click(open)
     const entries = window.history.length
@@ -1571,7 +1575,7 @@ describe("A new plan", () => {
         "POST /api/v1/plan-assignments": DRY_RUN,
       },
     })
-    await click(button("New plan", headerAction()))
+    await click(button("New plan", catalogHead()))
     type(field("plan-new-name"), "Family Plus")
     reply("GET /api/v1/plans", jsonResponse(overview({ plans: [family, added, free] })))
     await submit(field("plan-new-name").closest("form")!)
@@ -1595,7 +1599,7 @@ describe("A new plan", () => {
 
   it("opens the new plan's People tab through the app once the Plans tab is gone", async () => {
     await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse(added, 201) } })
-    await click(button("New plan", headerAction()))
+    await click(button("New plan", catalogHead()))
     type(field("plan-new-name"), "Family Plus")
     reply("GET /api/v1/plans", jsonResponse(overview({ plans: [family, added, free] })))
     await submit(field("plan-new-name").closest("form")!)
@@ -1610,12 +1614,12 @@ describe("A new plan", () => {
 
   it("returns focus to New plan when the new plan is not listed yet", async () => {
     await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse(added, 201) } })
-    await click(button("New plan", headerAction()))
+    await click(button("New plan", catalogHead()))
     type(field("plan-new-name"), "Family Plus")
     await submit(field("plan-new-name").closest("form")!)
     expect(toast()).toBe("Family Plus was added.")
     expect(panelOrNull()).toBeNull()
-    expect(document.activeElement).toBe(button("New plan", headerAction()))
+    expect(document.activeElement).toBe(button("New plan", catalogHead()))
   })
 
   it("adds the first plan from the empty state, which the catalog then replaces", async () => {
@@ -1644,11 +1648,11 @@ describe("A new plan", () => {
 
   it("closes the new plan's panel on Cancel, returning focus to New plan", async () => {
     await renderPlans(testI18n())
-    await click(button("New plan", headerAction()))
+    await click(button("New plan", catalogHead()))
     await click(button("Cancel", panel()))
     expect(panelOrNull()).toBeNull()
     expect(here()).toBe("/people/plans")
-    expect(document.activeElement).toBe(button("New plan", headerAction()))
+    expect(document.activeElement).toBe(button("New plan", catalogHead()))
   })
 
   it("returns focus to New plan in the empty state once its panel closes", async () => {
@@ -1660,7 +1664,7 @@ describe("A new plan", () => {
 
   it("keeps Save unavailable until each limit has a number or No limit, and says why", async () => {
     await renderPlans(testI18n())
-    await click(button("New plan", headerAction()))
+    await click(button("New plan", catalogHead()))
     type(field("plan-new-name"), "Family Plus")
     await click(limitOption("plan-new-accounts", "Up to"))
     expect(button("Save plan", panel()).getAttribute("aria-disabled")).toBe("true")
@@ -1674,7 +1678,7 @@ describe("A new plan", () => {
     await renderPlans(testI18n(), {
       answers: { "POST /api/v1/plans": refusal(422, "invalid_plan", { reason: "name" }) },
     })
-    await click(button("New plan", headerAction()))
+    await click(button("New plan", catalogHead()))
     type(field("plan-new-name"), "Family Plus")
     await submit(field("plan-new-name").closest("form")!)
     expect(panel().querySelector("[role='alert']")?.textContent).toBe(
@@ -1694,7 +1698,7 @@ describe("A new plan", () => {
     await renderPlans(testI18n(), {
       answers: { "POST /api/v1/plans": refusal(409, "plan_name_taken", { name: "Family plus" }) },
     })
-    await click(button("New plan", headerAction()))
+    await click(button("New plan", catalogHead()))
     type(field("plan-new-name"), " family ")
     await submit(field("plan-new-name").closest("form")!)
     expect(sent("POST", "/api/v1/plans")).toBeUndefined()
@@ -2190,7 +2194,7 @@ describe("Plans in other languages", () => {
     const names = [...dateWords(), family.name, free.name]
     expect(untranslatedText(container, names)).toEqual([])
     await click(closeButton())
-    await click(button(pseudoI18n().t("people.plans.new"), headerAction()))
+    await click(button(pseudoI18n().t("people.plans.new"), catalogHead()))
     expect(untranslatedText(container, names)).toEqual([])
   })
 

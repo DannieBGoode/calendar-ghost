@@ -1039,7 +1039,7 @@ describe("People page", () => {
     expect(document.title).toBe(title)
   })
 
-  it("says what each tab is for, and offers its one action, beside the page title", async () => {
+  it("says what each tab is for, and offers Invite someone beside the page title, but not on Plans", async () => {
     await renderPeople(testI18n(), { answers: { "GET /api/v1/plans": jsonResponse(PLANS) } })
     const intro = () => container.querySelector(".page-intro")?.textContent
     const actions = () => [...container.querySelectorAll(".heading-action button")].map((item) => item.textContent.trim())
@@ -1052,7 +1052,8 @@ describe("People page", () => {
     expect(intro()).toBe(
       "Plans set how much each person can use and how soon their calendars sync.",
     )
-    expect(actions()).toEqual(["New plan"])
+    // New plan sits in the catalog's head, on the list it adds to.
+    expect(actions()).toEqual([])
     await click(tabs[1]!)
     expect(actions()).toEqual(["Invite someone"])
   })

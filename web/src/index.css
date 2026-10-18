@@ -2014,7 +2014,13 @@ p {
   container: plans-catalog / inline-size;
 }
 
+/* How many Plans there are, and New plan beside them, on the list it adds to. */
 .plans-catalog-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
   padding: 1.25rem var(--panel-padding) 0.5rem;
 }
 

@@ -17,7 +17,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   them, and names the default Plan; its sentence says what a limit does, or what the switch would
   do, and never repeats a count. A table then compares the Plans by limit, with how many people
   have each and how many of them are over a limit, each linking to them under **Everyone**; its
-  footnote says these counts include administrators, who are never limited.
+  footnote says these counts include administrators, who are never limited. **New plan** sits in
+  the table's head, beside how many Plans there are, or in the empty state before the first Plan.
   Selecting a Plan, anywhere on its row, opens it in a side panel beside the table, sized so its
   **Save** is in view, at its own address
   (`/people/plans/{key}`, its People tab under it, and `/people/plans/new` for New plan), never a

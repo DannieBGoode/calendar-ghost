@@ -89,8 +89,6 @@ function PeopleContent({
   const now = useNow()
   // Counts arrivals at the list from elsewhere on this page, each of which starts at its heading.
   const [listArrivals, setListArrivals] = useState(0)
-  // Where a tab may put its own action beside the page title.
-  const [headingAction, setHeadingAction] = useState<HTMLDivElement | null>(null)
   useEffect(() => {
     document.title = documentTitle(i18n, i18n.t(TAB_TITLES[tab]))
   }, [i18n, tab])
@@ -126,8 +124,8 @@ function PeopleContent({
     invitations.invite.mutate()
   }
 
-  // The sentence and the one action follow the tab: Plans says what Plans do, and offers New plan
-  // there, from the Plans tab itself, once a Plan exists.
+  // The sentence follows the tab. Invite someone sits beside it, but not on Plans, whose New plan
+  // sits on the list it adds to.
   const plans = tab === "plans"
   return (
     <div className="page-section people-page">
@@ -136,14 +134,14 @@ function PeopleContent({
           <h1>{t("people.page.title")}</h1>
           <p className="page-intro">{t(plans ? "people.plans.pageIntro" : "people.page.intro")}</p>
         </div>
-        <div className="heading-action" ref={setHeadingAction}>
-          {!plans && (
+        {!plans && (
+          <div className="heading-action">
             <Button id="invite-someone" type="button" disabled={invitations.invite.isPending} onClick={inviteSomeone}>
               <UserPlus aria-hidden="true" />
               {invitations.invite.isPending ? t("people.invitations.inviting") : t("people.invitations.invite")}
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       <PeopleTabs current={tab} invitations={invitations} onOpen={openTab} />
       {tab === "everyone" && (
@@ -160,7 +158,6 @@ function PeopleContent({
       {plans && (
         <PlansSection
           currentUserId={currentUserId}
-          headingAction={headingAction}
           onShowPeople={showPeople}
           onOpenPerson={onOpenPerson}
           onOpenPlan={onOpenPlan}

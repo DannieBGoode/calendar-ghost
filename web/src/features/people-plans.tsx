@@ -1,6 +1,5 @@
 import { AlertCircle, Plus, RefreshCw } from "lucide-react"
 import { useEffect, type ReactNode } from "react"
-import { createPortal } from "react-dom"
 
 import { GhostMark } from "@/components/ghost-mark"
 import { Button } from "@/components/ui/button"
@@ -19,7 +18,6 @@ import { usePlans, type PlanCommands } from "@/lib/use-plans"
 type PlansContext = {
   /** The reader, whom Assign people marks "You". */
   currentUserId: string
-  headingAction: HTMLElement | null
   /** Opens Everyone at the people a link names. */
   onShowPeople: ShowPeople
   /** Opens one person's page, as a link to someone who has a Plan does. */
@@ -31,11 +29,11 @@ type PlansContext = {
 }
 
 /**
- * People's Plans tab: the status card with the one switch first, then the catalog of Plans, or,
- * with no Plan yet, one empty state whose one action is New plan; and beside them, at its own
- * address, a Plan's side panel. Once a Plan exists, New plan sits beside the page title, in
- * `headingAction`. It shows only while People does, so never under Only me, where the only person
- * administers and no Plan limits an administrator. Plans are read only once it opens.
+ * People's Plans tab: the status card with the one switch first, then the catalog of Plans, with
+ * New plan in its head, or, with no Plan yet, one empty state whose one action is New plan; and
+ * beside them, at its own address, a Plan's side panel. It shows only while People does, so never
+ * under Only me, where the only person administers and no Plan limits an administrator. Plans are
+ * read only once it opens.
  */
 export function PlansSection(context: PlansContext) {
   const { t } = useI18n()
@@ -121,7 +119,6 @@ function PlansContent({ overview, commands, ...context }: PlansContext & { overv
   const newPlan = <NewPlanButton outline={panel !== null} work={work} />
   return (
     <div className="plans-layout" data-panel={panel !== null || undefined}>
-      {context.headingAction && !empty && createPortal(newPlan, context.headingAction)}
       <div className="plans-main">
         <PlansStatus
           overview={overview}
@@ -133,7 +130,14 @@ function PlansContent({ overview, commands, ...context }: PlansContext & { overv
         {empty ? (
           <NoPlans action={newPlan} />
         ) : (
-          <PlansCatalog overview={overview} commands={commands} work={work} onChange={onChange} onShowPeople={context.onShowPeople} />
+          <PlansCatalog
+            overview={overview}
+            commands={commands}
+            work={work}
+            action={newPlan}
+            onChange={onChange}
+            onShowPeople={context.onShowPeople}
+          />
         )}
       </div>
       {panel && <PlanPanel panel={panel} overview={overview} commands={commands} work={work} {...context} />}
