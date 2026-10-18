@@ -801,9 +801,11 @@ describe("The catalog", () => {
     expect(planRow("free").querySelectorAll("th").length).toBe(1)
     expect(cells("family")).toEqual(["Family", "5", "3", "2", "Instant", "4 people", ""])
     expect(cells("hourly")).toEqual(["Hourly", "Unlimited", "Unlimited", "Unlimited", "Every hour", "Nobody", ""])
-    expect(cell("free", "tokens").getAttribute("data-muted")).toBe("true")
+    // A limit is ink, None too, since it is a limit of zero; no limit is muted, as Nobody is.
+    expect(cell("free", "tokens").hasAttribute("data-muted")).toBe(false)
     expect(cell("free", "rules").hasAttribute("data-muted")).toBe(false)
     expect(cell("hourly", "rules").getAttribute("data-muted")).toBe("true")
+    expect(cell("hourly", "people").querySelector(".plan-nobody")).not.toBeNull()
     expect(cell("family", "speed").querySelector("svg[aria-hidden='true']")).not.toBeNull()
     expect(cell("family", "rules").getAttribute("data-label")).toBe("Active rules")
     expect(catalog.querySelector(".plans-catalog-note")?.textContent).toBe(

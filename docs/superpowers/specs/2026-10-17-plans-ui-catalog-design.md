@@ -123,8 +123,9 @@ empty state.
    opens the same panel, as Activity's rows do. Names and People counts read as ink, underlined
    only under the pointer or keyboard focus. The Plan column takes what the fixed columns leave;
    counts are right-aligned in tabular numerals under right-aligned headings that wrap rather than
-   overhang; "Unlimited" and "None" are muted. Sync speed is "Instant" with a lightning icon or
-   "Every 5 min" with a clock, on the row's line of text, a little apart from the counts. People is
+   overhang; a limit reads in ink, numbers and "None" alike, and "Unlimited" and "Nobody" are
+   muted. Sync speed is "Instant" with a lightning icon or "Every 5 min" with a clock, on the row's
+   line of text, a little apart from the counts. People is
    a link, "2 people", to Everyone filtered by the Plan, with a chip "1 over a limit" in Attention
    Ochre with an icon on the same line that links to the same list narrowed to people over ("1
    would be over", neutral, while Plans are off). Rows are 48 px. A footnote, its icon on its first

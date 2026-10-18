@@ -201,7 +201,7 @@ function NameCell({ plan, selected, work }: { plan: PlanSummary; selected: boole
   )
 }
 
-/** A Plan's counts in tabular numerals, with "Unlimited" and "None" muted. */
+/** A Plan's counts in tabular numerals, with "Unlimited" muted. */
 function CountCells({ plan }: { plan: PlanSummary }) {
   const i18n = useI18n()
   return COUNTS.map(({ column, label, limit }) => {

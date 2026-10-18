@@ -20,12 +20,15 @@ export function overPeople(plans: readonly PlanSummary[]): number {
   return plans.reduce((total, plan) => total + plan.over_people, 0)
 }
 
-/** One count in a Plan's column: its number, or, muted, "Unlimited" or "None" for a Plan that includes none. */
+/**
+ * One count in a Plan's column: a limit in ink, its number or "None" for a Plan that includes none,
+ * or, muted, "Unlimited" for no limit.
+ */
 export type CountCell = { text: string; muted: boolean }
 
 export function countCell({ t, format }: I18n, value: number | null): CountCell {
   if (value === null) return { text: t("people.plans.catalog.unlimited"), muted: true }
-  if (value === 0) return { text: t("people.plans.catalog.none"), muted: true }
+  if (value === 0) return { text: t("people.plans.catalog.none"), muted: false }
   return { text: format.number(value), muted: false }
 }
 

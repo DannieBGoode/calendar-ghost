@@ -97,10 +97,10 @@ describe("catalogOrder", () => {
 })
 
 describe("countCell", () => {
-  it("says a count as a number, no limit as Unlimited, and zero as None, the last two muted", () => {
+  it("says a count as a number, no limit as Unlimited, muted, and zero as None, a limit in ink as numbers are", () => {
     expect(countCell(i18n, 1200)).toEqual({ text: "1,200", muted: false })
     expect(countCell(i18n, null)).toEqual({ text: "Unlimited", muted: true })
-    expect(countCell(i18n, 0)).toEqual({ text: "None", muted: true })
+    expect(countCell(i18n, 0)).toEqual({ text: "None", muted: false })
   })
 })
 

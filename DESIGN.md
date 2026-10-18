@@ -356,7 +356,8 @@ disabled item dims its label and icon; the reason it gives stays in readable mut
 When people compare like things, such as Plans, a data table gives each comparable value a column:
 a header row, one row per thing headed by its name (a row header, so a screen reader names the
 thing as it moves down a column) as a link, counts right-aligned in tabular numerals under
-right-aligned headings that wrap rather than overhang, "Unlimited" and "None" in muted text, chips
+right-aligned headings that wrap rather than overhang, a limit in ink, numbers and "None" alike,
+"Unlimited" and "Nobody", which have nothing to count, in muted text, chips
 beside a value they qualify, and a More actions menu whose items carry descriptions and say why an
 item is disabled. A press anywhere else on a row opens what its name opens, as Activity's rows do;
 the name stays the row's one keyboard target. A link that is a cell's whole content reads as ink,
