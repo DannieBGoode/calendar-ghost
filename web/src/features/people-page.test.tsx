@@ -248,7 +248,7 @@ function showPeople(i18n: I18n, queryClient: QueryClient, visit = 0) {
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
             <AppToasts>
-              <PeopleView key={visit} tab={tab} notice={null} onOpenPerson={openPerson} />
+              <PeopleView key={visit} tab={tab} notice={null} onOpenPerson={openPerson} onOpenPlan={vi.fn()} />
             </AppToasts>
           </QueryClientProvider>
         </ThemeProvider>

@@ -12,7 +12,7 @@ import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
 import { api } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
-import { appPathForPeopleTab, type OpenPerson, type PeopleTab } from "@/lib/navigation"
+import { appPathForPeopleTab, type OpenPerson, type OpenPlan, type PeopleTab } from "@/lib/navigation"
 import { leaveThen } from "@/lib/leave-guard"
 import { DEFAULT_PEOPLE_QUERY, peoplePath, peopleSearch, type PeopleFilter } from "@/lib/people-query"
 import { useNow } from "@/lib/use-now"
@@ -33,23 +33,37 @@ const TAB_TITLES: Record<PeopleTab, MessageKey> = {
  * they own. People comes first, with Installation Health above them; the invitations still
  * waiting, and the Plans that limit people, have tabs of their own. The app offers this page only
  * while the Registration Policy lets people join. `notice` says what just happened elsewhere, such
- * as deleting someone from their own page.
+ * as deleting someone from their own page; `panelFocus` moves focus to the Plan panel the address
+ * opens, as a toast's next step does from elsewhere.
  */
 export function PeopleView({
   tab,
   notice,
   onOpenPerson,
+  onOpenPlan,
+  panelFocus = false,
 }: {
   tab: PeopleTab
   notice: string | null
   onOpenPerson: OpenPerson
+  onOpenPlan: OpenPlan
+  panelFocus?: boolean
 }) {
   const { t } = useI18n()
   const access = usePeopleAccess()
   const session = useQuery({ queryKey: ["session"], queryFn: api.session })
   const user = session.data?.user
   if (access !== "open" || !user) return <PageSkeleton label={t("people.page.loading")} />
-  return <PeopleContent initialTab={tab} currentUserId={user.id} notice={notice} onOpenPerson={onOpenPerson} />
+  return (
+    <PeopleContent
+      initialTab={tab}
+      currentUserId={user.id}
+      notice={notice}
+      onOpenPerson={onOpenPerson}
+      onOpenPlan={onOpenPlan}
+      panelFocus={panelFocus}
+    />
+  )
 }
 
 function PeopleContent({
@@ -57,11 +71,15 @@ function PeopleContent({
   currentUserId,
   notice,
   onOpenPerson,
+  onOpenPlan,
+  panelFocus,
 }: {
   initialTab: PeopleTab
   currentUserId: string
   notice: string | null
   onOpenPerson: OpenPerson
+  onOpenPlan: OpenPlan
+  panelFocus: boolean
 }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -145,6 +163,8 @@ function PeopleContent({
           headingAction={headingAction}
           onShowPeople={showPeople}
           onOpenPerson={onOpenPerson}
+          onOpenPlan={onOpenPlan}
+          panelFocus={panelFocus}
         />
       )}
       <p className="sr-only" role="status">

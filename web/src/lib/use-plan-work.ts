@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { leaveThen } from "@/lib/leave-guard"
 import {
@@ -6,13 +6,18 @@ import {
   appPathForPeopleTab,
   appPathForPlanPanel,
   planCopyFromSearch,
+  type OpenPlan,
   type PlanPanel,
   type PlanPanelTab,
 } from "@/lib/navigation"
 import type { PlanCommands } from "@/lib/use-plans"
 
-/** Where focus returns once the panel closes: a Plan's name in the catalog, or New plan with null. */
-export type FocusReturn = { plan: string | null }
+/**
+ * Where focus returns once the panel closes: a Plan's name in the catalog, or New plan with null,
+ * and what follows once it has, such as saying what a save did, so the result's toast returns
+ * focus there too.
+ */
+export type FocusReturn = { plan: string | null; afterwards?: (() => void) | undefined }
 
 function samePanel(a: PlanPanel, b: PlanPanel): boolean {
   return a.plan === b.plan && a.tab === b.tab
@@ -30,13 +35,20 @@ function panelAtAddress(): PlanPanel | null {
  * focus to its title; closing it returns to the Plans tab's address, and focus to the Plan's name
  * or New plan. While a Plan command is on its way, nothing opens or closes, so its answer has a
  * place to show. Opening something forgets the refusals of the last. While the open panel has
- * changes not saved, opening, switching, or closing it asks first (`leaveThen`).
+ * changes not saved, opening, switching, or closing it asks first (`leaveThen`); once they are
+ * saved, the panel closes without asking. What outlives the Plans tab, such as a toast, opens a
+ * panel through `elsewhere` once the tab is gone; arriving so (`arrivalFocus`), the panel the
+ * address opens takes focus as from the page, while one opened by its address alone does not.
  */
-export function usePlanWork({ setting, define, change, remove, assign }: PlanCommands) {
+export function usePlanWork(
+  { setting, define, change, remove, assign }: PlanCommands,
+  elsewhere: OpenPlan,
+  arrivalFocus: boolean,
+) {
   const [panel, setPanel] = useState(panelAtAddress)
   const [copyOf, setCopyOf] = useState(() => (panel?.plan === null ? planCopyFromSearch(window.location.search) : null))
   const [removing, setRemoving] = useState<string | null>(null)
-  const [titleFocus, setTitleFocus] = useState(false)
+  const [titleFocus, setTitleFocus] = useState(arrivalFocus && panel !== null)
   const [focusReturn, setFocusReturn] = useState<FocusReturn | null>(null)
   const busy = [setting, define, change, remove, assign].some((command) => command.isPending)
 
@@ -87,6 +99,15 @@ export function usePlanWork({ setting, define, change, remove, assign }: PlanCom
     })
   }
 
+  // The latest `openPanel` while the Plans tab shows, and null once it is gone.
+  const opener = useRef<typeof openPanel | null>(null)
+  useEffect(() => {
+    opener.current = openPanel
+    return () => {
+      opener.current = null
+    }
+  })
+
   return {
     panel,
     copyOf,
@@ -97,14 +118,22 @@ export function usePlanWork({ setting, define, change, remove, assign }: PlanCom
     openPanel,
     openTab,
     closePanel,
-    /** A new Plan was saved: its panel moves to the Plan's own address, with focus on its title. */
-    showAdded: (key: string) => {
-      const next: PlanPanel = { plan: key, tab: "limits" }
-      window.history.replaceState(null, "", appPathForPlanPanel(next))
-      setPanel(next)
+    /**
+     * A Plan was saved, or added: its panel closes without asking, as nothing is left to discard,
+     * at the Plans tab's address in place of the panel's, so Back never returns to an empty New
+     * plan. Focus returns to the Plan's name, then `afterwards` runs.
+     */
+    closeSaved: (plan: string, afterwards?: () => void) => {
+      window.history.replaceState(null, "", appPathForPeopleTab("plans"))
+      setFocusReturn({ plan, afterwards })
+      setPanel(null)
       setCopyOf(null)
-      setTitleFocus(true)
     },
+    /**
+     * Opens a panel from what may outlive the Plans tab, such as a toast's next step: in place,
+     * as from the page, while the tab shows, and through `elsewhere` once it is gone.
+     */
+    openLater: useCallback((next: PlanPanel) => (opener.current ?? elsewhere)(next), [elsewhere]),
     /** Asks, under the Plan's row, before removing it. */
     openRemoval: (key: string) => {
       if (busy) return

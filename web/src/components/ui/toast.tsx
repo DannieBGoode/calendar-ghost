@@ -78,13 +78,14 @@ function useHold() {
 
 /**
  * Shows page-level results, one at a time, at the bottom of the window: an icon, the result, Undo
- * when it can be reversed, and Close. Results reach screen readers through one polite live region,
- * always present so the first result is announced too; the buttons sit outside it, so they are not
- * read out with each result. A toast never takes focus. One with Undo stays until it is closed or
- * the next result replaces it, so Undo is still there when a keyboard reaches it; one without
- * leaves after six seconds, counted again each time the pointer leaves it or focus leaves it.
- * While one shows, the page reserves its space. When it closes with focus inside it, by Undo,
- * Close, or Escape, focus returns to the control that had it when the result appeared.
+ * when it can be reversed or the one next step it leads to, and Close. Results reach screen
+ * readers through one polite live region, always present so the first result is announced too;
+ * the buttons sit outside it, so they are not read out with each result. A toast never takes
+ * focus. One with Undo, or a next step, stays until it is closed or the next result replaces it,
+ * so its action is still there when a keyboard reaches it; one without leaves after six seconds,
+ * counted again each time the pointer leaves it or focus leaves it. While one shows, the page
+ * reserves its space. When it closes with focus inside it, by its action, Close, or Escape, focus
+ * returns to the control that had it when the result appeared.
  */
 function ToastProvider({ closeLabel, children }: { closeLabel: string; children: ReactNode }) {
   const [shown, setShown] = useState<Shown | null>(null)
@@ -150,16 +151,11 @@ function ToastProvider({ closeLabel, children }: { closeLabel: string; children:
             {shown && <p key={shown.id}>{shown.toast.message}</p>}
           </div>
           {shown?.toast.action && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 pointer-coarse:h-11"
+            <ToastAction
+              action={shown.toast.action}
               onClick={() => finish(shown, shown.toast.action?.onSelect)}
               onKeyDown={(event) => closeOnEscape(event, shown)}
-            >
-              <Undo2 aria-hidden="true" />
-              {shown.toast.action.label}
-            </Button>
+            />
           )}
           {shown && (
             <Button
@@ -177,6 +173,24 @@ function ToastProvider({ closeLabel, children }: { closeLabel: string; children:
         </div>
       </div>
     </ToastContext.Provider>
+  )
+}
+
+/** The toast's one action: Undo, with its icon, or the next step it leads to, with its own. */
+function ToastAction({
+  action,
+  onClick,
+  onKeyDown,
+}: {
+  action: NonNullable<Toast["action"]>
+  onClick: () => void
+  onKeyDown: (event: KeyboardEvent) => void
+}) {
+  return (
+    <Button variant="outline" size="sm" className="shrink-0 pointer-coarse:h-11" onClick={onClick} onKeyDown={onKeyDown}>
+      {action.icon ?? <Undo2 aria-hidden="true" />}
+      {action.label}
+    </Button>
   )
 }
 

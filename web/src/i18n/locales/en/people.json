@@ -743,6 +743,7 @@
       "off": "Plans are off. Nobody is limited.",
       "defaultChanged": "{name} is the default plan now.",
       "defined": "{name} was added.",
+      "assign": "Assign people",
       "changed": "{name} was saved.",
       "removed": "{name} was removed."
     },

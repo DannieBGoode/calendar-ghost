@@ -77,9 +77,10 @@ function useRefusal(error: unknown, draft: PlanDraft, form: RefObject<HTMLFormEl
  * for no key: the server makes a new Plan's from its name. While a save is on its way, every
  * control keeps its focus but ignores changes; a refusal moves focus to the field it names, and so
  * does a name another Plan already has, before anything is sent. A limit lower than the people on
- * the Plan use says how many of them it would leave with more than it allows. While changes are
- * not saved, leaving the form in any way, Cancel, Close, Escape, another Plan, a tab, another page,
- * or Back, first asks in the footer whether to discard them.
+ * the Plan use says how many of them it would leave with more than it allows. Save on a Plan with
+ * nothing changed sends nothing and leaves as Cancel does. While changes are not saved, leaving the
+ * form in any way, Cancel, Close, Escape, another Plan, a tab, another page, or Back, first asks in
+ * the footer whether to discard them.
  */
 export function PlanEditor({
   plan,
@@ -145,6 +146,11 @@ export function PlanEditor({
     event.preventDefault()
     const payload = payloadOf(draft)
     if (!payload || pending) return
+    // A Plan with nothing changed has nothing to save, so Save only closes the form.
+    if (plan !== null && changes === 0) {
+      onCancel()
+      return
+    }
     const taken = nameRefusal(draft, others)
     if (taken) {
       refusal.found(taken)

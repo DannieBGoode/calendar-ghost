@@ -1,4 +1,4 @@
-import { X } from "lucide-react"
+import { UserPlus, X } from "lucide-react"
 import { useEffect, useRef, type KeyboardEvent } from "react"
 
 import { PageTabs } from "@/components/page-tabs"
@@ -108,13 +108,18 @@ function MissingPlan({ work }: { work: PlanWorkControls }) {
   )
 }
 
-/** The title, which takes focus as the panel opens from the page, and one line under it. */
+/**
+ * The title, which takes focus as the panel opens from the page, and one line under it. Taking
+ * focus brings it into view when it is not, as when the panel takes the catalog's place on a
+ * narrow screen scrolled down to a Plan's row.
+ */
 function PanelHead({ title, meta, work }: { title: string; meta: string | null; work: PlanWorkControls }) {
   const heading = useRef<HTMLHeadingElement>(null)
   const { titleFocus, titleFocused } = work
   useEffect(() => {
     if (!titleFocus) return
     heading.current?.focus({ preventScroll: true })
+    heading.current?.scrollIntoView({ block: "nearest" })
     titleFocused()
   }, [titleFocus, titleFocused])
   return (
@@ -157,7 +162,10 @@ function offeredWith(offered: SyncInterval[], own: SyncInterval): SyncInterval[]
   return offered.includes(own) ? offered : [...offered, own]
 }
 
-/** A Plan's Limits: its editor, which stays open once saved, saying so in a toast. */
+/**
+ * A Plan's Limits: its editor, which closes once saved, back on the Plan's row, saying so in a
+ * toast. Save with nothing changed only closes it.
+ */
 function EditPlanForm({ plan, overview, commands, work }: PanelProps & { plan: PlanSummary }) {
   const i18n = useI18n()
   const toasts = useToast()
@@ -173,7 +181,12 @@ function EditPlanForm({ plan, overview, commands, work }: PanelProps & { plan: P
       onSave={(payload) =>
         change.mutate(
           { key: plan.key, payload },
-          { onSuccess: (saved) => toasts.show({ message: i18n.t("people.plans.results.changed", { name: saved.name }) }) },
+          {
+            onSuccess: (saved) =>
+              work.closeSaved(plan.key, () =>
+                toasts.show({ message: i18n.t("people.plans.results.changed", { name: saved.name }) }),
+              ),
+          },
         )
       }
       onCancel={work.closePanel}
@@ -183,7 +196,8 @@ function EditPlanForm({ plan, overview, commands, work }: PanelProps & { plan: P
 
 /**
  * New plan's editor: empty with no limits, or, from Duplicate, with another Plan's limits and a
- * name of its own, checked like any name. Once added, the panel moves to the Plan's own address.
+ * name of its own, checked like any name. Once added, the panel closes, back on the new Plan's
+ * row, and a toast says so with Assign people, which opens the Plan's People tab.
  */
 function NewPlanForm({ copied, overview, commands, work }: PanelProps & { copied: PlanSummary | undefined }) {
   const { t } = useI18n()
@@ -202,10 +216,17 @@ function NewPlanForm({ copied, overview, commands, work }: PanelProps & { copied
       error={define.error}
       onSave={(payload) =>
         define.mutate(payload, {
-          onSuccess: (plan) => {
-            work.showAdded(plan.key)
-            toasts.show({ message: t("people.plans.results.defined", { name: plan.name }) })
-          },
+          onSuccess: (plan) =>
+            work.closeSaved(plan.key, () =>
+              toasts.show({
+                message: t("people.plans.results.defined", { name: plan.name }),
+                action: {
+                  label: t("people.plans.results.assign"),
+                  icon: <UserPlus aria-hidden="true" />,
+                  onSelect: () => work.openLater({ plan: plan.key, tab: "people" }),
+                },
+              }),
+            ),
         })
       }
       onCancel={work.closePanel}

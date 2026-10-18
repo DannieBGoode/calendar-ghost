@@ -58,6 +58,8 @@ export type ViewOptions = {
   /** An attention notice stays until dismissed and offers a way to review what happened. */
   noticeTone?: "attention" | undefined
   createRule?: boolean
+  /** Moves focus to the Plan panel the address opens, as opening it from the Plans tab does. */
+  planPanelFocus?: boolean
   search?: string
   /** The Settings tab to open, such as Connections for a link about Google accounts. */
   settingsTab?: SettingsTab
@@ -68,6 +70,8 @@ export type OpenRule = (ruleId: string, options?: ViewOptions) => void
 export type OpenRulePreview = (ruleId: string) => void
 export type OpenSettingsTab = (tab: SettingsTab) => void
 export type OpenPerson = (personId: string) => void
+/** Opens a Plan's side panel on People's Plans tab from anywhere, as a new arrival there. */
+export type OpenPlan = (panel: PlanPanel) => void
 
 export function activitySearch(ruleId: string): string {
   return `?rule=${encodeURIComponent(ruleId)}`

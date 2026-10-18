@@ -2494,8 +2494,10 @@ p {
   padding: 0 1.25rem 1rem;
 }
 
-/* The Plan's name as an object title, between the page title and section titles. */
+/* The Plan's name as an object title, between the page title and section titles. Brought into
+   view as it takes focus, it keeps the panel's Close in view above it too. */
 .plan-panel-head h3 {
+  scroll-margin-top: 3rem;
   font-size: 1.25rem;
   font-weight: 650;
   line-height: 1.3;

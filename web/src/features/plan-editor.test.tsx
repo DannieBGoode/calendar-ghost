@@ -9,6 +9,7 @@ import { pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
 import { ApiError, type PlanSummary, type SyncInterval } from "@/lib/api"
 import { leaveThen } from "@/lib/leave-guard"
+import { draftOf } from "@/lib/plan-draft"
 
 import { PlanEditor } from "./plan-editor"
 
@@ -196,6 +197,7 @@ function refusal(code: string, params: Record<string, string | number> = {}): Ap
 /** Saves, then answers the save with `error`, as the Plans tab does. */
 function refuse(error: unknown, plan: PlanSummary | null = family) {
   submit()
+  expect(onSave).toHaveBeenCalled()
   show({ plan, pending: true, error: null })
   show({ plan, pending: false, error })
 }
@@ -453,6 +455,7 @@ describe("PlanEditor", () => {
 
   it("keeps every control focusable while it saves, and ignores them until it ends", () => {
     edit()
+    click(speed("5_minutes"))
     const save = button("Save plan")
     act(() => save.focus())
     submit()
@@ -477,19 +480,58 @@ describe("PlanEditor", () => {
 
     type(field("plan-family-name"), "Other")
     click(option("plan-family-rules", "No limit"))
-    click(speed("5_minutes"))
+    click(speed("instant"))
     click(button("Cancel"))
     submit()
     expect(field("plan-family-name").value).toBe("Family")
     expect(option("plan-family-rules", "No limit").checked).toBe(false)
-    expect(speed("instant").checked).toBe(true)
+    expect(speed("5_minutes").checked).toBe(true)
     expect(onCancel).not.toHaveBeenCalled()
     expect(onSave).toHaveBeenCalledTimes(1)
 
-    show({ plan: family, pending: false, error: null })
+    // Saved: the Plan now has what was sent, so nothing is left to lose.
+    show({ plan: { ...family, limits: { ...family.limits, sync_interval: "5_minutes" } }, pending: false, error: null })
     expect(save.getAttribute("aria-disabled")).toBeNull()
     click(button("Cancel"))
     expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+
+  it("only leaves on Save when a plan has nothing changed, sending nothing", () => {
+    edit()
+    submit()
+    expect(onSave).not.toHaveBeenCalled()
+    expect(onCancel).toHaveBeenCalledTimes(1)
+
+    // Changed back to what it has saved, it has nothing to send either.
+    type(field("plan-family-name"), "Family Large")
+    type(field("plan-family-name"), "Family")
+    submit()
+    expect(onSave).not.toHaveBeenCalled()
+    expect(onCancel).toHaveBeenCalledTimes(2)
+  })
+
+  it("saves a new plan that starts as a copy even with nothing changed", () => {
+    root ??= createRoot(container)
+    act(() => {
+      root?.render(
+        <StaticI18nProvider i18n={i18n}>
+          <PlanEditor
+            plan={null}
+            start={{ ...draftOf(family, ["instant", "5_minutes"]), name: "Family copy" }}
+            enabled
+            others={["Family"]}
+            intervals={["instant", "5_minutes"]}
+            pending={false}
+            error={null}
+            onSave={onSave}
+            onCancel={onCancel}
+          />
+        </StaticI18nProvider>,
+      )
+    })
+    submit()
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ name: "Family copy", limits: family.limits })
+    expect(onCancel).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -507,6 +549,7 @@ describe("PlanEditor", () => {
     ],
   ])("moves focus to the field a refusal names, and shows why under it", (error, refusedField, reason) => {
     edit()
+    type(field("plan-family-rules"), "6")
     act(() => button("Save plan").focus())
     refuse(error)
 
@@ -572,6 +615,7 @@ describe("PlanEditor", () => {
     [new TypeError("Failed to fetch"), "The browser could not reach Calendar Ghost."],
   ])("shows a refusal that names no field at the foot of the form", (error, reason) => {
     edit()
+    type(field("plan-family-rules"), "6")
     act(() => button("Save plan").focus())
     refuse(error)
     expect([...form().querySelectorAll("[role='alert']")].map((alert) => alert.textContent)).toEqual([reason])
@@ -581,6 +625,7 @@ describe("PlanEditor", () => {
 
   it("clears a refusal once its field changes, and keeps it while others do", () => {
     edit()
+    type(field("plan-family-rules"), "6")
     refuse(refusal("invalid_plan", { reason: "name" }))
     type(field("plan-family-rules"), "4")
     expect(field("plan-family-name").getAttribute("aria-invalid")).toBe("true")

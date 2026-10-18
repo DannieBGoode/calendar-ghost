@@ -166,7 +166,15 @@ save. Nobody loses anything they already have."
   focus.
 - **New plan** opens the same panel titled "New plan", with no People tab, an empty name, every
   count at No limit, and Instant; Duplicate opens it with the Plan's limits and the name "Free
-  copy", checked like any name. A saved new Plan's panel moves to its own address.
+  copy", checked like any name.
+- **Saving** closes the panel once the server answers, without asking, since nothing is left to
+  discard. `/people/plans` replaces the panel's address, so Back never returns to an empty New
+  plan, and focus goes to the Plan's name in the table, or to New plan while a new Plan is not
+  listed yet. A toast says what happened: "Free was saved.", or, for a new Plan or a duplicate,
+  "Free was added." with Assign people, which opens the Plan's People tab with focus on the
+  panel's title, and stays until it is closed or replaced. Save with nothing changed only closes
+  the panel. A refusal keeps it open, and changes not saved still ask before it closes. (Amended
+  on 2026-10-17 after the owner's review; a saved Plan's panel used to stay open.)
 
 ### Plan panel: People
 
@@ -275,8 +283,9 @@ behavior and roles, and DESIGN.md describes them:
 - **Radio cards:** a radio group whose options carry a title, an icon, and a description.
 - **Checkbox,** with a mixed state for the header.
 - **Meter** (`role="meter"` with `aria-valuetext`, such as "2 of 1, over the limit").
-- **Toast** with one polite live region, an optional Undo, and no timeout shorter than a person
-  needs: it stays until closed or replaced.
+- **Toast** with one polite live region, an optional Undo or one next step, such as Assign people
+  for a Plan just added, and no timeout shorter than a person needs: it stays until closed or
+  replaced.
 - **Popover** for the Change plan chooser: it takes focus, and Escape or Cancel returns it.
 
 The side panel reuses Activity's layout and `DetailToolbar`; the row menu reuses `OverflowMenu`;

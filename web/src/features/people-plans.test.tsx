@@ -11,6 +11,7 @@ import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
 import type { OverLimit, PeoplePage, PersonRow, PlanSummary, PlansOverview, Registration, SessionStatus } from "@/lib/api"
+import type { PlanPanel } from "@/lib/navigation"
 
 import { PeopleView } from "./people-page"
 
@@ -183,6 +184,8 @@ let root: Root | null = null
 let address: string
 /** The people whose pages a link opened, by id. */
 let opened: string[] = []
+/** The Plan panels the app was asked to open, from elsewhere than the Plans tab. */
+let openedPlans: PlanPanel[] = []
 
 function page() {
   return window as typeof window & { happyDOM: { setURL: (url: string) => void } }
@@ -193,6 +196,7 @@ beforeEach(() => {
   document.body.append(container)
   address = window.location.href
   opened = []
+  openedPlans = []
   page().happyDOM.setURL(`${ORIGIN}/people/plans`)
 })
 
@@ -214,7 +218,8 @@ async function settle(times = 8) {
   }
 }
 
-async function renderPlans(i18n: I18n, scenario: Scenario = {}) {
+/** How People was arrived at: `panelFocus` as a toast's next step opens a Plan's panel from elsewhere. */
+async function renderPlans(i18n: I18n, scenario: Scenario = {}, { panelFocus = false } = {}) {
   serve(scenario)
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -224,7 +229,13 @@ async function renderPlans(i18n: I18n, scenario: Scenario = {}) {
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
             <AppToasts>
-              <PeopleView tab="plans" notice={null} onOpenPerson={(id) => opened.push(id)} />
+              <PeopleView
+                tab="plans"
+                notice={null}
+                onOpenPerson={(id) => opened.push(id)}
+                onOpenPlan={(panel) => openedPlans.push(panel)}
+                panelFocus={panelFocus}
+              />
             </AppToasts>
           </QueryClientProvider>
         </ThemeProvider>
@@ -298,6 +309,11 @@ function sentAll(method: string, path: string): unknown[] {
 /** The page-level result shown last, as the toast's live region says it. */
 function toast(): string | null | undefined {
   return container.querySelector("[role='status'][aria-atomic]")?.textContent
+}
+
+/** The toast's own button, such as Undo or Assign people. */
+function toastButton(name: string): HTMLButtonElement {
+  return button(name, container.querySelector("[role='status'][aria-atomic]")!.parentElement!)
 }
 
 function statusCard(): HTMLElement {
@@ -1066,11 +1082,23 @@ describe("A plan's panel", () => {
     expect(document.activeElement).toBe(nameLink("free"))
   })
 
+  it("brings its title into view as it takes focus, as when it takes the catalog's place on a narrow screen", async () => {
+    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
+    await renderPlans(testI18n())
+    await click(nameLink("family"))
+    expect(document.activeElement).toBe(panelTitle())
+    expect(scrolled).toHaveBeenCalledOnce()
+    expect(scrolled.mock.contexts[0]).toBe(panelTitle())
+    expect(scrolled.mock.calls[0]).toEqual([{ block: "nearest" }])
+  })
+
   it("opens at its own address on arrival, at the tab it names, without moving focus", async () => {
     page().happyDOM.setURL(`${ORIGIN}/people/plans/free/people`)
+    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
     await renderPlans(testI18n(), {
       answers: { "GET /api/v1/users": jsonResponse(candidates([ALEX])), "POST /api/v1/plan-assignments": DRY_RUN },
     })
+    expect(scrolled).not.toHaveBeenCalled()
     expect(panelTitle().textContent).toBe("Free")
     expect(panelTabs().map(([label, , current]) => [label, current])).toEqual([
       ["Limits", null],
@@ -1078,6 +1106,19 @@ describe("A plan's panel", () => {
     ])
     expect(panel().contains(assignOf("free"))).toBe(true)
     expect(document.activeElement).not.toBe(panelTitle())
+  })
+
+  it("opens with focus on its title when the app opens it from elsewhere, as a toast's next step does", async () => {
+    page().happyDOM.setURL(`${ORIGIN}/people/plans/free/people`)
+    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
+    await renderPlans(
+      testI18n(),
+      { answers: { "GET /api/v1/users": jsonResponse(candidates([ALEX])), "POST /api/v1/plan-assignments": DRY_RUN } },
+      { panelFocus: true },
+    )
+    expect(panelTitle().textContent).toBe("Free")
+    expect(document.activeElement).toBe(panelTitle())
+    expect(scrolled.mock.contexts).toEqual([panelTitle()])
   })
 
   it("switches between Limits and People at their own addresses, keeping focus on the tab", async () => {
@@ -1236,13 +1277,14 @@ describe("Leaving a plan's changes not saved", () => {
 })
 
 describe("Editing a plan", () => {
-  it("edits in the panel without its key, warns before lowering a limit, and stays open once saved", async () => {
+  it("edits in the panel without its key, warns before lowering a limit, and closes once saved, back on its row", async () => {
     const saved: PlanSummary = { ...family, name: "Family Large", limits: { ...family.limits, rules: 2 } }
     await renderPlans(testI18n(), {
       plans: overview({ enabled: true, defaultPlan: "free" }),
       answers: { "PUT /api/v1/plans/family": jsonResponse(saved) },
     })
     await click(nameLink("family"))
+    const entries = window.history.length
     expect(container.querySelector("#plan-family-key")).toBeNull()
     expect(field("plan-family-name").value).toBe("Family")
 
@@ -1263,10 +1305,38 @@ describe("Editing a plan", () => {
       limits: { rules: 2, connected_accounts: 3, integration_tokens: 2, sync_interval: "instant" },
     })
     expect(toast()).toBe("Family Large was saved.")
+    // Saved, nothing is left to discard: the panel closes without asking, in place of its address.
+    expect(panelOrNull()).toBeNull()
+    expect(here()).toBe("/people/plans")
+    expect(window.history.length).toBe(entries)
+    expect(nameLink("family").textContent).toBe("Family Large")
+    expect(document.activeElement).toBe(nameLink("family"))
+    expect(headings()).toHaveLength(7)
+  })
+
+  it("closes on Save with nothing changed, sending and saying nothing", async () => {
+    await renderPlans(testI18n())
+    await click(nameLink("family"))
+    await submit(field("plan-family-name").closest("form")!)
+    expect(sent("PUT", "/api/v1/plans/family")).toBeUndefined()
+    expect(panelOrNull()).toBeNull()
+    expect(here()).toBe("/people/plans")
+    expect(toast()).toBe("")
+    expect(document.activeElement).toBe(nameLink("family"))
+  })
+
+  it("still asks before closing changes a refused save kept", async () => {
+    await renderPlans(testI18n(), {
+      answers: { "PUT /api/v1/plans/family": refusal(422, "invalid_plan", { reason: "name" }) },
+    })
+    await click(nameLink("family"))
+    type(field("plan-family-name"), "Family Large")
+    await submit(field("plan-family-name").closest("form")!)
+    expect(panel().querySelector("[role='alert']")).not.toBeNull()
+    await click(closeButton())
     expect(here()).toBe("/people/plans/family")
-    expect(panelTitle().textContent).toBe("Family Large")
-    expect(panel().querySelector(".plan-panel-changes")?.textContent ?? "").toBe("")
-    expect(document.activeElement).toBe(save)
+    expect(panel().querySelector(".plan-panel-question p")?.textContent).toBe("Discard 1 change?")
+    expect(toast()).toBe("")
   })
 
   it("opens the same panel from Edit in the row menu, and closes it on Cancel, sending nothing", async () => {
@@ -1366,11 +1436,12 @@ describe("A new plan", () => {
     use: NO_USE,
   }
 
-  it("adds a plan from New plan in the panel, without a key, then shows it at its own address", async () => {
+  it("adds a plan from New plan in the panel, without a key, then closes it with focus on the new plan's name", async () => {
     await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse(added, 201) } })
     const open = button("New plan", headerAction())
     expect(open.className).toContain("bg-primary")
     await click(open)
+    const entries = window.history.length
     expect(here()).toBe("/people/plans/new")
     expect(panelTitle().textContent).toBe("New plan")
     expect(document.activeElement).toBe(panelTitle())
@@ -1395,11 +1466,70 @@ describe("A new plan", () => {
       limits: { rules: 8, connected_accounts: null, integration_tokens: 0, sync_interval: "5_minutes" },
     })
     expect(toast()).toBe("Family Plus was added.")
-    expect(here()).toBe("/people/plans/family-2")
+    expect(toastButton("Assign people")).not.toBeNull()
+    // Added, nothing is left to discard: the panel closes without asking, and Back never
+    // returns to an empty New plan, as the address is replaced.
+    expect(panelOrNull()).toBeNull()
+    expect(here()).toBe("/people/plans")
+    expect(window.history.length).toBe(entries)
+    expect(listed()).toEqual(["family", "family-2", "free"])
+    expect(document.activeElement).toBe(nameLink("family-2"))
+    expect(open.className).toContain("bg-primary")
+  })
+
+  it("opens the new plan's People tab from Assign people in its toast, with focus on the panel's title", async () => {
+    await renderPlans(testI18n(), {
+      answers: {
+        "POST /api/v1/plans": jsonResponse(added, 201),
+        "GET /api/v1/users": jsonResponse(candidates([ALEX])),
+        "POST /api/v1/plan-assignments": DRY_RUN,
+      },
+    })
+    await click(button("New plan", headerAction()))
+    type(field("plan-new-name"), "Family Plus")
+    reply("GET /api/v1/plans", jsonResponse(overview({ plans: [family, added, free] })))
+    await submit(field("plan-new-name").closest("form")!)
+    const entries = window.history.length
+
+    const assign = toastButton("Assign people")
+    focus(assign)
+    await click(assign)
+    expect(here()).toBe("/people/plans/family-2/people")
+    expect(window.history.length).toBe(entries + 1)
     expect(panelTitle().textContent).toBe("Family Plus")
+    expect(panelTabs().map(([label, , current]) => [label, current])).toEqual([
+      ["Limits", null],
+      ["People", "page"],
+    ])
+    expect(panel().contains(assignOf("family-2"))).toBe(true)
     expect(document.activeElement).toBe(panelTitle())
-    expect(panelTabs().map(([label]) => label)).toEqual(["Limits", "People"])
-    expect(planRow("family-2").getAttribute("data-selected")).toBe("true")
+    expect(toast()).toBe("")
+    expect(openedPlans).toEqual([])
+  })
+
+  it("opens the new plan's People tab through the app once the Plans tab is gone", async () => {
+    await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse(added, 201) } })
+    await click(button("New plan", headerAction()))
+    type(field("plan-new-name"), "Family Plus")
+    reply("GET /api/v1/plans", jsonResponse(overview({ plans: [family, added, free] })))
+    await submit(field("plan-new-name").closest("form")!)
+
+    const everyone = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")].find((tab) => tab.textContent === "Everyone")!
+    await click(everyone)
+    expect(container.querySelector("#plans-title")).toBeNull()
+    await click(toastButton("Assign people"))
+    expect(openedPlans).toEqual([{ plan: "family-2", tab: "people" }])
+    expect(here()).toBe("/people")
+  })
+
+  it("returns focus to New plan when the new plan is not listed yet", async () => {
+    await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse(added, 201) } })
+    await click(button("New plan", headerAction()))
+    type(field("plan-new-name"), "Family Plus")
+    await submit(field("plan-new-name").closest("form")!)
+    expect(toast()).toBe("Family Plus was added.")
+    expect(panelOrNull()).toBeNull()
+    expect(document.activeElement).toBe(button("New plan", headerAction()))
   })
 
   it("adds the first plan from the empty state, which the catalog then replaces", async () => {
@@ -1419,10 +1549,11 @@ describe("A new plan", () => {
 
     expect(toast()).toBe("Free was added.")
     expect(container.querySelector("#plans-empty")).toBeNull()
+    expect(panelOrNull()).toBeNull()
     expect(listed()).toEqual(["free"])
     expect(cell("free", "people").textContent).toBe("Nobody")
-    expect(here()).toBe("/people/plans/free")
-    expect(document.activeElement).toBe(panelTitle())
+    expect(here()).toBe("/people/plans")
+    expect(document.activeElement).toBe(nameLink("free"))
   })
 
   it("closes the new plan's panel on Cancel, returning focus to New plan", async () => {
@@ -1467,6 +1598,10 @@ describe("A new plan", () => {
     expect(document.activeElement).toBe(field("plan-new-name"))
     expect(here()).toBe("/people/plans/new")
     expect(toast()).toBe("")
+    // What was refused is still not saved, so closing asks first.
+    await click(closeButton())
+    expect(here()).toBe("/people/plans/new")
+    expect(panel().querySelector(".plan-panel-question p")?.textContent).toBe("Discard 1 change?")
   })
 
   it("refuses a name another plan has before sending it, and shows the server's refusal the same way", async () => {
@@ -1489,8 +1624,9 @@ describe("A new plan", () => {
     )
   })
 
-  it("duplicates a plan as a new plan at its own address, with its limits and a name of its own", async () => {
-    await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse({ ...free, key: "free-copy" }, 201) } })
+  it("duplicates a plan as a new plan at its own address, with its limits and a name of its own, saved like any new plan", async () => {
+    const copy: PlanSummary = { ...free, key: "free-copy", name: "Free copy", people: 0, limited_people: 0 }
+    await renderPlans(testI18n(), { answers: { "POST /api/v1/plans": jsonResponse(copy, 201) } })
     await chooseFromMenu("free", "Duplicate")
     expect(here()).toBe("/people/plans/new?copy=free")
     expect(panelTitle().textContent).toBe("New plan")
@@ -1498,8 +1634,13 @@ describe("A new plan", () => {
     expect(panel().querySelector(".plan-panel-meta")?.textContent).toBe("Starts with the limits of Free.")
     expect(field("plan-new-name").value).toBe("Free copy")
     expect(limitOption("plan-new-tokens", "None").checked).toBe(true)
+    reply("GET /api/v1/plans", jsonResponse(overview({ plans: [family, free, copy] })))
     await submit(field("plan-new-name").closest("form")!)
     expect(sent("POST", "/api/v1/plans")).toStrictEqual({ name: "Free copy", limits: free.limits })
+    expect(toast()).toBe("Free copy was added.")
+    expect(panelOrNull()).toBeNull()
+    expect(here()).toBe("/people/plans")
+    expect(document.activeElement).toBe(nameLink("free-copy"))
   })
 
   it("opens a duplicate from its address", async () => {

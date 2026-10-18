@@ -100,6 +100,25 @@ describe("ToastProvider", () => {
     expect(document.activeElement).toBe(control(container))
   })
 
+  it("shows the icon of a next step in place of Undo's, and keeps it until it is closed", () => {
+    vi.useFakeTimers()
+    const { container, show } = render()
+    const next = vi.fn()
+    show({
+      message: "Free was added.",
+      action: { label: "Assign people", icon: <svg className="next-step" aria-hidden="true" />, onSelect: next },
+    })
+    const button = buttonNamed(container, "Assign people")!
+    expect(button.querySelector(".next-step")).not.toBeNull()
+    expect(button.querySelectorAll("svg")).toHaveLength(1)
+    act(() => {
+      vi.advanceTimersByTime(10 * 60 * 1000)
+    })
+    act(() => button.click())
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(liveRegion(container).textContent).toBe("")
+  })
+
   it("shows one result at a time: the next replaces it", () => {
     const { container, show } = render()
     show({ message: "Plans are on. They limit 2 people.", action: { label: "Undo", onSelect: vi.fn() } })

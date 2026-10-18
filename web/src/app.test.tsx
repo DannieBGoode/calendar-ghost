@@ -629,6 +629,69 @@ describe("People", () => {
     expect(container.querySelector("#plans-empty")).not.toBeNull()
   })
 
+  it("opens a new plan's People tab from its toast after People's other tab replaced Plans, with focus on the panel's title", async () => {
+    page.happyDOM.setURL("http://localhost:8000/people/plans/new")
+    serveAs("installation_administrator", "invitation_only")
+    const team = {
+      key: "team",
+      name: "Team",
+      limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" },
+      is_default: false,
+      people: 0,
+      limited_people: 0,
+      over_people: 0,
+      use: { rules: [], connected_accounts: [], integration_tokens: [] },
+    }
+    const served = vi.mocked(fetch)
+    const answer = served.getMockImplementation()!
+    let added = false
+    served.mockImplementation((input, init) => {
+      // The app calls fetch with a path.
+      const path = typeof input === "string" ? input.split("?")[0] : ""
+      if (path === "/api/v1/plans" && init?.method === "POST") {
+        added = true
+        return Promise.resolve(jsonResponse(team))
+      }
+      if (path === "/api/v1/plans" && added) {
+        return Promise.resolve(
+          jsonResponse({ enabled: false, default_plan: null, sync_intervals: ["instant", "5_minutes"], administrators: 1, followers: 1, plans: [team] }),
+        )
+      }
+      return answer(input, init)
+    })
+    const { container } = await renderApp(testI18n())
+    const name = container.querySelector<HTMLInputElement>("#plan-new-name")!
+    act(() => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(name, "Team")
+      name.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => {
+      name.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    await settle()
+    expect(window.location.pathname).toBe("/people/plans")
+    expect(container.querySelector("#plan-panel")).toBeNull()
+
+    const everyone = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")].find((tab) => tab.textContent === "Everyone")!
+    act(() => {
+      everyone.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
+    })
+    await settle()
+    expect(container.querySelector("#plans-title")).toBeNull()
+
+    const assign = [...container.querySelectorAll<HTMLButtonElement>(".toast-viewport button")].find(
+      (button) => button.textContent === "Assign people",
+    )!
+    act(() => assign.focus())
+    act(() => assign.click())
+    await settle()
+    expect(window.location.pathname).toBe("/people/plans/team/people")
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Plans")
+    expect(container.querySelector("#plan-panel-title")?.textContent).toBe("Team")
+    expect(document.activeElement).toBe(container.querySelector("#plan-panel-title"))
+  })
+
   it("asks before Back or another page drops a new plan's changes, and goes there once they are discarded", async () => {
     page.happyDOM.setURL("http://localhost:8000/people/plans/new")
     serveAs("installation_administrator", "invitation_only")

@@ -11,7 +11,7 @@ import { PlanPanel } from "@/features/plan-panel"
 import { useSettingChange } from "@/features/use-setting-change"
 import { useI18n } from "@/i18n/provider"
 import type { PlansOverview } from "@/lib/api"
-import type { OpenPerson } from "@/lib/navigation"
+import type { OpenPerson, OpenPlan } from "@/lib/navigation"
 import { usePlanWork, type PlanWorkControls } from "@/lib/use-plan-work"
 import { usePlans, type PlanCommands } from "@/lib/use-plans"
 
@@ -24,6 +24,10 @@ type PlansContext = {
   onShowPeople: ShowPeople
   /** Opens one person's page, as a link to someone who has a Plan does. */
   onOpenPerson: OpenPerson
+  /** Opens a Plan's panel as a new arrival, for a toast's next step once this tab is gone. */
+  onOpenPlan: OpenPlan
+  /** The arrival opens a Plan's panel from elsewhere, so it takes focus as from the page. */
+  panelFocus: boolean
 }
 
 /**
@@ -88,13 +92,15 @@ function PlansLoadError({ onRetry }: { onRetry: () => void }) {
 
 /**
  * Once the panel closes, or a removed Plan's confirmation does, focus returns to the Plan's name
- * in the catalog, or to New plan, wherever it shows now.
+ * in the catalog, or to New plan, wherever it shows now, as when a new Plan is not listed yet;
+ * then what follows, such as the save's toast, which returns focus there as it closes.
  */
 function useFocusReturn({ focusReturn, focusReturned }: PlanWorkControls) {
   useEffect(() => {
     if (focusReturn === null) return
     const name = focusReturn.plan === null ? null : document.getElementById(`plan-name-${focusReturn.plan}`)
     ;(name ?? document.getElementById("plans-new"))?.focus()
+    focusReturn.afterwards?.()
     focusReturned()
   }, [focusReturn, focusReturned])
 }
@@ -105,7 +111,7 @@ function useFocusReturn({ focusReturn, focusReturned }: PlanWorkControls) {
  * turns outline. On a narrow tab the panel takes their place.
  */
 function PlansContent({ overview, commands, ...context }: PlansContext & { overview: PlansOverview; commands: PlanCommands }) {
-  const work = usePlanWork(commands)
+  const work = usePlanWork(commands, context.onOpenPlan, context.panelFocus)
   const onChange = useSettingChange(commands.setting)
   useFocusReturn(work)
   const empty = overview.plans.length === 0

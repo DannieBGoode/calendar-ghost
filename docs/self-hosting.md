@@ -288,8 +288,10 @@ table, at its own address, never over the page: the Plan's name, then the most a
 calendar accounts, and Integration Tokens a person may have, each **No limit** or **Up to** a
 number (Integration Tokens may also be **None**), and **Sync speed**, Instant or every 5 minutes.
 Selecting a Plan's name in the table opens the same panel to change it; its footer counts the
-changes not saved, and **Escape** or **Cancel** closes it. Calendar Ghost makes the Plan's key,
-which names it in the API, from its name. Everyone without a Plan of their own has the default, including people who join
+changes not saved, and **Escape** or **Cancel** closes it. **Save plan** closes it too, and a
+message at the bottom of the window says what was saved; for a new Plan it offers **Assign people**,
+which opens the Plan's **People** tab. Calendar Ghost makes the Plan's key, which names it in the
+API, from its name. Everyone without a Plan of their own has the default, including people who join
 later; the default carries a **Default** badge, and **Make default** in another Plan's **More
 actions** menu says how many people it moves. To limit only some people, open the Plan's
 **People** tab, or choose **Assign people** in its menu: search by email, tick each person, and

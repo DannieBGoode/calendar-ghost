@@ -25,6 +25,7 @@ import {
   isPlainLeftClick,
   type AppLocation,
   type AppView,
+  type PlanPanel,
   type SettingsTab,
   type ViewOptions,
   withSettingsTab,
@@ -203,6 +204,10 @@ function AuthenticatedApp() {
     navigate({ view: "people", ruleId: null, personId })
   }
 
+  function openPlan(planPanel: PlanPanel) {
+    navigate({ view: "people", ruleId: null, peopleTab: "plans", planPanel }, { planPanelFocus: true })
+  }
+
   function openSettingsTab(settingsTab: SettingsTab) {
     navigate({ view: "settings", ruleId: null, settingsTab })
   }
@@ -233,7 +238,7 @@ function AuthenticatedApp() {
             <Button ref={menuButton} className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-controls="primary-nav" aria-label={mobileNav ? t("app.nav.close") : t("app.nav.open")}>{mobileNav ? <X /> : <Menu />}</Button>
           </div>
         </header>
-        <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} onOpenRulePreview={openRulePreview} onOpenSettingsTab={openSettingsTab} onOpenPerson={openPerson} /></main>
+        <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} onOpenRulePreview={openRulePreview} onOpenSettingsTab={openSettingsTab} onOpenPerson={openPerson} onOpenPlan={openPlan} /></main>
         <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
         <AppFooter />
       </div>
