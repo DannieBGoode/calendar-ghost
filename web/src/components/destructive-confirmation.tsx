@@ -7,9 +7,10 @@ import { cn } from "@/lib/utils"
 
 /**
  * A destructive change confirmed inline: its title, which takes focus, its consequence, and a
- * neutral way back beside the button that names the effect. It scrolls fully into view as it opens. While the change is on its way both
- * buttons stay focusable but ignore presses, so focus never falls to the page; `confirmDisabled`
- * holds the confirm button back until a prerequisite, such as a password, is met.
+ * neutral way back beside the button that names the effect. It scrolls fully into view as it
+ * opens. While the change is on its way both buttons stay focusable but ignore presses, so focus
+ * never falls to the page; `confirmDisabled` holds the confirm button back until a prerequisite,
+ * such as a password, is met.
  */
 export function DestructiveConfirmation({
   id,
