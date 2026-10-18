@@ -44,6 +44,7 @@ from calendar_sync.domain.audit import AuditAction, AuditEntry, RecordedDecision
 from calendar_sync.domain.causes import NO_CAUSE, WITHOUT_CAUSE, Cause
 from calendar_sync.domain.incidents import IncidentResolution
 from calendar_sync.domain.model import (
+    KEEPS_PLACE,
     AllDayRange,
     AllDaySyncPolicy,
     BirthdayPolicy,
@@ -1084,10 +1085,6 @@ def _rule_values(rule: SyncRule) -> tuple[object, ...]:
     )
 
 
-_KEEPS_PLACE = frozenset({SyncRuleState.DRAFT, SyncRuleState.PREVIEWED})
-"""The states a rule may keep a place in; a mark left on any other row reads as none."""
-
-
 def rule_from_row(row: sqlite3.Row) -> SyncRule:
     state = SyncRuleState(str(row["state"]))
     return SyncRule(
@@ -1112,7 +1109,8 @@ def rule_from_row(row: sqlite3.Row) -> SyncRule:
         state=state,
         reprojection_required=bool(row["reprojection_required"]),
         awaiting_reauthorization=bool(row["awaiting_reauthorization"]),
-        keeps_place=bool(row["keeps_place"]) and state in _KEEPS_PLACE,
+        # A mark left on a row in any other state reads as none.
+        keeps_place=bool(row["keeps_place"]) and state in KEEPS_PLACE,
     )
 
 

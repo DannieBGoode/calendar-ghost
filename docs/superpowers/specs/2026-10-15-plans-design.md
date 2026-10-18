@@ -93,9 +93,9 @@ It imports only `domain/cadence.py`. `domain/access.py` imports `PlanKey` from i
 - `AssignmentSource` (`StrEnum`): `administrator`, `billing`. Only the phase-5 billing adapter
   writes `billing`.
 - `Allowance(basis, plan, on_default, assigned)`. `limits` is the Plan's limits when the basis is
-  `plan`, and no limits otherwise. `cadence` follows `limits.sync_interval`. `limits_manual_runs`
-  is true only when the basis is `plan`. `assigned` is the User's own stored Plan, so an
-  administrator can see a Plan that does not apply yet.
+  `plan`, and no limits otherwise. `cadence` follows `limits.sync_interval`. Slice 3 adds
+  `limits_manual_runs`, true only when the basis is `plan`. `assigned` is the User's own stored
+  Plan, so an administrator can see a Plan that does not apply yet.
 
 `allowance_for(plans_on, administers, own, default)` decides in this order:
 

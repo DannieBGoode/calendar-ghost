@@ -327,11 +327,6 @@ class Allowance:
         """How soon their rules sync, as their Plan's interval says."""
         return self.limits.sync_interval.cadence
 
-    @property
-    def limits_manual_runs(self) -> bool:
-        """Whether the manual-run limit applies to them: only when a Plan limits them."""
-        return self.basis is AllowanceBasis.PLAN
-
 
 UNLIMITED = Allowance(AllowanceBasis.PLANS_OFF)
 """The Allowance of every User while Plans are off, and of a User no store finds."""

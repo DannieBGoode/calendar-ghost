@@ -156,13 +156,6 @@ def test_an_allowance_has_its_plans_limits_and_cadence(plan: Plan, cadence: Sync
     assert allowance.cadence == cadence
 
 
-@pytest.mark.parametrize("basis", list(AllowanceBasis))
-def test_only_a_plan_basis_limits_manual_runs(basis: AllowanceBasis) -> None:
-    allowance = Allowance(basis, plan=FREE if basis is AllowanceBasis.PLAN else None)
-
-    assert allowance.limits_manual_runs is (basis is AllowanceBasis.PLAN)
-
-
 @pytest.mark.parametrize("key", ["free", "a", "family-2", "0", "2026-plan", "a" * 32])
 def test_a_plan_key_is_lower_case_letters_digits_and_hyphens(key: str) -> None:
     assert PlanKey(key).value == key
