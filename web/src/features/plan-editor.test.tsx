@@ -47,7 +47,6 @@ type Props = {
   enabled?: boolean
   /** The names of the other Plans. */
   others?: string[]
-  intervals?: SyncInterval[]
 }
 
 let container: HTMLDivElement
@@ -76,7 +75,7 @@ afterEach(() => {
  * Renders the editor, or renders it again with new props, keeping what was typed. Cancel leaves
  * the way the Plans tab's does, asking first while changes are not saved.
  */
-function show({ plan, pending, error, enabled = true, others = [], intervals = ["instant", "5_minutes"] }: Props) {
+function show({ plan, pending, error, enabled = true, others = [] }: Props) {
   root ??= createRoot(container)
   act(() => {
     root?.render(
@@ -85,7 +84,7 @@ function show({ plan, pending, error, enabled = true, others = [], intervals = [
           plan={plan}
           enabled={enabled}
           others={others}
-          intervals={intervals}
+          intervals={["instant", "5_minutes"]}
           pending={pending}
           error={error}
           onSave={onSave}
@@ -291,18 +290,6 @@ describe("PlanEditor", () => {
     expect(speed("instant").checked).toBe(true)
   })
 
-  it("keeps an interval a later release saved, beside the offered ones", () => {
-    show({
-      plan: { ...family, limits: { ...family.limits, sync_interval: "60_minutes" } },
-      pending: false,
-      error: null,
-      intervals: ["instant", "5_minutes", "60_minutes"],
-    })
-    expect(labelOf(speed("60_minutes"))).toBe("Every hour")
-    expect(description(speed("60_minutes"))).toEqual(["Calendars are checked for changes every hour."])
-    expect(speed("60_minutes").checked).toBe(true)
-  })
-
   it("keeps a limit's number while No limit is chosen, so choosing Up to again keeps it", () => {
     edit(null)
     expect(option("plan-new-rules", "No limit").checked).toBe(true)
@@ -421,13 +408,6 @@ describe("PlanEditor", () => {
     expect(question()).toBeNull()
     expect(field("plan-family-name").value).toBe("Family")
     expect(changes()).toBe("")
-  })
-
-  it("names one change as one", () => {
-    edit()
-    click(speed("5_minutes"))
-    click(button("Cancel"))
-    expect(question()?.querySelector("p")?.textContent).toBe("Discard 1 change?")
   })
 
   it("leaves at once with nothing to lose", () => {

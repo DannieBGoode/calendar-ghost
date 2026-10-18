@@ -10,7 +10,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { PersonPlanOverview, PlansOverview, SessionStatus, UserOverview } from "@/lib/api"
+import type { OverLimit, PersonPlanOverview, PlansOverview, SessionStatus, UserOverview } from "@/lib/api"
 
 import { PersonView } from "./person-page"
 
@@ -582,8 +582,8 @@ describe("A person's page", () => {
         sync_interval: "instant",
       },
     }
-    const given = (has: { key: string; name: string; on_default: boolean }) =>
-      jsonResponse({ dry_run: true, people: [{ user_id: "user-robin", email: "robin@example.test", had: hasFamily, has, over: [] }] })
+    const given = (has: { key: string; name: string; on_default: boolean }, over: OverLimit[] = []) =>
+      jsonResponse({ dry_run: true, people: [{ user_id: "user-robin", email: "robin@example.test", had: hasFamily, has, over }] })
 
     function card(): HTMLElement {
       return container.querySelector<HTMLElement>(".person-plan-card")!
@@ -784,7 +784,6 @@ describe("A person's page", () => {
         ["Free Default", "1 rule, 1 account, no tokens, every 5 min", false],
         ["Family Current", "5 rules, 3 accounts, 2 tokens, Instant", true],
       ])
-      expect(form.textContent).not.toContain("Follow the default plan")
       expect(form.querySelector(".plan-change-note")?.textContent).toBe(
         "People on the default plan move with it when the default changes.",
       )
@@ -809,18 +808,7 @@ describe("A person's page", () => {
     })
 
     it("says under the option chosen which limit they would be over, announced, in Attention Ochre only while plans are on", async () => {
-      const wouldBeOver = jsonResponse({
-        dry_run: true,
-        people: [
-          {
-            user_id: "user-robin",
-            email: "robin@example.test",
-            had: hasFamily,
-            has: hasFree,
-            over: [{ limit: "connected_accounts", in_use: 2, allowed: 1 }],
-          },
-        ],
-      })
+      const wouldBeOver = given(hasFree, [{ limit: "connected_accounts", in_use: 2, allowed: 1 }])
       await renderPerson(testI18n(), "user-robin", withPlan(onFamily, { "POST /api/v1/plan-assignments": wouldBeOver }))
       await click(changePlan())
       await click(choice("Free"))

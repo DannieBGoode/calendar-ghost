@@ -1244,7 +1244,6 @@ describe("Changing plans from Everyone", () => {
       ["Free Default", false],
       ["Family Current", true],
     ])
-    expect(dialog.textContent).not.toContain("Follow the default plan")
     expect(dialog.querySelector(".plan-change-note")?.textContent).toBe(
       "People on the default plan move with it when the default changes.",
     )

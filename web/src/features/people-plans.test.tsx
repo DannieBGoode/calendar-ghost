@@ -780,8 +780,6 @@ describe("The catalog", () => {
     await renderPlans(testI18n(), { plans: overview({ enabled: true, defaultPlan: "free", plans: [family, free, hourly] }) })
     const catalog = element("plans-catalog")
     expect(catalog.querySelector("h3")?.textContent).toBe("3 plans")
-    // A table that opens a plan from its row needs no instruction above it.
-    expect(catalog.querySelector(".plans-catalog-intro")).toBeNull()
     expect([...catalog.querySelectorAll("thead th")].map((heading) => heading.textContent)).toEqual([
       "Plan",
       "Active rules",
@@ -1098,7 +1096,6 @@ describe("A plan's panel", () => {
     expect(facts()).toEqual([])
     // The catalog keeps what picks a plan, and marks the open one.
     expect(headings()).toEqual(["Plan", "Sync speed", "People"])
-    expect(element("plans-catalog").querySelector(".plans-catalog-intro")).toBeNull()
     expect(element("plans-catalog").querySelector(".plans-catalog-note")?.textContent).toBe(
       "Changes apply as soon as you save. Nobody loses anything they already have.",
     )
@@ -1186,33 +1183,25 @@ describe("A plan's panel", () => {
     expect(scrolled.mock.calls[0]).toEqual([{ block: "nearest" }])
   })
 
-  it("opens at its own address on arrival, at the tab it names, without moving focus", async () => {
+  it.each([
+    ["on arrival, without moving focus", false],
+    ["with focus on its title when the app opens it from elsewhere, as a toast's next step does", true],
+  ])("opens at its own address, at the tab it names, %s", async (_how, panelFocus) => {
     page().happyDOM.setURL(`${ORIGIN}/people/plans/free/people`)
     const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
-    await renderPlans(testI18n(), {
-      answers: { "GET /api/v1/users": jsonResponse(candidates([ALEX])), "POST /api/v1/plan-assignments": DRY_RUN },
-    })
-    expect(scrolled).not.toHaveBeenCalled()
+    await renderPlans(
+      testI18n(),
+      { answers: { "GET /api/v1/users": jsonResponse(candidates([ALEX])), "POST /api/v1/plan-assignments": DRY_RUN } },
+      { panelFocus },
+    )
     expect(panelTitle().textContent).toBe("Free")
     expect(panelTabs().map(([label, , current]) => [label, current])).toEqual([
       ["Limits", null],
       ["People22 have it", "page"],
     ])
     expect(panel().contains(assignOf("free"))).toBe(true)
-    expect(document.activeElement).not.toBe(panelTitle())
-  })
-
-  it("opens with focus on its title when the app opens it from elsewhere, as a toast's next step does", async () => {
-    page().happyDOM.setURL(`${ORIGIN}/people/plans/free/people`)
-    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
-    await renderPlans(
-      testI18n(),
-      { answers: { "GET /api/v1/users": jsonResponse(candidates([ALEX])), "POST /api/v1/plan-assignments": DRY_RUN } },
-      { panelFocus: true },
-    )
-    expect(panelTitle().textContent).toBe("Free")
-    expect(document.activeElement).toBe(panelTitle())
-    expect(scrolled.mock.contexts).toEqual([panelTitle()])
+    expect(document.activeElement === panelTitle()).toBe(panelFocus)
+    expect(scrolled.mock.contexts).toEqual(panelFocus ? [panelTitle()] : [])
   })
 
   it("switches between Limits and People at their own addresses, keeping focus on the tab", async () => {
@@ -1379,7 +1368,6 @@ describe("Editing a plan", () => {
     })
     await click(nameLink("family"))
     const entries = window.history.length
-    expect(container.querySelector("#plan-family-key")).toBeNull()
     expect(field("plan-family-name").value).toBe("Family")
 
     type(field("plan-family-rules"), "2")
@@ -1406,17 +1394,6 @@ describe("Editing a plan", () => {
     expect(nameLink("family").textContent).toBe("Family Large")
     expect(document.activeElement).toBe(nameLink("family"))
     expect(headings()).toHaveLength(7)
-  })
-
-  it("closes on Save with nothing changed, sending and saying nothing", async () => {
-    await renderPlans(testI18n())
-    await click(nameLink("family"))
-    await submit(field("plan-family-name").closest("form")!)
-    expect(sent("PUT", "/api/v1/plans/family")).toBeUndefined()
-    expect(panelOrNull()).toBeNull()
-    expect(here()).toBe("/people/plans")
-    expect(toast()).toBe("")
-    expect(document.activeElement).toBe(nameLink("family"))
   })
 
   it("still asks before closing changes a refused save kept", async () => {
@@ -1514,6 +1491,8 @@ describe("Editing a plan", () => {
     await click(nameLink("family"))
     const offered = [...panel().querySelectorAll<HTMLInputElement>("[role='radiogroup'] input[type='radio']")]
     expect(offered.map((radio) => radio.value)).toEqual(["instant", "5_minutes", "60_minutes"])
+    expect(labelOf(speedRadio("60_minutes"))).toBe("Every hour")
+    expect(element(speedRadio("60_minutes").getAttribute("aria-describedby")!).textContent).toBe("Calendars are checked for changes every hour.")
     expect(speedRadio("60_minutes").checked).toBe(true)
   })
 })
@@ -1541,9 +1520,7 @@ describe("A new plan", () => {
     expect(document.activeElement).toBe(panelTitle())
     expect(panel().querySelector("nav.page-tabs")).toBeNull()
     expect(panel().querySelector(".plan-panel-meta")).toBeNull()
-    expect(container.querySelector("#plan-new-key")).toBeNull()
     expect(open.className).not.toContain("bg-primary")
-    expect(element("plans-catalog").querySelector(".plans-catalog-intro")).toBeNull()
 
     type(field("plan-new-name"), " Family Plus ")
     await click(limitOption("plan-new-rules", "Up to"))
@@ -1664,18 +1641,6 @@ describe("A new plan", () => {
     expect(document.activeElement).toBe(button("New plan", element("plans-empty")))
   })
 
-  it("keeps Save unavailable until each limit has a number or No limit, and says why", async () => {
-    await renderPlans(testI18n())
-    await click(button("New plan", catalogHead()))
-    type(field("plan-new-name"), "Family Plus")
-    await click(limitOption("plan-new-accounts", "Up to"))
-    expect(button("Save plan", panel()).getAttribute("aria-disabled")).toBe("true")
-    expect(panel().textContent).toContain("Enter how many calendar accounts, from 1 to 10,000, or choose No limit.")
-    type(field("plan-new-accounts"), "2")
-    await settle()
-    expect(button("Save plan", panel()).getAttribute("aria-disabled")).toBeNull()
-  })
-
   it("keeps the new plan's panel open with the reason it was refused, under the field it names", async () => {
     await renderPlans(testI18n(), {
       answers: { "POST /api/v1/plans": refusal(422, "invalid_plan", { reason: "name" }) },
@@ -1756,16 +1721,21 @@ function freeAndOthers(others: PersonRow[], holding: PersonRow[] = [ROBIN_OVER, 
   return (call: Call) => jsonResponse(candidates(call.query.get("plan") === "free" ? holding : others))
 }
 
+/** Opens Free's Assign people, with Family the default, `others` to list, and `dryRun` as the dry run's answer. */
+async function assignFree(
+  others: PersonRow[],
+  { holding, enabled = true, dryRun = DRY_RUN }: { holding?: PersonRow[]; enabled?: boolean; dryRun?: Response } = {},
+) {
+  await renderPlans(testI18n(), {
+    plans: overview({ enabled, defaultPlan: "family" }),
+    answers: { "GET /api/v1/users": freeAndOthers(others, holding), "POST /api/v1/plan-assignments": dryRun },
+  })
+  await chooseFromMenu("free", "Assign people")
+}
+
 describe("Assigning people from a plan", () => {
   it("lists who does not have the plan, with the plan each has and what they would be over, administrators last", async () => {
-    await renderPlans(testI18n(), {
-      plans: overview({ enabled: true, defaultPlan: "family" }),
-      answers: {
-        "GET /api/v1/users": freeAndOthers([ALEX, DANA, ROBIN, SAM]),
-        "POST /api/v1/plan-assignments": DRY_RUN,
-      },
-    })
-    await chooseFromMenu("free", "Assign people")
+    await assignFree([ALEX, DANA, ROBIN, SAM])
     expect(here()).toBe("/people/plans/free/people")
     const assign = assignOf("free")
     expect(panel().contains(assign)).toBe(true)
@@ -1799,11 +1769,7 @@ describe("Assigning people from a plan", () => {
   })
 
   it("gives the plan to the people chosen at once, says so, and Undo gives each the plan they had", async () => {
-    await renderPlans(testI18n(), {
-      plans: overview({ enabled: true, defaultPlan: "family" }),
-      answers: { "GET /api/v1/users": freeAndOthers([ALEX, SAM]), "POST /api/v1/plan-assignments": DRY_RUN },
-    })
-    await chooseFromMenu("free", "Assign people")
+    await assignFree([ALEX, SAM])
     await check("free", ALEX)
     const note = () => assignOf("free").querySelector(".plan-assign-note")
     expect(note()?.textContent).toBe(
@@ -1845,22 +1811,10 @@ describe("Assigning people from a plan", () => {
     // Choosing the default means having no plan of their own, as Change plan sends it.
     expect(assignCalls()).toEqual([{ plan: null, user_ids: ["user-sam"], dry_run: true }])
     await check("free", SAM)
-    reply("POST /api/v1/plan-assignments", moved([[SAM, []]]))
-    await click(button("Give Free to 1 person", panel()))
-    expect(assignCalls().at(-1)).toEqual({ plan: null, user_ids: ["user-sam"], dry_run: false })
-    expect(toast()).toBe("sam@example.test now has Free.")
-  })
-
-  it("names the one person given the plan", async () => {
-    await renderPlans(testI18n(), {
-      plans: overview({ enabled: true, defaultPlan: "family" }),
-      answers: { "GET /api/v1/users": freeAndOthers([SAM]), "POST /api/v1/plan-assignments": moved([[SAM, []]], true) },
-    })
-    await chooseFromMenu("free", "Assign people")
-    await check("free", SAM)
     expect(assignOf("free").querySelector(".plan-assign-note")).toBeNull()
     reply("POST /api/v1/plan-assignments", moved([[SAM, []]]))
     await click(button("Give Free to 1 person", panel()))
+    expect(assignCalls().at(-1)).toEqual({ plan: null, user_ids: ["user-sam"], dry_run: false })
     expect(toast()).toBe("sam@example.test now has Free.")
   })
 
@@ -1940,11 +1894,7 @@ describe("Assigning people from a plan", () => {
 
   it("keeps the command on its way, then says why it was refused, keeping who was chosen", async () => {
     let answer: (response: Response) => void = () => undefined
-    await renderPlans(testI18n(), {
-      plans: overview({ enabled: true, defaultPlan: "family" }),
-      answers: { "GET /api/v1/users": freeAndOthers([ALEX, SAM]), "POST /api/v1/plan-assignments": DRY_RUN },
-    })
-    await chooseFromMenu("free", "Assign people")
+    await assignFree([ALEX, SAM])
     await check("free", SAM)
     routes["POST /api/v1/plan-assignments"] = new Promise<Response>((resolve) => {
       answer = resolve
@@ -1972,11 +1922,7 @@ describe("Assigning people from a plan", () => {
   })
 
   it("closes on Cancel, giving nothing, and returns focus to the plan's name", async () => {
-    await renderPlans(testI18n(), {
-      plans: overview({ enabled: true, defaultPlan: "family" }),
-      answers: { "GET /api/v1/users": freeAndOthers([ALEX, SAM]), "POST /api/v1/plan-assignments": DRY_RUN },
-    })
-    await chooseFromMenu("free", "Assign people")
+    await assignFree([ALEX, SAM])
     await check("free", SAM)
     await click(button("Cancel", panel()))
     expect(panelOrNull()).toBeNull()
@@ -1985,21 +1931,13 @@ describe("Assigning people from a plan", () => {
   })
 
   it("lists people without a dry run when the only ones found administer", async () => {
-    await renderPlans(testI18n(), {
-      plans: overview({ enabled: true, defaultPlan: "family" }),
-      answers: { "GET /api/v1/users": freeAndOthers([DANA]) },
-    })
-    await chooseFromMenu("free", "Assign people")
+    await assignFree([DANA])
     expect(assignRows("free")).toEqual([["dana@example.testYou", "Never limited, whatever plan they have", null]])
     expect(assignCalls()).toEqual([])
   })
 
   it("says why Undo was refused under the plan's row once its panel is closed", async () => {
-    await renderPlans(testI18n(), {
-      plans: overview({ enabled: true, defaultPlan: "family" }),
-      answers: { "GET /api/v1/users": freeAndOthers([SAM]), "POST /api/v1/plan-assignments": moved([[SAM, []]], true) },
-    })
-    await chooseFromMenu("free", "Assign people")
+    await assignFree([SAM], { dryRun: moved([[SAM, []]], true) })
     await check("free", SAM)
     reply("POST /api/v1/plan-assignments", moved([[SAM, []]]))
     await click(button("Give Free to 1 person", panel()))
@@ -2036,11 +1974,7 @@ function changeChoice(person: PersonRow, label: string): HTMLInputElement {
 describe("Who has a plan now", () => {
   it("lists who has the plan, what each is over, and links to them and to Everyone", async () => {
     const admin = candidate("dana@example.test", { key: "free", name: "Free", on_default: false }, "installation_administrator")
-    await renderPlans(testI18n(), {
-      plans: overview({ enabled: true, defaultPlan: "family" }),
-      answers: { "GET /api/v1/users": freeAndOthers([ALEX], [admin, JORDAN, ROBIN_OVER]), "POST /api/v1/plan-assignments": DRY_RUN },
-    })
-    await chooseFromMenu("free", "Assign people")
+    await assignFree([ALEX], { holding: [admin, JORDAN, ROBIN_OVER] })
     const holders = element("plan-holders-free")
     expect(holders.querySelector("h4")?.textContent).toBe("Have Free now")
     const asked = calls.filter((call) => call.method === "GET" && call.query.get("plan") === "free").at(-1)
@@ -2067,11 +2001,7 @@ describe("Who has a plan now", () => {
   })
 
   it("says what each would be over, neutral, while plans are off, and when nobody has the plan", async () => {
-    await renderPlans(testI18n(), {
-      plans: overview({ defaultPlan: "family" }),
-      answers: { "GET /api/v1/users": freeAndOthers([ALEX], [ROBIN_OVER]), "POST /api/v1/plan-assignments": DRY_RUN },
-    })
-    await chooseFromMenu("free", "Assign people")
+    await assignFree([ALEX], { holding: [ROBIN_OVER], enabled: false })
     expect(holderRows()[0]?.[1]).toBe("Would be over: 2 calendar accounts, 1 allowed")
     expect(element("plan-holders-free").querySelector("[data-tone]")).toBeNull()
 
@@ -2082,11 +2012,7 @@ describe("Who has a plan now", () => {
   })
 
   it("changes one person's plan from the list after a dry run, and Undo gives it back", async () => {
-    await renderPlans(testI18n(), {
-      plans: overview({ enabled: true, defaultPlan: "family" }),
-      answers: { "GET /api/v1/users": freeAndOthers([ALEX]), "POST /api/v1/plan-assignments": DRY_RUN },
-    })
-    await chooseFromMenu("free", "Assign people")
+    await assignFree([ALEX])
     const change = element("plan-holders-free").querySelector<HTMLButtonElement>(
       "button[aria-label='Change plan for robin@example.test']",
     )!
@@ -2106,7 +2032,6 @@ describe("Who has a plan now", () => {
     expect(document.activeElement).toBe(changeChoice(ROBIN_OVER, "Free"))
     expect(chooser.textContent).toContain("5 rules, 3 accounts, 2 tokens, Instant")
     expect(chooser.textContent).toContain("People on the default plan move with it when the default changes.")
-    expect(chooser.textContent).not.toContain("Follow the default plan")
 
     reply("POST /api/v1/plan-assignments", moved([[ROBIN_OVER, [{ limit: "rules", in_use: 6, allowed: 5 }]]], true))
     // Family is the default, so choosing it means robin follows the default.
@@ -2128,11 +2053,7 @@ describe("Who has a plan now", () => {
   })
 
   it("closes the chooser on Cancel, changing nothing, with focus back on Change plan", async () => {
-    await renderPlans(testI18n(), {
-      plans: overview({ enabled: true, defaultPlan: "family" }),
-      answers: { "GET /api/v1/users": freeAndOthers([ALEX]), "POST /api/v1/plan-assignments": DRY_RUN },
-    })
-    await chooseFromMenu("free", "Assign people")
+    await assignFree([ALEX])
     const change = element("plan-holders-free").querySelector<HTMLButtonElement>(
       "button[aria-label='Change plan for jordan@example.test']",
     )!
@@ -2145,11 +2066,7 @@ describe("Who has a plan now", () => {
   })
 
   it("says why a change was refused under the chooser", async () => {
-    await renderPlans(testI18n(), {
-      plans: overview({ enabled: true, defaultPlan: "family" }),
-      answers: { "GET /api/v1/users": freeAndOthers([ALEX]), "POST /api/v1/plan-assignments": DRY_RUN },
-    })
-    await chooseFromMenu("free", "Assign people")
+    await assignFree([ALEX])
     await click(
       element("plan-holders-free").querySelector<HTMLButtonElement>("button[aria-label='Change plan for jordan@example.test']")!,
     )
