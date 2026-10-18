@@ -398,7 +398,7 @@ def test_a_plans_fault_shows_no_plan_and_never_fails_people(
     assert "database is locked" not in caplog.text
 
 
-# Who is over a limit (ADR 0038, amended)
+# Who is over a limit (ADR 0038)
 
 
 def test_each_person_is_shown_the_plan_they_have_and_each_of_its_limits_they_are_over() -> None:

@@ -32,8 +32,7 @@ default, and with Plans off nothing in this design limits or changes anything.
    their own has it. Turning Plans on with no default makes an ordinary Plan named "No limits"
    (every count unlimited, Instant) the default, so turning Plans on changes nothing until the
    administrator adds a smaller Plan and gives it to someone. Plans are never on without a
-   default: clearing it while they are on is refused. Billing falls back to it. (Amended
-   2026-10-16; before, Plans could not turn on until the administrator chose a default.)
+   default: clearing it while they are on is refused. Billing falls back to it.
 6. **Installation Administrators are never limited.** Under Only Me the only User administers, so
    Plans have no effect there, and the Web UI hides them.
 7. **Sync intervals.** A fixed server list: Instant, 5, 10, 15, 30, and 60 minutes. Instant means
@@ -630,7 +629,7 @@ Today `SyncScheduler` runs a pass, sleeps 300 seconds, and runs every enabled ru
 | `ChangePlan` | The key never changes. New limits apply at once to new resources. A new name must not read as another Plan's (409 `plan_name_taken`); a Plan may keep its own in another case. The form warns how many people the Plan limits, and that rules beyond a lower limit keep syncing for 7 days, then are held (before slice 4: that no new rule can start). |
 | `RemovePlan` | 409 `plan_is_default`, or 409 `plan_in_use` with `people`. The administrator moves those Users first, which is also safe for billing. |
 | `SetPlansSetting` | Turning Plans on when neither the request nor the installation names a default adds "No limits" (every count unlimited, Instant, its key made from its name, named "No limits 2" and so on when a Plan already reads as that name) and makes it the default, in the same transaction. It is an ordinary Plan: it can be renamed and changed, and not removed while it is the default. 409 `plans_need_default` when the request would clear the default with Plans on, or as they turn on. Turning them off is always allowed and keeps everything. |
-| `AssignPlan` | `PlanAssignments.assign(user, plan, AssignmentChange(administrator, actor, now))`. `None` returns the User to the default. Allowed while Plans are off, so an administrator can prepare. Since 2026-10-17 it also gives one Plan to up to 100 people at once, all or none, and a dry run says what each would be over without writing (ADR 0038, amended) |
+| `AssignPlan` | `PlanAssignments.assign(user, plan, AssignmentChange(administrator, actor, now))`. `None` returns the User to the default. Allowed while Plans are off, so an administrator can prepare. Since 2026-10-17 it also gives one Plan to up to 100 people at once, all or none, and a dry run says what each would be over without writing (ADR 0038) |
 
 - **Billing seam.** Billing will call the same port with `AssignmentChange(billing, None, at)`,
   and assign `None` when a payment ends. `plan_assigned_by` lets the billing spec decide whether
@@ -638,15 +637,14 @@ Today `SyncScheduler` runs a pass, sleeps 300 seconds, and runs every enabled ru
 - **Provenance.** The current assignment records its source, actor, and time. A history waits for
   the deferred record of administrator actions. Each change writes a log line with ids only.
 - **Operator Overview.** The person page shows the person's Plan and a "Change plan" action,
-  whenever at least one Plan exists: until 2026-10-17 as a fact ("Plan: Family", "Plan: Free
-  (default)", "No plan limits administrators"), and since then as a Plan card with how much of each
-  limit they use (section 10.2; ADR 0030, amended, for the Integration Token count). This
-  keeps ADR 0030's promise, and CONTEXT's Operator Overview entry gains the Plan. Since
-  2026-10-16 the overview also computes, for the Plan each person has (their own, or else the
-  default, whether or not Plans are on), each limit they have more of than it allows, with how
-  many are in use and allowed, counted through `InstallationUnitOfWork.plan_use`; only active
-  Users who do not administer are ever over. The person's overview and every row of People answer
-  it as `has` and `over`, and People finds people by Plan (`?plan=`), as `people` counts them.
+  whenever at least one Plan exists, as a Plan card with how much of each limit they use (the
+  [catalog design](2026-10-17-plans-ui-catalog-design.md); ADR 0030, amended, for the Integration
+  Token count). This keeps ADR 0030's promise, and CONTEXT's Operator Overview entry gains the Plan.
+  Since 2026-10-16 the overview also computes, for the Plan each person has (their own, or else the
+  default, whether or not Plans are on), each limit they have more of than it allows, with how many
+  are in use and allowed, counted through `InstallationUnitOfWork.plan_use`; only active Users who
+  do not administer are ever over. The person's overview and every row of People answer it as `has`
+  and `over`, and People finds people by Plan (`?plan=`), as `people` counts them.
 - **Invitations** carry no Plan. Invited Users start on the default, and the Invite form says
   which Plan that is once one is the default.
 - A malformed Plan key in a path names no Plan, so it answers 404 `plan_not_found`.
@@ -691,66 +689,10 @@ third design review, and which describes each screen. It replaced the first desi
 Default plan select, and "Limit people with plans" checkbox, and lists under "Kept from the earlier
 rounds" what it keeps of them.
 
-- **People, Plans** (`/people/plans`, a tab after Everyone and Invitations, hidden with People under
-  Only Me; until 2026-10-16 it sat in Settings, Administration, between Registration and Storage).
-  First a status card: "Plans are on" or "Plans are off", one sentence on what Plans do now or
-  would do once on, and one switch that applies at once, with its result in a toast with Undo.
-  Turning on with no default adds No limits, as section 9 says; the switch sends the saved default
-  with the new state. The card's facts, "Limited now", "Over a limit", "Default plan", and "Never
-  limited", come from `limited_people`, `over_people`, the default, and how many administrators
-  there are. With no Plan, the card is followed by one empty state ("No plans yet") whose action is
-  New plan. Otherwise a table of Plans: Plan (the default first, with a "Default" badge), Active
-  rules, Calendar accounts, Integration Tokens, Sync speed, People, and a row menu. People links to
-  Everyone filtered by the Plan, with "1 over a limit" from `over_people`. The row menu holds Edit,
-  Assign people, Make default (which says whom it moves, and sends the saved state with the new
-  default), Duplicate, and Remove, disabled with its reason on the default ("Make another plan the
-  default first.") and on a Plan someone has, naming the first three by email from
-  `GET /api/v1/users?plan=` (`page_size=3`, by email) and then how many more, the count alone until
-  the names arrive; on any other Plan, Remove confirms inline. There is no Default plan select, no "No default", and no Save default. Edit,
-  Assign people, and New plan open a side panel beside the table at `/people/plans/<key>`,
-  `/people/plans/<key>/people`, and `/people/plans/new`, never a modal; on a narrow screen it
-  replaces the table. Its Limits tab is the editor: a name, never a key, refused under Name before
-  it is sent when another Plan reads as it ("Another plan is named Free. Choose a different
-  name."); "Maximum active rules", "Maximum calendar accounts", and "Maximum Integration Tokens",
-  each "No limit" or "Up to" a whole number (Integration Tokens also "None"), with what counts as
-  its hint; and "Sync speed", Instant or Every 5 minutes as radio cards, with "Longer intervals
-  arrive in a later release." A limit typed lower than the people on the Plan use warns under it,
-  in a status a screen reader announces, with how many of the people it limits would have more,
-  counted from `use` and naming nobody ("1 person on Pro has more active rules than this. Their
-  rules keep syncing, but they can't start another."; "Once plans are on, ..." while they are
-  off). Its People tab assigns: a search and a checklist of the people who do not have the Plan,
-  each with the Plan they have and, from a dry run of `POST /api/v1/plan-assignments`, what they
-  would be over, administrators last as never limited; then who has it now, each with Change plan.
-  Save names the field it waits for. While a command is on its way, its controls keep focus with
-  `aria-disabled`; a refusal shows under the control or field it names, which takes focus.
-- **People:** once a Plan exists, Everyone has a Plan column (the Plan's name with "Default",
-  "Over a limit" in Attention Ochre with an icon, or "Not limited" for an administrator; "Would be
-  over", neutral, while Plans are off), a Plan filter ("Any plan", then each Plan, the default as
-  "Free (default)") kept in the address as `?plan=`, and a Limits filter ("Anyone", "Over a
-  limit") kept as `?over=true`; Everyone reads Plans for the filter only then. Rows can be
-  selected, and a bulk bar's Change plan opens a popover of radio cards: "Follow the default plan"
-  first, naming the default now, then each Plan with what it allows ("1 active rule, 1 calendar
-  account, no Integration Tokens, every 5 minutes"), and, from a dry run, who would be over before
-  the administrator confirms. Each row's More actions and the person page offer the same chooser
-  for one person. A person's page has a Plan card: who gave the Plan and when (`assigned_by`,
-  `assigned_at`), whether it limits them now, the Plan's name, and one row per limit with a meter
-  of `use` against the limit, "1 of 1" and "Limit reached", or "2 of 1" and "Over" in Attention
-  Ochre with an icon and a sentence on what keeps working. An administrator's reads "No plan limits
-  administrators." A result names the Plan ("robin@example.test now has Family.", "2 people now
-  have Pro."): for one person on their row or Plan card, in a status a screen reader announces, and
-  for several people, or from a Plan's People tab, in a toast with Undo.
-- **Settings, Your account, Your plan** (`#your-plan`): one card titled with the Plan's name,
-  "Set by your administrator" or "The default plan", then the person page's rows in the person's
-  words, each a meter with "x of y" and a chip, never color alone; unlimited counts read "No limit"
-  with how many are in use, and a Plan with no Integration Tokens reads "Not included". A count
-  past its limit says what keeps working and how to make room, linking to Connections for calendar
-  accounts. The card closes with "To change your plan, ask your administrator.", naming nobody.
-  Arriving by "See your plan" moves focus to its heading. An administrator reads "You administer
-  this installation, so no plan limits you." Hidden while Plans are off and under Only Me. Slice 4
-  adds the grace line ("On {date}, {n} rules will be held: your plan lets {limit} sync."), with
-  the step "Choose which keep syncing" and an inline checkbox list.
-- **Invite someone** says, once a Plan is the default, "They get the default plan, Free. You can
-  change it after they join." Invitations still carry no Plan.
+- **People, Plans; Everyone; a person's page; Your plan; Invite someone:** as the catalog design
+  describes. Slice 4 adds to Your plan the grace line ("On {date}, {n} rules will be held: your
+  plan lets {limit} sync."), with the step "Choose which keep syncing" and an inline checkbox
+  list.
 - **Limits:** Start is disabled when `can_start` is false, with the refusal message and a link to
   Your plan. The preview footer shows the coded message, not "Try again in a moment". "Create sync
   rule" stays enabled; while a rule limit applies, a note beside it says "Your plan lets 5 rules

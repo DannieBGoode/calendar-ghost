@@ -495,36 +495,33 @@ head ("5 plans"), or in the empty state, outline while a side panel is open so t
 holds the one primary action. Plans sit beside the people they limit, so Settings keeps only
 each person's own Your plan.
 
-The Plans tab leads with a status card: the state as an object title ("Plans are on"), one
-sentence that says what the facts cannot (what a limit does and who gets the default while on,
-what the switch does while off), never a count or a name a fact shows, and the switch, which
-applies at once and answers in a toast with Undo. Below them sit three facts, one equal column
-each: Limited now, Over a limit (in Attention Ochre with an icon, its number the link that opens
-Everyone narrowed to those people: "⚠ 1 person ›"), and Default plan. On a narrow card the first
-two lead side by side and Default plan follows on one quieter line. The catalog's footnote says
-once that People counts include administrators, who are never limited. While Plans are
-off the facts say what turning on would do, and every over-limit chip on the page turns neutral,
-because nothing is enforced. With no Plan, the card is followed by one
-empty state whose action is New plan. Otherwise the catalog follows: a data table of Plans with one
-column per limit, the default first with a "Default" badge, and People as a link to Everyone
+The Plans tab leads with a status card and its switch: the state as an object title ("Plans are
+on"), one sentence that says what the facts cannot (what a limit does and who gets the default
+while on, what the switch does while off), never a count or a name a fact shows, and three facts,
+one equal column each: Limited now, Over a limit (in Attention Ochre with an icon, its number the
+link that opens Everyone narrowed to those people: "⚠ 1 person ›"), and Default plan. On a narrow
+card the first two lead side by side and Default plan follows on one quieter line. While Plans are
+off the facts say what turning on would do, and every over-limit chip on the page turns neutral.
+With no Plan, one empty state follows whose action is New plan; otherwise the catalog, a data
+table of Plans, the default first with a "Default" badge, and People as a link to Everyone
 filtered by the Plan, with an Attention Ochre "1 over a limit" chip linking to those of them over
-it. A press anywhere on a row opens its Plan. Each row's More actions holds Edit, Assign people,
-Make default, which says whom it moves and who keeps the default they were given as their own,
-Duplicate, and Remove. Remove on the default, or on a Plan someone has, is disabled with its reason
-as its description, naming the first three who have it by email and then how many more, instead
-of a confirmation the server would refuse. There is no Default plan select and no "No default": a
-Plan becomes the default only by Make default, and Plans are never on without one.
+it. Its footnote says once that People counts include administrators, who are never limited. Each
+row's More actions holds Edit, Assign people, Make default, which says whom it moves and who keeps
+the default they were given as their own, Duplicate, and Remove, which on the default, or on a
+Plan someone has, is disabled instead of offering a confirmation the server would refuse, its
+reason naming the first three who have it by email and then how many more. There is no Default
+plan select and no "No default": a Plan becomes the default only by Make default, and Plans are
+never on without one.
 
-Selecting a Plan opens its side panel at its own address, with two tabs. Limits is the editor: a
-name, never a key, refused before it is sent when another Plan has it; a Limit field per count,
-with what counts as its hint; Sync speed as radio cards; and, under a limit typed lower than the
-people on the Plan use, how many people it would leave with more, in Attention Ochre with an icon.
-People is a searchable checklist of the people who do not have the Plan, each saying before anyone
-confirms what they would be over, administrators last as never limited, then who has the Plan now.
-Whoever is chosen stays chosen, and warned about, while a search hides them. On the default's
-panel, giving it means following it, as Change plan's default does.
-While a Plan command is on its way, its controls stay focusable and wait, so focus never drops to
-the page; a refusal shows under the field it names, which takes focus.
+A Plan's side panel has two tabs. Limits is the editor: a name, never a key, refused before it is
+sent when another Plan has it; a Limit field per count; Sync speed; and, under a limit typed lower
+than the people on the Plan use, how many people it would leave with more, in Attention Ochre with
+an icon. People is a searchable checklist of the people who do not have the Plan, each saying
+before anyone confirms what they would be over, administrators last as never limited, then who has
+the Plan now. Whoever is chosen stays chosen, and warned about, while a search hides them. On the
+default's panel, giving it means following it, as Change plan's default does. While a Plan command
+is on its way, its controls stay focusable and wait, so focus never drops to the page; a refusal
+shows under the field it names, which takes focus.
 
 Everyone shows Installation Health in a card, then everyone here in one card holding its search,
 filters, table, and pages, sorted by when people joined unless asked otherwise. Installation Health
@@ -542,11 +539,9 @@ command's result appears beside the person it changed. Once a Plan exists, the t
 column, the Plan's name with chips ("Default", "Over a limit" in Attention Ochre with an icon, "Not
 limited" for an administrator) and, on a muted line under them, which limit someone is over ("2
 calendar accounts, 1 allowed"), and the filters a Plan filter and a Limits filter, kept in the
-address like the others. Rows can be selected; the bulk bar's Change plan opens a popover of radio
-rows, one per Plan, the default first, where choosing the default means following it, with what
-they have now chosen and marked "Current", and a dry run under the choice that says who would be
-over. Each row's More actions opens the same chooser for one person, and the person's page opens
-it inside their Plan card. The result of any change is a toast with Undo.
+address like the others. Rows can be selected for Change plan, whose radio rows put the default
+first, where choosing it means following it, with what they have now chosen. The result of any
+change is a toast with Undo.
 
 A person's page starts at their name, and the browser tab names them. It leads with a
 Synchronization card: the verdict with how many rules run, then a problem several rules share,

@@ -197,7 +197,7 @@ Allowance, the Plan they have, and each of its limits they are over, from the co
 `InstallationUnitOfWork.plan_use` reads as each limit counts them; a failure to read Plans leaves
 it out instead of failing People. `OperatorOverview.reach_of` counts, for People's Plans tab, how
 many of the people each Plan limits are over it and how many have each count, and fails as the
-Plans routes do (ADR 0038, amended). `OperatorOverview.page` lists
+Plans routes do (ADR 0038). `OperatorOverview.page` lists
 Users for People, and `OperatorOverview.of` answers an administrator about one User; both come
 from one function, so they cannot differ. `interfaces/access.py` holds the one access decision both transports use: a present
 `Authorization` header decides alone and must carry the scope the route needs, and only the status

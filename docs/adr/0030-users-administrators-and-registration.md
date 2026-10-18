@@ -2,9 +2,8 @@
 
 Builds on [ADR 0023](0023-hosted-service-runs-the-open-codebase.md) and
 [ADR 0029](0029-isolate-users-in-one-sqlite-database.md). Amended by
-[ADR 0038](0038-plans-allowances-and-limits.md): the Operator Overview shows each User's Plan, and
-returning to setup turns Plans off. Amended again on 2026-10-17: People shows how much of their Plan
-a person uses, Integration Tokens included; see the last amendment.
+[ADR 0038](0038-plans-allowances-and-limits.md): the Operator Overview shows each User's Plan and
+how much of it they use, Integration Tokens included, and returning to setup turns Plans off.
 
 ## Context
 
@@ -108,8 +107,6 @@ their detail:
 - **Returning to setup turns Plans off,** keeping their definitions and the default, so a new
   first User never inherits limits nobody can see. Invitations carry no Plan: an invited User
   starts on the Default Plan.
-
-## Amendment: how much of their Plan a person uses (2026-10-17)
 
 The [catalog design for Plans](../superpowers/specs/2026-10-17-plans-ui-catalog-design.md) gives a
 person's page on People a Plan card with one meter per limit, so the administrator who decides

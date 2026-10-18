@@ -40,9 +40,9 @@ place, which compares only one Plan at a time and carries the most accessibility
 
 1. **Labels.** The editor's limits are "Maximum active rules", "Maximum calendar accounts",
    "Maximum integration tokens", and "Sync speed"; columns and usage say "Active rules", "Calendar
-   accounts", "Integration tokens", and "Sync speed" (sentence case, the glossary term too, since
-   2026-10-18). Calendar accounts are never "active":
-   Disconnected Accounts count. CONTEXT.md defines Active Rule.
+   accounts", "Integration tokens", and "Sync speed" (sentence case, the glossary term too).
+   Calendar accounts are never "active": Disconnected Accounts count. CONTEXT.md defines
+   Active Rule.
 2. **One switch, first.** One Plans on and off switch, at the top of the Plans tab in a status
    card, which applies at once and says the result in a toast.
 3. **No "No default", no Default plan card.** The default is a "Default" badge on its Plan, and
@@ -64,7 +64,6 @@ place, which compares only one Plan at a time and carries the most accessibility
 
 Every behavior the earlier rounds built and tested stays:
 
-- Turning Plans on with no default adds the ordinary Plan "No limits" as the default.
 - Plan names are unique whatever their case; the form refuses a name another Plan has before
   sending it ("Another plan is named Free. Choose a different name."), with focus on Name.
 - A Plan's key is made from its name, and the Web UI neither asks for it nor shows it.
@@ -72,13 +71,6 @@ Every behavior the earlier rounds built and tested stays:
   `use`; the Web UI computes no counts of its own.
 - Limit hints fail open: when Your plan cannot be read, every hint is left out and every control
   works, and the server still checks.
-- While a command is on its way, its controls keep focus with `aria-disabled`; a refusal shows
-  under the control or field it names, which takes focus; results reach screen readers through
-  one live region.
-- The lowered-limit warning, counted from `use`; Remove refused with who has the Plan; the
-  `?plan=` filter.
-- Sync speed offers only Instant and Every 5 minutes, with "Longer intervals arrive in a later
-  release." The 10 to 60 minute intervals stay out until the scheduler honors them.
 
 ## Screens
 
@@ -150,8 +142,6 @@ empty state.
 5. **Narrow screens.** Below a 56rem catalog, each row becomes a card that labels its values, as
    Everyone's rows do.
 
-(Items 1, 2, 3, and 5 amended on 2026-10-18 after the owner's review of the Plans tab.)
-
 ### Plan panel: Limits
 
 The panel opens beside the table at `/people/plans/<key>`, or `/people/plans/new` for New plan.
@@ -166,7 +156,7 @@ save. Nobody loses anything they already have."
   Tabs: Limits and People, with how many have it.
 - **Fit.** The panel fits the window below where it starts, so its footer with Save is in view as
   it opens, and only its body scrolls; once it sticks under the top bar it is as tall as the room
-  there. (Amended on 2026-10-18.)
+  there.
 - **Name,** with "People see this name in Your plan."
 - **"Limits for each person",** each limit with its hint and a segmented control:
   - "Maximum active rules": "Running rules count, and rules waiting for an account to be
@@ -177,7 +167,7 @@ save. Nobody loses anything they already have."
   - The number stays visible, dimmed, while No limit or None is chosen, so switching back keeps
     it. It is a text field with a numeric keyboard, so a scroll wheel never changes a limit.
   - Where the field is too narrow for its options on one line, as on a phone, they stack as a list,
-    each a full-width row; wider, an option that wraps fills its line. (Amended on 2026-10-18.)
+    each a full-width row; wider, an option that wraps fills its line.
   - A limit lower than the people on the Plan use warns under it, in Attention Ochre with an icon,
     counted from `use` and naming nobody: "1 person on Pro has more active rules than this. Their
     rules keep syncing, but they can't start another." While Plans are off it starts "Once plans
@@ -199,8 +189,7 @@ save. Nobody loses anything they already have."
   listed yet. A toast says what happened: "Free was saved.", or, for a new Plan or a duplicate,
   "Free was added." with Assign people, which opens the Plan's People tab with focus on the
   panel's title, and stays until it is closed or replaced. Save with nothing changed only closes
-  the panel. A refusal keeps it open, and changes not saved still ask before it closes. (Amended
-  on 2026-10-17 after the owner's review; a saved Plan's panel used to stay open.)
+  the panel. A refusal keeps it open, and changes not saved still ask before it closes.
 
 ### Plan panel: People
 
@@ -215,7 +204,7 @@ At `/people/plans/<key>/people`, which Assign people in the row menu opens.
   with an icon ("Would be over: 3 active rules, Free allows 1"). Administrators follow under
   "Administrators", each "Never limited, whatever plan they have", the reader marked "You".
 - Whoever is checked stays checked while a search hides them, and the dry run still asks about
-  them, so the note below still names them. (Amended on 2026-10-18.)
+  them, so the note below still names them.
 - When a checked person would be over, a note says what that means: "alex@example.test will have
   more than Free allows. Their 3 active rules keep syncing, but they can't start another until only
   1 is active."
@@ -236,8 +225,7 @@ At `/people/plans/<key>/people`, which Assign people in the row menu opens.
 - The Plan column is the Plan's name with chips: "Default", "Over a limit" in Attention Ochre with
   an icon ("Would be over", neutral, while Plans are off), and "Not limited" for an administrator,
   then which limit someone is over on a muted line under them ("2 calendar accounts, 1 allowed").
-  Each email heads its row, in ink, underlined only under the pointer or keyboard focus. (Amended
-  on 2026-10-18; which limit used to be said only to a screen reader.)
+  Each email heads its row, in ink, underlined only under the pointer or keyboard focus.
 - Row checkboxes, with one in the header for the page that can be mixed. Selecting shows a bulk bar
   above the table: "2 selected", Change plan, and Clear selection.
 - **Change plan** opens a popover, "Change plan for 2 people", with the one compact chooser
@@ -254,19 +242,16 @@ At `/people/plans/<key>/people`, which Assign people in the row menu opens.
   Plans are on, or "Nobody would be over a limit". Then Save and Cancel. Save with what they have
   now closes it and sends nothing; with nothing chosen it says "Choose a plan first." and moves
   focus to the first Plan. Focus starts on the Plan chosen.
-- The popover never leaves the window: it opens under its control, or above it when there is more
-  room there, below the top bar and above a toast. Its height is capped at the room it has and its
-  rows scroll inside it, while its title, note, and Save stay in view; a control with little room
-  on both sides is first scrolled up, as far as the page scrolls. While rows sit below the cut
-  edge, they fade out at it, and the fade is gone at the end of the list; a screen reader still has
-  every row. (Amended on 2026-10-18: the owner kept the capped popover on a phone.)
+- The popover never leaves the window, on a phone too: it opens under its control, or above it
+  when there is more room there, below the top bar and above a toast. Its height is capped at the
+  room it has and its rows scroll inside it, while its title, note, and Save stay in view; a
+  control with little room on both sides is first scrolled up, as far as the page scrolls. While
+  rows sit below the cut edge, they fade out at it, and the fade is gone at the end of the list; a
+  screen reader still has every row.
 - Each row's More actions holds Change plan, which opens the same chooser for that person, titled
   "Change plan for robin@example.test".
 - A change for one person or several answers in a toast, "robin@example.test now has Pro." or "2
-  people now have Pro.", with Undo, which gives each person back the Plan they had. (Amended on
-  2026-10-18 after the owner's review; Change plan used to be a column of radio cards with "Follow
-  the default plan" beside the default Plan, a held line, and a confirm button that waited, and a
-  change for one person answered on their row.)
+  people now have Pro.", with Undo, which gives each person back the Plan they had.
 
 ### A person's page
 
@@ -279,7 +264,7 @@ A Plan card follows the Synchronization card once any Plan exists.
   titled "Change plan", since the page names them, so their usage stays in view under it. It
   scrolls fully into view as it opens, with focus on the Plan chosen. Save or Cancel closes it and
   returns focus to Change plan; the result is a toast with Undo ("robin@example.test now has
-  Free."). (Amended on 2026-10-18; it used to be a popover over the card and the footer.)
+  Free.").
 - The Plan's name as an object title, with "Default" and "Over a limit" chips as in Everyone.
 - One row per limit: its name and what counts ("Running, or waiting for reauthorization",
   "Disconnected accounts count", "Revoked tokens don't count", "How soon changes reach other
@@ -344,7 +329,7 @@ behavior and roles, and DESIGN.md describes them:
 - **Popover** for the Change plan chooser in Everyone: it takes focus, Escape or Cancel returns it,
   and it stays inside the window, flipping above its control and capping its height. The row menu
   shares its placement (`keep-in-window.ts`), so a menu never runs under the window's foot, the
-  footer, or a toast, and a disabled item's reason stays readable. (Amended on 2026-10-18.)
+  footer, or a toast, and a disabled item's reason stays readable.
 
 The side panel reuses Activity's layout and `DetailToolbar`; the row menu reuses `OverflowMenu`;
 search reuses `SearchField`. The popover, the person page's card, and a Plan's People tab share
@@ -352,39 +337,18 @@ one Change plan component.
 
 ## Server changes
 
-[ADR 0038](../../adr/0038-plans-allowances-and-limits.md)'s 2026-10-17 amendment records them:
-
-- `POST /api/v1/plan-assignments` (administrator) gives one Plan, or the default with `null`, to up
-  to 100 people at once, all or none, with one `AssignmentChange` and one log line per person, and
-  answers each person's Plan before and after and what they are over. With `dry_run` it writes
-  nothing and answers the same. It refuses an unknown Plan with 404 `plan_not_found`, and no
-  people, more than 100, or someone who is not a User with 422 `invalid_assignment`.
-- `GET /api/v1/users?over=true` lists the people over a limit of the Plan they have.
-- The person's Plan gains `assigned_by`, `assigned_at`, and `use`: their Active Rules, Connected
-  Accounts, and unrevoked Integration Tokens
-  ([ADR 0030](../../adr/0030-users-administrators-and-registration.md), amended, for the token
-  count).
-- The Plans overview gains how many people have no Plan of their own, for the count Make default
-  says it moves.
-- No Plan has the key `new`, which `/people/plans/new` names.
-- `PUT /api/v1/plan-settings` does not change: the switch sends the saved default with the new
-  `enabled`, and Make default sends the saved `enabled` with the new `default_plan`.
+[ADR 0038](../../adr/0038-plans-allowances-and-limits.md) records the server changes this design
+needed. `PUT /api/v1/plan-settings` does not change: the switch sends the saved default with the
+new `enabled`, and Make default sends the saved `enabled` with the new `default_plan`.
 
 ## Accessibility
 
 - Every status combines color with text and an icon; meters always have their numbers beside them.
-- Controls reach 44 px on a coarse pointer, the base Button, Input, and NativeSelect included
-  (amended on 2026-10-18).
+- Controls reach 44 px on a coarse pointer, the base Button, Input, and NativeSelect included.
 - A Plan's name heads its row in the catalog, and a person's email in Everyone, so a screen reader
-  names the row as it moves down a column (amended on 2026-10-18).
+  names the row as it moves down a column.
 - The panel is not modal: opening it moves focus to its title, Close returns it to the row, and the
   rest of the page stays usable. Change plan moves focus to the Plan chosen, the arrow keys move
   the choice, and Escape or Cancel closes it and returns focus to its button.
 - The switch, the bulk bar, and every command keep focus with `aria-disabled` while they wait.
 - Checked at 390 and 1440 px, in light, dark, and Midnight, with the pseudo-locale and 200% text.
-
-## Documentation that follows the build
-
-`docs/self-hosting.md` (its Plans steps), `docs/troubleshooting.md` (removing the default Plan), and
-`CHANGELOG.md` describe the Plans UI step by step; they change with the screens they describe.
-`docs/data-ownership.md` already lists what a person's Plan card shows an administrator.

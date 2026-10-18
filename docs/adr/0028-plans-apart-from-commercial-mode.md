@@ -60,9 +60,8 @@ open:
   that cost more, and a free Plan may sync every 5 to 10 minutes. A self-hosted installation has
   every feature and no limits unless its own administrator turns Plans on.
 - **A Default Plan.** The administrator marks one Plan as the default, which every User without a
-  Plan of their own has. Plans cannot turn on until a default exists. Billing will return a User
-  to it when a payment ends. (Since 2026-10-16, turning Plans on with no default makes a Plan
-  named "No limits" the default; see ADR 0038's amendment.)
+  Plan of their own has, and billing will return a User to it when a payment ends. Turning Plans
+  on with no default makes a Plan named "No limits" the default.
 - **Installation Administrators are never limited.** Under Only Me the only User administers, so
   Plans have no effect there, and the Web UI hides them.
 - **Sync intervals are a fixed list:** Instant, 5, 10, 15, 30, and 60 minutes, where Instant means
