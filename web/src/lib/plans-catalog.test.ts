@@ -208,6 +208,10 @@ describe("makeDefaultHint", () => {
 })
 
 describe("removeRefusal", () => {
+  it("keeps the default even when nobody has it", () => {
+    expect(removeRefusal(i18n, { ...free, people: 0, is_default: true }, undefined)).toBe("Make another plan the default first.")
+  })
+
   it("counts who has a Plan until their names arrive, or when they cannot", () => {
     expect(removeRefusal(i18n, free, undefined)).toBe("2 people have Free. Give them another plan first.")
     expect(removeRefusal(i18n, { ...free, people: 1 }, holders([]))).toBe("1 person has Free. Give them another plan first.")

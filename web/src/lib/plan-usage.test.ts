@@ -189,6 +189,10 @@ describe("ownPlanCard", () => {
     ])
   })
 
+  it("shows Over a limit when only calendar accounts are past their limit", () => {
+    expect(ownPlanCard(i18n, own)?.chips).toEqual([{ id: "over", text: "Over a limit", tone: "attention" }])
+  })
+
   it("says rules and tokens past their limits to the reader", () => {
     const rows =
       ownPlanCard(i18n, {
