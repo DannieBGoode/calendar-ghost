@@ -102,7 +102,6 @@ def plans_response(overview: PlansOverview, reach: Mapping[PlanKey, PlanReach]) 
         enabled=overview.setting.enabled,
         default_plan=default.value if default is not None else None,
         sync_intervals=[interval.value for interval in overview.offered],
-        administrators=overview.administrators,
         followers=overview.followers,
         plans=[plan_response(listing, reach[listing.plan.key]) for listing in overview.plans],
     )

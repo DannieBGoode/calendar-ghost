@@ -1941,8 +1941,6 @@ export interface components {
          * @description The Plans setting, the sync intervals offered now, and every Plan by name.
          */
         PlansResponse: {
-            /** Administrators */
-            administrators: number;
             /** Default Plan */
             default_plan: string | null;
             /** Enabled */

@@ -19,11 +19,10 @@ from calendar_sync.application.identity.ports import (
     PlanListing,
     PlansSetting,
     UserDirectory,
-    UserQuery,
 )
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.ports import Allowances
-from calendar_sync.domain.access import Role, UserId
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.plans import (
     OFFERED_INTERVALS,
     Allowance,
@@ -41,24 +40,18 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class PlansOverview:
     """Every Plan with who has it, the Plans setting, the sync intervals a Plan may offer, and
-    how many people administer."""
+    how many people have no Plan of their own."""
 
     setting: PlansSetting
     plans: tuple[PlanListing, ...]
     offered: tuple[SyncInterval, ...]
-    administrators: int
-    """Everyone who holds the Installation Administrator role, active or not: no Plan limits
-    them, though each Plan's `people` counts those who have it."""
     followers: int
     """Everyone with no Plan of their own, whatever their role or state: whom Make default
     moves to the Plan it makes the default."""
 
 
-def _overview(users: UserDirectory, catalog: PlanCatalog, setting: PlansSetting) -> PlansOverview:
-    administrators = users.find(UserQuery(role=Role.INSTALLATION_ADMINISTRATOR, limit=0)).total
-    return PlansOverview(
-        setting, tuple(catalog.plans()), OFFERED_INTERVALS, administrators, catalog.followers()
-    )
+def _overview(catalog: PlanCatalog, setting: PlansSetting) -> PlansOverview:
+    return PlansOverview(setting, tuple(catalog.plans()), OFFERED_INTERVALS, catalog.followers())
 
 
 def _listing(catalog: PlanCatalog, key: PlanKey) -> PlanListing:
@@ -83,7 +76,7 @@ class ShowPlans:
 
     def execute(self, actor: UserId) -> PlansOverview:
         require_administrator(self.users, actor)
-        return _overview(self.users, self.catalog, self.catalog.settings())
+        return _overview(self.catalog, self.catalog.settings())
 
 
 @dataclass(slots=True)
@@ -162,7 +155,7 @@ class SetPlansSetting:
             _logged(setting.default),
             actor.value,
         )
-        return _overview(self.users, self.catalog, setting)
+        return _overview(self.catalog, setting)
 
 
 @dataclass(slots=True)

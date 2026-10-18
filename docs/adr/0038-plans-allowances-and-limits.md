@@ -332,11 +332,12 @@ limits, what they count, and how they are enforced do not change.
   Plan, administrators included. `assigned_by` and `assigned_at` come from
   `PlanAssignments.last_changes` only while the Plan is their own, and `assigned_by` is null once
   that administrator is deleted. A fault reading them leaves the Plan out, as before.
-- **The Plans overview counts administrators,** for the status card's Never limited fact:
-  `administrators` is every User who holds the role, active or not. It also counts `followers`,
-  every User with no Plan of their own, whatever their role or state, for the count Make default
-  says it moves ("People without a plan of their own (2 now) move to Free."). The default's
-  `people` cannot say it, since it also counts those whose own Plan became the default.
+- **The Plans overview counts `followers`,** every User with no Plan of their own, whatever their
+  role or state, for the count Make default says it moves ("People without a plan of their own
+  (2 now) move to Free."). The default's `people` cannot say it, since it also counts those whose
+  own Plan became the default. It no longer counts administrators: on 2026-10-18 the owner dropped
+  the status card's Never limited fact, and the catalog's footnote says once that People counts
+  include administrators, who are never limited.
 - **No Plan has the key `new`.** The New plan panel's address is `/people/plans/new`, beside each
   Plan's `/people/plans/<key>`, so a key made from a name treats `new` as taken (a Plan named New
   gets `new-2`), and `POST /api/v1/plans` refuses a request that names it with 422 `invalid_plan`.

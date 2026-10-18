@@ -135,7 +135,6 @@ const PLANS: PlansOverview = {
   enabled: true,
   default_plan: "free",
   sync_intervals: ["instant", "5_minutes"],
-  administrators: 1,
   followers: 2,
   plans: [planSummary("family", "Family", false), planSummary("free", "Free", true)],
 }
@@ -1051,7 +1050,7 @@ describe("People page", () => {
     const tabs = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")]
     await click(tabs[2]!)
     expect(intro()).toBe(
-      "Plans set how much each person can use and how soon their calendars sync. Administrators are never limited.",
+      "Plans set how much each person can use and how soon their calendars sync.",
     )
     expect(actions()).toEqual(["New plan"])
     await click(tabs[1]!)

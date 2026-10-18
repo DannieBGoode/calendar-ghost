@@ -501,7 +501,6 @@ describe("People", () => {
         enabled: false,
         default_plan: null,
         sync_intervals: ["instant", "5_minutes"],
-        administrators: 1,
         followers: 1,
         plans: [],
       },
@@ -654,7 +653,7 @@ describe("People", () => {
       }
       if (path === "/api/v1/plans" && added) {
         return Promise.resolve(
-          jsonResponse({ enabled: false, default_plan: null, sync_intervals: ["instant", "5_minutes"], administrators: 1, followers: 1, plans: [team] }),
+          jsonResponse({ enabled: false, default_plan: null, sync_intervals: ["instant", "5_minutes"], followers: 1, plans: [team] }),
         )
       }
       return answer(input, init)

@@ -77,7 +77,7 @@ export function compactStatusSentence(i18n: I18n, overview: PlansOverview): stri
 
 /** One of the status card's facts; `over` counts who is over a limit, for the fact that shows them. */
 export type PlansFact = {
-  id: "limited" | "over" | "default" | "administrators"
+  id: "limited" | "over" | "default"
   label: string
   value: string
   /** In Attention Ochre with an icon: people are over a limit Plans enforce now. */
@@ -92,16 +92,14 @@ function peopleCount({ t }: I18n, count: number): string {
 }
 
 /**
- * The status card's facts: whom Plans limit, who is over a limit, the Default Plan, and who is
- * never limited, the last two secondary. While Plans are off they say what turning them on would
- * do, and nothing takes the attention tone, since nothing is enforced. None before any Plan exists.
- * Who is never limited is left out when the answer has no count of them, as a server older than
- * the page sends, rather than shown without its number.
+ * The status card's facts: whom Plans limit, who is over a limit, and the Default Plan, the last
+ * secondary. While Plans are off they say what turning them on would do, and nothing takes the
+ * attention tone, since nothing is enforced. None before any Plan exists.
  */
 export function statusFacts(i18n: I18n, overview: PlansOverview): PlansFact[] {
   const { t } = i18n
   if (overview.plans.length === 0) return []
-  const { enabled, administrators } = overview
+  const { enabled } = overview
   const over = overPeople(overview.plans)
   const fact = (id: PlansFact["id"], label: string, value: string, count = 0): PlansFact => ({
     id,
@@ -109,9 +107,9 @@ export function statusFacts(i18n: I18n, overview: PlansOverview): PlansFact[] {
     value,
     attention: enabled && count > 0,
     over: count,
-    secondary: id === "default" || id === "administrators",
+    secondary: id === "default",
   })
-  const facts = [
+  return [
     fact(
       "limited",
       t(enabled ? "people.plans.status.limited" : "people.plans.status.wouldLimitFact"),
@@ -120,9 +118,6 @@ export function statusFacts(i18n: I18n, overview: PlansOverview): PlansFact[] {
     fact("over", t(enabled ? "people.plans.status.over" : "people.plans.status.wouldBeOver"), peopleCount(i18n, over), over),
     fact("default", t("people.plans.status.default"), defaultName(overview) ?? t("people.plans.status.noDefault")),
   ]
-  if (!Number.isFinite(administrators)) return facts
-  const never = t("people.plans.status.administrators", { count: administrators })
-  return [...facts, fact("administrators", t("people.plans.status.neverLimited"), never)]
 }
 
 /**

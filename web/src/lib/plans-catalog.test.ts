@@ -48,20 +48,17 @@ function overview({
   enabled = true,
   defaultPlan = "no-limits",
   plans = [noLimits, free, pro],
-  administrators = 1,
   followers = 2,
 }: {
   enabled?: boolean
   defaultPlan?: string | null
   plans?: PlanSummary[]
-  administrators?: number
   followers?: number
 } = {}): PlansOverview {
   return {
     enabled,
     default_plan: defaultPlan,
     sync_intervals: ["instant", "5_minutes"],
-    administrators,
     followers,
     plans: plans.map((plan) => ({ ...plan, is_default: plan.key === defaultPlan })),
   }
@@ -170,12 +167,11 @@ describe("compactStatusSentence", () => {
 })
 
 describe("statusFacts", () => {
-  it("states whom Plans limit, who is over, the default, and who is never limited, while on", () => {
-    expect(statusFacts(i18n, overview({ administrators: 2 }))).toEqual([
+  it("states whom Plans limit, who is over, and the default, while on", () => {
+    expect(statusFacts(i18n, overview())).toEqual([
       { id: "limited", label: "Limited now", value: "2 people", attention: false, over: 0, secondary: false },
       { id: "over", label: "Over a limit", value: "1 person", attention: true, over: 1, secondary: false },
       { id: "default", label: "Default plan", value: "No limits", attention: false, over: 0, secondary: true },
-      { id: "administrators", label: "Never limited", value: "2 administrators", attention: false, over: 0, secondary: true },
     ])
   })
 
@@ -184,7 +180,6 @@ describe("statusFacts", () => {
       { id: "limited", label: "Would limit", value: "Nobody", attention: false, over: 0, secondary: false },
       { id: "over", label: "Would be over a limit", value: "Nobody", attention: false, over: 0, secondary: false },
       { id: "default", label: "Default plan", value: "None yet", attention: false, over: 0, secondary: true },
-      { id: "administrators", label: "Never limited", value: "1 administrator", attention: false, over: 0, secondary: true },
     ])
     expect(statusFacts(i18n, overview({ enabled: false }))[1]).toEqual({
       id: "over",
@@ -198,12 +193,6 @@ describe("statusFacts", () => {
 
   it("has no facts before any Plan exists", () => {
     expect(statusFacts(i18n, overview({ enabled: false, defaultPlan: null, plans: [] }))).toEqual([])
-  })
-
-  it("leaves out who is never limited when the server did not count them, as one older than the page", () => {
-    const older: Partial<PlansOverview> = overview()
-    delete older.administrators
-    expect(statusFacts(i18n, older as PlansOverview).map((fact) => fact.id)).toEqual(["limited", "over", "default"])
   })
 })
 

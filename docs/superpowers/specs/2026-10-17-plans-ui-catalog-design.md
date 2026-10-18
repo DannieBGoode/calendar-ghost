@@ -91,9 +91,9 @@ administers.
 
 People's sentence and primary action follow the tab, as Activity's title does. Everyone and
 Invitations keep the privacy sentence and Invite someone. Plans says "Plans set how much each person
-can use and how soon their calendars sync. Administrators are never limited." with New plan, which
-is outline while a panel is open, so the panel's footer holds the one primary action. With no Plan,
-New plan lives only in the empty state.
+can use and how soon their calendars sync." with New plan, which is outline while a panel is open,
+so the panel's footer holds the one primary action. With no Plan, New plan lives only in the empty
+state.
 
 ### Plans tab
 
@@ -108,11 +108,11 @@ New plan lives only in the empty state.
    - Off, with no Plan: "Everyone can use everything, with no limits. Turning plans on adds a plan
      named No limits as the default, so nobody is limited until you give someone a smaller plan."
 
-   Below, the facts, one equal column each for as many as the server counted, so a fact it left
-   out leaves no hole: "Limited now", "Over a limit" (in Attention Ochre with an icon, its number
-   the link that opens Everyone narrowed to people over a limit, "⚠ 1 person ›", named "Show the 1
-   person over a limit"), "Default plan", and "Never limited" ("1 administrator"). On a narrow card
-   the first two lead side by side and the other two follow on one quieter line. While Plans are
+   Below, three facts, one equal column each: "Limited now", "Over a limit" (in Attention Ochre
+   with an icon, its number the link that opens Everyone narrowed to people over a limit, "⚠ 1
+   person ›", named "Show the 1 person over a limit"), and "Default plan". On a narrow card the
+   first two lead side by side and "Default plan" follows on one quieter line, one line at 390 px.
+   While Plans are
    off they read "Would limit" and "Would be over a limit", neutral, because nothing is enforced.
    With no Plan, the card has no facts.
 2. **Catalog table,** titled "3 plans", with no instruction under it. Columns: Plan, Active rules,
@@ -127,7 +127,8 @@ New plan lives only in the empty state.
    a link, "2 people", to Everyone filtered by the Plan, with a chip "1 over a limit" in Attention
    Ochre with an icon on the same line that links to the same list narrowed to people over ("1
    would be over", neutral, while Plans are off). Rows are 48 px. A footnote, its icon on its first
-   line, says "People counts include administrators. Paused rules and drafts are not active."
+   line, says "People counts include administrators, who are never limited. Paused rules and
+   drafts are not active.", the one place the page says it.
 3. **Row menu** (the existing More actions menu, whose items carry descriptions): Edit; Assign
    people; Make default, described "People without a plan of their own (2 now) move to Free.", and,
    for people given the current default as their own Plan, "1 person keeps No limits, which was
@@ -357,8 +358,8 @@ one Change plan component.
   Accounts, and unrevoked Integration Tokens
   ([ADR 0030](../../adr/0030-users-administrators-and-registration.md), amended, for the token
   count).
-- The Plans overview gains how many administrators there are, for the Never limited fact, and how
-  many people have no Plan of their own, for the count Make default says it moves.
+- The Plans overview gains how many people have no Plan of their own, for the count Make default
+  says it moves.
 - No Plan has the key `new`, which `/people/plans/new` names.
 - `PUT /api/v1/plan-settings` does not change: the switch sends the saved default with the new
   `enabled`, and Make default sends the saved `enabled` with the new `default_plan`.

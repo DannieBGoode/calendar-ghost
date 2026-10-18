@@ -438,7 +438,7 @@
   },
   "plans": {
     "title": "Plans",
-    "pageIntro": "Plans set how much each person can use and how soon their calendars sync. Administrators are never limited.",
+    "pageIntro": "Plans set how much each person can use and how soon their calendars sync.",
     "new": "New plan",
     "loading": "Loading plans",
     "loadError": "Plans could not load. Nothing changed: the limits people had still apply.",
@@ -471,17 +471,12 @@
         "other": "{count} people"
       },
       "nobody": "Nobody",
-      "administrators": {
-        "one": "{count} administrator",
-        "other": "{count} administrators"
-      },
       "noDefault": "None yet",
       "limited": "Limited now",
       "wouldLimitFact": "Would limit",
       "over": "Over a limit",
       "wouldBeOver": "Would be over a limit",
       "default": "Default plan",
-      "neverLimited": "Never limited",
       "showOver": {
         "one": "Show the {count} person over a limit",
         "other": "Show the {count} people over a limit"
@@ -537,7 +532,7 @@
         "one": "{count} would be over on {name}",
         "other": "{count} would be over on {name}"
       },
-      "note": "People counts include administrators. Paused rules and drafts are not active.",
+      "note": "People counts include administrators, who are never limited. Paused rules and drafts are not active.",
       "noteOpen": "Changes apply as soon as you save. Nobody loses anything they already have."
     },
     "speed": {

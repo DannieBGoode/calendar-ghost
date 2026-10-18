@@ -37,7 +37,6 @@ const overview: PlansOverview = {
   enabled: false,
   default_plan: "free",
   sync_intervals: ["instant", "5_minutes"],
-  administrators: 1,
   followers: 2,
   plans: [family, free],
 }

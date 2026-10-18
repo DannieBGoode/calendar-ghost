@@ -834,9 +834,6 @@ class PlansResponse(ApiResponse):
     """The Default Plan's key; null until an administrator chooses one."""
     sync_intervals: list[SyncIntervalValue]
     """The sync intervals a Plan may be given now, in order."""
-    administrators: int
-    """Everyone who holds the Installation Administrator role, active or not. No Plan limits
-    them, though each Plan's `people` counts those who have it."""
     followers: int
     """Everyone with no Plan of their own, whatever their role or state: whom making another Plan
     the default moves to it."""

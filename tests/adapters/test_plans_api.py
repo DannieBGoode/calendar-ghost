@@ -196,7 +196,6 @@ def test_an_administrator_defines_lists_changes_and_removes_plans(
         "enabled": False,
         "default_plan": None,
         "sync_intervals": OFFERED,
-        "administrators": 1,
         "followers": 2,
         "plans": [],
     }
@@ -326,7 +325,6 @@ def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_that_limits_nob
         "enabled": True,
         "default_plan": "no-limits",
         "sync_intervals": OFFERED,
-        "administrators": 1,
         "followers": 2,
         "plans": [
             {**FREE_BODY, **NOBODY_ON_IT},
@@ -374,7 +372,6 @@ def test_the_default_is_never_cleared_while_plans_are_on_and_turning_them_off_ke
         "enabled": False,
         "default_plan": "free",
         "sync_intervals": OFFERED,
-        "administrators": 1,
         "followers": 2,
         # Everyone has the default; it would limit only the member, never an administrator.
         "plans": [{**FREE_BODY, "is_default": True, "people": 2, "limited_people": 1, **NO_USE}],

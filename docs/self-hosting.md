@@ -321,10 +321,10 @@ or **Over** with what keeps working), and that changing it is for their administ
 does not name ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
 
 The card counts how many people Plans limit, how many of them are over a limit, which you select
-to list them, the default Plan, and how many administrators are never limited. Below it, a table
-compares the Plans by limit: active rules, calendar accounts, Integration Tokens, sync speed, and
-how many people have each Plan, which lists them under **Everyone**, with how many of them are over
-a limit. Before you save a lower limit, the panel says how many people it would leave with more.
+to list them, and names the default Plan. Below it, a table compares the Plans by limit: active
+rules, calendar accounts, Integration Tokens, sync speed, and how many people have each Plan, which
+lists them under **Everyone**, with how many of them are over a limit; these counts include
+administrators, who are never limited. Before you save a lower limit, the panel says how many people it would leave with more.
 **Everyone** shows each person's Plan in its own column, with **Default**, **Over a limit**, or
 **Not limited** beside it and which limit someone is over under it, and the **Plan** and **Limits** filters list only the people who have
 one Plan, or who are over a limit. A person's page has a **Plan** card: who gave the Plan and when,

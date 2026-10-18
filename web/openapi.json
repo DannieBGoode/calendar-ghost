@@ -2463,10 +2463,6 @@
       "PlansResponse": {
         "description": "The Plans setting, the sync intervals offered now, and every Plan by name.",
         "properties": {
-          "administrators": {
-            "title": "Administrators",
-            "type": "integer"
-          },
           "default_plan": {
             "anyOf": [
               {
@@ -2513,7 +2509,6 @@
           "enabled",
           "default_plan",
           "sync_intervals",
-          "administrators",
           "followers",
           "plans"
         ],

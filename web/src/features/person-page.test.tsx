@@ -121,7 +121,6 @@ const plans: PlansOverview = {
   enabled: true,
   default_plan: "free",
   sync_intervals: ["instant", "5_minutes"],
-  administrators: 1,
   followers: 1,
   plans: [
     {

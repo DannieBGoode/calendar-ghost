@@ -13,10 +13,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   Instant or every 5 minutes. The form says what counts toward each limit, and before a lower limit
   is saved, how many people it would leave with more than it allows. The Plans tab starts with a card that says
   whether Plans are on and what they do now, or would do, beside the one **Plans** switch, which
-  applies at once, and counts whom Plans limit, who is over a limit, which you select to list them,
-  the default Plan, and the administrators no Plan limits; its sentence says what a limit does, or
-  what the switch would do, and never repeats a count. A table then compares the Plans by limit, with how many people
-  have each and how many of them are over a limit, each linking to them under **Everyone**.
+  applies at once, and counts whom Plans limit and who is over a limit, which you select to list
+  them, and names the default Plan; its sentence says what a limit does, or what the switch would
+  do, and never repeats a count. A table then compares the Plans by limit, with how many people
+  have each and how many of them are over a limit, each linking to them under **Everyone**; its
+  footnote says these counts include administrators, who are never limited.
   Selecting a Plan, anywhere on its row, opens it in a side panel beside the table, sized so its
   **Save** is in view, at its own address
   (`/people/plans/{key}`, its People tab under it, and `/people/plans/new` for New plan), never a
@@ -70,7 +71,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   the default's key, there or with `PUT /api/v1/users/{user_id}/plan`, does as `null` does: the
   person follows the default. A person's
   `plan` also gains `assigned_by` and `assigned_at`, who gave their own Plan and when, and `use`,
-  each count beside its limit; `GET /api/v1/plans` gains `administrators` and `followers`, how
+  each count beside its limit; `GET /api/v1/plans` gains `followers`, how
   many people have no Plan of their own. No Plan has the key
   `new`, which the New plan page's address uses: a Plan named New gets `new-2`, and
   `POST /api/v1/plans` refuses the key (422 `invalid_plan`). Migration 33 adds the `plans` table

@@ -489,11 +489,11 @@ each person's own Your plan.
 The Plans tab leads with a status card: the state as an object title ("Plans are on"), one
 sentence that says what the facts cannot (what a limit does and who gets the default while on,
 what the switch does while off), never a count or a name a fact shows, and the switch, which
-applies at once and answers in a toast with Undo. Below them sit the facts, one equal column each
-for as many as the server counted: Limited now, Over a limit (in Attention Ochre with an icon,
-its number the link that opens Everyone narrowed to those people: "⚠ 1 person ›"), Default plan,
-and Never limited, which explains why People counts include people Plans do not limit. On a narrow
-card the first two lead side by side and the other two follow on one quieter line. While Plans are
+applies at once and answers in a toast with Undo. Below them sit three facts, one equal column
+each: Limited now, Over a limit (in Attention Ochre with an icon, its number the link that opens
+Everyone narrowed to those people: "⚠ 1 person ›"), and Default plan. On a narrow card the first
+two lead side by side and Default plan follows on one quieter line. The catalog's footnote says
+once that People counts include administrators, who are never limited. While Plans are
 off the facts say what turning on would do, and every over-limit chip on the page turns neutral,
 because nothing is enforced. With no Plan, the card is followed by one
 empty state whose action is New plan. Otherwise the catalog follows: a data table of Plans with one

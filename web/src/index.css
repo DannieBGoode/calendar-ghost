@@ -1913,7 +1913,7 @@ p {
   text-align: right;
 }
 
-/* One equal track per fact the card has, so a fact the server did not count leaves no hole. */
+/* One equal track per fact. */
 .plans-facts {
   display: grid;
   margin: 0;
@@ -2923,8 +2923,8 @@ p {
     text-align: left;
   }
 
-  /* Whom Plans limit and who is over lead, side by side; the default and who is never limited
-     follow on one quieter line, so the card leaves room for the catalog on a phone. */
+  /* Whom Plans limit and who is over lead, side by side; the default follows on one quieter line,
+     so the card leaves room for the catalog on a phone. */
   .plans-facts {
     display: flex;
     flex-wrap: wrap;

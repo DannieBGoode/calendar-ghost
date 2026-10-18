@@ -89,7 +89,6 @@ function overview({
     enabled,
     default_plan: defaultPlan,
     sync_intervals: ["instant", "5_minutes"],
-    administrators: 1,
     followers,
     plans: plans.map((plan) => ({ ...plan, is_default: plan.key === defaultPlan })),
   }
@@ -556,7 +555,7 @@ describe("People's Plans tab", () => {
     await renderPlans(testI18n())
     expect(container.querySelector("h1")?.textContent).toBe("People")
     expect(container.querySelector(".page-intro")?.textContent).toBe(
-      "Plans set how much each person can use and how soon their calendars sync. Administrators are never limited.",
+      "Plans set how much each person can use and how soon their calendars sync.",
     )
     expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Plans")
     expect(element("plans-title").textContent).toBe("Plans")
@@ -623,13 +622,11 @@ describe("The status card", () => {
       ["Limited now", "5 people"],
       ["Over a limit", "Nobody"],
       ["Default plan", "Free"],
-      ["Never limited", "1 administrator"],
     ])
-    // Whom it limits and who is over lead; the default and who is never limited fold into one
-    // quieter line where the card is narrow.
+    // Whom it limits and who is over lead; the default follows on one quieter line where the card
+    // is narrow.
     expect([...statusCard().querySelectorAll(".plans-fact[data-secondary]")].map((item) => item.getAttribute("data-fact"))).toEqual([
       "default",
-      "administrators",
     ])
     expect(statusCard().querySelector("[data-tone='attention']")).toBeNull()
     expect(fact("over").querySelector("a")).toBeNull()
@@ -677,21 +674,9 @@ describe("The status card", () => {
     expect(element("plans-status-sentence").textContent).toBe(sentence)
     expect(planSwitch().getAttribute("aria-checked")).toBe("false")
     expect(planSwitch().querySelector("[data-state-label='off']")?.textContent).toBe("Off")
-    expect(facts().map(([label]) => label)).toEqual(["Would limit", "Would be over a limit", "Default plan", "Never limited"])
+    expect(facts().map(([label]) => label)).toEqual(["Would limit", "Would be over a limit", "Default plan"])
     expect(fact("default").textContent).toBe(chosen)
     expect(statusCard().querySelector("[data-tone='attention']")).toBeNull()
-  })
-
-  it("leaves out who is never limited, rather than show a placeholder, when the server is older than the page", async () => {
-    const older: Partial<PlansOverview> = overview({ enabled: true, defaultPlan: "free" })
-    delete older.administrators
-    await renderPlans(testI18n(), { plans: older as PlansOverview })
-    expect(facts()).toEqual([
-      ["Limited now", "5 people"],
-      ["Over a limit", "Nobody"],
-      ["Default plan", "Free"],
-    ])
-    expect(statusCard().textContent).not.toContain("{")
   })
 
   it("says Plans limit nobody while the default limits nothing", async () => {
@@ -818,7 +803,7 @@ describe("The catalog", () => {
     expect(cell("family", "speed").querySelector("svg[aria-hidden='true']")).not.toBeNull()
     expect(cell("family", "rules").getAttribute("data-label")).toBe("Active rules")
     expect(catalog.querySelector(".plans-catalog-note")?.textContent).toBe(
-      "People counts include administrators. Paused rules and drafts are not active.",
+      "People counts include administrators, who are never limited. Paused rules and drafts are not active.",
     )
   })
 
@@ -1130,7 +1115,7 @@ describe("A plan's panel", () => {
     expect(here()).toBe("/people/plans")
     expect(document.activeElement).toBe(nameLink("family"))
     expect(headings()).toHaveLength(7)
-    expect(facts().map(([label]) => label)).toEqual(["Would limit", "Would be over a limit", "Default plan", "Never limited"])
+    expect(facts().map(([label]) => label)).toEqual(["Would limit", "Would be over a limit", "Default plan"])
   })
 
   it("returns the page to where it was before the panel opened once Close closes it", async () => {

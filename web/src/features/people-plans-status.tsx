@@ -95,9 +95,9 @@ function PlansSwitch({ overview, commands, onChange }: { overview: PlansOverview
 }
 
 /**
- * Whom Plans limit, who is over a limit, the Default Plan, and who is never limited, as nouns and
- * numbers, the last two secondary. Who is over takes Attention Ochre and its icon while Plans are
- * on, and its number is the link that opens Everyone narrowed to them.
+ * Whom Plans limit, who is over a limit, and the Default Plan, as nouns and numbers, the last
+ * secondary. Who is over takes Attention Ochre and its icon while Plans are on, and its number is
+ * the link that opens Everyone narrowed to them.
  */
 function PlansFacts({ facts, onShowPeople }: { facts: PlansFact[]; onShowPeople: ShowPeople }) {
   if (facts.length === 0) return null
