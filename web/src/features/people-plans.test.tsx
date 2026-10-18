@@ -1955,39 +1955,28 @@ describe("Who has a plan now", () => {
     const chooser = changeOf(ROBIN_OVER)
     expect(change.getAttribute("aria-controls")).toBe(chooser.id)
     expect(chooser.querySelector("h5")?.textContent).toBe("Change plan for robin@example.test")
-    expect(document.activeElement).toBe(chooser.querySelector("h5"))
+    // The same compact chooser as everywhere: one line per plan, the default first, what they have chosen.
     expect(
-      [...chooser.querySelectorAll<HTMLInputElement>("input[type='radio']")].map((radio) => [
-        labelOf(radio),
-        radio.disabled,
-      ]),
+      [...chooser.querySelectorAll<HTMLInputElement>("input[type='radio']")].map((radio) => [labelOf(radio), radio.checked]),
     ).toEqual([
-      ["Follow the default plan", false],
-      ["Family", false],
+      ["Family Default", false],
       ["Free Current", true],
     ])
-    expect(chooser.textContent).toContain("Family now. If the default changes, so does theirs.")
-    expect(chooser.textContent).toContain("5 active rules, 3 calendar accounts, 2 Integration Tokens, with Instant sync.")
-    const confirm = button("Change plan", chooser)
-    expect(confirm.getAttribute("aria-disabled")).toBe("true")
-    expect(element(confirm.getAttribute("aria-describedby")!).textContent).toBe("Choose a plan for robin@example.test.")
+    expect(document.activeElement).toBe(changeChoice(ROBIN_OVER, "Free"))
+    expect(chooser.textContent).toContain("5 rules, 3 accounts, 2 tokens, Instant")
+    expect(chooser.textContent).toContain("People on the default plan move with it when the default changes.")
+    expect(chooser.textContent).not.toContain("Follow the default plan")
 
     reply("POST /api/v1/plan-assignments", moved([[ROBIN_OVER, [{ limit: "rules", in_use: 6, allowed: 5 }]]], true))
+    // Family is the default, so choosing it means robin follows the default.
     await click(changeChoice(ROBIN_OVER, "Family"))
-    expect(assignCalls().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin"], dry_run: true })
-    expect(chooser.querySelector(".plan-change-result")?.textContent).toBe(
-      "robin@example.test will have more than Family allows. Everything they have keeps working, but they can't add more until they are within it.",
-    )
-    reply("POST /api/v1/plan-assignments", moved([[ROBIN_OVER, []]], true))
-    await click(changeChoice(ROBIN_OVER, "Follow the default plan"))
     expect(assignCalls().at(-1)).toEqual({ plan: null, user_ids: ["user-robin"], dry_run: true })
-    expect(chooser.querySelector(".plan-change-result")?.textContent).toBe("robin@example.test is within every limit of Family.")
-    expect(button("Move robin@example.test to the default plan", chooser)).not.toBeNull()
+    const note = chooser.querySelector("[role='status'][data-tone='attention']")
+    expect(note?.textContent).toBe("Would be over: 6 active rules, 5 allowed")
 
-    await click(changeChoice(ROBIN_OVER, "Family"))
     reply("POST /api/v1/plan-assignments", moved([[ROBIN_OVER, []]]))
-    await click(button("Give Family to robin@example.test", chooser))
-    expect(assignCalls().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin"], dry_run: false })
+    await click(button("Save", chooser))
+    expect(assignCalls().at(-1)).toEqual({ plan: null, user_ids: ["user-robin"], dry_run: false })
     expect(toast()).toBe("robin@example.test now has Family.")
     expect(container.querySelector("#plan-change-user-robin")).toBeNull()
     expect(document.activeElement).toBe(element("plan-holders-free").querySelector("h4"))
@@ -2025,7 +2014,7 @@ describe("Who has a plan now", () => {
     )
     await click(changeChoice(JORDAN, "Family"))
     reply("POST /api/v1/plan-assignments", refusal(404, "plan_not_found"))
-    await click(button("Give Family to jordan@example.test", changeOf(JORDAN)))
+    await click(button("Save", changeOf(JORDAN)))
     expect(changeOf(JORDAN).querySelector("[role='alert']")?.textContent).toBe(
       "This plan no longer exists. Reload to see the current plans.",
     )

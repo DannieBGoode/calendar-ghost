@@ -10,18 +10,16 @@ import type { AssignMove } from "@/lib/plan-assignment"
 import { OWN_PLAN_QUERY } from "@/lib/use-own-plan"
 import { PLANS_QUERY, sendMoves } from "@/lib/use-plans"
 
-/** What an Installation Administrator can do to another User. */
+/**
+ * What an Installation Administrator can do to another User. "plan" opens Change plan beside them,
+ * which then changes their Plan itself, as Plans change from Everyone.
+ */
 type PersonAction = "promote" | "demote" | "disable" | "enable" | "reset" | "delete" | "plan"
-/**
- * The Plan a "plan" command gives someone, by its key and the name its result says, or the
- * Default Plan (no key), named by the Plan that is the default, while one is.
- */
-type PlanChoice = { key: string; name: string } | { key: null; name: string | null }
-/**
- * A command on someone. `plan` is the Plan a "plan" command gives them; starting "plan" without
- * it opens the choice instead, as "delete" opens its confirmation.
- */
-export type PersonCommand = { person: Person; action: PersonAction; plan?: PlanChoice }
+/** A command that is sent as it is chosen, rather than opening a next step. */
+type SentAction = Exclude<PersonAction, "plan">
+/** A command on someone; "delete" opens its confirmation first, and "plan" opens Change plan. */
+export type PersonCommand = { person: Person; action: PersonAction }
+type SentCommand = { person: Person; action: SentAction }
 
 /** What a command returned that the administrator needs next: a link to pass on, or a deletion's counts. */
 type Outcome = { link?: IssuedLink; deletion?: UserDeletion }
@@ -33,15 +31,8 @@ const CHANGED: Partial<Record<PersonAction, MessageKey>> = {
   enable: "people.status.enabled",
 }
 
-/** What giving someone a Plan did, naming the Plan: "robin@example.test now has Free." */
-function planChanged({ t }: I18n, email: string, { key, name }: PlanChoice): string {
-  if (key !== null) return t("people.status.planChanged", { email, name })
-  return name === null ? t("people.status.planDefaultUnnamed", { email }) : t("people.status.planDefault", { email, name })
-}
-
 /** What a command on someone says once it is done, or null for one that says nothing beside them. */
-function changedMessage(i18n: I18n, name: string, { action, plan }: PersonCommand): string | null {
-  if (action === "plan") return plan ? planChanged(i18n, name, plan) : null
+function changedMessage(i18n: I18n, name: string, { action }: SentCommand): string | null {
   const changed = CHANGED[action]
   return changed ? i18n.t(changed, { email: name }) : null
 }
@@ -50,7 +41,7 @@ function changedMessage(i18n: I18n, name: string, { action, plan }: PersonComman
 // knows one is running even after the page that sent it is gone.
 const PERSON_COMMAND = ["person-command"]
 
-async function run({ person, action, plan }: PersonCommand): Promise<Outcome> {
+async function run({ person, action }: SentCommand): Promise<Outcome> {
   switch (action) {
     case "promote":
       await api.setPersonRole(person.id, "installation_administrator")
@@ -68,9 +59,6 @@ async function run({ person, action, plan }: PersonCommand): Promise<Outcome> {
       return { link: await api.issuePasswordResetLink(person.id) }
     case "delete":
       return { deletion: await api.deletePerson(person.id) }
-    case "plan":
-      await api.setPersonPlan(person.id, plan?.key ?? null)
-      return {}
   }
 }
 
@@ -99,7 +87,7 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
   const [choosingPlan, setChoosingPlan] = useState<string | null>(null)
   const [resetLink, setResetLink] = useState<{ personId: string; link: IssuedLink } | null>(null)
   // What the last command on someone still listed did, shown beside them.
-  const [result, setResult] = useState<{ personId: string; action: PersonAction; text: string } | null>(null)
+  const [result, setResult] = useState<{ personId: string; text: string } | null>(null)
   const [deletedMessage, setDeletedMessage] = useState("")
   const busy = useIsMutating({ mutationKey: PERSON_COMMAND }) > 0
   const command = useMutation({
@@ -115,18 +103,13 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
         queryClient.invalidateQueries({ queryKey: PLANS_QUERY }),
       ])
     },
-    // A refused Plan may have been removed meanwhile, so the choice reads the Plans again.
-    onError: async (_error, { action }) => {
-      if (action === "plan") await queryClient.invalidateQueries({ queryKey: PLANS_QUERY })
-    },
   })
 
-  function finish({ link, deletion }: Outcome, done: PersonCommand) {
-    const { person, action } = done
+  function finish({ link, deletion }: Outcome, done: SentCommand) {
+    const { person } = done
     const name = personName(i18n, person)
     const changed = changedMessage(i18n, name, done)
     if (link) setResetLink({ personId: person.id, link })
-    if (action === "plan") setChoosingPlan(null)
     if (deletion) {
       const deleted = deletionMessage(i18n, name, deletion)
       setDeleting(null)
@@ -135,7 +118,7 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     }
     if (changed !== null) {
       setMessage(changed)
-      setResult({ personId: person.id, action, text: changed })
+      setResult({ personId: person.id, text: changed })
     }
   }
 
@@ -145,7 +128,7 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     return queryClient.isMutating({ mutationKey: PERSON_COMMAND }) > 0
   }
 
-  function send(next: PersonCommand) {
+  function send(next: SentCommand) {
     if (running()) return
     // A callback given to this one call runs only while the page that sent it is still shown,
     // so a deletion that finishes after leaving it never navigates from wherever the
@@ -168,14 +151,13 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     setDeleting(null)
     setChoosingPlan(null)
     if (next.action === "delete") setDeleting(next.person.id)
-    else if (next.action === "plan" && next.plan === undefined) setChoosingPlan(next.person.id)
-    else send(next)
+    else if (next.action === "plan") setChoosingPlan(next.person.id)
+    else send({ person: next.person, action: next.action })
   }
 
-  /** Closes Change plan, putting its refusal away, unless its change is on its way. */
+  /** Closes Change plan, unless a change is on its way. */
   function closePlanChoice() {
     if (running()) return
-    command.reset()
     setChoosingPlan(null)
   }
 
@@ -189,18 +171,10 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     return result?.personId === person.id ? result.text : null
   }
 
-  /** What the last command on this person did, when it changed their Plan. */
-  function planResultFor(person: Person): string | null {
-    return result?.action === "plan" ? resultFor(person) : null
-  }
-
-  /**
-   * Whether a command on this person has something to show beside them. Change plan shows its
-   * own refusal in its popover while it is open.
-   */
+  /** Whether a command on this person has something to show beside them. */
   function hasDetails(person: Person): boolean {
     return (
-      (errorFor(person) !== null && choosingPlan !== person.id) ||
+      errorFor(person) !== null ||
       deleting === person.id ||
       resetLink?.personId === person.id ||
       resultFor(person) !== null
@@ -222,7 +196,6 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     send,
     errorFor,
     resultFor,
-    planResultFor,
     hasDetails,
   }
 }
@@ -230,9 +203,10 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
 export type PeopleCommands = ReturnType<typeof usePersonCommands>
 
 /**
- * Giving Plans to several people at once from Everyone, one call per Plan, as Undo needs. It
- * shares the person commands' key, so it and a command on one person never run together, and
- * refreshes People, the Plans, and the administrator's own Plan.
+ * Giving Plans to people from Change plan, for one person or several, one call per Plan, as Undo
+ * needs. It shares the person commands' key, so it and another command on someone never run
+ * together, and refreshes People, each person's page, the Plans, and the administrator's own Plan.
+ * A refused Plan may have been removed meanwhile, so a refusal reads the Plans again.
  */
 export function useGivePlans() {
   const queryClient = useQueryClient()
@@ -245,6 +219,7 @@ export function useGivePlans() {
         queryClient.invalidateQueries({ queryKey: PLANS_QUERY }),
         queryClient.invalidateQueries({ queryKey: OWN_PLAN_QUERY }),
       ]),
+    onError: () => queryClient.invalidateQueries({ queryKey: PLANS_QUERY }),
   })
 }
 

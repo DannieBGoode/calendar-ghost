@@ -138,29 +138,6 @@ describe("RadioCards", () => {
     expect(option(container, "Instant").checked).toBe(false)
   })
 
-  it("keeps a choice that cannot be made visible, with why, and out of reach", () => {
-    const onChange = vi.fn()
-    const container = render(
-      <RadioCards
-        aria-label="Change plan"
-        value={null}
-        options={[
-          { value: "free", title: "Free", description: "1 active rule", unavailable: "Current" },
-          { value: "pro", title: "Pro", description: "No limits" },
-        ]}
-        onValueChange={onChange}
-      />,
-    )
-    const free = option(container, "Free")
-    const pro = option(container, "Pro")
-    expect(free.disabled).toBe(true)
-    expect(labelOf(free)).toBe("Free Current")
-    expect(pro.disabled).toBe(false)
-    expect(free.checked || pro.checked).toBe(false)
-    act(() => free.click())
-    expect(onChange).not.toHaveBeenCalledWith("free")
-  })
-
   it("keeps focus and ignores choices while a command is on its way", () => {
     const onChange = vi.fn()
     const container = render(<Harness pending onChange={onChange} />)
@@ -181,7 +158,7 @@ describe("RadioCards", () => {
         value="a"
         options={[
           { value: "a", title: "[Îñšţåñţ]", description: "[Çĥåñĝéš]" },
-          { value: "b", title: "[Éṽéŕý 5 ɱîñûţéš]", unavailable: "[Çûŕŕéñţ]" },
+          { value: "b", title: "[Éṽéŕý 5 ɱîñûţéš]" },
         ]}
         onValueChange={vi.fn()}
       />,

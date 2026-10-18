@@ -1147,11 +1147,18 @@ function choice(label: string, scope: ParentNode = popover()!): HTMLInputElement
   return found
 }
 
+/** Each choice in the popover: its name with its badges, and whether it is chosen. */
 function choices(scope: ParentNode = popover()!): [string, boolean][] {
   return [...scope.querySelectorAll<HTMLInputElement>("input[type='radio']")].map((radio) => [
     [...(radio.labels ?? [])].map((item) => item.textContent).join(" "),
-    radio.disabled,
+    radio.checked,
   ])
+}
+
+/** What a dry run says under a choice, once it answers. */
+function noteUnder(label: string): string | undefined {
+  const ids = choice(label).getAttribute("aria-describedby")?.split(" ") ?? []
+  return ids.length > 1 ? document.getElementById(ids.at(-1)!)?.textContent : undefined
 }
 
 function toast(): string | null | undefined {
@@ -1221,24 +1228,25 @@ describe("Changing plans from Everyone", () => {
     expect(change.getAttribute("aria-controls")).toBe(dialog.id)
     const title = dialog.querySelector("h3")!
     expect(title.textContent).toBe("Change plan for 2 people")
-    expect(document.activeElement).toBe(title)
-    expect(dialog.textContent).toContain("robin@example.test and jordan@example.test have Family now.")
+    expect(dialog.getAttribute("aria-labelledby")).toBe(title.id)
+    // One line per plan, the default first; what both have now is chosen and marked Current.
     expect(choices()).toEqual([
-      ["Follow the default plan", false],
-      ["Free", false],
+      ["Free Default", false],
       ["Family Current", true],
     ])
-    expect(dialog.textContent).toContain("Free now. If the default changes, so does theirs.")
-    expect(button("Change plan", dialog).getAttribute("aria-disabled")).toBe("true")
-
-    await click(choice("Free"))
-    expect(assignments()).toEqual([{ plan: "free", user_ids: ["user-robin", "user-jordan"], dry_run: true }])
-    expect(dialog.querySelector(".plan-change-result")?.textContent).toBe(
-      "They move from Family to Free. robin@example.test is no longer over a limit.",
+    expect(dialog.textContent).not.toContain("Follow the default plan")
+    expect(dialog.querySelector(".plan-change-note")?.textContent).toBe(
+      "People on the default plan move with it when the default changes.",
     )
+    expect(document.activeElement).toBe(choice("Family"))
 
-    await click(button("Give Free to 2 people", dialog))
-    expect(assignments().at(-1)).toEqual({ plan: "free", user_ids: ["user-robin", "user-jordan"], dry_run: false })
+    // Free is the default, so they follow it.
+    await click(choice("Free"))
+    expect(assignments()).toEqual([{ plan: null, user_ids: ["user-robin", "user-jordan"], dry_run: true }])
+    expect(noteUnder("Free")).toBe("Nobody would be over a limit")
+
+    await click(button("Save", dialog))
+    expect(assignments().at(-1)).toEqual({ plan: null, user_ids: ["user-robin", "user-jordan"], dry_run: false })
     expect(popover()).toBeNull()
     expect(toast()).toBe("2 people now have Free.")
     // The selection is done with: the bar is at rest, and focus waits on the list's heading.
@@ -1248,6 +1256,34 @@ describe("Changing plans from Everyone", () => {
     await click(button("Undo"))
     expect(assignments().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin", "user-jordan"], dry_run: false })
     expect(toast()).toBe("2 people have their plans back.")
+  })
+
+  it("counts who has each plan when they differ, and asks for a choice before Save sends anything", async () => {
+    await renderPlanned(testI18n(), { "POST /api/v1/plan-assignments": given([robin, sam]) })
+    await click(checkbox("Select robin@example.test"))
+    await click(checkbox("Select sam@example.test"))
+    await click(button("Change plan", bulkBar()))
+    expect(choices()).toEqual([
+      ["Free Default 1 has it", false],
+      ["Family 1 has it", false],
+    ])
+    expect(document.activeElement).toBe(choice("Free"))
+
+    await click(button("Save", popover()!))
+    const group = popover()!.querySelector("[role='radiogroup']")!
+    expect(group.getAttribute("aria-invalid")).toBe("true")
+    expect(popover()!.querySelector("[role='alert']")?.textContent).toBe("Choose a plan first.")
+    expect(document.getElementById(group.getAttribute("aria-describedby")!.split(" ").at(-1)!)?.textContent).toBe(
+      "Choose a plan first.",
+    )
+    expect(document.activeElement).toBe(choice("Free"))
+    expect(assignments()).toEqual([])
+
+    await click(choice("Family"))
+    expect(popover()!.querySelector("[role='alert']")).toBeNull()
+    expect(group.hasAttribute("aria-invalid")).toBe(false)
+    expect(assignments()).toEqual([{ plan: "family", user_ids: ["user-robin", "user-sam"], dry_run: true }])
+    expect(noteUnder("Family")).toBe("Nobody would be over a limit")
   })
 
   it("says what Undo did, or why it could not, once the change leaves nobody in the list", async () => {
@@ -1263,7 +1299,7 @@ describe("Changing plans from Everyone", () => {
       await click(checkbox("Select all"))
       await click(button("Change plan", bulkBar()))
       await click(choice("Free"))
-      await click(button("Give Free to 2 people", popover()!))
+      await click(button("Save", popover()!))
       expect(toast()).toBe("2 people now have Free.")
       expect(rows()).toHaveLength(0)
       expect(container.querySelector(".people-bulk-bar")).toBeNull()
@@ -1294,8 +1330,6 @@ describe("Changing plans from Everyone", () => {
     await click(checkbox("Select robin@example.test"))
     await click(checkbox("Select sam@example.test"))
     await click(button("Change plan", bulkBar()))
-    expect(popover()?.textContent).toContain("They have Family (1) and Free (1) now.")
-    expect(choices().every(([, disabled]) => !disabled)).toBe(true)
     await click(choice("Free"))
     press(choice("Free"), "Escape")
     await settle()
@@ -1303,6 +1337,8 @@ describe("Changing plans from Everyone", () => {
     expect(document.activeElement).toBe(button("Change plan", bulkBar()))
 
     await click(button("Change plan", bulkBar()))
+    // Opened again, nothing is chosen, as they have different plans.
+    expect(choices().some(([, checked]) => checked)).toBe(false)
     await click(button("Cancel", popover()!))
     expect(popover()).toBeNull()
     expect(document.activeElement).toBe(button("Change plan", bulkBar()))
@@ -1315,10 +1351,8 @@ describe("Changing plans from Everyone", () => {
     await click(checkbox("Select robin@example.test"))
     await click(checkbox("Select jordan@example.test"))
     await click(button("Change plan", bulkBar()))
-    await click(choice("Follow the default plan"))
-    expect(popover()?.querySelector(".plan-change-result")?.textContent).toBe(
-      "They move from Family to the default plan, Free. robin@example.test is no longer over a limit.",
-    )
+    await click(choice("Free"))
+    expect(noteUnder("Free")).toBe("Nobody would be over a limit")
     const held = new Promise<Response>((resolve) => {
       answer = resolve
     })
@@ -1326,14 +1360,14 @@ describe("Changing plans from Everyone", () => {
     vi.mocked(fetch).mockImplementation((input, init) =>
       init?.method === "POST" && (input as string).startsWith("/api/v1/plan-assignments") ? held : served(input, init),
     )
-    const confirm = button("Move 2 people to the default plan", popover()!)
-    act(() => confirm.focus())
-    await click(confirm)
-    expect(confirm.getAttribute("aria-disabled")).toBe("true")
-    expect(confirm.getAttribute("aria-busy")).toBe("true")
+    const save = button("Save", popover()!)
+    act(() => save.focus())
+    await click(save)
+    expect(save.getAttribute("aria-disabled")).toBe("true")
+    expect(save.getAttribute("aria-busy")).toBe("true")
     expect(button("Cancel", popover()!).getAttribute("aria-disabled")).toBe("true")
-    expect(document.activeElement).toBe(confirm)
-    press(confirm, "Escape")
+    expect(document.activeElement).toBe(save)
+    press(save, "Escape")
     expect(popover()).not.toBeNull()
 
     act(() => answer(jsonResponse({ detail: "gone", code: "invalid_assignment", params: {} }, 422)))
@@ -1343,10 +1377,9 @@ describe("Changing plans from Everyone", () => {
     expect(toast()).toBe("")
   })
 
-  it("changes one person's plan from their row's actions, showing the result on the row", async () => {
+  it("changes one person's plan from their row's actions, with Undo in a toast", async () => {
     await renderPlanned(testI18n(), {
       "POST /api/v1/plan-assignments": given([robin], { key: "free", name: "Free", on_default: true }),
-      "PUT /api/v1/users/user-robin/plan": jsonResponse({ basis: "plan", plan: FREE, assigned: null }),
     })
     await choose("robin@example.test", "Change plan")
     const dialog = popover()!
@@ -1354,35 +1387,67 @@ describe("Changing plans from Everyone", () => {
     // The popover is the row's only next step: no empty row of details opens under it.
     expect(personRow("robin@example.test").nextElementSibling?.classList.contains("person-details-row")).toBe(false)
     expect(dialog.querySelector("h3")?.textContent).toBe("Change plan for robin@example.test")
-    expect(document.activeElement).toBe(dialog.querySelector("h3"))
-    expect(dialog.textContent).toContain("robin@example.test has Family now.")
+    expect(choices()).toEqual([
+      ["Free Default", false],
+      ["Family Current", true],
+    ])
+    expect(document.activeElement).toBe(choice("Family"))
 
-    await click(choice("Follow the default plan"))
+    await click(choice("Free"))
     expect(assignments().at(-1)).toEqual({ plan: null, user_ids: ["user-robin"], dry_run: true })
-    expect(dialog.querySelector(".plan-change-result")?.textContent).toBe("robin@example.test is within every limit of Free.")
-    await click(button("Move robin@example.test to the default plan", dialog))
-    expect(sent("PUT", "/api/v1/users/user-robin/plan")?.body).toEqual({ plan: null })
+    expect(noteUnder("Free")).toBe("Within every limit")
+    await click(button("Save", dialog))
+    expect(assignments().at(-1)).toEqual({ plan: null, user_ids: ["user-robin"], dry_run: false })
     expect(popover()).toBeNull()
-    expect(status()).toBe("robin@example.test now has the default plan, Free.")
-    expect(personRow("robin@example.test").nextElementSibling?.querySelector(".command-result")?.textContent).toBe(
-      "robin@example.test now has the default plan, Free.",
-    )
+    expect(toast()).toBe("robin@example.test now has Free.")
+    // The toast says it, so no line under the row repeats it.
+    expect(personRow("robin@example.test").nextElementSibling?.classList.contains("person-details-row")).toBe(false)
     expect(document.activeElement?.getAttribute("aria-label")).toBe("Actions for robin@example.test")
-    expect(toast()).toBe("")
+
+    await click(button("Undo"))
+    expect(assignments().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin"], dry_run: false })
+    expect(toast()).toBe("robin@example.test has their plan back.")
   })
 
-  it("shows a refused change for one person in their popover, and nothing on the row", async () => {
-    await renderPlanned(testI18n(), {
-      "POST /api/v1/plan-assignments": given([robin]),
-      "PUT /api/v1/users/user-robin/plan": jsonResponse({ detail: "gone", code: "plan_not_found", params: {} }, 404),
+  it("says what a change from a row did, with Undo, even once it leaves nobody in the list", async () => {
+    const changes = () => assignments().filter((body) => !(body as { dry_run: boolean }).dry_run).length
+    // Everyone narrowed to Family: once robin has Free nobody is left, and Undo brings them back.
+    const family = () => jsonResponse(withPlans(onePage(changes() % 2 === 1 ? [] : [robin])))
+    await renderPeople(testI18n(), {
+      search: "?plan=family",
+      people: family,
+      answers: { "GET /api/v1/plans": jsonResponse(PLANS), "POST /api/v1/plan-assignments": given([robin]) },
     })
     await choose("robin@example.test", "Change plan")
     await click(choice("Free"))
-    await click(button("Give Free to robin@example.test", popover()!))
+    await click(button("Save", popover()!))
+    expect(rows()).toHaveLength(0)
+    expect(toast()).toBe("robin@example.test now has Free.")
+    // The row and its actions are gone, so focus waits on the list's heading.
+    expect(document.activeElement?.id).toBe("people-list-title")
+
+    await click(button("Undo"))
+    expect(assignments().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin"], dry_run: false })
+    expect(toast()).toBe("robin@example.test has their plan back.")
+    expect(rows()).toHaveLength(1)
+  })
+
+  it("shows a refused change for one person in their popover, and nothing on the row", async () => {
+    await renderPlanned(testI18n(), { "POST /api/v1/plan-assignments": given([robin]) })
+    await choose("robin@example.test", "Change plan")
+    await click(choice("Free"))
+    const served = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input, init) =>
+      init?.method === "POST" && (input as string).startsWith("/api/v1/plan-assignments")
+        ? Promise.resolve(jsonResponse({ detail: "gone", code: "plan_not_found", params: {} }, 404))
+        : served(input, init),
+    )
+    await click(button("Save", popover()!))
     expect(popover()?.querySelector("[role='alert']")?.textContent).toBe(
       "This plan no longer exists. Reload to see the current plans.",
     )
     expect(personRow("robin@example.test").nextElementSibling?.classList.contains("person-details-row")).toBe(false)
+    expect(toast()).toBe("")
     await click(button("Cancel", popover()!))
     expect(container.querySelector("[role='alert']")).toBeNull()
     expect(document.activeElement?.getAttribute("aria-label")).toBe("Actions for robin@example.test")
@@ -1395,7 +1460,7 @@ describe("Changing plans from Everyone", () => {
     await click(boxes[1]!)
     await click(boxes[2]!)
     await click(bulkBar().querySelector<HTMLButtonElement>("button[aria-haspopup='dialog']")!)
-    await click(popover()!.querySelectorAll<HTMLInputElement>("input[type='radio']")[1]!)
+    await click(popover()!.querySelectorAll<HTMLInputElement>("input[type='radio']")[0]!)
     const fixtures = [me.email!, robin.email!, sam.email!, jordan.email!, "Family", "Free", ...LIST_WORDS, ...dateWords()]
     expect(untranslatedText(container, fixtures)).toEqual([])
   })

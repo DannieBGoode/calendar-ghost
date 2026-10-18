@@ -1,90 +1,135 @@
-import { CheckCircle2, TriangleAlert } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 
 import { Button } from "@/components/ui/button"
-import { RadioCards } from "@/components/ui/radio-cards"
+import { RadioRows, type RadioRowOption } from "@/components/ui/radio-rows"
+import { Skeleton } from "@/components/ui/skeleton"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { PersonRow, PlanAssignments, PlanSummary, PlansOverview } from "@/lib/api"
 import {
-  FOLLOW_DEFAULT,
-  changeChoices,
-  changeConfirm,
-  changeReason,
-  changeResult,
+  changeMove,
+  changeOptions,
   changeTitle,
   changedResult,
+  choiceVerdict,
   chosenPlan,
-  heldNow,
-  type ChangeOutcome,
+  offered,
+  sharedChoice,
+  type ChangeOption,
+  type ChoiceVerdict,
   type PlanPerson,
-} from "@/lib/plan-assignment"
+} from "@/lib/plan-change"
 import { usePlanDryRun } from "@/lib/use-plan-assignment"
-import type { PlanCommands } from "@/lib/use-plans"
+import { usePlanList, type PlanCommands } from "@/lib/use-plans"
 
-/** Where the chooser sends a change: a Plan by its key, or the Default Plan with null, and that Plan. */
-export type ConfirmChange = (plan: string | null, chosen: PlanSummary | undefined) => void
+/** What Save sends: a Plan's key, or null for the default, which they then follow, or for no Plan; and the Plan chosen, null for none. */
+export type SaveChange = (plan: string | null, chosen: PlanSummary | null) => void
 
 export type PlanChooserProps = {
   /** The chooser's own id, which its parts' ids start with. */
   id: string
+  /** Its title: "Change plan" where the page already names them, otherwise who it is for. */
+  title: string
   people: readonly PlanPerson[]
   overview: PlansOverview
-  /** Its title's level: 3 in a popover on a page, 5 under a person in a Plan's panel. */
+  /** Its title's level: 3 on a page or in a popover, 5 under a person in a Plan's panel. */
   level: 3 | 5
   /** The change is on its way: every control keeps focus and waits. */
   pending: boolean
-  /** Why the last change was refused, shown under the chooser; null without one. */
+  /** Why the last change was refused, shown under the choice; null without one. */
   refusal: unknown
   /** A new choice was made, which puts a refusal away. */
   onChoose?: () => void
-  onConfirm: ConfirmChange
+  /** Save with a choice that changes something. */
+  onSave: SaveChange
+  /** Cancel, Escape, or Save with what they have now: it closes, changing nothing. */
   onCancel: () => void
 }
 
 /**
- * The choice as it stands: the Plan chosen, or the default with FOLLOW_DEFAULT, nothing until then
- * or once the Plan chosen is no longer offered; and what a dry run says it would do for them.
+ * The choice as it stands: what they all have now to start from, the option chosen, and what a dry
+ * run says it would do. A Plan chosen that is no longer offered, as after a refusal, gives way to
+ * what they have now. Nothing is asked of the server for what they have now.
  */
 function useChoice({ people, overview, pending, onChoose }: PlanChooserProps) {
   const i18n = useI18n()
-  const [picked, setPicked] = useState<string | null>(null)
-  const options = changeChoices(i18n, overview.plans, people)
-  const choice = options.some((option) => option.value === picked && !option.unavailable) ? picked : null
-  const plan = choice === null ? undefined : chosenPlan(overview.plans, choice)
-  const follows = choice === FOLLOW_DEFAULT
-  const dryRun = usePlanDryRun(follows ? null : choice, choice === null ? [] : people.map((person) => person.id), pending)
-  const outcome = changeResult(i18n, people, { plan, follows }, dryRun.data)
+  const shared = sharedChoice(overview.plans, people)
+  const [picked, setPicked] = useState<string | null>(shared)
+  const [missing, setMissing] = useState(false)
+  const choice = picked !== null && offered(overview.plans, picked) ? picked : shared
+  const changes = choice !== null && choice !== shared
+  const move = choice === null ? null : changeMove(overview.plans, choice)
+  const dryRun = usePlanDryRun(move, changes ? people.map((person) => person.id) : [], pending)
   return {
-    options,
+    options: changeOptions(i18n, overview.plans, people),
     choice,
-    plan,
-    outcome,
+    changes,
+    missing,
+    verdict: changes ? choiceVerdict(i18n, people, dryRun.data) : null,
+    ask: () => setMissing(true),
     choose: (next: string) => {
       setPicked(next)
+      setMissing(false)
       onChoose?.()
     },
   }
 }
 
+/** Each option as a row, the one chosen with what the dry run says, in Attention Ochre while Plans are on. */
+function optionRows(options: readonly ChangeOption[], choice: string | null, verdict: ChoiceVerdict | null, enabled: boolean): RadioRowOption<string>[] {
+  return options.map((option) => ({
+    value: option.value,
+    title: option.title,
+    summary: option.summary,
+    badges: option.badges.map((badge) => ({ text: badge.text, variant: badge.kind === "default" ? "outline" : "neutral" })),
+    note: option.value === choice && verdict ? { text: verdict.text, tone: verdict.over && enabled ? "attention" : undefined } : null,
+  }))
+}
+
+/** Moves focus to the option chosen, or to the first when none is. */
+function focusChoice(options: HTMLElement | null) {
+  const radio = options?.querySelector<HTMLInputElement>("input[type='radio']:checked") ?? options?.querySelector<HTMLInputElement>("input[type='radio']")
+  radio?.focus()
+}
+
+/** The ids an element's aria-describedby names, leaving out those not shown. */
+function describedBy(...ids: (string | false)[]): string | undefined {
+  return ids.filter(Boolean).join(" ") || undefined
+}
+
 /**
- * Change plan for one or more people: what they have now, then "Follow the default plan" and each
- * Plan with what it allows, what every one of them has marked "Current". Once a choice is made, a
- * dry run says before anyone confirms who moves where and who would have more than it allows. Its
- * title takes focus as it opens. While the change is on its way every control keeps focus and
- * waits; a refusal shows here. Escape or Cancel closes it.
+ * Change plan for one or more people: one compact row per Plan, the default first, where choosing
+ * the default means they follow it, with a note that they then move with it. What they all have
+ * now is chosen and marked Current; when they differ, each Plan counts who has it. Once another
+ * choice is made, a dry run says under it which limits anyone would be over. Focus starts on the
+ * option chosen. Save with what they have now closes it, sending nothing; with nothing chosen it
+ * asks for a choice. While the change is on its way every control keeps focus and waits; a refusal
+ * shows here. Escape or Cancel closes it.
  */
-export function PlanChooser(props: PlanChooserProps) {
-  const { id, people, overview, level, pending, refusal, onConfirm, onCancel } = props
-  const i18n = useI18n()
-  const { options, choice, plan, outcome, choose } = useChoice(props)
-  const heading = useRef<HTMLHeadingElement>(null)
+function PlanChooser(props: PlanChooserProps) {
+  const { id, title, overview, level, pending, refusal, onSave, onCancel } = props
+  const { t } = useI18n()
+  const state = useChoice(props)
+  const options = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    heading.current?.focus()
+    focusChoice(options.current)
   }, [])
   const Title = level === 3 ? "h3" : "h5"
+  const hasDefault = overview.plans.some((plan) => plan.is_default)
   const cancel = () => !pending && onCancel()
-  const attention = outcome.over && overview.enabled
+
+  function save() {
+    if (pending) return
+    if (state.choice === null) {
+      state.ask()
+      focusChoice(options.current)
+    } else if (!state.changes) {
+      onCancel()
+    } else {
+      onSave(changeMove(overview.plans, state.choice), chosenPlan(overview.plans, state.choice))
+    }
+  }
 
   function escape(event: KeyboardEvent<HTMLElement>) {
     if (event.key !== "Escape") return
@@ -94,55 +139,39 @@ export function PlanChooser(props: PlanChooserProps) {
   }
 
   return (
-    <section id={id} className="plan-change" aria-labelledby={`${id}-title`} onKeyDown={escape}>
-      <Title id={`${id}-title`} ref={heading} tabIndex={-1}>
-        {changeTitle(i18n, people)}
-      </Title>
-      <p className="plan-change-held">{heldNow(i18n, people)}</p>
-      <RadioCards
-        aria-labelledby={`${id}-title`}
-        aria-describedby={`${id}-result`}
-        options={options}
-        value={choice}
-        pending={pending}
-        onValueChange={choose}
-      />
-      <ChangeOutcomeLine id={`${id}-result`} outcome={outcome} attention={attention} />
-      <div className="plan-change-actions">
-        <Button
-          type="button"
-          size="sm"
-          aria-disabled={choice === null || pending || undefined}
-          aria-busy={pending || undefined}
-          aria-describedby={choice === null ? `${id}-reason` : undefined}
-          onClick={() => choice !== null && !pending && onConfirm(choice === FOLLOW_DEFAULT ? null : choice, plan)}
-        >
-          {changeConfirm(i18n, people, choice, plan)}
-        </Button>
-        <Button type="button" size="sm" variant="ghost" aria-disabled={pending || undefined} onClick={cancel}>
-          {i18n.t("people.plans.change.cancel")}
-        </Button>
+    <div id={id} className="plan-change" onKeyDown={escape}>
+      <Title id={`${id}-title`}>{title}</Title>
+      <div ref={options} className="plan-change-options">
+        <RadioRows
+          aria-labelledby={`${id}-title`}
+          aria-describedby={describedBy(hasDefault && `${id}-note`, state.missing && `${id}-missing`)}
+          aria-invalid={state.missing || undefined}
+          options={optionRows(state.options, state.choice, state.verdict, overview.enabled)}
+          value={state.choice}
+          pending={pending}
+          onValueChange={state.choose}
+        />
       </div>
-      {choice === null && (
-        <p id={`${id}-reason`} className="field-hint">
-          {changeReason(i18n, people)}
+      {hasDefault && (
+        <p id={`${id}-note`} className="plan-change-note">
+          {t("people.plans.change.defaultNote")}
+        </p>
+      )}
+      {state.missing && (
+        <p id={`${id}-missing`} className="field-error" role="alert">
+          {t("people.plans.change.chooseFirst")}
         </p>
       )}
       <ChangeRefusal refusal={refusal} />
-    </section>
-  )
-}
-
-/**
- * What the dry run found, announced as it arrives: an icon beside the words, the attention icon
- * when someone would be over, in Attention Ochre while Plans are on.
- */
-function ChangeOutcomeLine({ id, outcome, attention }: { id: string; outcome: ChangeOutcome; attention: boolean }) {
-  return (
-    <p id={id} className="plan-change-result" role="status" data-tone={attention ? "attention" : undefined}>
-      {outcome.text && (outcome.over ? <TriangleAlert aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />)}
-      {outcome.text}
-    </p>
+      <div className="plan-change-actions">
+        <Button type="button" size="sm" aria-disabled={pending || undefined} aria-busy={pending || undefined} onClick={save}>
+          {t("people.plans.change.save")}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" aria-disabled={pending || undefined} onClick={cancel}>
+          {t("people.plans.change.cancel")}
+        </Button>
+      </div>
+    </div>
   )
 }
 
@@ -153,6 +182,35 @@ function ChangeRefusal({ refusal }: { refusal: unknown }) {
     <p className="field-error" role="alert">
       {apiErrorMessage(i18n, refusal)}
     </p>
+  )
+}
+
+/**
+ * Change plan where the Plans are not at hand, on a person's page and in Everyone: the Plans are
+ * read as it opens, with Try again when they cannot be, then the chooser.
+ */
+export function ChooserWithPlans(props: Omit<PlanChooserProps, "overview" | "level">) {
+  const { t } = useI18n()
+  const plans = usePlanList()
+  if (plans.data) return <PlanChooser {...props} overview={plans.data} level={3} />
+  if (plans.isPending) {
+    return (
+      <div role="status" aria-busy="true" aria-label={t("people.plans.change.loading")}>
+        <h3 id={`${props.id}-title`} className="sr-only">
+          {t("people.plans.change.loading")}
+        </h3>
+        <Skeleton className="h-40 w-full" />
+      </div>
+    )
+  }
+  return (
+    <div className="plan-assign-error" role="alert">
+      <h3 id={`${props.id}-title`}>{t("people.plans.change.loadError")}</h3>
+      <Button type="button" variant="outline" size="sm" onClick={() => void plans.refetch()}>
+        <RefreshCw aria-hidden="true" />
+        {t("people.plans.tryAgain")}
+      </Button>
+    </div>
   )
 }
 
@@ -186,20 +244,21 @@ export function PlanChange({
   onCancel: () => void
 }) {
   const i18n = useI18n()
-  const confirm: ConfirmChange = (plan, chosen) =>
+  const save: SaveChange = (plan, chosen) =>
     assign.mutate(
       { from, via: "change", moves: [{ plan, userIds: [person.id] }] },
-      { onSuccess: ([answer]) => answer && onChanged(answer, changedResult(i18n, [person], plan === null ? null : chosen)) },
+      { onSuccess: ([answer]) => answer && onChanged(answer, changedResult(i18n, [person], chosen)) },
     )
   return (
     <PlanChooser
       id={`plan-change-${person.id}`}
+      title={changeTitle(i18n, [person])}
       people={[person]}
       overview={overview}
       level={5}
       pending={assign.isPending}
       refusal={changeRefusal(assign, person.id)}
-      onConfirm={confirm}
+      onSave={save}
       onCancel={onCancel}
     />
   )

@@ -207,16 +207,31 @@ At `/people/plans/<key>/people`, which Assign people in the row menu opens.
   an icon ("Would be over", neutral, while Plans are off), and "Not limited" for an administrator.
 - Row checkboxes, with one in the header for the page that can be mixed. Selecting shows a bulk bar
   above the table: "2 selected", Change plan, and Clear selection.
-- **Change plan** opens a popover: "Change plan for 2 people", who has what now
-  ("robin@example.test and jordan@example.test have Free now."), then radio cards: "Follow the
-  default plan" first ("No limits now. If the default changes, so does theirs."), then each Plan
-  with what it allows ("1 active rule, 1 calendar account, no Integration Tokens, every 5
-  minutes"); the Plan all of them have now is marked "Current" and cannot be chosen. Under the
-  choice, the dry run's result: "Both move from Free to Pro. robin@example.test is no longer over
-  a limit." or what anyone would be over. Then "Give Pro to 2 people" and Cancel.
-- Each row's More actions holds Change plan, which opens the same chooser for that person.
-- A change for one person shows its result on their row, as every People command does; a change
-  for several answers in a toast, "2 people now have Pro.", with Undo.
+- **Change plan** opens a popover, "Change plan for 2 people", with the one compact chooser
+  Change plan uses everywhere: one row per Plan, the default first with its "Default" badge, each
+  with its limits in short beside its name ("1 rule, 1 account, no tokens, every 5 min",
+  "Unlimited, Instant"). There is no separate "Follow the default plan": choosing the default Plan
+  means they follow it, and one line under the rows says so: "People on the default plan move
+  with it when the default changes." While no Plan is the default, "No plan" comes last ("Nothing
+  limits them until a plan is the default."). What all of them have now is chosen and marked
+  "Current", their own default Plan included; when they differ, nothing is chosen and each Plan
+  says how many have it ("1 has it"). Once another Plan is chosen, a dry run says under it, in a
+  live region, who would be over and which limit ("robin@example.test would be over: 2 calendar
+  accounts, 1 allowed", "2 people would be over a limit") in Attention Ochre with its icon while
+  Plans are on, or "Nobody would be over a limit". Then Save and Cancel. Save with what they have
+  now closes it and sends nothing; with nothing chosen it says "Choose a plan first." and moves
+  focus to the first Plan. Focus starts on the Plan chosen.
+- The popover never leaves the window: it opens under its control, or above it when there is more
+  room there, below the top bar and above a toast. Its height is capped at the room it has and its
+  rows scroll inside it, while its title, note, and Save stay in view; a control with little room
+  on both sides is first scrolled up, as far as the page scrolls.
+- Each row's More actions holds Change plan, which opens the same chooser for that person, titled
+  "Change plan for robin@example.test".
+- A change for one person or several answers in a toast, "robin@example.test now has Pro." or "2
+  people now have Pro.", with Undo, which gives each person back the Plan they had. (Amended on
+  2026-10-18 after the owner's review; Change plan used to be a column of radio cards with "Follow
+  the default plan" beside the default Plan, a held line, and a confirm button that waited, and a
+  change for one person answered on their row.)
 
 ### A person's page
 
@@ -225,8 +240,11 @@ A Plan card follows the Synchronization card once any Plan exists.
 - Title "Plan", with who gave it and whether it limits them now: "Given by dana@example.test on Oct
   12. Plans are on, so it limits robin@example.test now.", "The default plan. Plans are off, so it
   limits nobody yet.", or, for an administrator, "No plan limits administrators." Change plan
-  (outline) opens the same chooser as Everyone's, and its result names the Plan on the card
-  ("robin@example.test now has Free."), in a status a screen reader announces.
+  (outline) opens the same chooser as Everyone's inside the card, in place of the Plan's name,
+  titled "Change plan", since the page names them, so their usage stays in view under it. Save
+  or Cancel closes it and returns focus to Change plan; the result is a toast with Undo
+  ("robin@example.test now has Free."). (Amended on 2026-10-18; it used to be a popover over the
+  card and the footer.)
 - The Plan's name as an object title, with "Default" and "Over a limit" chips as in Everyone.
 - One row per limit: its name and what counts ("Running, or waiting for reauthorization",
   "Disconnected accounts count", "Revoked tokens don't count", "How soon changes reach other
@@ -281,16 +299,19 @@ behavior and roles, and DESIGN.md describes them:
 - **Switch** (`role="switch"`) with its visible "On" or "Off" label and a 44 px target.
 - **Limit field:** a segmented radio group of No limit, Up to with a stepper, and, for tokens, None.
 - **Radio cards:** a radio group whose options carry a title, an icon, and a description.
+- **Radio rows:** a radio group of compact rows: a title with badges, a short summary, and a line
+  under each row, a live region, for what choosing it would do.
 - **Checkbox,** with a mixed state for the header.
 - **Meter** (`role="meter"` with `aria-valuetext`, such as "2 of 1, over the limit").
 - **Toast** with one polite live region, an optional Undo or one next step, such as Assign people
   for a Plan just added, and no timeout shorter than a person needs: it stays until closed or
   replaced.
-- **Popover** for the Change plan chooser: it takes focus, and Escape or Cancel returns it.
+- **Popover** for the Change plan chooser in Everyone: it takes focus, Escape or Cancel returns it,
+  and it stays inside the window, flipping above its control and capping its height.
 
 The side panel reuses Activity's layout and `DetailToolbar`; the row menu reuses `OverflowMenu`;
-search reuses `SearchField`. The popover and the person page's chooser share one Change plan
-component.
+search reuses `SearchField`. The popover, the person page's card, and a Plan's People tab share
+one Change plan component.
 
 ## Server changes
 
@@ -317,8 +338,8 @@ component.
 - Every status combines color with text and an icon; meters always have their numbers beside them.
 - Controls reach 44 px on a coarse pointer.
 - The panel is not modal: opening it moves focus to its title, Close returns it to the row, and the
-  rest of the page stays usable. A popover takes focus, and Escape or Cancel closes it and returns
-  focus to its button.
+  rest of the page stays usable. Change plan moves focus to the Plan chosen, the arrow keys move
+  the choice, and Escape or Cancel closes it and returns focus to its button.
 - The switch, the bulk bar, and every command keep focus with `aria-disabled` while they wait.
 - Checked at 390 and 1440 px, in light, dark, and Midnight, with the pseudo-locale and 200% text.
 

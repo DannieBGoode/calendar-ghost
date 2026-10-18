@@ -60,30 +60,18 @@ function personActions({ t }: I18n, person: Person, { busy, start }: PeopleComma
 }
 
 /**
- * What a command on this person shows beside them: its error, the deletion to confirm, or a link.
- * Change plan shows its own refusal in its popover. On their page, `planOnCard` leaves what a Plan
- * change did to their Plan card.
+ * What a command on this person shows beside them: its result or error, the deletion to confirm,
+ * or a link. Change plan shows its own refusal where it opened, and its result in a toast.
  */
-export function PersonDetails({
-  person,
-  name,
-  commands,
-  planOnCard = false,
-}: {
-  person: Person
-  name: string
-  commands: PeopleCommands
-  planOnCard?: boolean
-}) {
+export function PersonDetails({ person, name, commands }: { person: Person; name: string; commands: PeopleCommands }) {
   const i18n = useI18n()
   const { t } = i18n
   const error = commands.errorFor(person)
-  const result = planOnCard && commands.planResultFor(person) !== null ? null : commands.resultFor(person)
-  const choosingPlan = commands.choosingPlan === person.id
+  const result = commands.resultFor(person)
   return (
     <>
       {result !== null && <p className="command-result">{result}</p>}
-      {error !== null && !choosingPlan && (
+      {error !== null && (
         <p className="field-error" role="alert">
           {apiErrorMessage(i18n, error)}
         </p>

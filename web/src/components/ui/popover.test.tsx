@@ -14,6 +14,9 @@ afterEach(() => {
   act(() => root?.unmount())
   root = null
   document.body.innerHTML = ""
+  document.documentElement.style.removeProperty("scroll-padding-top")
+  document.documentElement.style.removeProperty("scroll-padding-bottom")
+  vi.restoreAllMocks()
 })
 
 function render(element: React.ReactElement): HTMLElement {
@@ -162,5 +165,133 @@ describe("Popover", () => {
     })
     expect(dialog(container)).toBeNull()
     expect(document.activeElement).toBe(elsewhere)
+  })
+})
+
+/** A box as `getBoundingClientRect` gives it, with no width, so only the vertical place is tested. */
+function box(top: number, height: number): DOMRect {
+  return { top, bottom: top + height, height, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) }
+}
+
+/**
+ * Lays the page out as a browser would: the window's height, where the control's wrapper sits, and
+ * how tall the popover's content is, which its max-height caps. `content` can change later, as
+ * content that arrives does.
+ */
+function layout({ window: height, control, content }: { window: number; control: number; content: number }) {
+  // `shift` moves the control once the popover's height is capped, as on a page scrolled to its end.
+  const page = { content, control, shift: 0 }
+  vi.spyOn(window, "innerHeight", "get").mockReturnValue(height)
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (this.tagName === "DIALOG") return box(0, Math.min(page.content, Number.parseFloat(this.style.maxHeight) || Infinity))
+    const capped = document.querySelector<HTMLElement>("dialog")?.style.maxHeight
+    if (this.classList.contains("relative")) return box(page.control + (capped ? page.shift : 0), 32)
+    return box(0, 0)
+  })
+  return page
+}
+
+/** Which side of its control the popover opened on, and the most it may be tall, as its style says. */
+function placement(container: HTMLElement): { side: string | undefined; maxHeight: string } {
+  const layer = dialog(container)!
+  // A popover is marked capped exactly when its height is.
+  expect(layer.dataset.capped === "true").toBe(layer.style.maxHeight !== "")
+  return { side: layer.dataset.side, maxHeight: layer.style.maxHeight }
+}
+
+/** Lets what waits for the next frame run, as placing again after a scroll does. */
+async function nextFrames() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 40))
+  })
+}
+
+async function open(container: HTMLElement) {
+  act(() => button(container, "Change plan").click())
+  await nextFrames()
+}
+
+describe("Popover in the window", () => {
+  it("opens under its control when the window has room for it", async () => {
+    layout({ window: 900, control: 100, content: 400 })
+    const container = render(<Harness />)
+    await open(container)
+    expect(placement(container)).toEqual({ side: "bottom", maxHeight: "" })
+    expect(dialog(container)!.style.bottom).toBe("")
+  })
+
+  it("opens above its control when there is more room there, and never past the window's edge", async () => {
+    layout({ window: 900, control: 700, content: 400 })
+    const container = render(<Harness />)
+    await open(container)
+    // Under the control 146 px are left, above it 678.
+    expect(placement(container)).toEqual({ side: "top", maxHeight: "" })
+    expect(dialog(container)!.style.top).toBe("auto")
+    expect(dialog(container)!.style.bottom).not.toBe("")
+
+    act(() => root?.unmount())
+    layout({ window: 900, control: 700, content: 800 })
+    const taller = render(<Harness />)
+    await open(taller)
+    expect(placement(taller)).toEqual({ side: "top", maxHeight: "678px" })
+  })
+
+  it("caps its height at the room under its control when that is larger, so its content scrolls inside it", async () => {
+    layout({ window: 600, control: 100, content: 800 })
+    const container = render(<Harness />)
+    await open(container)
+    expect(placement(container)).toEqual({ side: "bottom", maxHeight: "446px" })
+  })
+
+  it("keeps clear of the top bar and of a toast, which the page's scroll padding marks", async () => {
+    document.documentElement.style.setProperty("scroll-padding-top", "80px")
+    document.documentElement.style.setProperty("scroll-padding-bottom", "100px")
+    layout({ window: 900, control: 400, content: 500 })
+    const container = render(<Harness />)
+    await open(container)
+    // Under the control: 900 - 100 - 16 - (432 + 6) = 346. Above it: 400 - 6 - 80 - 16 = 298.
+    expect(placement(container)).toEqual({ side: "bottom", maxHeight: "346px" })
+  })
+
+  it("scrolls its control up first when the window has little room on either side of it", async () => {
+    document.documentElement.style.setProperty("scroll-padding-top", "80px")
+    layout({ window: 300, control: 130, content: 400 })
+    const scrolled = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => undefined)
+    const container = render(<Harness />)
+    await open(container)
+    expect(scrolled).toHaveBeenCalledTimes(1)
+    expect(scrolled.mock.contexts[0]).toBe(dialog(container)!.parentElement)
+    // Up to just under the top bar, which the page's scroll padding keeps clear.
+    expect(scrolled.mock.calls[0]).toEqual([{ block: "start" }])
+  })
+
+  it("fits itself again when capping its height moved its control, as at the end of a page", async () => {
+    const page = layout({ window: 600, control: 300, content: 800 })
+    page.shift = 16
+    const container = render(<Harness />)
+    await open(container)
+    // Capped at the 278 px above the control, the page moved it 16 px down: 294 px are above it now.
+    expect(placement(container)).toEqual({ side: "top", maxHeight: "294px" })
+  })
+
+  it("places itself again when its content grows, and as the page scrolls", async () => {
+    const page = layout({ window: 900, control: 300, content: 200 })
+    const container = render(<Harness />)
+    await open(container)
+    expect(placement(container)).toEqual({ side: "bottom", maxHeight: "" })
+
+    page.content = 700
+    act(() => dialog(container)!.append(document.createElement("p")))
+    await nextFrames()
+    // Under the control 546 px are left, above it 278: it stays under, capped.
+    expect(placement(container)).toEqual({ side: "bottom", maxHeight: "546px" })
+
+    page.control = 600
+    act(() => {
+      window.dispatchEvent(new Event("scroll"))
+    })
+    await nextFrames()
+    // Now 246 px are left under it and 578 above.
+    expect(placement(container)).toEqual({ side: "top", maxHeight: "578px" })
   })
 })

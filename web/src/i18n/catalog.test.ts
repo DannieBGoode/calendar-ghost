@@ -143,6 +143,7 @@ const TEMPLATE_VALUES: TemplateValues = {
     "60_minutes",
   ],
   "people.plans.panel.speed.*": ["instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"],
+  "people.plans.change.limits.speed.*": ["instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"],
   "people.usage.interval.*": ["instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"],
   "common.provider.*": PROVIDER_KINDS,
   "common.providerName.*": PROVIDER_KINDS,

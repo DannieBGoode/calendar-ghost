@@ -5,8 +5,8 @@ import { cn } from "@/lib/utils"
 /**
  * A native radio drawn as the palette's dot: a ring that fills with the lantern color when chosen.
  * It is a `peer`, so the label after it can draw the focus ring around the whole option. Radio
- * Cards and Limit Fields group these by one `name`, so the browser gives them the WAI-ARIA radio
- * group keyboard: Tab stops once, and the arrow keys move the choice.
+ * Cards, Radio Rows, and Limit Fields group these by one `name`, so the browser gives them the
+ * WAI-ARIA radio group keyboard: Tab stops once, and the arrow keys move the choice.
  */
 function Radio({ className, ...props }: Omit<React.ComponentProps<"input">, "type">) {
   return (

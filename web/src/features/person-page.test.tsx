@@ -5,6 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { AppToasts } from "@/components/app-toasts"
 import { ThemeProvider } from "@/components/theme-provider"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
@@ -187,7 +188,7 @@ async function settle(times = 8) {
  * An answer, one read at each request, for an answer that changes between requests, or one that
  * arrives only when a test gives it.
  */
-type Answer = Response | Promise<Response> | (() => Response)
+type Answer = Response | Promise<Response> | (() => Response | Promise<Response>)
 
 async function renderPerson(i18n: I18n, personId = "user-robin", answers: Record<string, Answer> = {}) {
   const routes: Record<string, Answer> = {
@@ -224,7 +225,9 @@ async function renderPerson(i18n: I18n, personId = "user-robin", answers: Record
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <PersonView personId={personId} onBack={back} onDeleted={deleted} own={own} />
+            <AppToasts>
+              <PersonView personId={personId} onBack={back} onDeleted={deleted} own={own} />
+            </AppToasts>
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -600,16 +603,52 @@ describe("A person's page", () => {
       ])
     }
 
-    function popover(): HTMLElement | null {
-      return container.querySelector<HTMLElement>("dialog")
+    function chooser(): HTMLElement | null {
+      return container.querySelector<HTMLElement>("#plan-change-user-robin")
     }
 
     function choice(label: string): HTMLInputElement {
-      const found = [...popover()!.querySelectorAll<HTMLInputElement>("input[type='radio']")].find((radio) =>
+      const found = [...chooser()!.querySelectorAll<HTMLInputElement>("input[type='radio']")].find((radio) =>
         [...(radio.labels ?? [])].some((item) => item.textContent.startsWith(label)),
       )
       if (!found) throw new Error(`No choice ${label}`)
       return found
+    }
+
+    /** What describes an option: its limits in short, then what choosing it would do, once known. */
+    function described(radio: HTMLInputElement): string[] {
+      const ids = radio.getAttribute("aria-describedby")?.split(" ") ?? []
+      return ids.map((id) => document.getElementById(id)?.textContent ?? "")
+    }
+
+    /** Each option: its name with its badges, its limits in short, and whether it is chosen. */
+    function options(): [string, string, boolean][] {
+      return [...chooser()!.querySelectorAll<HTMLInputElement>("input[type='radio']")].map((radio) => [
+        [...(radio.labels ?? [])].map((item) => item.textContent).join(" "),
+        described(radio)[0] ?? "",
+        radio.checked,
+      ])
+    }
+
+    /** What Change plan asked the server, dry runs included, in order. */
+    function posted(): { plan: string | null; user_ids: string[]; dry_run: boolean }[] {
+      return calls
+        .filter((call) => call.method === "POST" && call.path === "/api/v1/plan-assignments")
+        .map((call) => call.body as { plan: string | null; user_ids: string[]; dry_run: boolean })
+    }
+
+    function toast(): string | null | undefined {
+      return container.querySelector("[role='status'][aria-atomic]")?.textContent
+    }
+
+    function overviewReads(): number {
+      return calls.filter((call) => call.path === "/api/v1/users/user-robin/overview").length
+    }
+
+    function press(target: Element, key: string) {
+      act(() => {
+        target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }))
+      })
     }
 
     function changePlan(): HTMLButtonElement {
@@ -718,153 +757,203 @@ describe("A person's page", () => {
 
     it("keeps Change plan on the card, out of their actions menu", async () => {
       await renderPerson(testI18n(), "user-robin", withPlan(onFamily))
-      expect(changePlan().getAttribute("aria-haspopup")).toBe("dialog")
+      expect(changePlan()).not.toBeUndefined()
+      // It opens in the card, not over the page.
+      expect(changePlan().hasAttribute("aria-haspopup")).toBe(false)
       await click(container.querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
       expect(menuLabels()).toEqual(["Make administrator", "Disable", "Create password reset link", "Delete"])
     })
 
-    it("changes their plan from a popover after a dry run, saying the result on the card", async () => {
-      await renderPerson(
-        testI18n(),
-        "user-robin",
-        withPlan(onFamily, {
-          "POST /api/v1/plan-assignments": given(hasFree),
-          "PUT /api/v1/users/user-robin/plan": jsonResponse(onFree),
-        }),
-      )
-      const before = calls.filter((call) => call.path === "/api/v1/users/user-robin/overview").length
+    it("changes their plan in the card: one line per plan, the default meaning they follow it, then Save and a toast with Undo", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily, { "POST /api/v1/plan-assignments": given(hasFree) }))
+      const before = overviewReads()
       await click(changePlan())
-      const dialog = popover()!
-      expect(changePlan().getAttribute("aria-expanded")).toBe("true")
-      expect(dialog.querySelector("h3")?.textContent).toBe("Change plan for robin@example.test")
-      expect(document.activeElement).toBe(dialog.querySelector("h3"))
-      expect(dialog.textContent).toContain("robin@example.test has Family now.")
-      expect(
-        [...dialog.querySelectorAll<HTMLInputElement>("input[type='radio']")].map((radio) => [
-          [...(radio.labels ?? [])].map((item) => item.textContent).join(" "),
-          radio.disabled,
-        ]),
-      ).toEqual([
-        ["Follow the default plan", false],
-        ["Free", false],
-        ["Family Current", true],
+      expect(container.querySelector("dialog")).toBeNull()
+      const form = chooser()!
+      expect(card().contains(form)).toBe(true)
+      const title = form.querySelector("h3")!
+      expect(title.textContent).toBe("Change plan")
+      expect(form.querySelector("[role='radiogroup']")?.getAttribute("aria-labelledby")).toBe(title.id)
+      // The page names them, so the chooser does not, and Change plan gives way to it.
+      expect(form.textContent).not.toContain("robin@example.test")
+      expect(changePlan()).toBeUndefined()
+      expect(card().querySelector(".person-plan-held")).toBeNull()
+      // What they use stays in view beside the choice.
+      expect(usage()).toHaveLength(4)
+      // One choice per plan, the default first; no separate way to follow the default.
+      expect(options()).toEqual([
+        ["Free Default", "1 rule, 1 account, no tokens, every 5 min", false],
+        ["Family Current", "5 rules, 3 accounts, 2 tokens, Instant", true],
       ])
-      expect(dialog.textContent).toContain("Free now. If the default changes, so does theirs.")
+      expect(form.textContent).not.toContain("Follow the default plan")
+      expect(form.querySelector(".plan-change-note")?.textContent).toBe(
+        "People on the default plan move with it when the default changes.",
+      )
+      expect(document.activeElement).toBe(choice("Family"))
 
       await click(choice("Free"))
-      expect(calls.find((call) => call.method === "POST")?.body).toEqual({
-        plan: "free",
-        user_ids: ["user-robin"],
-        dry_run: true,
-      })
-      expect(dialog.querySelector(".plan-change-result")?.textContent).toBe("robin@example.test is within every limit of Free.")
-      await click(button("Give Free to robin@example.test"))
+      expect(posted()).toEqual([{ plan: null, user_ids: ["user-robin"], dry_run: true }])
+      expect(described(choice("Free"))).toEqual(["1 rule, 1 account, no tokens, every 5 min", "Within every limit"])
+      await click(button("Save"))
 
-      expect(calls.filter((call) => call.method === "PUT")).toEqual([
-        { method: "PUT", path: "/api/v1/users/user-robin/plan", body: { plan: "free" } },
-      ])
-      expect(popover()).toBeNull()
-      expect(card().querySelector(".person-plan-result")?.textContent).toBe("robin@example.test now has Free.")
-      expect(container.querySelector(".sr-only[role='status']")?.textContent).toBe("robin@example.test now has Free.")
-      // Shown on the card, not again under their name.
-      expect(container.querySelector(".person-heading ~ .command-result")).toBeNull()
+      expect(posted().at(-1)).toEqual({ plan: null, user_ids: ["user-robin"], dry_run: false })
+      expect(chooser()).toBeNull()
+      expect(toast()).toBe("robin@example.test now has Free.")
       expect(document.activeElement).toBe(changePlan())
-      expect(calls.filter((call) => call.path === "/api/v1/users/user-robin/overview").length).toBeGreaterThan(before)
+      expect(overviewReads()).toBeGreaterThan(before)
+      // The toast says it once: not again on the card or under their name.
+      expect(container.querySelector(".command-result")).toBeNull()
+
+      await click(button("Undo"))
+      expect(posted().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin"], dry_run: false })
+      expect(toast()).toBe("robin@example.test has their plan back.")
     })
 
-    it("returns them to the default plan, and says which plan that is", async () => {
-      await renderPerson(
-        testI18n(),
-        "user-robin",
-        withPlan(onFamily, { "POST /api/v1/plan-assignments": given(hasFree), "PUT /api/v1/users/user-robin/plan": jsonResponse(onFree) }),
-      )
-      await click(changePlan())
-      await click(choice("Follow the default plan"))
-      await click(button("Move robin@example.test to the default plan"))
-      expect(calls.find((call) => call.method === "PUT")?.body).toEqual({ plan: null })
-      expect(card().querySelector(".person-plan-result")?.textContent).toBe(
-        "robin@example.test now has the default plan, Free.",
-      )
-    })
-
-    it("keeps the popover waiting while the change is on its way, ignoring more input", async () => {
-      await renderPerson(
-        testI18n(),
-        "user-robin",
-        withPlan(onFamily, {
-          "POST /api/v1/plan-assignments": given(hasFree),
-          "PUT /api/v1/users/user-robin/plan": new Promise<Response>(() => undefined),
-        }),
-      )
-      await click(changePlan())
-      await click(choice("Free"))
-      const confirm = button("Give Free to robin@example.test")
-      act(() => confirm.focus())
-      await click(confirm)
-      await click(confirm)
-      expect(calls.filter((call) => call.method === "PUT").length).toBe(1)
-      for (const held of [confirm, button("Cancel")]) expect(held.getAttribute("aria-disabled")).toBe("true")
-      expect(confirm.getAttribute("aria-busy")).toBe("true")
-      expect(document.activeElement).toBe(confirm)
-      await click(button("Cancel"))
-      act(() => {
-        confirm.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    it("says under the option chosen which limit they would be over, announced, in Attention Ochre only while plans are on", async () => {
+      const wouldBeOver = jsonResponse({
+        dry_run: true,
+        people: [
+          {
+            user_id: "user-robin",
+            email: "robin@example.test",
+            had: hasFamily,
+            has: hasFree,
+            over: [{ limit: "connected_accounts", in_use: 2, allowed: 1 }],
+          },
+        ],
       })
-      await settle()
-      expect(popover()).not.toBeNull()
-    })
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily, { "POST /api/v1/plan-assignments": wouldBeOver }))
+      await click(changePlan())
+      await click(choice("Free"))
+      expect(described(choice("Free"))).toEqual([
+        "1 rule, 1 account, no tokens, every 5 min",
+        "Would be over: 2 calendar accounts, 1 allowed",
+      ])
+      const note = chooser()!.querySelector<HTMLElement>("[role='status'][data-tone='attention']")!
+      expect(note.textContent).toBe("Would be over: 2 calendar accounts, 1 allowed")
+      expect(note.querySelector("svg[aria-hidden='true']")).not.toBeNull()
+      // Only under the option chosen.
+      expect(described(choice("Family"))).toEqual(["5 rules, 3 accounts, 2 tokens, Instant"])
 
-    it("shows the server's refusal in the popover, and reads the plans again so a removed plan leaves", async () => {
-      const refusal = { detail: "no plan has this key", code: "plan_not_found", params: {} }
-      const familyOnly: PlansOverview = { ...plans, plans: plans.plans.filter((plan) => plan.key === "family") }
-      let plansRead = 0
+      act(() => root?.unmount())
+      root = null
       await renderPerson(
         testI18n(),
         "user-robin",
         withPlan(onFamily, {
-          "GET /api/v1/plans": () => jsonResponse((plansRead += 1) === 1 ? plans : familyOnly),
-          "POST /api/v1/plan-assignments": given(hasFree),
-          "PUT /api/v1/users/user-robin/plan": jsonResponse(refusal, 404),
+          "GET /api/v1/plans": jsonResponse({ ...plans, enabled: false }),
+          "POST /api/v1/plan-assignments": wouldBeOver,
         }),
       )
       await click(changePlan())
       await click(choice("Free"))
-      await click(button("Give Free to robin@example.test"))
-      expect(popover()?.querySelector("[role='alert']")?.textContent).toBe(
+      expect(described(choice("Free"))[1]).toBe("Would be over: 2 calendar accounts, 1 allowed")
+      expect(chooser()!.querySelector("[data-tone='attention']")).toBeNull()
+    })
+
+    it("closes, changing nothing, on Save with the plan they have, Cancel, or Escape, with focus back on Change plan", async () => {
+      await renderPerson(testI18n(), "user-robin", withPlan(onFamily, { "POST /api/v1/plan-assignments": given(hasFree) }))
+      await click(changePlan())
+      await click(button("Save"))
+      expect(chooser()).toBeNull()
+      expect(document.activeElement).toBe(changePlan())
+
+      await click(changePlan())
+      await click(choice("Free"))
+      await click(button("Cancel"))
+      expect(chooser()).toBeNull()
+      expect(document.activeElement).toBe(changePlan())
+
+      await click(changePlan())
+      // Opened again, it starts from the plan they have.
+      expect(choice("Family").checked).toBe(true)
+      press(choice("Family"), "Escape")
+      await settle()
+      expect(chooser()).toBeNull()
+      expect(document.activeElement).toBe(changePlan())
+      expect(posted().every((body) => body.dry_run)).toBe(true)
+      expect(toast()).toBe("")
+    })
+
+    it("keeps the chooser waiting while the change is on its way, ignoring more input", async () => {
+      let posts = 0
+      await renderPerson(
+        testI18n(),
+        "user-robin",
+        withPlan(onFamily, {
+          "POST /api/v1/plan-assignments": () => ((posts += 1) === 1 ? given(hasFree) : new Promise<Response>(() => undefined)),
+        }),
+      )
+      await click(changePlan())
+      await click(choice("Free"))
+      const save = button("Save")
+      act(() => save.focus())
+      await click(save)
+      await click(save)
+      expect(posted().filter((body) => !body.dry_run)).toHaveLength(1)
+      for (const held of [save, button("Cancel")]) expect(held.getAttribute("aria-disabled")).toBe("true")
+      expect(save.getAttribute("aria-busy")).toBe("true")
+      expect(document.activeElement).toBe(save)
+      await click(button("Cancel"))
+      press(save, "Escape")
+      await settle()
+      expect(chooser()).not.toBeNull()
+    })
+
+    it("shows the server's refusal in the chooser, and reads the plans again so a removed plan leaves", async () => {
+      const refusal = { detail: "no plan has this key", code: "plan_not_found", params: {} }
+      const pro = { ...plans.plans[0]!, key: "pro", name: "Pro" }
+      let posts = 0
+      // Pro is removed elsewhere just as robin is given it: the server refuses, and lists it no more.
+      await renderPerson(
+        testI18n(),
+        "user-robin",
+        withPlan(onFamily, {
+          "GET /api/v1/plans": () => jsonResponse(posts < 2 ? { ...plans, plans: [...plans.plans, pro] } : plans),
+          "POST /api/v1/plan-assignments": () => ((posts += 1) === 1 ? given(hasFree) : jsonResponse(refusal, 404)),
+        }),
+      )
+      const plansRead = () => calls.filter((call) => call.path === "/api/v1/plans").length
+      await click(changePlan())
+      await click(choice("Pro"))
+      const before = plansRead()
+      await click(button("Save"))
+      expect(chooser()?.querySelector("[role='alert']")?.textContent).toBe(
         "This plan no longer exists. Reload to see the current plans.",
       )
-      expect(plansRead).toBe(2)
-      expect([...popover()!.querySelectorAll("input[type='radio']")].length).toBe(2)
-      // The plan chosen is gone, so nothing is chosen.
-      const confirm = [...popover()!.querySelectorAll("button")].find((item) => item.textContent.trim() === "Change plan")
-      expect(confirm?.getAttribute("aria-disabled")).toBe("true")
-      // Only in the popover, not again under their name.
+      expect(plansRead()).toBeGreaterThan(before)
+      // Pro is gone, so the choice is back on the plan they have.
+      expect(options().map(([label, , checked]) => [label, checked])).toEqual([
+        ["Free Default", false],
+        ["Family Current", true],
+      ])
+      // Only in the chooser, not again under their name.
       expect(container.querySelectorAll("[role='alert']").length).toBe(1)
 
       await click(button("Cancel"))
-      expect(popover()).toBeNull()
+      expect(chooser()).toBeNull()
       expect(container.querySelector("[role='alert']")).toBeNull()
       expect(document.activeElement).toBe(changePlan())
-      expect(calls.filter((call) => call.method === "PUT").length).toBe(1)
+      expect(posted().filter((body) => !body.dry_run)).toHaveLength(1)
     })
 
-    it("keeps one next step open: a command from the menu closes the popover", async () => {
+    it("keeps one next step open: a command from the menu closes the chooser", async () => {
       await renderPerson(testI18n(), "user-robin", withPlan(onFamily, { "POST /api/v1/plan-assignments": given(hasFree) }))
       await click(changePlan())
-      expect(popover()).not.toBeNull()
+      expect(chooser()).not.toBeNull()
       await choose("Delete")
-      expect(popover()).toBeNull()
+      expect(chooser()).toBeNull()
       expect(container.querySelector("#delete-person-user-robin")).not.toBeNull()
 
       await click(changePlan())
       expect(container.querySelector("#delete-person-user-robin")).toBeNull()
-      expect(popover()).not.toBeNull()
+      expect(chooser()).not.toBeNull()
     })
 
-    it("has no untranslated text with the plan card and the popover open", async () => {
+    it("has no untranslated text with the plan card and the chooser open", async () => {
       await renderPerson(pseudoI18n(), "user-robin", withPlan(overFamily, { "POST /api/v1/plan-assignments": given(hasFree) }))
-      await click(card().querySelector<HTMLButtonElement>("button[aria-haspopup='dialog']")!)
-      await click(popover()!.querySelectorAll<HTMLInputElement>("input[type='radio']")[1]!)
+      await click(card().querySelector<HTMLButtonElement>(".person-plan-change button")!)
+      await click(chooser()!.querySelectorAll<HTMLInputElement>("input[type='radio']")[0]!)
       expect(
         untranslatedText(container, ["robin@example.test", "dana@example.test", RULE_NAME, "Family", "Free", ...dateWords()]),
       ).toEqual([])

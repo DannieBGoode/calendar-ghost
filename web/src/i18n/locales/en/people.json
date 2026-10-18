@@ -100,9 +100,6 @@
   },
   "status": {
     "administrator": "{email} is now an administrator.",
-    "planChanged": "{email} now has {name}.",
-    "planDefault": "{email} now has the default plan, {name}.",
-    "planDefaultUnnamed": "{email} now has the default plan.",
     "notAdministrator": "{email} is no longer an administrator.",
     "disabled": "{email} can no longer sign in. Their rules wait until you enable them again.",
     "enabled": "{email} can sign in again.",
@@ -810,48 +807,60 @@
     },
     "change": {
       "title": "Change plan for {person}",
-      "follow": "Follow the default plan",
-      "followNow": "{name} now. If the default changes, so does theirs.",
-      "followNone": "No plan is the default yet.",
-      "current": "Current",
-      "within": "{person} is within every limit of {name}.",
-      "choose": "Change plan",
-      "chooseReason": "Choose a plan for {person}.",
-      "give": "Give {name} to {person}",
-      "giveDefault": "Move {person} to the default plan",
-      "followed": "{person} now follows the default plan.",
-      "cancel": "Cancel",
       "titleMany": {
         "one": "Change plan for {count} person",
         "other": "Change plan for {count} people"
       },
-      "chooseReasonMany": {
-        "one": "Choose a plan for {count} person.",
-        "other": "Choose a plan for {count} people."
+      "heading": "Change plan",
+      "current": "Current",
+      "holding": {
+        "one": "{count} has it",
+        "other": "{count} have it"
       },
-      "heldOne": "{person} has {name} now.",
-      "heldFew": "{people} have {name} now.",
-      "heldAll": "All {count} have {name} now.",
-      "heldMixed": "They have {plans} now.",
-      "heldGroup": "{name} ({count})",
-      "noPlan": "no plan",
-      "moveFrom": "They move from {from} to {to}.",
-      "moveTo": "They move to {to}.",
-      "toDefault": "the default plan, {name}",
-      "noLongerOverOne": "{person} is no longer over a limit.",
-      "noLongerOver": {
-        "one": "{count} person is no longer over a limit.",
-        "other": "{count} people are no longer over a limit."
+      "noPlan": "No plan",
+      "noPlanSummary": "Nothing limits them until a plan is the default.",
+      "defaultNote": "People on the default plan move with it when the default changes.",
+      "within": "Within every limit",
+      "nobodyOver": "Nobody would be over a limit",
+      "overOne": "{person} would be over: {limits}",
+      "overMany": {
+        "one": "{count} person would be over a limit",
+        "other": "{count} people would be over a limit"
       },
-      "allWithin": "They are all within every limit of {name}.",
-      "result": "{move} {over}",
-      "giveDefaultMany": {
-        "one": "Move {count} person to the default plan",
-        "other": "Move {count} people to the default plan"
+      "chooseFirst": "Choose a plan first.",
+      "save": "Save",
+      "cancel": "Cancel",
+      "noPlanResult": "{person} has no plan now.",
+      "noPlanResultMany": {
+        "one": "{count} person has no plan now.",
+        "other": "{count} people have no plan now."
       },
-      "followedMany": {
-        "one": "{count} person now follows the default plan.",
-        "other": "{count} people now follow the default plan."
+      "limits": {
+        "unlimited": "unlimited",
+        "rules": {
+          "one": "{count} rule",
+          "other": "{count} rules"
+        },
+        "rulesUnlimited": "unlimited rules",
+        "accounts": {
+          "one": "{count} account",
+          "other": "{count} accounts"
+        },
+        "accountsUnlimited": "unlimited accounts",
+        "tokens": {
+          "one": "{count} token",
+          "other": "{count} tokens"
+        },
+        "tokensNone": "no tokens",
+        "tokensUnlimited": "unlimited tokens",
+        "speed": {
+          "instant": "Instant",
+          "5_minutes": "every 5 min",
+          "10_minutes": "every 10 min",
+          "15_minutes": "every 15 min",
+          "30_minutes": "every 30 min",
+          "60_minutes": "every hour"
+        }
       },
       "loading": "Loading plans",
       "loadError": "Plans could not load."

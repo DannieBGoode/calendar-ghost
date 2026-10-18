@@ -7,7 +7,7 @@ import { PeopleFilters } from "@/features/people-filters"
 import { InstallationHealthSummary } from "@/features/people-health"
 import { PeoplePagination } from "@/features/people-pagination"
 import { PeopleTable } from "@/features/people-table"
-import { usePlanChangeToast, type ShowPlanChange } from "@/features/use-plan-change-toast"
+import { usePlanChanges, type PlanChanges } from "@/features/use-plan-changes"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
@@ -22,8 +22,8 @@ import { useRowSelection } from "@/lib/use-row-selection"
 /**
  * People's first tab: Installation Health, then everyone here in one card with its search,
  * filters, table, and pages. Health and invitations load beside the list, not after it. A change
- * of several people's plans answers here, not in the bar that made it, since it can leave nobody
- * in the list: a refused Undo shows above the list, empty or not.
+ * of people's plans, from the bar or a row, answers here, not where it was made, since it can
+ * leave nobody in the list: a refused Undo shows above the list, empty or not.
  */
 export function PeopleRoster({
   query,
@@ -45,7 +45,7 @@ export function PeopleRoster({
   const people = usePeoplePage(query)
   const commands = usePersonCommands()
   const plans = useFilterPlans(people.data, query)
-  const changes = usePlanChangeToast()
+  const changes = usePlanChanges()
 
   return (
     <>
@@ -65,9 +65,9 @@ export function PeopleRoster({
           plans={plans}
           onChange={(next) => update({ ...next, page: 1 }, "replace")}
         />
-        {changes.refusal && (
+        {changes.undoRefusal && (
           <p className="field-error people-undo-error" role="alert">
-            {apiErrorMessage(i18n, changes.refusal)}
+            {apiErrorMessage(i18n, changes.undoRefusal)}
           </p>
         )}
         <p className="sr-only" role="status">
@@ -87,7 +87,7 @@ export function PeopleRoster({
             commands={commands}
             update={update}
             onOpenPerson={onOpenPerson}
-            onChanged={changes.show}
+            changes={changes}
           />
         )}
         {/* A deletion's result has no row left to sit on. */}
@@ -120,7 +120,7 @@ function PeopleResults({
   commands,
   update,
   onOpenPerson,
-  onChanged,
+  changes,
 }: {
   page: PeoplePage
   query: PeopleQuery
@@ -130,7 +130,7 @@ function PeopleResults({
   commands: PeopleCommands
   update: UpdatePeopleQuery
   onOpenPerson: OpenPerson
-  onChanged: ShowPlanChange
+  changes: PlanChanges
 }) {
   // Who is selected belongs to what the list shows: another search, filter, sort, or page selects nobody.
   const selection = useRowSelection(JSON.stringify(query))
@@ -156,8 +156,8 @@ function PeopleResults({
         <PeopleBulkBar
           selected={page.users.filter((person) => selection.ids.has(person.id))}
           busy={commands.busy}
+          changes={changes}
           onClear={selection.clear}
-          onChanged={onChanged}
         />
       )}
       <PeopleTable
@@ -166,6 +166,7 @@ function PeopleResults({
         currentUserId={currentUserId}
         now={now}
         commands={commands}
+        changes={changes}
         selection={selection}
         onSort={(sort: PeopleSort) => update(nextSort(query, sort), "replace")}
         onOpenPerson={onOpenPerson}

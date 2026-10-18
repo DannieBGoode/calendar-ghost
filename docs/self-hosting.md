@@ -298,13 +298,15 @@ actions** menu says how many people it moves. To limit only some people, open th
 give it, as **Give Free to 2 people** does. Before you do, the list shows the Plan each person has
 now and any limit they would be over, and administrators come last, since no Plan limits them.
 Below it, **Have Free now** lists who has the Plan, with any limit they are over, and **Change
-plan** beside each of them gives them another Plan, or the default, after saying whether they
-would be over it. Under **Everyone**, tick people, or the box above the list for the whole page,
-and choose **Change plan** in the bar above the table: it says which Plan they have now, offers
-**Follow the default plan** and each Plan with what it allows, and, before you confirm, who moves
-where and who would be over. A message at the bottom of the window says what changed, with
-**Undo**. **Change plan** in a person's **More actions**, and on the **Plan** card of their page,
-does the same for one person. **Duplicate** opens a new Plan with
+plan** beside each of them gives them another Plan. Under **Everyone**, tick people, or the box
+above the list for the whole page, and choose **Change plan** in the bar above the table. It lists
+each Plan on one line with its limits in short, the default first. Choosing the default means
+they follow it, so they move with it when the default changes. The Plan they have now is chosen
+and marked **Current**, or, when they have different Plans, each Plan says how many have it. Once
+you choose another Plan, a line under it says who would be over a limit, and which one, before you
+**Save**. A message at the bottom of the window says what changed, with **Undo**. **Change plan**
+in a person's **More actions** does the same for one person, and on the **Plan** card of their
+page it opens inside the card, beside how much of their Plan they use. **Duplicate** opens a new Plan with
 another's limits. Two Plans cannot share a name, whatever its case: the form says so
 under **Name**. With no default, turning Plans on adds a Plan named No limits, which limits
 nobody, as the default, so nothing changes until someone has a smaller Plan; you can rename and

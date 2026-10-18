@@ -1843,17 +1843,6 @@ p {
   gap: 0.75rem;
 }
 
-/* Change plan's options say what each Plan allows, so its choice is wider than a setting's; its
-   sentences keep a readable measure. */
-.person-plan-choice {
-  max-width: 40rem;
-}
-
-.person-plan-choice .field-hint,
-.person-plan-choice .field-error {
-  max-width: 66ch;
-}
-
 /* A Plan's name, with Default beside it rather than on a line of its own. */
 .plan-title {
   display: flex;
@@ -2744,24 +2733,17 @@ p {
   line-height: 1.4;
 }
 
-.plan-change h5:focus-visible {
-  border-radius: 0.25rem;
-  outline: 3px solid var(--ring);
-  outline-offset: 3px;
+/* The options, one compact row each, a little wider than their rows so a focus ring shows whole. */
+.plan-change-options {
+  margin-inline: -0.25rem;
+  padding: 0.1875rem 0.25rem;
 }
 
-.plan-change-result {
+/* What choosing the default means, once, under the options. */
+.plan-change-note {
   color: var(--muted-foreground);
   font-size: 0.8125rem;
-  line-height: 1.5;
-}
-
-.plan-change-result:empty {
-  display: none;
-}
-
-.plan-change-result[data-tone="attention"] {
-  color: var(--warning-foreground);
+  line-height: 1.45;
 }
 
 .plan-change-actions {
@@ -2770,33 +2752,49 @@ p {
   gap: 0.5rem;
 }
 
-/* Who has what now, under the chooser's title. */
-.plan-change-held {
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  line-height: 1.45;
-}
-
-/* What the dry run found carries an icon as well as its words: a check, or the attention mark. */
-.plan-change-result:not(:empty) {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-}
-
-.plan-change-result svg {
-  width: 0.875rem;
-  height: 0.875rem;
-  flex: none;
-  margin-top: 0.2rem;
-}
-
-/* In a popover the chooser is the popover's content: no box of its own, a section-sized title. */
-.plan-change-popover .plan-change {
+/* On a person's page the chooser takes the Plan's name's place in its card: no box of its own,
+   rows at a readable measure, so each Plan's name and its limits stay on one line. */
+.person-plan-card .plan-change {
+  max-width: 40rem;
   gap: 0.75rem;
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+.person-plan-card .plan-change h3 {
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+/* In a popover the chooser is the popover's content: no box of its own, a section-sized title. Its
+   options scroll inside it once the popover's height is capped, while the title, the note, and
+   Save stay in view. */
+.plan-change-popover .plan-change {
+  min-height: 0;
+  flex: 1 1 auto;
+  gap: 0.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.plan-change-popover .plan-change > :not(.plan-change-options) {
+  flex: none;
+}
+
+.plan-change-popover .plan-change-options {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* However little room a capped popover has, at least two options show; below that the popover
+   itself scrolls. */
+.plan-change-popover[data-capped] .plan-change-options {
+  min-height: 5.75rem;
 }
 
 .plan-change-popover h3 {
@@ -2805,29 +2803,20 @@ p {
   line-height: 1.4;
 }
 
-.plan-change-popover h3:focus-visible {
-  border-radius: 0.25rem;
-  outline: 3px solid var(--ring);
-  outline-offset: 3px;
-}
-
-.plan-change-popover h3:focus:not(:focus-visible),
 .plan-change-popover:focus {
   outline: none;
 }
 
-.plan-change-popover .plan-change-actions {
-  margin-top: 0.25rem;
-}
-
-.plan-change-popover .plan-change-actions button {
+.plan-change-popover .plan-change-actions button,
+.person-plan-card .plan-change-actions button {
   height: 2.5rem;
   padding: 0 1rem;
   font-size: 0.875rem;
 }
 
 @media (pointer: coarse) {
-  .plan-change-popover .plan-change-actions button {
+  .plan-change-popover .plan-change-actions button,
+  .person-plan-card .plan-change-actions button {
     height: 2.75rem;
   }
 }

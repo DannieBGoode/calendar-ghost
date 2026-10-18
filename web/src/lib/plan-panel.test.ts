@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { testI18n } from "@/i18n/testing"
 import type { PlanLimits } from "@/lib/api"
-import { planAllowsSentence, planPanelMeta } from "@/lib/plan-panel"
+import { planAllowsSentence, planLimitsSummary, planPanelMeta } from "@/lib/plan-panel"
 
 const i18n = testI18n()
 
@@ -28,5 +28,19 @@ describe("A plan's panel", () => {
     )
     expect(planPanelMeta(i18n, { name: "Pro", people: 1, limits: UNLIMITED })).toBe("1 person has Pro. Unlimited, with Instant sync.")
     expect(planPanelMeta(i18n, { name: "Spare", people: 0, limits: UNLIMITED })).toBe("Nobody has Spare yet. Unlimited, with Instant sync.")
+  })
+})
+
+describe("A plan's limits in short", () => {
+  it.each([
+    [FREE, "1 rule, 1 account, no tokens, every 5 min"],
+    [{ ...FREE, rules: 5, connected_accounts: 3, integration_tokens: 2, sync_interval: "instant" }, "5 rules, 3 accounts, 2 tokens, Instant"],
+    [{ ...FREE, rules: 5, connected_accounts: 3, integration_tokens: null, sync_interval: "instant" }, "5 rules, 3 accounts, unlimited tokens, Instant"],
+    [UNLIMITED, "Unlimited, Instant"],
+    [{ ...UNLIMITED, sync_interval: "60_minutes" }, "Unlimited, every hour"],
+    // A summary never starts in lower case, whichever count has no limit.
+    [{ ...FREE, rules: null }, "Unlimited rules, 1 account, no tokens, every 5 min"],
+  ] as const)("names each limit in a word or two, as a line in Change plan: %j", (limits, summary) => {
+    expect(planLimitsSummary(i18n, limits)).toBe(summary)
   })
 })

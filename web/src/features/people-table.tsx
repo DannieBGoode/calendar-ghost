@@ -7,7 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DisabledBadge, VerdictBadge } from "@/components/verdict-badge"
 import { SELECT_ALL } from "@/features/people-bulk-bar"
 import { PersonDetails, PersonMenu } from "@/features/person-actions"
-import { PersonPlanPopover } from "@/features/person-plan"
+import { LIST_TITLE, RowPlanPopover } from "@/features/plan-change-popover"
+import type { PlanChanges } from "@/features/use-plan-changes"
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
 import type { PeopleQuery, PeopleSort, PersonRow, SortOrder } from "@/lib/api"
@@ -47,6 +48,7 @@ export function PeopleTable({
   currentUserId,
   now,
   commands,
+  changes,
   selection,
   onSort,
   onOpenPerson,
@@ -56,6 +58,8 @@ export function PeopleTable({
   currentUserId: string
   now: number
   commands: PeopleCommands
+  /** Change plan for one person from their row's actions. */
+  changes: PlanChanges
   /** Who is selected, once a Plan exists. */
   selection: RowSelection
   onSort: (sort: PeopleSort) => void
@@ -108,6 +112,7 @@ export function PeopleTable({
             columns={columns.length}
             now={now}
             commands={commands}
+            changes={changes}
             onOpen={onOpenPerson}
           />
         ))}
@@ -188,6 +193,7 @@ function PersonRows({
   columns,
   now,
   commands,
+  changes,
   onOpen,
 }: {
   person: PersonRow
@@ -199,12 +205,14 @@ function PersonRows({
   columns: number
   now: number
   commands: PeopleCommands
+  changes: PlanChanges
   onOpen: OpenPerson
 }) {
   const i18n = useI18n()
   const { t } = i18n
   const name = personName(i18n, person)
   const selected = selection.ids.has(person.id)
+  useFocusKeptOnLeave()
   return (
     <Fragment>
       <tr role="row" className="person-row" data-selected={planned && selected ? true : undefined}>
@@ -260,7 +268,7 @@ function PersonRows({
             lastSignIn(i18n, person, now)
           )}
         </td>
-        <PersonActions person={person} name={name} you={you} commands={commands} />
+        <PersonActions person={person} name={name} you={you} commands={commands} changes={changes} />
       </tr>
       {commands.hasDetails(person) && (
         <tr role="row" className="person-details-row">
@@ -274,18 +282,45 @@ function PersonRows({
 }
 
 /**
+ * A row that leaves the list while it holds focus, as when a change takes its person out of a
+ * narrowed list, leaves focus on the list's heading rather than nowhere.
+ */
+function useFocusKeptOnLeave() {
+  useEffect(
+    () => () => {
+      const active = document.activeElement
+      if (active === null || active === document.body) document.getElementById(LIST_TITLE)?.focus({ preventScroll: true })
+    },
+    [],
+  )
+}
+
+/**
  * Someone else's actions: the menu, and, once a Plan exists, Change plan in a popover beside it,
  * which gives focus back to the menu as it closes.
  */
-function PersonActions({ person, name, you, commands }: { person: PersonRow; name: string; you: boolean; commands: PeopleCommands }) {
+function PersonActions({
+  person,
+  name,
+  you,
+  commands,
+  changes,
+}: {
+  person: PersonRow
+  name: string
+  you: boolean
+  commands: PeopleCommands
+  changes: PlanChanges
+}) {
   const cell = useRef<HTMLTableCellElement>(null)
   return (
     <td ref={cell} role="cell" className="person-col-actions">
       {!you && <PersonMenu person={person} name={name} commands={commands} plan={person.plan} />}
       {!you && person.plan && (
-        <PersonPlanPopover
+        <RowPlanPopover
           person={person}
           commands={commands}
+          changes={changes}
           returnFocus={() => cell.current?.querySelector<HTMLElement>("[aria-haspopup='menu']") ?? null}
         />
       )}

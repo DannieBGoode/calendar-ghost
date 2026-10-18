@@ -27,12 +27,14 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   of the window, most with **Undo**. **Everyone** shows each person's Plan in its own column, its
   name with **Default**, **Over a limit**, or **Not limited** beside it, and can list only the
   people who have one Plan, or who are over a limit. Its rows can be selected, a page at a time,
-  and **Change plan** in the bar above the table gives the people selected another Plan, or the
-  default, from a popover that says after a dry run who moves where and who would be over, with
-  **Undo** once done. Each row's **More actions** offers the same for one person. A person's page
-  has a **Plan** card: who gave the Plan and when, whether it limits them now, **Change plan**, and
-  a meter for each limit with how much of it they use, saying under a limit they are over what
-  keeps working. Once a Plan is the default, **Invitations** says which Plan someone invited will
+  and **Change plan** in the bar above the table gives the people selected another Plan from a
+  popover that stays inside the window: one line per Plan with its limits in short, the default
+  first, where choosing the default means they follow it, what they have now marked **Current**,
+  and, under the Plan chosen, a dry run's word on who would be over which limit, then **Save**,
+  with **Undo** once done. Each row's **More actions** offers the same for one person. A person's
+  page has a **Plan** card: who gave the Plan and when, whether it limits them now, **Change
+  plan**, which opens the same choice inside the card, and a meter for each limit with how much of
+  it they use, saying under a limit they are over what keeps working. Once a Plan is the default, **Invitations** says which Plan someone invited will
   get. Two Plans cannot share a name, whatever its case; the form says so under Name. Remove is
   unavailable on the default, saying to make another Plan the default first, and on
   a Plan someone has, naming the first three of them. Turning Plans on with no default adds a Plan

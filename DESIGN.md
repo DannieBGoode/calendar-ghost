@@ -290,8 +290,17 @@ scroll wheel never changes it. Its hint, above the control, says in one line wha
 
 When each option of a choice needs a sentence, the options are radio cards: a bordered row per
 option with its radio, an optional icon, a title, and a description, the chosen one outlined in
-the palette's lantern color. Sync speed and Change plan use them. An option that cannot be chosen
-stays visible, dimmed, with why ("Current").
+the palette's lantern color. Sync speed uses them.
+
+### Radio Rows
+
+When a name and a few words tell the options apart, as Plans in Change plan, the options are radio
+rows: one compact row per option, no border, its radio, its name with badges such as "Default" and
+"Current", and its summary in muted nouns beside the name where there is room, under it where there
+is not. The chosen row is tinted, and the row with focus carries the focus ring. Under each row, a
+line says what choosing it would do ("Would be over: 2 calendar accounts, 1 allowed", in Attention
+Ochre with its icon); it is a live region from the start, so it is announced as it fills. A row is
+about 40 px tall, at least 44 px on a coarse pointer, so a list of Plans stays short.
 
 ### Selection and Bulk Actions
 
@@ -330,8 +339,12 @@ never covers the panel's footer. A result about one row still appears on that ro
 A popover holds one short choice beside the control that opened it, such as Change plan for the
 selected people: a title, the choice, what it will do, and its one action with Cancel. It lifts
 above the page as a menu does, takes focus when it opens, and Escape or Cancel closes it and
-returns focus to its control. It never blocks the rest of the page, and anything longer is a side
-panel.
+returns focus to its control. It never blocks the rest of the page, and it never leaves the
+window: it opens under its control, or above it when there is more room there, below the top bar
+and above a toast, with its height capped at the room it has. Its list then scrolls inside it
+while its title and action stay in view. A control with little room on either side is first
+scrolled up. Anything longer is a side panel, and a choice about what a page already shows, such
+as one person's Plan on their page, opens in place in its card.
 
 ### Data Tables
 
@@ -501,9 +514,10 @@ command's result appears beside the person it changed. Once a Plan exists, the t
 column, the Plan's name with chips ("Default", "Over a limit" in Attention Ochre with an icon, "Not
 limited" for an administrator), and the filters a Plan filter and a Limits filter, kept in the
 address like the others. Rows can be selected; the bulk bar's Change plan opens a popover of radio
-cards, "Follow the default plan" first, then each Plan with what it allows, which says before it is
-confirmed who moves and who would be over. Each row's More actions and the person's page open the
-same chooser for one person, and the result of a change for several people is a toast.
+rows, one per Plan, the default first, where choosing the default means following it, with what
+they have now chosen and marked "Current", and a dry run under the choice that says who would be
+over. Each row's More actions opens the same chooser for one person, and the person's page opens
+it inside their Plan card. The result of any change is a toast with Undo.
 
 A person's page starts at their name, and the browser tab names them. It leads with a
 Synchronization card: the verdict with how many rules run, then a problem several rules share,
@@ -513,7 +527,7 @@ problem the person fixes themself, with a muted "If they ask for help: …" sayi
 installation's own, and nothing for the administrator to do otherwise. On their own page an
 administrator reads the steps as their own, with a link to take each one, and their calendars by
 name. Once a Plan exists, a Plan card follows Synchronization: who gave the Plan and when, whether it limits them
-now, Change plan, the Plan's name as an object title, and one meter per limit with "1 of 1" and its
+now, Change plan, which opens in the card in place of the Plan's name, the Plan's name as an object title, and one meter per limit with "1 of 1" and its
 chip, past a limit with one sentence on what keeps working; an administrator's card says no Plan
 limits administrators. With problems, a second card holds their accounts, Activity, and calls,
 with one line on whether the calls look normal; with none, those close the one Synchronization card. Calendars of

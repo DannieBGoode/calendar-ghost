@@ -2,7 +2,6 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-import { Badge } from "./badge"
 import { Radio } from "./radio"
 
 type RadioCardOption<T extends string> = {
@@ -11,8 +10,6 @@ type RadioCardOption<T extends string> = {
   description?: string
   /** A decorative mark before the title; the title still names the option. */
   icon?: React.ReactNode
-  /** Why the option cannot be chosen, such as "Current"; it then stays visible, dimmed, beside its title. */
-  unavailable?: string
 }
 
 type RadioCardsName = { "aria-label": string } | { "aria-labelledby": string }
@@ -81,13 +78,12 @@ function RadioCard<T extends string>({
 }) {
   const descriptionId = option.description ? `${id}-description` : undefined
   return (
-    <div className="relative grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 rounded-[0.625rem] border border-border bg-background px-3.5 py-3 transition-[border-color,box-shadow] duration-200 has-checked:border-primary has-checked:shadow-[inset_0_0_0_1px_var(--primary)] has-disabled:opacity-60 has-[:enabled:not(:checked)]:hover:border-input">
+    <div className="relative grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 rounded-[0.625rem] border border-border bg-background px-3.5 py-3 transition-[border-color,box-shadow] duration-200 has-checked:border-primary has-checked:shadow-[inset_0_0_0_1px_var(--primary)] has-[:enabled:not(:checked)]:hover:border-input">
       <Radio
         id={id}
         name={name}
         value={option.value}
         checked={checked}
-        disabled={Boolean(option.unavailable)}
         aria-disabled={pending || undefined}
         aria-describedby={descriptionId}
         className="mt-[0.1875rem] size-4 checked:border-[5px]"
@@ -95,17 +91,10 @@ function RadioCard<T extends string>({
       />
       <label
         htmlFor={id}
-        className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[0.9375rem] font-semibold leading-snug text-foreground after:absolute after:inset-0 after:rounded-[0.625rem] after:content-[''] peer-focus-visible:after:ring-[3px] peer-focus-visible:after:ring-ring/90 peer-enabled:cursor-pointer peer-disabled:cursor-not-allowed peer-aria-disabled:cursor-not-allowed [&>svg]:size-4 [&>svg]:shrink-0"
+        className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[0.9375rem] font-semibold leading-snug text-foreground after:absolute after:inset-0 after:rounded-[0.625rem] after:content-[''] peer-focus-visible:after:ring-[3px] peer-focus-visible:after:ring-ring/90 peer-enabled:cursor-pointer peer-aria-disabled:cursor-not-allowed [&>svg]:size-4 [&>svg]:shrink-0"
       >
         {option.icon}
         {option.title}
-        {/* A space, so the reason reads as its own word in the radio's name ("Free Current"). */}
-        {option.unavailable && (
-          <>
-            {" "}
-            <Badge variant="neutral">{option.unavailable}</Badge>
-          </>
-        )}
       </label>
       {option.description && (
         <p id={descriptionId} className="col-start-2 text-[0.8125rem] leading-normal text-muted-foreground">

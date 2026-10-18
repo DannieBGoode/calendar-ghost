@@ -1,116 +1,94 @@
-import { RefreshCw } from "lucide-react"
-import { useRef } from "react"
+import { useCallback, useRef } from "react"
 
 import { PlanChips } from "@/components/plan-chips"
 import { PlanUsage } from "@/components/plan-usage"
 import { Button } from "@/components/ui/button"
-import { Popover } from "@/components/ui/popover"
-import { Skeleton } from "@/components/ui/skeleton"
-import { PlanChooser, type ConfirmChange, type PlanChooserProps } from "@/features/plan-change"
+import { ChooserWithPlans, type SaveChange } from "@/features/plan-change"
+import { usePlanChanges, type PlanChanges } from "@/features/use-plan-changes"
+import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { PersonPlanOverview, UserOverview } from "@/lib/api"
 import { isAdministrator, personName } from "@/lib/people"
-import type { PlanPerson } from "@/lib/plan-assignment"
+import type { PlanPerson } from "@/lib/plan-change"
 import { planCardSummary, planUsageRows } from "@/lib/plan-usage"
 import { heldPlanChips } from "@/lib/plans"
 import type { PeopleCommands } from "@/lib/use-people"
 import { usePlanList } from "@/lib/use-plans"
 
-type ChangePopoverProps = Omit<PlanChooserProps, "overview" | "level" | "onCancel"> & {
-  open: boolean
-  /** It lines up with its control's end edge, as for a control at the end of a row or card. */
-  alignEnd?: boolean
-  /** The control that opened it, which gets focus back as it closes. */
-  returnFocus: () => HTMLElement | null
-  /** Escape, Cancel, or a press outside asks to close it. */
-  onClose: () => void
-}
-
 /**
- * Change plan in a popover beside the control that opened it, for the people selected in
- * Everyone, one person's row, or their page: the Plans are read as it opens, with Try again when
- * they cannot be, then the chooser.
+ * Change plan inside a person's Plan card, open while their command is Change plan. Its title is
+ * "Change plan", since the page names them. Once the change is made, or it closes, focus returns
+ * to Change plan, then the page's toast says what the change did, with Undo.
  */
-export function ChangePlanPopover({ open, alignEnd, returnFocus, onClose, ...chooser }: ChangePopoverProps) {
-  return (
-    <Popover
-      id={`${chooser.id}-popover`}
-      open={open}
-      alignEnd={alignEnd}
-      aria-labelledby={`${chooser.id}-title`}
-      returnFocus={returnFocus}
-      onClose={onClose}
-      className="plan-change-popover"
-    >
-      <ChooserWithPlans {...chooser} onCancel={onClose} />
-    </Popover>
-  )
-}
-
-function ChooserWithPlans(props: Omit<PlanChooserProps, "overview" | "level">) {
-  const { t } = useI18n()
-  const plans = usePlanList()
-  if (plans.data) return <PlanChooser {...props} overview={plans.data} level={3} />
-  if (plans.isPending) {
-    return (
-      <div role="status" aria-busy="true" aria-label={t("people.plans.change.loading")}>
-        <h3 id={`${props.id}-title`} className="sr-only">
-          {t("people.plans.change.loading")}
-        </h3>
-        <Skeleton className="h-40 w-full" />
-      </div>
-    )
-  }
-  return (
-    <div className="plan-assign-error" role="alert">
-      <h3 id={`${props.id}-title`}>{t("people.plans.change.loadError")}</h3>
-      <Button type="button" variant="outline" size="sm" onClick={() => void plans.refetch()}>
-        <RefreshCw aria-hidden="true" />
-        {t("people.plans.tryAgain")}
-      </Button>
-    </div>
-  )
-}
-
-/**
- * Change plan for one person, as a command on them like their others: open while their Plan is
- * being chosen, waiting while any person command runs, with the refusal of the last change. The
- * change gives the Plan chosen by its key, or the default with none, named as its result says it.
- */
-export function PersonPlanPopover({
+function PersonPlanChange({
   person,
   commands,
-  returnFocus,
+  changes,
+  onClosed,
 }: {
   person: PlanPerson
   commands: PeopleCommands
-  returnFocus: () => HTMLElement | null
+  changes: PlanChanges
+  /** It closed: what follows once focus is back on Change plan, such as the change's toast. */
+  onClosed: (then?: () => void) => void
 }) {
-  const refused = commands.errorFor(person)
-  const confirm: ConfirmChange = (key, chosen) => {
-    const name = chosen?.name ?? null
-    commands.send({ person, action: "plan", plan: key === null ? { key, name } : { key, name: name ?? key } })
-  }
+  const { t } = useI18n()
+  const source = person.id
+  const refusal = changes.refusalFor(source)
+  const save: SaveChange = (plan, chosen) =>
+    changes.change({
+      source,
+      people: [person],
+      plan,
+      chosen,
+      done: (show) => {
+        commands.closePlanChoice()
+        onClosed(show)
+      },
+    })
   return (
-    <ChangePlanPopover
+    <ChooserWithPlans
       id={`plan-change-${person.id}`}
-      open={commands.choosingPlan === person.id}
-      alignEnd
+      title={t("people.plans.change.heading")}
       people={[person]}
-      pending={commands.busy}
-      refusal={refused}
-      returnFocus={returnFocus}
-      onChoose={() => refused && commands.command.reset()}
-      onConfirm={confirm}
-      onClose={commands.closePlanChoice}
+      pending={changes.pending}
+      refusal={refusal}
+      onChoose={() => refusal && changes.forget()}
+      onSave={save}
+      onCancel={() => {
+        changes.forget()
+        commands.closePlanChoice()
+        onClosed()
+      }}
     />
   )
 }
 
 /**
+ * Once Change plan closes from inside, focus returns to the button that opened it as the button
+ * shows again, and then what follows runs, such as the toast, which returns focus there as it
+ * closes. Closing it by another command, such as Delete, leaves focus where that command put it.
+ */
+function useReturnToChange() {
+  const returning = useRef<{ then: (() => void) | undefined } | null>(null)
+  const button = useCallback((node: HTMLButtonElement | null) => {
+    const closed = returning.current
+    if (!node || closed === null) return
+    returning.current = null
+    node.focus()
+    closed.then?.()
+  }, [])
+  const closed = useCallback((then?: () => void) => {
+    returning.current = { then }
+  }, [])
+  return [button, closed] as const
+}
+
+/**
  * A person's Plan card, after Synchronization once any Plan exists: who gave the Plan and when and
  * whether it limits them now, Change plan for anyone but the reader, the Plan's name with its chips,
- * then one meter per limit. What a change did shows here, as their page's status announces it.
+ * then one meter per limit. Change plan opens in the card, in place of the Plan's name, so what
+ * they use stays in view beside the choice; what a change did is a toast with Undo.
  */
 export function PersonPlanCard({
   overview,
@@ -131,9 +109,11 @@ export function PersonPlanCard({
   const person = { ...overview.user, plan }
   const name = personName(i18n, person)
   const administrator = isAdministrator(person)
-  const change = useRef<HTMLButtonElement>(null)
-  const result = commands.planResultFor(person)
+  const changes = usePlanChanges()
+  // Read as the card shows, so Change plan opens at once, with focus on the Plan they have.
+  usePlanList(!own)
   const choosing = commands.choosingPlan === person.id
+  const [changeButton, closed] = useReturnToChange()
   return (
     <section className="page-card workflow user-overview-block person-plan-card" aria-labelledby="person-plan-title">
       <div className="person-plan-head">
@@ -141,31 +121,35 @@ export function PersonPlanCard({
           <h2 id="person-plan-title">{t("people.person.plan.title")}</h2>
           <p className="person-plan-summary">{planCardSummary(i18n, plan, { name, administrator, now })}</p>
         </div>
-        {!own && (
+        {!own && !choosing && (
           <div className="person-plan-change">
             <Button
-              ref={change}
+              ref={changeButton}
               type="button"
               variant="outline"
-              aria-haspopup="dialog"
-              aria-expanded={choosing}
-              aria-controls={choosing ? `plan-change-${person.id}-popover` : undefined}
               aria-disabled={commands.busy || undefined}
-              onClick={() => (choosing ? commands.closePlanChoice() : commands.start({ person, action: "plan" }))}
+              onClick={() => commands.start({ person, action: "plan" })}
             >
               {t("people.person.plan.change")}
             </Button>
-            <PersonPlanPopover person={person} commands={commands} returnFocus={() => change.current} />
           </div>
         )}
       </div>
-      {plan.has && (
-        <p className="person-plan-held">
-          <span className="person-plan-name">{plan.has.name}</span>
-          <PlanChips chips={heldPlanChips(i18n, plan, administrator)} />
+      {choosing ? (
+        <PersonPlanChange person={person} commands={commands} changes={changes} onClosed={closed} />
+      ) : (
+        plan.has && (
+          <p className="person-plan-held">
+            <span className="person-plan-name">{plan.has.name}</span>
+            <PlanChips chips={heldPlanChips(i18n, plan, administrator)} />
+          </p>
+        )
+      )}
+      {changes.undoRefusal && (
+        <p className="field-error" role="alert">
+          {apiErrorMessage(i18n, changes.undoRefusal)}
         </p>
       )}
-      {result !== null && <p className="command-result person-plan-result">{result}</p>}
       {!administrator && plan.basis !== "administrator" && <PlanUsage rows={planUsageRows(i18n, plan, name)} />}
     </section>
   )

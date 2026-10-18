@@ -101,7 +101,7 @@ function PersonContent({
         </div>
         {you === null && <PersonMenu person={person} name={name} commands={commands} />}
       </div>
-      {you === null && <PersonDetails person={person} name={name} commands={commands} planOnCard />}
+      {you === null && <PersonDetails person={person} name={name} commands={commands} />}
       <p className="sr-only" role="status">
         {commands.message}
       </p>

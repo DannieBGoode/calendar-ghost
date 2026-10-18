@@ -391,9 +391,6 @@ export const api = {
     call("/api/v1/users/{user_id}/role", "put", { params: { user_id: userId }, body: { role } }),
   setPersonState: (userId: string, state: PersonState) =>
     call("/api/v1/users/{user_id}/state", "put", { params: { user_id: userId }, body: { state } }),
-  /** Gives a person their own Plan; null returns them to the Default Plan. */
-  setPersonPlan: (userId: string, plan: string | null) =>
-    call("/api/v1/users/{user_id}/plan", "put", { params: { user_id: userId }, body: { plan } }),
   issuePasswordResetLink: (userId: string) =>
     call("/api/v1/users/{user_id}/password-reset-links", "post", { params: { user_id: userId } }),
   deletePerson: (userId: string) => call("/api/v1/users/{user_id}", "delete", { params: { user_id: userId } }),
