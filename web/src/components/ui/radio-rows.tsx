@@ -36,9 +36,10 @@ type RadioRowsProps<T extends string> = RadioRowsName & {
 /**
  * A choice among things a name and a few words tell apart, such as Plans: one compact row per
  * option in one native radio group. Tab stops once, the arrow keys move the choice, and pressing
- * anywhere on a row chooses it. Each radio is named by its title and badges and described by its
- * summary, and the chosen row is tinted. Under each row, a line says what choosing it would do; it
- * is a live region from the start, so a screen reader announces it as it fills.
+ * anywhere on a row chooses it, so a row is at least 44 px tall on a coarse pointer. Each radio
+ * is named by its title and badges and described by its summary, and the chosen row is tinted.
+ * Under each row, a line says what choosing it would do; it is a live region from the start, so a
+ * screen reader announces it as it fills.
  */
 function RadioRows<T extends string>({
   options,
@@ -86,7 +87,7 @@ function RadioRow<T extends string>({
   const summaryId = option.summary ? `${id}-summary` : undefined
   const noteId = option.note ? `${id}-note` : undefined
   return (
-    <div className="relative grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 rounded-lg px-3 py-2 transition-colors duration-150 has-checked:bg-(--primary-soft) has-[input:not(:checked):not([aria-disabled])]:hover:bg-muted has-[input:focus-visible]:ring-[3px] has-[input:focus-visible]:ring-ring/90 has-[input[aria-disabled]]:cursor-not-allowed motion-reduce:transition-none pointer-coarse:py-2.5">
+    <div className="relative grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 rounded-lg px-3 py-2 transition-colors duration-150 has-checked:bg-(--primary-soft) has-[input:not(:checked):not([aria-disabled])]:hover:bg-muted has-[input:focus-visible]:ring-[3px] has-[input:focus-visible]:ring-ring/90 has-[input[aria-disabled]]:cursor-not-allowed motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:content-center">
       <Radio
         id={id}
         name={name}

@@ -135,6 +135,20 @@ describe("RadioRows", () => {
     expect(radios(container).some((radio) => radio.checked)).toBe(false)
   })
 
+  it("makes the whole row the tap target, at least 44 px tall on a coarse pointer", () => {
+    const container = render(<Harness />)
+    for (const radio of radios(container)) {
+      const row = radio.parentElement!
+      const label = radio.labels![0]!
+      // The label's ::after covers its positioned row, so pressing anywhere on the row chooses it.
+      expect(row.contains(label)).toBe(true)
+      expect(row.classList.contains("relative")).toBe(true)
+      expect(label.classList.contains("after:inset-0")).toBe(true)
+      // happy-dom has no layout, so this checks the rule DESIGN.md sets: 2.75rem on a coarse pointer.
+      expect(row.classList.contains("pointer-coarse:min-h-11")).toBe(true)
+    }
+  })
+
   it("keeps focus and ignores choices while a command is on its way", () => {
     const onChange = vi.fn()
     const container = render(<Harness pending onChange={onChange} />)
