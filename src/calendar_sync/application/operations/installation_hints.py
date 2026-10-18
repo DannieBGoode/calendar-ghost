@@ -144,7 +144,7 @@ def _wanting_instant_sync(owners: Iterable[InstantSyncOwner], cadence: SyncCaden
     batch. A User whose cadence cannot be read counts, as dispatch and upkeep treat them."""
     users = [owner.user for owner in owners if owner.wanted and not owner.disabled]
     cadences = cadences_of(cadence, users)
-    return sum(1 for user in users if (found := cadences.get(user)) is None or found.instant)
+    return sum(1 for user in users if cadences[user].instant)
 
 
 def _internet_host(address: str) -> bool:

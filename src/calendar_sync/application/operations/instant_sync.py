@@ -92,7 +92,7 @@ class WatchUpkeep:
         cadences = cadences_of(self.cadence, [owner.user for owner in owners])
         self._carried = ()
         for position, owner in enumerate(owners):
-            self._keep(owner, cadences.get(owner.user), calls)
+            self._keep(owner, cadences[owner.user], calls)
             if calls.exhausted:
                 # The Users it never reached go first next cycle, then this one, whose upkeep
                 # the budget may have cut short. So a User with a large backlog never stays
@@ -117,9 +117,7 @@ class WatchUpkeep:
 
         return sorted(owners, key=turn)
 
-    def _keep(
-        self, owner: InstantSyncOwner, cadence: SyncCadence | None, calls: CallBudget
-    ) -> None:
+    def _keep(self, owner: InstantSyncOwner, cadence: SyncCadence, calls: CallBudget) -> None:
         """One User's upkeep; a failure waits for the next cycle and holds up nobody else."""
         try:
             upkeep = self.upkeep_for(owner.user)
@@ -135,15 +133,10 @@ class WatchUpkeep:
                 error.__class__.__name__,
             )
 
-    def _allowed(self, owner: InstantSyncOwner, cadence: SyncCadence | None) -> bool:
+    def _allowed(self, owner: InstantSyncOwner, cadence: SyncCadence) -> bool:
         """Whether the User may have watches: the installation can be reached, the User is
         active and wants Instant Sync, and their Plan includes it, or could not be read."""
-        return (
-            self.address is not None
-            and not owner.disabled
-            and owner.wanted
-            and _may_sync_instantly(cadence)
-        )
+        return self.address is not None and not owner.disabled and owner.wanted and cadence.instant
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,7 +260,7 @@ class InstantDispatch:
         """The Users whose rules may run instantly now, their cadences read in one batch."""
         wanting = [owner.user for owner in owners if owner.wanted and not owner.disabled]
         cadences = cadences_of(self.cadence, wanting)
-        return frozenset(user for user in wanting if _may_sync_instantly(cadences.get(user)))
+        return frozenset(user for user in wanting if cadences[user].instant)
 
     def _drop(self, item: PendingInstantRun, now: datetime) -> None:
         """Acknowledge a request no instant run will answer; Scheduled Sync runs the rule."""
@@ -284,12 +277,6 @@ class InstantDispatch:
         with self.requests_for(owner)() as uow:
             uow.instant_requests.acknowledge(rule_id, seq, at)
             uow.commit()
-
-
-def _may_sync_instantly(cadence: SyncCadence | None) -> bool:
-    """Whether a User's cadence allows Instant Sync; one that could not be read does, so a Plans
-    fault never drops a request or retires a watch (ADR 0038)."""
-    return cadence is None or cadence.instant
 
 
 def _eligible(item: PendingInstantRun, instant: frozenset[UserId]) -> bool:

@@ -343,14 +343,11 @@ class PlanCadence:
         }
 
 
-def cadences_of(
-    policy: SyncCadencePolicy, users: Collection[UserId]
-) -> dict[UserId, SyncCadence | None]:
-    """Each User's cadence in one batch read; when the batch raises, each User read alone; None
-    for a User whose own read raises too, or whom the batch left out. Logs only the error's class.
-
-    Readers count None as instant, so a Plans fault never drops an Instant Sync Request,
-    retires a watch, or hides Instant Sync from Installation Hints (ADR 0038).
+def cadences_of(policy: SyncCadencePolicy, users: Collection[UserId]) -> dict[UserId, SyncCadence]:
+    """Each User's cadence in one batch read; when the batch raises, each User read alone;
+    `DEFAULT_CADENCE`, which is instant, for a User whose own read raises too, or whom the batch
+    left out, so a Plans fault never drops an Instant Sync Request, retires a watch, or hides
+    Instant Sync from Installation Hints (ADR 0038). Logs only the error's class.
     """
     try:
         batch = policy.cadences(users)
@@ -360,10 +357,10 @@ def cadences_of(
             error.__class__.__name__,
         )
         return {user: _cadence_alone(policy, user) for user in users}
-    return {user: batch.get(user) for user in users}
+    return {user: batch.get(user, DEFAULT_CADENCE) for user in users}
 
 
-def _cadence_alone(policy: SyncCadencePolicy, user: UserId) -> SyncCadence | None:
+def _cadence_alone(policy: SyncCadencePolicy, user: UserId) -> SyncCadence:
     try:
         return policy.cadence(user)
     except Exception as error:
@@ -371,7 +368,7 @@ def _cadence_alone(policy: SyncCadencePolicy, user: UserId) -> SyncCadence | Non
             "Could not read a User's Sync Cadence; they count as instant (%s)",
             error.__class__.__name__,
         )
-        return None
+        return DEFAULT_CADENCE
 
 
 def notice_address(

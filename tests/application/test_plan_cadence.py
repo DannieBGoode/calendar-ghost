@@ -129,8 +129,8 @@ class Unsteady:
 def test_cadences_of_takes_the_batch_when_it_can_be_read() -> None:
     policy = Unsteady(batch={MEMBER: DEFAULT_CADENCE})
 
-    # A User the batch leaves out reads as unread, which every reader counts as instant.
-    assert cadences_of(policy, [MEMBER, OTHER]) == {MEMBER: DEFAULT_CADENCE, OTHER: None}
+    # A User the batch leaves out gets the default cadence, which is instant.
+    assert cadences_of(policy, [MEMBER, OTHER]) == {MEMBER: DEFAULT_CADENCE, OTHER: DEFAULT_CADENCE}
     assert policy.read_alone == []
 
 
@@ -142,7 +142,7 @@ def test_cadences_of_reads_each_user_alone_when_the_batch_fails(
     with caplog.at_level("WARNING", logger=LOGGER):
         cadences = cadences_of(policy, [MEMBER, OTHER])
 
-    assert cadences == {MEMBER: None, OTHER: SCHEDULED_ONLY}
+    assert cadences == {MEMBER: DEFAULT_CADENCE, OTHER: SCHEDULED_ONLY}
     assert policy.read_alone == [MEMBER, OTHER]
     # Only the error's class: its text could quote the database's own words.
     assert "RuntimeError" in caplog.text
@@ -150,10 +150,10 @@ def test_cadences_of_reads_each_user_alone_when_the_batch_fails(
     assert all(record.exc_info is None for record in caplog.records)
 
 
-def test_with_plans_unreadable_every_user_reads_as_unread() -> None:
+def test_with_plans_unreadable_every_user_gets_the_default_cadence() -> None:
     assert cadences_of(PlanCadence(BrokenAllowances()), [MEMBER, OTHER]) == {
-        MEMBER: None,
-        OTHER: None,
+        MEMBER: DEFAULT_CADENCE,
+        OTHER: DEFAULT_CADENCE,
     }
 
 
