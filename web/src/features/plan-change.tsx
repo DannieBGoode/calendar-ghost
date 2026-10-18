@@ -23,9 +23,10 @@ import {
 } from "@/lib/plan-change"
 import { usePlanDryRun } from "@/lib/use-plan-assignment"
 import { usePlanList, type PlanCommands } from "@/lib/use-plans"
+import { describedBy } from "@/lib/utils"
 
 /** What Save sends: a Plan's key, or null for the default, which they then follow, or for no Plan; and the Plan chosen, null for none. */
-export type SaveChange = (plan: string | null, chosen: PlanSummary | null) => void
+type SaveChange = (plan: string | null, chosen: PlanSummary | null) => void
 
 export type PlanChooserProps = {
   /** The chooser's own id, which its parts' ids start with. */
@@ -102,11 +103,6 @@ function markEnd(list: HTMLElement) {
 function focusChoice(options: HTMLElement | null) {
   const radio = options?.querySelector<HTMLInputElement>("input[type='radio']:checked") ?? options?.querySelector<HTMLInputElement>("input[type='radio']")
   radio?.focus()
-}
-
-/** The ids an element's aria-describedby names, leaving out those not shown. */
-function describedBy(...ids: (string | false)[]): string | undefined {
-  return ids.filter(Boolean).join(" ") || undefined
 }
 
 /** Each level's title, and the size of Save and Cancel under it. */

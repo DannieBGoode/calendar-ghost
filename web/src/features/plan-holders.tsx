@@ -1,16 +1,15 @@
 import { ArrowRight, RefreshCw, TriangleAlert } from "lucide-react"
-import { useRef, useState, type MouseEvent } from "react"
+import { useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PlanChange } from "@/features/plan-change"
-import type { ShowPeople } from "@/features/people-plans-status"
+import { PeopleLink, type ShowPeople } from "@/features/people-plans-status"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { PersonRow, PlanAssignments, PlanSummary, PlansOverview } from "@/lib/api"
 import { appPathForPerson, isPlainLeftClick, type OpenPerson } from "@/lib/navigation"
 import { personName } from "@/lib/people"
-import { peoplePath } from "@/lib/people-query"
 import { wouldBeOver } from "@/lib/plan-assignment"
 import { overLimitText } from "@/lib/plans"
 import { usePlanPeople, type PlanCommands } from "@/lib/use-plans"
@@ -50,22 +49,16 @@ export function PlanHolders({ plan, overview, assign, onChanged, onOpenPerson, o
   const base = `plan-holders-${plan.key}`
   const people = holders.data?.users ?? []
 
-  function showAll(event: MouseEvent<HTMLAnchorElement>) {
-    if (!isPlainLeftClick(event)) return
-    event.preventDefault()
-    onShowPeople({ plan: plan.key })
-  }
-
   return (
     <section id={base} className="plan-have" aria-labelledby={`${base}-title`}>
       <div className="plan-have-head">
         <h4 id={`${base}-title`} ref={heading} tabIndex={-1}>
           {t("people.plans.holders.title", { name: plan.name })}
         </h4>
-        <a className="text-link plan-have-show" href={peoplePath({ plan: plan.key })} onClick={showAll}>
+        <PeopleLink className="text-link plan-have-show" filter={{ plan: plan.key }} onShowPeople={onShowPeople}>
           {t("people.plans.holders.show")}
           <ArrowRight aria-hidden="true" />
-        </a>
+        </PeopleLink>
       </div>
       <HoldersState plan={plan} holders={holders} />
       {people.length > 0 && (

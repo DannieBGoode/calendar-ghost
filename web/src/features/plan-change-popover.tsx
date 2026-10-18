@@ -1,5 +1,5 @@
 import { Popover } from "@/components/ui/popover"
-import { ChooserWithPlans, type PlanChooserProps, type SaveChange } from "@/features/plan-change"
+import { ChooserWithPlans, type PlanChooserProps } from "@/features/plan-change"
 import type { PlanChanges } from "@/features/use-plan-changes"
 import { useI18n } from "@/i18n/provider"
 import { changeTitle, type PlanPerson } from "@/lib/plan-change"
@@ -56,21 +56,12 @@ export function RowPlanPopover({
   returnFocus: () => HTMLElement | null
 }) {
   const i18n = useI18n()
-  const source = person.id
-  const refusal = changes.refusalFor(source)
-  const save: SaveChange = (plan, chosen) =>
-    changes.change({
-      source,
-      people: [person],
-      plan,
-      chosen,
-      done: (show) => {
-        commands.closePlanChoice()
-        const control = returnFocus()
-        ;(control?.isConnected ? control : document.getElementById(LIST_TITLE))?.focus()
-        show()
-      },
-    })
+  const chooser = changes.chooser(person.id, [person], (show) => {
+    commands.closePlanChoice()
+    const control = returnFocus()
+    ;(control?.isConnected ? control : document.getElementById(LIST_TITLE))?.focus()
+    show()
+  })
   const close = () => {
     if (changes.pending) return
     changes.forget()
@@ -83,11 +74,8 @@ export function RowPlanPopover({
       open={commands.choosingPlan === person.id}
       alignEnd
       people={[person]}
-      pending={changes.pending}
-      refusal={refusal}
       returnFocus={returnFocus}
-      onChoose={() => refusal && changes.forget()}
-      onSave={save}
+      {...chooser}
       onClose={close}
     />
   )

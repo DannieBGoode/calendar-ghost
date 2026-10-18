@@ -238,17 +238,10 @@ function StartButton({
  */
 function StartNote({ refusal, waiting, ready }: { refusal: string | null; waiting: boolean; ready: boolean }) {
   const { t } = useI18n()
-  if (refusal !== null) {
+  if (refusal !== null || waiting) {
     return (
       <span id="rule-preview-start-note" className="rule-preview-start-note">
-        {refusal} <YourPlanLink />
-      </span>
-    )
-  }
-  if (waiting) {
-    return (
-      <span id="rule-preview-start-note" className="rule-preview-start-note">
-        {t("rulePreview.page.availableWhenDone")}
+        {refusal === null ? t("rulePreview.page.availableWhenDone") : <>{refusal} <YourPlanLink /></>}
       </span>
     )
   }

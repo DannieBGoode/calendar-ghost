@@ -4,12 +4,11 @@ import { useRef, type MouseEvent, type ReactNode } from "react"
 import { Badge } from "@/components/ui/badge"
 import { PlanDetails } from "@/features/people-plan-details"
 import { PlanRowMenu } from "@/features/people-plan-row-menu"
-import type { ShowPeople } from "@/features/people-plans-status"
+import { PeopleLink, type ShowPeople } from "@/features/people-plans-status"
 import type { ChangeSetting } from "@/features/use-setting-change"
 import { useI18n } from "@/i18n/provider"
 import type { PlanSummary, PlansOverview, SyncInterval } from "@/lib/api"
 import { appPathForPlanPanel, isPlainLeftClick } from "@/lib/navigation"
-import { peoplePath, type PeopleFilter } from "@/lib/people-query"
 import { catalogOrder, countCell, removable, speedLabel } from "@/lib/plans-catalog"
 import type { PlanWorkControls } from "@/lib/use-plan-work"
 import type { PlanCommands } from "@/lib/use-plans"
@@ -276,39 +275,5 @@ function PeopleCell({ plan, enabled, onShowPeople }: { plan: PlanSummary; enable
         )}
       </div>
     </td>
-  )
-}
-
-/** A link to Everyone showing only the people `filter` names, opened in place. */
-function PeopleLink({
-  className,
-  attention = false,
-  filter,
-  label,
-  onShowPeople,
-  children,
-}: {
-  className: string
-  /** Takes the attention tone, as people over a limit Plans enforce now. */
-  attention?: boolean
-  filter: PeopleFilter
-  label: string
-  onShowPeople: ShowPeople
-  children: ReactNode
-}) {
-  return (
-    <a
-      className={className}
-      data-tone={attention ? "attention" : undefined}
-      href={peoplePath(filter)}
-      aria-label={label}
-      onClick={(event) => {
-        if (!isPlainLeftClick(event)) return
-        event.preventDefault()
-        onShowPeople(filter)
-      }}
-    >
-      {children}
-    </a>
   )
 }

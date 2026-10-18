@@ -3,7 +3,7 @@ import { useCallback, useRef } from "react"
 import { PlanChips } from "@/components/plan-chips"
 import { PlanUsage } from "@/components/plan-usage"
 import { Button } from "@/components/ui/button"
-import { ChooserWithPlans, type SaveChange } from "@/features/plan-change"
+import { ChooserWithPlans } from "@/features/plan-change"
 import { usePlanChanges, type PlanChanges } from "@/features/use-plan-changes"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
@@ -34,29 +34,17 @@ function PersonPlanChange({
   onClosed: (then?: () => void) => void
 }) {
   const { t } = useI18n()
-  const source = person.id
-  const refusal = changes.refusalFor(source)
-  const save: SaveChange = (plan, chosen) =>
-    changes.change({
-      source,
-      people: [person],
-      plan,
-      chosen,
-      done: (show) => {
-        commands.closePlanChoice()
-        onClosed(show)
-      },
-    })
+  const chooser = changes.chooser(person.id, [person], (show) => {
+    commands.closePlanChoice()
+    onClosed(show)
+  })
   return (
     <ChooserWithPlans
       id={`plan-change-${person.id}`}
       title={t("people.plans.change.heading")}
       inPlace
       people={[person]}
-      pending={changes.pending}
-      refusal={refusal}
-      onChoose={() => refusal && changes.forget()}
-      onSave={save}
+      {...chooser}
       onCancel={() => {
         changes.forget()
         commands.closePlanChoice()

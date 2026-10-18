@@ -1,5 +1,5 @@
 import { ChevronRight, TriangleAlert } from "lucide-react"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 
 import { Switch } from "@/components/ui/switch"
 import type { ChangeSetting } from "@/features/use-setting-change"
@@ -120,19 +120,44 @@ function ShowOver({ fact, onShowPeople }: { fact: PlansFact; onShowPeople: ShowP
   const { t } = useI18n()
   const label = fact.attention ? "people.plans.status.showOver" : "people.plans.status.showWouldBeOver"
   return (
-    <a
-      className="plans-fact-link"
-      href={peoplePath({ over: true })}
-      aria-label={t(label, { count: fact.over })}
-      onClick={(event) => {
-        if (!isPlainLeftClick(event)) return
-        event.preventDefault()
-        onShowPeople({ over: true })
-      }}
-    >
+    <PeopleLink className="plans-fact-link" filter={{ over: true }} label={t(label, { count: fact.over })} onShowPeople={onShowPeople}>
       {fact.attention && <TriangleAlert aria-hidden="true" data-attention="" />}
       <span>{fact.value}</span>
       <ChevronRight aria-hidden="true" />
+    </PeopleLink>
+  )
+}
+
+/** A link to Everyone showing only the people `filter` names, opened in place. */
+export function PeopleLink({
+  className,
+  attention = false,
+  filter,
+  label,
+  onShowPeople,
+  children,
+}: {
+  className: string
+  /** Takes the attention tone, as people over a limit Plans enforce now. */
+  attention?: boolean
+  filter: PeopleFilter
+  label?: string
+  onShowPeople: ShowPeople
+  children: ReactNode
+}) {
+  return (
+    <a
+      className={className}
+      data-tone={attention ? "attention" : undefined}
+      href={peoplePath(filter)}
+      aria-label={label}
+      onClick={(event) => {
+        if (!isPlainLeftClick(event)) return
+        event.preventDefault()
+        onShowPeople(filter)
+      }}
+    >
+      {children}
     </a>
   )
 }

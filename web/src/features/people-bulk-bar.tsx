@@ -2,7 +2,6 @@ import { ChevronDown } from "lucide-react"
 import { useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
-import type { SaveChange } from "@/features/plan-change"
 import { ChangePlanPopover, LIST_TITLE } from "@/features/plan-change-popover"
 import type { PlanChanges } from "@/features/use-plan-changes"
 import { useI18n } from "@/i18n/provider"
@@ -40,7 +39,6 @@ export function PeopleBulkBar({
   const { t } = i18n
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
-  const refusal = changes.refusalFor(BULK)
 
   const close = () => {
     if (changes.pending) return
@@ -56,21 +54,14 @@ export function PeopleBulkBar({
     document.getElementById(SELECT_ALL)?.focus()
   }
 
-  const save: SaveChange = (plan, chosen) =>
-    changes.change({
-      source: BULK,
-      people: [...selected],
-      plan,
-      chosen,
-      // Focus waits on the list's heading before the bar goes back to rest, so the toast's Undo
-      // and Close return it there.
-      done: (show) => {
-        document.getElementById(LIST_TITLE)?.focus()
-        setOpen(false)
-        onClear()
-        show()
-      },
-    })
+  // Focus waits on the list's heading before the bar goes back to rest, so the toast's Undo
+  // and Close return it there.
+  const chooser = changes.chooser(BULK, selected, (show) => {
+    document.getElementById(LIST_TITLE)?.focus()
+    setOpen(false)
+    onClear()
+    show()
+  })
 
   return (
     <div className="people-bulk-bar" role="region" aria-label={t("people.bulk.label")} data-active={selected.length > 0}>
@@ -99,11 +90,8 @@ export function PeopleBulkBar({
               title={changeTitle(i18n, selected)}
               open={open}
               people={selected}
-              pending={changes.pending}
-              refusal={refusal}
               returnFocus={() => trigger.current}
-              onChoose={() => refusal && changes.forget()}
-              onSave={save}
+              {...chooser}
               onClose={close}
             />
           </div>

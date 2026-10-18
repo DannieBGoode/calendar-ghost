@@ -172,24 +172,21 @@ function OverNote({
 
 type CandidatesQuery = ReturnType<typeof usePlanCandidates>
 
-/**
- * The people found: while the first search is on its way, skeletons in their shape; when they
- * cannot be read, why, with Try again; otherwise how many were found, then the checklist.
- */
-function Candidates({
-  base,
-  query,
-  ...list
-}: {
-  base: string
-  query: CandidatesQuery
+/** What each person found needs from Assign people beside the person. */
+type RowProps = {
   overOf: ReadonlyMap<string, OverLimit[]>
   enabled: boolean
   currentUserId: string
   chosen: Chosen
   pending: boolean
   onToggle: (person: PersonRow, checked: boolean) => void
-}) {
+}
+
+/**
+ * The people found: while the first search is on its way, skeletons in their shape; when they
+ * cannot be read, why, with Try again; otherwise how many were found, then the checklist.
+ */
+function Candidates({ base, query, ...list }: { base: string; query: CandidatesQuery } & RowProps) {
   const { t } = useI18n()
   if (query.isPending) {
     return (
@@ -214,20 +211,7 @@ function Candidates({
 }
 
 /** How many were found, then each person found who is a member, and under them the administrators. */
-function Checklist({
-  base,
-  found,
-  ...row
-}: {
-  base: string
-  found: AssignCandidates
-  overOf: ReadonlyMap<string, OverLimit[]>
-  enabled: boolean
-  currentUserId: string
-  chosen: Chosen
-  pending: boolean
-  onToggle: (person: PersonRow, checked: boolean) => void
-}) {
+function Checklist({ base, found, ...row }: { base: string; found: AssignCandidates } & RowProps) {
   const { t } = useI18n()
   const { members, administrators, more } = found
   const count = members.length + administrators.length
@@ -281,17 +265,7 @@ function CandidateRow({
   chosen,
   pending,
   onToggle,
-}: {
-  base: string
-  person: PersonRow
-  administrator: boolean
-  overOf: ReadonlyMap<string, OverLimit[]>
-  enabled: boolean
-  currentUserId: string
-  chosen: Chosen
-  pending: boolean
-  onToggle: (person: PersonRow, checked: boolean) => void
-}) {
+}: { base: string; person: PersonRow; administrator: boolean } & RowProps) {
   const i18n = useI18n()
   const { t } = i18n
   const id = `${base}-${person.id}`

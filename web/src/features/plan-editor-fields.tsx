@@ -7,11 +7,7 @@ import { RadioCards } from "@/components/ui/radio-cards"
 import { useI18n } from "@/i18n/provider"
 import type { SyncInterval } from "@/lib/api"
 import { COUNT_LIMIT, LIMIT_MINIMUM, LIMIT_WORDS, type LimitDraft, type LimitName } from "@/lib/plan-draft"
-
-/** The ids an element's aria-describedby names, leaving out those not shown. */
-function describedBy(...ids: (string | false | null | undefined)[]): string | undefined {
-  return ids.filter(Boolean).join(" ") || undefined
-}
+import { describedBy } from "@/lib/utils"
 
 /** A refusal under the field it names, announced as it appears. */
 function FieldError({ id, text }: { id: string; text: string | null }) {

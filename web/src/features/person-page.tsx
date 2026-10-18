@@ -177,27 +177,21 @@ function BackToPeople({ href, onBack }: { href: string; onBack: () => void }) {
   )
 }
 
-/** One fact about a person, keyed by which fact it is. */
-type Fact = { id: string; text: string }
-
 /** Their role, and when they joined and last signed in. Their Plan has a card of its own. */
 function PersonFacts({ person, now }: { person: Person; now: number }) {
   const i18n = useI18n()
   const { t } = i18n
-  const facts: Fact[] = [
-    { id: "role", text: t(`people.roles.${person.role}`) },
-    { id: "joined", text: t("people.person.joined", { relative: i18n.format.relative(person.created_at, now) }) },
-    {
-      id: "last-sign-in",
-      text: person.last_sign_in_at
-        ? t("people.person.lastSignIn", { relative: i18n.format.relative(person.last_sign_in_at, now) })
-        : t("people.person.neverSignedIn"),
-    },
+  const facts = [
+    t(`people.roles.${person.role}`),
+    t("people.person.joined", { relative: i18n.format.relative(person.created_at, now) }),
+    person.last_sign_in_at
+      ? t("people.person.lastSignIn", { relative: i18n.format.relative(person.last_sign_in_at, now) })
+      : t("people.person.neverSignedIn"),
   ]
   return (
     <ul className="person-facts">
-      {facts.map(({ id, text }) => (
-        <li key={id}>{text}</li>
+      {facts.map((fact) => (
+        <li key={fact}>{fact}</li>
       ))}
     </ul>
   )
