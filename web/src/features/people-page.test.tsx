@@ -1293,6 +1293,12 @@ describe("Changing plans from Everyone", () => {
     expect(group.hasAttribute("aria-invalid")).toBe(false)
     expect(assignments()).toEqual([{ plans: { "user-robin": "family", "user-sam": "family" }, dry_run: true }])
     expect(noteUnder("Family")).toBe("Nobody would be over a limit")
+
+    // Robin had Family of their own and Sam followed Free: Undo gives each theirs in one request.
+    await click(button("Save", popover()!))
+    await click(button("Undo"))
+    expect(assignments().slice(2)).toEqual([{ plans: { "user-robin": "family", "user-sam": null }, dry_run: false }])
+    expect(toast()).toBe("2 people have their plans back.")
   })
 
   it("says what Undo did, or why it could not, once the change leaves nobody in the list", async () => {

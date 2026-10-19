@@ -981,7 +981,7 @@ class PlanMoveResponse(ApiResponse):
 
 
 class PlanAssignmentsResponse(ApiResponse):
-    """Everyone a Plan was given to, in the order first named, or would be in a dry run."""
+    """Everyone a Plan was given to, in the order named, or would be in a dry run."""
 
     dry_run: bool
     """Whether nothing was given."""

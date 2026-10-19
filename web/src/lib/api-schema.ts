@@ -1796,7 +1796,7 @@ export interface components {
         };
         /**
          * PlanAssignmentsResponse
-         * @description Everyone a Plan was given to, in the order first named, or would be in a dry run.
+         * @description Everyone a Plan was given to, in the order named, or would be in a dry run.
          */
         PlanAssignmentsResponse: {
             /** Dry Run */

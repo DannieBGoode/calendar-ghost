@@ -248,7 +248,7 @@ that is gone by the next pass moves the admission counter, which restarts the gr
 | `application/sync/removal.py` | `RemoveSyncRule.execute(..., successor=None)` inserts the successor with the old rule's place (section 4) |
 | `application/sync/plan_holds.py` (slice 4) | `PlanHolds.settle(notify)`, `ChooseKeptRules`, `SettleLocks`, the `PlanNotices` port |
 | `application/sync/manual_runs.py` (slice 3) | `AdmitManualRun`, the `RunThrottle` port, `ManualRunsThrottled` |
-| `application/identity/ports.py` | `PlanCatalog` (settings, list, get, add, change, remove) and `PlanAssignments.assign_all(users, plan, change)`, where `change` is `AssignmentChange(source, actor, at)`. Billing will depend on `PlanAssignments` only. |
+| `application/identity/ports.py` | `PlanCatalog` (settings, list, get, add, change, remove) and `PlanAssignments.assign_all(plans, change)`, where `change` is `AssignmentChange(source, actor, at)`. Billing will depend on `PlanAssignments` only. |
 | `application/identity/plans.py` | `ShowPlans`, `DefinePlan`, `ChangePlan`, `RemovePlan`, `SetPlansSetting`. Each calls `require_administrator` first. |
 | `application/identity/integration_tokens.py` | New `IssueIntegrationToken`, which also takes over the route's `installation:read` administrator check |
 | `application/operations/own_plan.py` | `ShowOwnPlan`: a read model across sync and identity |
@@ -514,7 +514,7 @@ so a released rule can run in the same pass.
 | Plans turned off, or the administrator role granted | No limit: the next pass releases every hold and clears the grace |
 | Plans turned on, a default change, a Plan edit, an assignment, or the role removed | The next pass starts a grace for each User over their limit |
 | Plan deleted | Refused while it is the default or anyone has it |
-| Billing ends a payment (later) | `assign_all([user], None, billing)` puts the User back on the Default Plan, and the usual settle applies |
+| Billing ends a payment (later) | `assign_all({user: None}, billing)` puts the User back on the Default Plan, and the usual settle applies |
 
 ## 6. Status, monitors, and emails
 

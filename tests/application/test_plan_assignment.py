@@ -281,8 +281,9 @@ def test_an_undo_whose_plan_another_administrator_removed_restores_nobody(dry_ru
     installation.plans.remove(FREE.key)
     before = installation.stored()
 
+    # Bob, whose Plan is still there, comes first, so a write split by Plan would move him.
     with pytest.raises(PlanNotFound):
-        installation.assign.execute(ADMIN.id, UNDO, dry_run=dry_run)
+        installation.assign.execute(ADMIN.id, {BOB.id: None, ALICE.id: FREE.key}, dry_run=dry_run)
 
     assert installation.stored() == before
     assert [installation.own_plan(user) for user in (ALICE, BOB)] == [PRO.key, PRO.key]

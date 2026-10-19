@@ -893,7 +893,8 @@ def test_an_undo_to_several_plans_one_of_them_removed_meanwhile_restores_nobody(
     installation.turn_on("free")
     _assign(installation, "family", member)
     _assign(installation, "starter", member, third)
-    undo = {member.value: "family", third.value: None}
+    # The third person, whose Plan is still there, comes first, so a split write would move them.
+    undo = {third.value: None, member.value: "family"}
 
     planned = client.post("/api/v1/plan-assignments", json={"plans": undo, "dry_run": True})
     removed = client.delete("/api/v1/plans/family")
@@ -901,8 +902,8 @@ def test_an_undo_to_several_plans_one_of_them_removed_meanwhile_restores_nobody(
 
     assert planned.status_code == 200, planned.text
     assert [(move["had"]["key"], move["has"]) for move in planned.json()["people"]] == [
-        ("starter", {"key": "family", "name": "Family", "on_default": False}),
         ("starter", {"key": "free", "name": "Free", "on_default": True}),
+        ("starter", {"key": "family", "name": "Family", "on_default": False}),
     ]
     assert removed.status_code == 204
     assert _problem(refused) == (404, "plan_not_found", {})

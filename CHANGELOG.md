@@ -27,11 +27,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - The Plans API: `GET` and `POST /api/v1/plans`, `PUT` and `DELETE /api/v1/plans/{plan_key}`,
   `PUT /api/v1/plan-settings`, and `POST /api/v1/plan-assignments`, which gives each of up to 100
   people the Plan it names for them, all or none, so Undo never gives back only some, and with
-  `dry_run` only says who would be over; giving the default's key means following the default. `GET /api/v1/account/plan` answers Your plan. People rows and a
-  person's overview gain `plan`, `GET /api/v1/users` filters by `?plan=` and `?over=true`, rule
-  details gain `can_start` and `rule_limit`, and rules and rule details gain `keeps_place`. A
-  Plan's key is made from its name unless `POST` names one; no Plan has the key `new`. New problem
-  codes: `plan_limit_reached`, `plans_need_default`, `plan_not_found`, `plan_key_taken`,
+  `dry_run` only says who would be over; giving the default's key means following the default.
+  `GET /api/v1/account/plan` answers Your plan. People rows and a person's overview gain `plan`,
+  `GET /api/v1/users` filters by `?plan=` and `?over=true`, rule details gain `can_start` and
+  `rule_limit`, and rules and rule details gain `keeps_place`. A Plan's key is made from its name
+  unless `POST` names one; no Plan has the key `new`. New problem codes: `plan_limit_reached`,
+  `plans_need_default`, `plan_not_found`, `plan_key_taken`,
   `plan_name_taken`, `plan_in_use`, `plan_is_default`, `invalid_plan`, and `invalid_assignment`; a
   new account past the limit returns to Connections with the OAuth outcome `account_limit_reached`.
 - Migration 33 adds the `plans` table and the Plan columns. Rolling back to an earlier release
