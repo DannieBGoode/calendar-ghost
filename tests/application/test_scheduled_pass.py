@@ -426,6 +426,21 @@ def test_a_restart_lists_a_rule_from_its_last_run_once() -> None:
     assert len(listings("ran-before")) == 3
 
 
+def test_a_clock_set_back_lists_a_rule_at_its_next_pass() -> None:
+    # The clock ran six hours ahead: one rule was listed then, the other last ran then, before a
+    # restart that seeds its mark from that run.
+    ahead = NOW + 6 * HOUR
+    listed_ahead = _enabled(USER, "listed-ahead")
+    ran_ahead = _enabled(USER, "ran-ahead", ran=ahead)
+    installation = Installation(rules=[listed_ahead])
+    clock = SteppingClock()
+    scheduled = _scheduling(installation, clock, Plans())
+    assert _begin(scheduled, clock, ahead) == ["listed-ahead"]
+    installation.rules.append(ran_ahead)
+
+    assert _begin(scheduled, clock, NOW) == ["listed-ahead", "ran-ahead"]
+
+
 def test_a_restart_never_starves_the_daily_full_pass() -> None:
     passes = _every_five_minutes(hours=2, start=MIDNIGHT)
     listed: list[tuple[datetime, bool]] = []

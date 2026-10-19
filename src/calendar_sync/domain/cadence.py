@@ -52,7 +52,8 @@ def scheduled_run_due(
     A rule polled every five minutes or less is due at every pass, as is one `always_due`. Any
     other is due once per window of its interval: its windows follow one another from the Unix
     epoch, shifted by the rule's own phase, a hash of its id, so one interval's rules spread over
-    its passes instead of all running at one. A rule whose daily full pass is due is also due once
+    its passes instead of all running at one. A mark from a later window, left by a clock set
+    back, makes the rule due at once. A rule whose daily full pass is due is also due once
     the pass begins at or after its phase past 00:00 UTC, so restarts and Sync Now cannot keep it
     from its full pass, and the full passes of one interval's rules spread too.
     """
@@ -61,7 +62,8 @@ def scheduled_run_due(
     seconds = int(poll_every.total_seconds())
     phase = _phase(rule_id, seconds)
     begun = int(begins.timestamp())
-    if _window(int(listed.timestamp()), phase, seconds) < _window(begun, phase, seconds):
+    # Another window, earlier or, once the clock is set back, later: either way due now.
+    if _window(int(listed.timestamp()), phase, seconds) != _window(begun, phase, seconds):
         return True
     return full_pass_due and begun % _SECONDS_PER_DAY >= phase
 

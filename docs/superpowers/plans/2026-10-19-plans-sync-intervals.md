@@ -118,8 +118,8 @@ The code map behind every file:line below is `.context/slice2/map.md` (not commi
 
 - [ ] **Step 2: Run them:** `.venv/bin/pytest tests/domain/test_cadence.py tests/domain/test_plans.py -q` -> FAIL (no `scheduled_run_due`; 10 minutes polls every 5).
 - [ ] **Step 3: Implement** `scheduled_run_due`: due when `poll_every <= SCHEDULED_EVERY`, when
-  `always_due` (decision 2's other facts, which Task 2 computes), when `listed` is None or in an
-  earlier window (decision 1), or by decision 4; `hashlib` only. The minutes per `SyncInterval` sit
+  `always_due` (decision 2's other facts, which Task 2 computes), when `listed` is None or in
+  another window (decision 1; a later mark means the clock was set back), or by decision 4; `hashlib` only. The minutes per `SyncInterval` sit
   in a module-level mapping. Update the docstrings that say Scheduled Sync runs every rule every five
   minutes.
 - [ ] **Step 4: Run** the domain tests and `tests/application/test_plan_cadence.py` -> PASS.

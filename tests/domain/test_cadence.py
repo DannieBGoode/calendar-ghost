@@ -70,6 +70,19 @@ def test_a_rule_always_due_is_due_whatever_its_window() -> None:
 
 
 @pytest.mark.parametrize("poll_every", SLOW_INTERVALS, ids=lambda every: f"{every}")
+def test_a_rule_listed_after_the_pass_begins_is_due_once_the_clock_is_set_back(
+    poll_every: timedelta,
+) -> None:
+    """A clock set back six hours leaves a mark from a later window: the rule is due at once,
+    not once the clock catches up."""
+    listed = NOW + timedelta(hours=6)
+
+    assert scheduled_run_due(
+        poll_every, "rule-1", NOW, listed, always_due=False, full_pass_due=False
+    )
+
+
+@pytest.mark.parametrize("poll_every", SLOW_INTERVALS, ids=lambda every: f"{every}")
 def test_a_slow_rule_is_listed_once_per_window_of_its_interval(poll_every: timedelta) -> None:
     span = timedelta(hours=6)
     passes = [NOW + timedelta(minutes=minute) for minute in range(span // timedelta(minutes=1) + 1)]

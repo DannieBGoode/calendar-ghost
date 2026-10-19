@@ -312,9 +312,10 @@ migration, and with Plans off nothing changes. The scheduler still begins a pass
   read big-endian, modulo its interval in seconds. Its windows are `(t - phase) // interval`, with
   `t` in Unix seconds, so they are anchored at the Unix epoch, and because every offered interval
   divides a UTC day, one starts at the rule's phase past each 00:00 UTC. A rule is due when a pass
-  begins in a later window than the pass that last listed it. The phases spread one interval's
-  rules over its passes: 3,000 rules on an hourly Plan are listed about 250 at a pass, not all at
-  one, so they do not all hold up the faster Plans at one pass.
+  begins in another window than the pass that last listed it: a later one, or, once the clock is
+  set back, an earlier one, so a corrected clock never holds a rule back. The phases spread one
+  interval's rules over its passes: 3,000 rules on an hourly Plan are listed about 250 at a pass,
+  not all at one, so they do not all hold up the faster Plans at one pass.
 - **Always due.** A rule is due at every pass, whatever its window, when its interval is five
   minutes or less (`poll_every <= SCHEDULED_EVERY`), so with Instant, every 5 minutes, Plans off,
   or for an administrator, every rule is listed at every pass, as before; when it never ran, with
