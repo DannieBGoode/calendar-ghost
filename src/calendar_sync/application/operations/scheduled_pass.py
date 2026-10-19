@@ -102,7 +102,7 @@ class ScheduledPass:
             installation.forget_change_values(now - SOURCE_CHANGE_RETENTION)
             installation.forget_provider_calls(first_counted_day(today))
             installation.commit()
-            # Before listing the pass's rules, so a rule resumed here runs in this same pass.
+            # Before listing the pass's rules, so a rule resumed here can run in this same pass.
             for owner in installation.users_with_unfinished_lapses():
                 self._finish_lapses(owner)
             self._due = self._choose_checks(installation.failure_causes(now - RECHECK_INTERVAL))

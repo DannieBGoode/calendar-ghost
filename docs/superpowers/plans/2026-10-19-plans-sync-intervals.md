@@ -106,10 +106,10 @@ The code map behind every file:line below is `.context/slice2/map.md` (not commi
   - `test_windows_follow_the_instant_not_its_time_zone`: the same instants given in UTC and in
     `ZoneInfo("Pacific/Honolulu")` give the same answers.
   - `test_three_thousand_hourly_rules_spread_over_the_hour`: ids `rule-0`..`rule-2999`, each
-    listed exactly one hour before the first pass, passes every 5 minutes for one hour: each is
+    listed at `NOW - SCHEDULED_EVERY`, passes every 5 minutes for one hour from `NOW`: each is
     listed once, no pass lists more than 400.
   - `test_a_full_pass_due_waits_for_the_rules_phase_after_midnight`: 60 minutes, `listed` 1 minute
-    before `begins`, `full_pass_due=True`: over the first hour of a UTC day, stepping one minute,
+    before `begins`, `full_pass_due=True`: as `begins` steps one minute from 00:01 to 01:00 UTC,
     it is not due at any step before its phase and is due at the first step at or after it; across
     3,000 ids those first-due minutes are spread (no single minute holds more than 100).
   In `tests/domain/test_plans.py`, replace

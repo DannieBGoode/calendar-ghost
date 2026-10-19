@@ -2313,12 +2313,16 @@ class PersistenceContract:
             destination=endpoint("work-account", "d"),
             reprojection_required=True,
         )
+        ran_as_previewed = replace(
+            RULE, id=SyncRuleId("rule-5"), destination=endpoint("work-account", "e")
+        )
         with harness.unit_of_work() as uow:
-            for each in (never_ran, ran, failed, previewed, reprojecting):
+            for each in (never_ran, ran, failed, previewed, reprojecting, ran_as_previewed):
                 uow.rules.add(each)
                 uow.previews.record(RulePreviewSummary(each.id, NOW, 1, 0))
             for each in (ran, reprojecting):
                 uow.run_outcomes.record(RuleRunOutcome(each.id, RunKind.SYNC, NOW + MINUTE, True))
+            uow.run_outcomes.record(RuleRunOutcome(ran_as_previewed.id, RunKind.SYNC, NOW, True))
             uow.run_outcomes.record(
                 RuleRunOutcome(
                     failed.id,
@@ -2342,6 +2346,8 @@ class PersistenceContract:
             ),
             ScheduledRule(USER, previewed, None, last_run_at=NOW - HOUR, previewed_at=NOW),
             ScheduledRule(USER, reprojecting, None, last_run_at=NOW + MINUTE, previewed_at=NOW),
+            ScheduledRule(USER, ran_as_previewed, None, last_run_at=NOW, previewed_at=NOW),
         )
-        # Only a rule that ran without failing since its preview waits for its interval.
-        assert [each.always_due for each in scheduled] == [True, False, True, True, True]
+        # Only a rule that ran without failing since its preview waits for its interval, and a
+        # run that completed at the instant of its preview counts as since.
+        assert [each.always_due for each in scheduled] == [True, False, True, True, True, False]

@@ -314,7 +314,7 @@ migration, and with Plans off nothing changes. The scheduler still begins a pass
   divides a UTC day, one starts at the rule's phase past each 00:00 UTC. A rule is due when a pass
   begins in a later window than the pass that last listed it. The phases spread one interval's
   rules over its passes: 3,000 rules on an hourly Plan are listed about 250 at a pass, not all at
-  one, so they never hold up the faster Plans.
+  one, so they do not all hold up the faster Plans at one pass.
 - **Always due.** A rule is due at every pass, whatever its window, when its interval is five
   minutes or less (`poll_every <= SCHEDULED_EVERY`), so with Instant, every 5 minutes, Plans off,
   or for an administrator, every rule is listed at every pass, as before; when it never ran, with
@@ -327,8 +327,8 @@ migration, and with Plans off nothing changes. The scheduler still begins a pass
   failing. A rule whose last success is old is failing or due, so the 24-hour overdue check still
   sees it.
 - **Marks.** `ScheduledPass` keeps in memory, for each enabled rule, when the pass that last
-  listed it began. `begin` writes it, from its one reading of the clock, for every rule it lists,
-  and forgets rules no longer enabled. A rule it sees for the first time since the start counts
+  listed it began. `begin` writes it, from the time the pass began, for every rule it lists, and
+  forgets rules no longer enabled. A rule it sees for the first time since the start counts
   from its last run, the `sync` outcome's `completed_at` from any origin. Manual and instant runs
   never move a mark, so Sync Now cannot keep a rule from being listed.
 - **The daily full pass after a restart.** `_full_pass_due` still decides whether a listed rule's

@@ -480,8 +480,8 @@ class ScheduledRule:
     """When the rule's last sync completed, from any origin, failed or not; None if it never
     ran."""
     failing: bool = False
-    """Whether its last sync failed, or a failure streak is recorded that only a scheduled or
-    instant success clears, so a successful Sync Now leaves it failing."""
+    """Whether its last sync failed, or a store that keeps failure streaks has one recorded for
+    it."""
     previewed_at: datetime | None = None
     """When its latest Preview completed; None if it has none."""
 
