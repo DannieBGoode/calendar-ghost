@@ -1,9 +1,9 @@
 """Manual runs counted in memory per User, over a sliding window (ADR 0038)."""
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from threading import Barrier
+from threading import Barrier, Event, Thread
 
 from calendar_sync.application.sync.manual_runs import RunThrottle
 from calendar_sync.domain.access import UserId
@@ -12,6 +12,8 @@ from calendar_sync.infrastructure.throttle import MemoryRunThrottle
 NOW = datetime(2026, 10, 19, 9, 0, tzinfo=UTC)
 ALICE = UserId("alice")
 BOB = UserId("bob")
+WAIT = 0.5
+"""How long a test gives a run that must wait to show that it does not go ahead."""
 
 
 @dataclass
@@ -19,6 +21,22 @@ class MovableClock:
     moment: datetime
 
     def now(self) -> datetime:
+        return self.moment
+
+
+@dataclass
+class HeldClock:
+    """A clock whose first reading says when it starts and answers only once released. The admit
+    that reads it holds the throttle meanwhile, as a slow clock would."""
+
+    moment: datetime
+    reading: Event = field(default_factory=Event)
+    released: Event = field(default_factory=Event)
+
+    def now(self) -> datetime:
+        if not self.reading.is_set():
+            self.reading.set()
+            assert self.released.wait(5)
         return self.moment
 
 
@@ -96,3 +114,29 @@ def test_threads_racing_for_the_last_places_admit_exactly_the_limit() -> None:
         waits = list(pool.map(race, range(24)))
 
     assert waits.count(0.0) == 1
+
+
+def test_a_run_waits_while_another_takes_the_last_place() -> None:
+    clock = HeldClock(NOW)
+    throttle = MemoryRunThrottle(clock, limit=1)
+    waits: dict[str, float] = {}
+
+    def admit(name: str) -> None:
+        waits[name] = throttle.admit(ALICE)
+
+    first = Thread(target=admit, args=("first",))
+    first.start()
+    assert clock.reading.wait(5)
+    second = Thread(target=admit, args=("second",))
+    second.start()
+    try:
+        second.join(WAIT)
+        # The first run holds the throttle while it reads the clock, so the second cannot count
+        # the runs until the first has taken the last place.
+        assert second.is_alive()
+    finally:
+        clock.released.set()
+        first.join(5)
+        second.join(5)
+
+    assert waits == {"first": 0.0, "second": timedelta(hours=1).total_seconds()}
