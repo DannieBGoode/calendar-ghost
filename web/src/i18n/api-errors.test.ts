@@ -83,6 +83,12 @@ describe("apiErrorMessage", () => {
     )
   })
 
+  it("says in minutes when someone who started many runs may run again", () => {
+    const throttled = (minutes: number) => coded("manual_runs_throttled", { retry_after: minutes * 60, count: minutes })
+    expect(apiErrorMessage(i18n, throttled(2))).toBe("You started many runs in a short time. Try again in 2 minutes.")
+    expect(apiErrorMessage(i18n, throttled(1))).toBe("You started many runs in a short time. Try again in 1 minute.")
+  })
+
   it("shows the server's detail for an unknown code or a missing param, then a generic message", () => {
     expect(apiErrorMessage(i18n, coded("brand_new"))).toBe("English detail")
     expect(apiErrorMessage(i18n, coded("removal_interrupted", {}, "removal stopped"))).toBe("removal stopped")

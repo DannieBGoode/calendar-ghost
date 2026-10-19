@@ -22,6 +22,7 @@ from calendar_sync.application.sync.errors import (
     ReplacementInterrupted,
     RuleNotFound,
 )
+from calendar_sync.application.sync.manual_runs import ManualRunsThrottled
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.errors import DomainError, DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import SyncRuleId
@@ -177,6 +178,12 @@ FAMILY_KEY = PlanKey("family")
                 "provider": "google",
                 "kind": "rate_limit",
             },
+        ),
+        # The wait in seconds, rounded up, and in minutes for the message.
+        (
+            ManualRunsThrottled(89.2),
+            "manual_runs_throttled",
+            {"retry_after": 90, "count": 2},
         ),
         (DomainValidationError("name must not be empty"), "invalid_rule", {}),
         (InvalidStateTransition("cannot enable"), "invalid_state_transition", {}),

@@ -105,6 +105,7 @@ from calendar_sync.application.sync.instant_sync import (
 )
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.manual_runs import AdmitManualRun, RunThrottle
 from calendar_sync.application.sync.ports import (
     AccountCalendars,
     Allowances,
@@ -208,7 +209,7 @@ from calendar_sync.infrastructure.scheduling import (
     WatchKeeper,
 )
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher, ScryptPasswords
-from calendar_sync.infrastructure.throttle import MemorySignInThrottle
+from calendar_sync.infrastructure.throttle import MemoryRunThrottle, MemorySignInThrottle
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,6 +240,9 @@ class UserServices:
     """Whether Instant Sync is on for a User, and why each of their rules syncs as it does."""
     watch_upkeep: UpkeepWatches | None
     """Keeps this User's Calendar Watches; None where accounts cannot be stored."""
+    admit_manual_run: AdmitManualRun
+    """Admits each Sync Now, Reconcile Now, and Rule Preview, counted while a Plan limits the
+    User."""
     # Each of these needs the installation master key, and synchronization also a provider.
     list_connected_accounts: ListConnectedAccounts | None
     disconnect_connected_account: DisconnectConnectedAccount | None
@@ -361,6 +365,8 @@ class Adapters:
     sign_in_throttle: SignInThrottle
     link_throttle: SignInThrottle
     """Unusable Invitation and Password Reset Links per client, apart from failed sign-ins."""
+    run_throttle: RunThrottle
+    """One per process: each User's manual runs, counted across their requests."""
     registration: RegistrationSettings
     invitations: Invitations
     password_resets: PasswordResetLinks
@@ -448,6 +454,7 @@ def build_adapters(settings: Settings) -> Adapters:
         passwords=ScryptPasswords(),
         sign_in_throttle=MemorySignInThrottle(clock),
         link_throttle=MemorySignInThrottle(clock),
+        run_throttle=MemoryRunThrottle(clock),
         registration=SqliteRegistrationSettings(database),
         invitations=SqliteInvitations(database, ids),
         password_resets=SqlitePasswordResetLinks(database, ids),
@@ -916,6 +923,7 @@ def _compose_user(
         lapsed_authorizations=rule_health.lapses,
         instant_sync_status=instant,
         watch_upkeep=watch_upkeep,
+        admit_manual_run=AdmitManualRun(adapters.allowances, adapters.run_throttle, user_id),
         list_connected_accounts=(
             ListConnectedAccounts(unit_of_work, accounts) if accounts else None
         ),

@@ -21,6 +21,7 @@ from calendar_sync.application.sync.errors import (
     RuleNotFound,
 )
 from calendar_sync.application.sync.locking import RuleWork
+from calendar_sync.application.sync.manual_runs import AdmitManualRun, ManualRunsThrottled
 from calendar_sync.application.sync.ports import RulePreviewSummary
 from calendar_sync.application.sync.preview import PreviewItem, PreviewSyncRule
 from calendar_sync.application.sync.reconciliation import ReconcileNow
@@ -108,6 +109,8 @@ class RuleServices(Protocol):
     @property
     def reconcile_now(self) -> ReconcileNow | None: ...
     @property
+    def admit_manual_run(self) -> AdmitManualRun: ...
+    @property
     def user_id(self) -> UserId: ...
     @property
     def instant_sync_status(self) -> InstantSyncStatus: ...
@@ -175,7 +178,11 @@ async def sync_now(rule_id: str, services: Services) -> SyncResultResponse:
         "configure a calendar provider and the installation master key before synchronizing",
     )
     try:
-        result = await asyncio.to_thread(sync_now.execute, SyncRuleId(rule_id))
+        result = await asyncio.to_thread(
+            services.admit_manual_run.execute, sync_now.execute, SyncRuleId(rule_id)
+        )
+    except ManualRunsThrottled as error:
+        raise problem_from(status.HTTP_429_TOO_MANY_REQUESTS, error) from error
     except RuleNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except RuleNotExecutable as error:
@@ -205,7 +212,11 @@ async def reconcile_now(rule_id: str, services: Services) -> ReconcileResultResp
         "configure a calendar provider and the installation master key before reconciling",
     )
     try:
-        reconciled = await asyncio.to_thread(reconcile.execute, SyncRuleId(rule_id))
+        reconciled = await asyncio.to_thread(
+            services.admit_manual_run.execute, reconcile.execute, SyncRuleId(rule_id)
+        )
+    except ManualRunsThrottled as error:
+        raise problem_from(status.HTTP_429_TOO_MANY_REQUESTS, error) from error
     except RuleNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except RuleNotExecutable as error:
@@ -242,7 +253,11 @@ async def preview_rule(rule_id: str, services: Services) -> RulePreviewResponse:
         "configure a calendar provider and the installation master key before previewing",
     )
     try:
-        preview = await asyncio.to_thread(preview_sync_rule.execute, SyncRuleId(rule_id))
+        preview = await asyncio.to_thread(
+            services.admit_manual_run.execute, preview_sync_rule.execute, SyncRuleId(rule_id)
+        )
+    except ManualRunsThrottled as error:
+        raise problem_from(status.HTTP_429_TOO_MANY_REQUESTS, error) from error
     except RuleNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except RuleNotExecutable as error:
