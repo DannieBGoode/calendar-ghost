@@ -540,7 +540,7 @@ describe("PlanEditor", () => {
     [
       refusal("invalid_plan", { reason: "limit" }),
       () => field("plan-edit-family-rules"),
-      "Enter each limit as a whole number up to 10000, at least 1 for rules and calendar accounts, or choose No limit.",
+      "Enter each limit as a whole number up to 10,000, at least 1 for rules and calendar accounts, or choose No limit.",
     ],
   ])("moves focus to the field a refusal names, and shows why under it", (error, refusedField, reason) => {
     edit()
