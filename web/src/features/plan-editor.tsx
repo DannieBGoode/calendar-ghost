@@ -110,7 +110,8 @@ export function PlanEditor({
   const [draft, setDraft] = useState(() => (plan === null && start ? start : draftOf(plan, intervals)))
   const form = useRef<HTMLFormElement>(null)
   const refusal = useRefusal(error, draft, form)
-  const id = plan ? `plan-${plan.key}` : "plan-new"
+  // Its own prefix, like every id made from a Plan's key, so a key such as "name" never makes an id the page has.
+  const id = plan ? `plan-edit-${plan.key}` : "plan-new"
   // What the Plan has saved, or how a new one started, so the footer counts what changed since.
   const saved = plan === null && start ? start : draftOf(plan, intervals)
   const changes = changedFields(draft, saved)

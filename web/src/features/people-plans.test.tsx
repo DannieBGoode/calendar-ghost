@@ -1175,10 +1175,10 @@ describe("A plan's panel", () => {
     window.scrollTo(0, 0)
     await click(nameLink("family"))
     window.scrollTo(0, 160)
-    type(field("plan-family-name"), "Family Large")
+    type(field("plan-edit-family-name"), "Family Large")
     await settle()
     reply("GET /api/v1/plans", jsonResponse(overview({ plans: [saved, free] })))
-    await submit(field("plan-family-name").closest("form")!)
+    await submit(field("plan-edit-family-name").closest("form")!)
     expect(panelOrNull()).toBeNull()
     expect(window.scrollY).toBe(0)
   })
@@ -1204,7 +1204,7 @@ describe("A plan's panel", () => {
   it("closes with Escape from anywhere in it", async () => {
     await renderPlans(testI18n())
     await click(nameLink("free"))
-    await escape(field("plan-free-name"))
+    await escape(field("plan-edit-free-name"))
     expect(panelOrNull()).toBeNull()
     expect(here()).toBe("/people/plans")
     expect(document.activeElement).toBe(nameLink("free"))
@@ -1251,7 +1251,7 @@ describe("A plan's panel", () => {
     await click(people)
     expect(here()).toBe("/people/plans/free/people")
     expect(panel().contains(assignOf("free"))).toBe(true)
-    expect(container.querySelector("#plan-free-name")).toBeNull()
+    expect(container.querySelector("#plan-edit-free-name")).toBeNull()
     expect(document.activeElement).toBe(people)
     // The plan's name in the catalog opens its Limits, with focus on the panel's title.
     await click(nameLink("free"))
@@ -1260,7 +1260,7 @@ describe("A plan's panel", () => {
     await click(panelTab("People"))
     await click(panelTab("Limits"))
     expect(here()).toBe("/people/plans/free")
-    expect(field("plan-free-name").value).toBe("Free")
+    expect(field("plan-edit-free-name").value).toBe("Free")
   })
 
   it("opens another plan in place of the open one", async () => {
@@ -1321,18 +1321,18 @@ describe("Leaving a plan's changes not saved", () => {
   it("asks before Escape drops them, keeps them on Keep editing, and closes on Discard", async () => {
     await renderPlans(testI18n())
     await click(nameLink("family"))
-    type(field("plan-family-rules"), "2")
+    type(field("plan-edit-family-rules"), "2")
     await settle()
-    focus(field("plan-family-rules"))
-    await escape(field("plan-family-rules"))
+    focus(field("plan-edit-family-rules"))
+    await escape(field("plan-edit-family-rules"))
     expect(here()).toBe("/people/plans/family")
     expect(question()?.querySelector("p")?.textContent).toBe("Discard 1 change?")
     expect(document.activeElement).toBe(button("Keep editing", panel()))
 
     await click(button("Keep editing", panel()))
     expect(question()).toBeNull()
-    expect(field("plan-family-rules").value).toBe("2")
-    expect(document.activeElement).toBe(field("plan-family-rules"))
+    expect(field("plan-edit-family-rules").value).toBe("2")
+    expect(document.activeElement).toBe(field("plan-edit-family-rules"))
 
     await click(closeButton())
     expect(question()).not.toBeNull()
@@ -1344,8 +1344,8 @@ describe("Leaving a plan's changes not saved", () => {
 
     // Opened again, the plan shows what it has saved, and closes at once.
     await click(nameLink("family"))
-    expect(field("plan-family-rules").value).toBe("5")
-    await escape(field("plan-family-rules"))
+    expect(field("plan-edit-family-rules").value).toBe("5")
+    await escape(field("plan-edit-family-rules"))
     expect(panelOrNull()).toBeNull()
   })
 
@@ -1354,7 +1354,7 @@ describe("Leaving a plan's changes not saved", () => {
       answers: { "GET /api/v1/users": jsonResponse(candidates([ALEX])), "POST /api/v1/plan-assignments": DRY_RUN },
     })
     await click(nameLink("family"))
-    type(field("plan-family-name"), "Family Large")
+    type(field("plan-edit-family-name"), "Family Large")
     await settle()
 
     await click(nameLink("free"))
@@ -1365,7 +1365,7 @@ describe("Leaving a plan's changes not saved", () => {
 
     await click(panelTab("People"))
     expect(here()).toBe("/people/plans/family")
-    expect(field("plan-family-name").value).toBe("Family Large")
+    expect(field("plan-edit-family-name").value).toBe("Family Large")
     await click(button("Keep editing", panel()))
 
     await click(nameLink("free"))
@@ -1405,20 +1405,20 @@ describe("Editing a plan", () => {
     })
     await click(nameLink("family"))
     const entries = window.history.length
-    expect(field("plan-family-name").value).toBe("Family")
+    expect(field("plan-edit-family-name").value).toBe("Family")
 
-    type(field("plan-family-rules"), "2")
+    type(field("plan-edit-family-rules"), "2")
     await settle()
-    expect(element("plan-family-rules-warning").textContent).toBe(
+    expect(element("plan-edit-family-rules-warning").textContent).toBe(
       "1 person on Family has more active rules than this. Their rules keep syncing, but they can't start another.",
     )
-    type(field("plan-family-name"), "Family Large")
+    type(field("plan-edit-family-name"), "Family Large")
     await settle()
     expect(panel().querySelector(".plan-panel-changes")?.textContent).toBe("2 changes not saved")
     reply("GET /api/v1/plans", jsonResponse(overview({ enabled: true, defaultPlan: "free", plans: [saved, free] })))
     const save = button("Save plan", panel())
     focus(save)
-    await submit(field("plan-family-name").closest("form")!)
+    await submit(field("plan-edit-family-name").closest("form")!)
     expect(sent("PUT", "/api/v1/plans/family")).toEqual({
       name: "Family Large",
       limits: { rules: 2, connected_accounts: 3, integration_tokens: 2, sync_interval: "instant" },
@@ -1438,8 +1438,8 @@ describe("Editing a plan", () => {
       answers: { "PUT /api/v1/plans/family": refusal(422, "invalid_plan", { reason: "name" }) },
     })
     await click(nameLink("family"))
-    type(field("plan-family-name"), "Family Large")
-    await submit(field("plan-family-name").closest("form")!)
+    type(field("plan-edit-family-name"), "Family Large")
+    await submit(field("plan-edit-family-name").closest("form")!)
     expect(panel().querySelector("[role='alert']")).not.toBeNull()
     await click(closeButton())
     expect(here()).toBe("/people/plans/family")
@@ -1463,14 +1463,24 @@ describe("Editing a plan", () => {
       answers: { "PUT /api/v1/plans/family": jsonResponse({ ...family, name: "FAMILY" }) },
     })
     await click(nameLink("family"))
-    type(field("plan-family-name"), "free")
-    await submit(field("plan-family-name").closest("form")!)
+    type(field("plan-edit-family-name"), "free")
+    await submit(field("plan-edit-family-name").closest("form")!)
     expect(sent("PUT", "/api/v1/plans/family")).toBeUndefined()
     expect(panel().querySelector("[role='alert']")?.textContent).toBe("Another plan is named Free. Choose a different name.")
-    expect(document.activeElement).toBe(field("plan-family-name"))
-    type(field("plan-family-name"), "FAMILY")
-    await submit(field("plan-family-name").closest("form")!)
+    expect(document.activeElement).toBe(field("plan-edit-family-name"))
+    type(field("plan-edit-family-name"), "FAMILY")
+    await submit(field("plan-edit-family-name").closest("form")!)
     expect(sent("PUT", "/api/v1/plans/family")).toMatchObject({ name: "FAMILY" })
+  })
+
+  it("gives every field an id of its own, even in a plan keyed as a field is named", async () => {
+    const named: PlanSummary = { ...free, key: "name", name: "Name" }
+    await renderPlans(testI18n(), { plans: overview({ plans: [named, { ...free, key: "rules", name: "Rules" }] }) })
+    await click(nameLink("name"))
+    const ids = [...container.querySelectorAll("[id]")].map((node) => node.id)
+    expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([])
+    const label = [...panel().querySelectorAll("label")].find((one) => one.textContent === "Name")!
+    expect((document.getElementById(label.htmlFor) as HTMLInputElement).value).toBe("Name")
   })
 
   it("keeps a save on its way, and then its refusal, while the other plan commands wait", async () => {
@@ -1480,8 +1490,8 @@ describe("Editing a plan", () => {
     })
     await renderPlans(testI18n(), { answers: { "PUT /api/v1/plans/family": held } })
     await click(nameLink("family"))
-    type(field("plan-family-name"), "Family Large")
-    await submit(field("plan-family-name").closest("form")!)
+    type(field("plan-edit-family-name"), "Family Large")
+    await submit(field("plan-edit-family-name").closest("form")!)
     for (const waiting of [button("Save plan", panel()), button("Cancel", panel()), closeButton()]) {
       expect(waiting.disabled).toBe(false)
       expect(waiting.getAttribute("aria-disabled")).toBe("true")
@@ -1495,7 +1505,7 @@ describe("Editing a plan", () => {
     await click(button("New plan", catalogHead()))
     await click(panelTab("People"))
     await click(closeButton())
-    await escape(field("plan-family-name"))
+    await escape(field("plan-edit-family-name"))
     expect(here()).toBe("/people/plans/family")
     expect(panelTitle().textContent).toBe("Family")
 
@@ -1507,16 +1517,16 @@ describe("Editing a plan", () => {
     expect(panel().querySelector("[role='alert']")?.textContent).toBe(
       "Give the plan a name of 1 to 60 characters, without line breaks or other control characters.",
     )
-    expect(document.activeElement).toBe(field("plan-family-name"))
+    expect(document.activeElement).toBe(field("plan-edit-family-name"))
     expect(nameLink("free").hasAttribute("aria-disabled")).toBe(false)
   })
 
   it("says what a lower limit will do once plans are on, while they are off", async () => {
     await renderPlans(testI18n(), { plans: overview({ defaultPlan: "free" }) })
     await click(nameLink("family"))
-    type(field("plan-family-rules"), "2")
+    type(field("plan-edit-family-rules"), "2")
     await settle()
-    expect(element("plan-family-rules-warning").textContent).toBe(
+    expect(element("plan-edit-family-rules-warning").textContent).toBe(
       "1 person on Family has more active rules than this. Once plans are on, their rules keep syncing, but they can't start another.",
     )
   })
@@ -2154,7 +2164,7 @@ describe("Plans in other languages", () => {
   it("has no untranslated text in a plan's panel", async () => {
     await renderPlans(pseudoI18n(), { plans: overview({ enabled: true, defaultPlan: "free" }) })
     await click(nameLink("family"))
-    type(field("plan-family-rules"), "2")
+    type(field("plan-edit-family-rules"), "2")
     await settle()
     const names = [...dateWords(), family.name, free.name]
     expect(untranslatedText(container, names)).toEqual([])
