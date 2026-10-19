@@ -249,7 +249,7 @@ that is gone by the next pass moves the admission counter, which restarts the gr
 | `application/sync/plan_holds.py` (slice 4) | `PlanHolds.settle(notify)`, `ChooseKeptRules`, `SettleLocks`, the `PlanNotices` port |
 | `application/sync/manual_runs.py` (slice 3) | `AdmitManualRun`, the `RunThrottle` port, `ManualRunsThrottled` |
 | `application/identity/ports.py` | `PlanCatalog` (settings, list, get, add, change, remove) and `PlanAssignments.assign(user, plan, change)`, where `change` is `AssignmentChange(source, actor, at)`. Billing will depend on `PlanAssignments` only. |
-| `application/identity/plans.py` | `ShowPlans`, `DefinePlan`, `ChangePlan`, `RemovePlan`, `SetPlansSetting`, `AssignPlan`. Each calls `require_administrator` first. |
+| `application/identity/plans.py` | `ShowPlans`, `DefinePlan`, `ChangePlan`, `RemovePlan`, `SetPlansSetting`. Each calls `require_administrator` first. |
 | `application/identity/integration_tokens.py` | New `IssueIntegrationToken`, which also takes over the route's `installation:read` administrator check |
 | `application/operations/own_plan.py` | `ShowOwnPlan`: a read model across sync and identity |
 | `application/operations/operator_overview.py` | Each person's `PersonPlan` (the Plan they have and each limit of it they are over) and `reach_of`, each Plan's `PlanReach`, from `InstallationUnitOfWork.plan_use` (amended 2026-10-16) |
@@ -629,7 +629,7 @@ Today `SyncScheduler` runs a pass, sleeps 300 seconds, and runs every enabled ru
 | `ChangePlan` | The key never changes. New limits apply at once to new resources. A new name must not read as another Plan's (409 `plan_name_taken`); a Plan may keep its own in another case. The form warns how many people the Plan limits, and that rules beyond a lower limit keep syncing for 7 days, then are held (before slice 4: that no new rule can start). |
 | `RemovePlan` | 409 `plan_is_default`, or 409 `plan_in_use` with `people`. The administrator moves those Users first, which is also safe for billing. |
 | `SetPlansSetting` | Turning Plans on when neither the request nor the installation names a default adds "No limits" (every count unlimited, Instant, its key made from its name, named "No limits 2" and so on when a Plan already reads as that name) and makes it the default, in the same transaction. It is an ordinary Plan: it can be renamed and changed, and not removed while it is the default. 409 `plans_need_default` when the request would clear the default with Plans on, or as they turn on. Turning them off is always allowed and keeps everything. |
-| `AssignPlan` | `PlanAssignments.assign(user, plan, AssignmentChange(administrator, actor, now))`. `None` returns the User to the default. Allowed while Plans are off, so an administrator can prepare. Since 2026-10-17 it also gives one Plan to up to 100 people at once, all or none, and a dry run says what each would be over without writing (ADR 0038) |
+| `AssignPlans` | `PlanAssignments.assign_all(users, plan, AssignmentChange(administrator, actor, now))` gives one Plan to up to 100 people at once, all or none, and a dry run says what each would be over without writing (ADR 0038). `None` returns them to the default. Allowed while Plans are off, so an administrator can prepare. |
 
 - **Billing seam.** Billing will call the same port with `AssignmentChange(billing, None, at)`,
   and assign `None` when a payment ends. `plan_assigned_by` lets the billing spec decide whether
@@ -658,7 +658,6 @@ Today `SyncScheduler` runs a pass, sleeps 300 seconds, and runs every enabled ru
 | `GET /api/v1/plans` | administrator | 1 |
 | `PUT /api/v1/plan-settings` | administrator | 1 |
 | `POST /api/v1/plans`, `PUT` and `DELETE /api/v1/plans/{plan_key}` | administrator | 1 |
-| `PUT /api/v1/users/{user_id}/plan` (in `routes/users.py`, through `_named_user`) | administrator | 1 |
 | `POST /api/v1/plan-assignments`, with `dry_run` | administrator | Catalog (2026-10-17) |
 | `GET /api/v1/account/plan` | current user | 1 (hold fields in 4) |
 | `PUT /api/v1/account/plan/kept-rules` | current user | 4 |

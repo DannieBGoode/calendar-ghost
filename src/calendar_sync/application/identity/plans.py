@@ -1,5 +1,5 @@
 """What Installation Administrators do with Plans (ADR 0038): define, change, and remove them,
-choose the Default Plan, turn Plans on or off, and give a User their own Plan.
+choose the Default Plan, and turn Plans on or off.
 
 Each use case checks first that the actor is an active Installation Administrator. Each change
 logs one line that names only ids: a Plan's key and Users' identifiers, never a name or email.
@@ -10,23 +10,18 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from calendar_sync.application.identity.administration import UserNotFound, require_administrator
+from calendar_sync.application.identity.administration import require_administrator
 from calendar_sync.application.identity.errors import PlanNotFound
 from calendar_sync.application.identity.ports import (
-    AssignmentChange,
-    PlanAssignments,
     PlanCatalog,
     PlanListing,
     PlansSetting,
     UserDirectory,
 )
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.ports import Allowances
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.plans import (
     OFFERED_INTERVALS,
-    Allowance,
-    AssignmentSource,
     NewPlan,
     Plan,
     PlanKey,
@@ -156,29 +151,3 @@ class SetPlansSetting:
             actor.value,
         )
         return _overview(self.catalog, setting)
-
-
-@dataclass(slots=True)
-class AssignPlan:
-    """Give a User their own Plan, or None to return them to the Default Plan; giving the
-    Default Plan does the same, so they follow it.
-
-    Allowed while Plans are off, so an administrator can prepare them. An administrator's own
-    Plan is stored and limits them only once they stop administering.
-    """
-
-    users: UserDirectory
-    assignments: PlanAssignments
-    allowances: Allowances
-    clock: Clock
-
-    def execute(self, actor: UserId, user: UserId, plan: PlanKey | None) -> Allowance:
-        require_administrator(self.users, actor)
-        if self.users.get(user) is None:
-            raise UserNotFound(f"user {user.value} does not exist")
-        change = AssignmentChange(AssignmentSource.ADMINISTRATOR, actor, self.clock.now())
-        # Raises PlanNotFound; False when the User was deleted since the check above.
-        if not self.assignments.assign(user, plan, change):
-            raise UserNotFound(f"user {user.value} does not exist")
-        logger.info("plan assigned user=%s plan=%s by=%s", user.value, _logged(plan), actor.value)
-        return self.allowances.of(user)

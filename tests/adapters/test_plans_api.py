@@ -389,10 +389,10 @@ def test_the_default_is_never_cleared_while_plans_are_on_and_turning_them_off_ke
 
 
 def test_each_refusal_answers_its_code_and_params(installation: Installation) -> None:
-    client, member = installation.client, installation.member.value
+    client = installation.client
     installation.define(FREE_BODY, FAMILY_BODY)
     installation.turn_on("free")
-    assigned = client.put(f"/api/v1/users/{member}/plan", json={"plan": "family"})
+    _assign(installation, "family", installation.member)
 
     answers = {
         "taken": client.post("/api/v1/plans", json={**FAMILY_BODY, "name": "Another"}),
@@ -406,13 +406,9 @@ def test_each_refusal_answers_its_code_and_params(installation: Installation) ->
         ),
         "unknown_change": client.put("/api/v1/plans/gold", json=CHANGE_FAMILY),
         "unknown_removal": client.delete("/api/v1/plans/gold"),
-        "unknown_plan": client.put(f"/api/v1/users/{member}/plan", json={"plan": "gold"}),
-        "unknown_user": client.put("/api/v1/users/nobody/plan", json={"plan": "free"}),
-        "malformed_user": client.put("/api/v1/users/%20/plan", json={"plan": "free"}),
     }
     listed = client.get("/api/v1/plans").json()
 
-    assert assigned.status_code == 200
     assert {name: _problem(response) for name, response in answers.items()} == {
         "taken": (409, "plan_key_taken", {}),
         "default": (409, "plan_is_default", {}),
@@ -421,9 +417,6 @@ def test_each_refusal_answers_its_code_and_params(installation: Installation) ->
         "unknown_default": (404, "plan_not_found", {}),
         "unknown_change": (404, "plan_not_found", {}),
         "unknown_removal": (404, "plan_not_found", {}),
-        "unknown_plan": (404, "plan_not_found", {}),
-        "unknown_user": (404, "user_not_found", {}),
-        "malformed_user": (404, "user_not_found", {}),
     }
     # Nothing a refusal answered changed anything.
     assert (listed["enabled"], listed["default_plan"]) == (True, "free")
@@ -518,6 +511,11 @@ def test_a_new_plan_another_administrator_removed_at_once_is_answered_as_not_fou
     assert _problem(response) == (404, "plan_not_found", {})
 
 
+def _giving(plan: str) -> dict[str, Any]:
+    """A request that gives the member the Plan `plan` names."""
+    return {"plan": plan, "user_ids": [OTHER_USER.value]}
+
+
 @pytest.mark.parametrize(
     ("method", "path", "body"),
     [
@@ -537,8 +535,8 @@ def test_a_new_plan_another_administrator_removed_at_once_is_answered_as_not_fou
             {"enabled": False, "default_plan": "x y"},
             id="default-with-a-space",
         ),
-        pytest.param("PUT", "/api/v1/users/{member}/plan", {"plan": "x y"}, id="assign-space"),
-        pytest.param("PUT", "/api/v1/users/{member}/plan", {"plan": ""}, id="assign-empty"),
+        pytest.param("POST", "/api/v1/plan-assignments", _giving("x y"), id="assign-space"),
+        pytest.param("POST", "/api/v1/plan-assignments", _giving(""), id="assign-empty"),
         pytest.param(
             "PUT",
             "/api/v1/plan-settings",
@@ -552,10 +550,10 @@ def test_a_new_plan_another_administrator_removed_at_once_is_answered_as_not_fou
             id="default-201-characters",
         ),
         pytest.param(
-            "PUT", "/api/v1/users/{member}/plan", {"plan": "a" * 33}, id="assign-33-characters"
+            "POST", "/api/v1/plan-assignments", _giving("a" * 33), id="assign-33-characters"
         ),
         pytest.param(
-            "PUT", "/api/v1/users/{member}/plan", {"plan": "a" * 201}, id="assign-201-characters"
+            "POST", "/api/v1/plan-assignments", _giving("a" * 201), id="assign-201-characters"
         ),
     ],
 )
@@ -565,9 +563,7 @@ def test_a_malformed_plan_key_names_no_plan(
     """Never 422 or 500: a key this release refuses, of any length, is answered as an unknown
     Plan."""
     installation.define(FREE_BODY)
-    response = installation.client.request(
-        method, path.format(member=installation.member.value), json=body
-    )
+    response = installation.client.request(method, path, json=body)
 
     assert _problem(response) == (404, "plan_not_found", {})
 
@@ -582,16 +578,14 @@ def test_a_malformed_plan_key_names_no_plan(
             {"enabled": False, "default_plan": "a" * 100_000},
             id="default",
         ),
-        pytest.param("PUT", "/api/v1/users/{member}/plan", {"plan": "a" * 100_000}, id="assign"),
+        pytest.param("POST", "/api/v1/plan-assignments", _giving("a" * 100_000), id="assign"),
     ],
 )
 def test_a_missing_plan_answer_never_repeats_a_malformed_key(
     installation: Installation, method: str, path: str, body: dict[str, Any] | None
 ) -> None:
     """However long the key sent, the answer stays short: it names no key this release refuses."""
-    response = installation.client.request(
-        method, path.format(member=installation.member.value), json=body
-    )
+    response = installation.client.request(method, path, json=body)
 
     assert _problem(response) == (404, "plan_not_found", {})
     assert "aaaa" not in response.json()["detail"]
@@ -691,20 +685,17 @@ def test_a_stored_plan_key_this_release_refuses_never_breaks_sign_in_or_the_rule
 def test_an_administrator_assigns_plans_even_while_plans_are_off(
     installation: Installation,
 ) -> None:
-    client, member = installation.client, installation.member.value
+    client, member = installation.client, installation.member
     installation.define(FREE_BODY, FAMILY_BODY)
-    while_off = client.put(f"/api/v1/users/{member}/plan", json={"plan": "family"})
+    while_off = _assign(installation, "family", member)
     installation.turn_on("free")
-    once_on = installation.overview_plan(installation.member)
-    returned = client.put(f"/api/v1/users/{member}/plan", json={"plan": None})
-    to_administrator = client.put(
-        f"/api/v1/users/{installation.admin.value}/plan", json={"plan": "family"}
-    )
+    once_on = installation.overview_plan(member)
+    returned = _assign(installation, None, member)
+    to_administrator = _assign(installation, "family", installation.admin)
     listed = {plan["key"]: plan for plan in client.get("/api/v1/plans").json()["plans"]}
 
     family = {"key": "family", "name": "Family"}
-    assert while_off.status_code == 200
-    assert while_off.json() == {"basis": "plans_off", "plan": None, "assigned": family}
+    assert while_off["people"][0]["has"] == {**family, "on_default": False}
     # Given by the administrator, at the time it was given.
     assert datetime.fromisoformat(once_on.pop("assigned_at")).tzinfo is not None
     assert once_on == {
@@ -716,34 +707,11 @@ def test_an_administrator_assigns_plans_even_while_plans_are_off(
         "assigned_by": ADMIN_EMAIL,
         "use": _use(FAMILY_BODY),
     }
-    assert returned.json() == {
-        "basis": "plan",
-        "plan": {"key": "free", "name": "Free", "on_default": True},
-        "assigned": None,
-    }
+    assert returned["people"][0]["has"] == {"key": "free", "name": "Free", "on_default": True}
     # An administrator's own Plan is kept, and limits them only once they stop administering.
-    assert to_administrator.json() == {"basis": "administrator", "plan": None, "assigned": family}
+    assert to_administrator["people"][0]["has"] == {**family, "on_default": False}
     assert (listed["family"]["people"], listed["family"]["limited_people"]) == (1, 0)
     assert (listed["free"]["people"], listed["free"]["limited_people"]) == (1, 1)
-
-
-def test_giving_someone_the_default_plan_means_following_it(installation: Installation) -> None:
-    """As null does, whichever client gives it, so they move with the default."""
-    client, member = installation.client, installation.member.value
-    installation.define(FREE_BODY, FAMILY_BODY)
-    installation.turn_on("free")
-    client.put(f"/api/v1/users/{member}/plan", json={"plan": "family"})
-
-    given = client.put(f"/api/v1/users/{member}/plan", json={"plan": "free"})
-    followers = client.get("/api/v1/plans").json()["followers"]
-
-    assert given.status_code == 200, given.text
-    assert given.json() == {
-        "basis": "plan",
-        "plan": {"key": "free", "name": "Free", "on_default": True},
-        "assigned": None,
-    }
-    assert followers == 2
 
 
 def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
@@ -995,7 +963,6 @@ def test_a_member_is_refused_every_plans_administrator_route_and_reads_their_own
         client.put("/api/v1/plans/free", json=CHANGE_FREE),
         client.delete("/api/v1/plans/free"),
         client.put("/api/v1/plan-settings", json={"enabled": True, "default_plan": "free"}),
-        client.put(f"/api/v1/users/{installation.member.value}/plan", json={"plan": "free"}),
         client.post(
             "/api/v1/plan-assignments",
             json={"plan": "free", "user_ids": [installation.member.value], "dry_run": True},

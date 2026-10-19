@@ -1,5 +1,4 @@
-"""People and Who can join: the Registration Policy, Invitations, roles, Plans, disabling, and
-deletion.
+"""People and Who can join: the Registration Policy, Invitations, roles, disabling, and deletion.
 
 Every route here is an Installation Administrator's, except the two links people follow to join
 or to choose a new password, which are public and need the link's token.
@@ -42,9 +41,7 @@ from calendar_sync.application.identity.errors import (
     EmailTaken,
     IncorrectCredentials,
     PasswordPolicyViolation,
-    PlanNotFound,
 )
-from calendar_sync.application.identity.plans import AssignPlan
 from calendar_sync.application.identity.ports import IssuedLink, UserQuery, UserSort
 from calendar_sync.application.operations.operator_overview import (
     OperatorOverview,
@@ -71,23 +68,17 @@ from calendar_sync.interfaces.api.dependencies import (
     current_user,
     set_session_cookie,
 )
-from calendar_sync.interfaces.api.plan_payload import (
-    named_plan,
-    person_plan_overview_response,
-    person_plan_response,
-)
+from calendar_sync.interfaces.api.plan_payload import person_plan_overview_response
 from calendar_sync.interfaces.api.problems import ApiProblem, problem_from
 from calendar_sync.interfaces.api.routes.session import SignedInAnswers, signed_in
 from calendar_sync.interfaces.api.schemas import (
     AcceptInvitationRequest,
-    AssignPlanRequest,
     IssuedLinkResponse,
     LinkRequest,
     LinkStatusResponse,
     PendingInvitationResponse,
     PeopleQuery,
     PersonPlanOverviewResponse,
-    PersonPlanResponse,
     PersonResponse,
     RegistrationRequest,
     RegistrationResponse,
@@ -130,8 +121,6 @@ class Administration(Protocol):
     def change_user_state(self) -> ChangeUserState: ...
     @property
     def delete_user(self) -> DeleteUser: ...
-    @property
-    def assign_plan(self) -> AssignPlan: ...
 
 
 class AdministrationServices(SignedInAnswers, Protocol):
@@ -329,24 +318,6 @@ def change_state(
     except (LastAdministrator, YourOwnState) as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
     return _user(changed)
-
-
-@router.put("/api/v1/users/{user_id}/plan", response_model=PersonPlanResponse)
-def assign_plan(
-    user_id: str, payload: AssignPlanRequest, services: Services, actor: Administrator
-) -> PersonPlanResponse:
-    """Give a User their own Plan, or with null return them to the Default Plan, as giving the
-    Default Plan's key does. Allowed while Plans are off, so an administrator can prepare; an
-    administrator's own Plan limits them only once they stop administering."""
-    subject = _named_user(user_id)
-    plan = named_plan(payload.plan) if payload.plan is not None else None
-    try:
-        allowance = services.administration.assign_plan.execute(actor, subject, plan)
-    except (UserNotFound, PlanNotFound) as error:
-        raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
-    except AdministratorRequired as error:
-        raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
-    return person_plan_response(allowance)
 
 
 @router.post(

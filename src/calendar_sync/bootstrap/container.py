@@ -26,7 +26,6 @@ from calendar_sync.application.identity.administration import (
 )
 from calendar_sync.application.identity.integration_tokens import IssueIntegrationToken
 from calendar_sync.application.identity.plans import (
-    AssignPlan,
     ChangePlan,
     DefinePlan,
     RemovePlan,
@@ -285,8 +284,6 @@ class AdministrationServices:
     delete_user: DeleteUser
     delete_own_account: DeleteOwnAccount
     show_own_account_deletion: ShowOwnAccountDeletion
-    assign_plan: AssignPlan
-    """Gives a User their own Plan, or returns them to the Default Plan (ADR 0038)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -793,7 +790,6 @@ def _administration(
         delete_user=DeleteUser(users, sessions, owned),
         delete_own_account=DeleteOwnAccount(users, passwords, sessions, owned, settings, clock),
         show_own_account_deletion=ShowOwnAccountDeletion(users),
-        assign_plan=AssignPlan(users, adapters.plan_assignments, adapters.allowances, clock),
     )
 
 

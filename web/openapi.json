@@ -113,26 +113,6 @@
         "title": "AppliedPlanResponse",
         "type": "object"
       },
-      "AssignPlanRequest": {
-        "properties": {
-          "plan": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Plan"
-          }
-        },
-        "required": [
-          "plan"
-        ],
-        "title": "AssignPlanRequest",
-        "type": "object"
-      },
       "AuditEntryResponse": {
         "properties": {
           "action": {
@@ -1950,47 +1930,6 @@
           "use"
         ],
         "title": "PersonPlanOverviewResponse",
-        "type": "object"
-      },
-      "PersonPlanResponse": {
-        "description": "A person's Plan as it limits them now (ADR 0038).",
-        "properties": {
-          "assigned": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PlanNameResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "basis": {
-            "enum": [
-              "plans_off",
-              "administrator",
-              "plan"
-            ],
-            "title": "Basis",
-            "type": "string"
-          },
-          "plan": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AppliedPlanResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "basis",
-          "plan",
-          "assigned"
-        ],
-        "title": "PersonPlanResponse",
         "type": "object"
       },
       "PersonPlanUseResponse": {
@@ -8659,72 +8598,6 @@
           }
         },
         "summary": "Issue Password Reset"
-      }
-    },
-    "/api/v1/users/{user_id}/plan": {
-      "put": {
-        "description": "Give a User their own Plan, or with null return them to the Default Plan, as giving the\nDefault Plan's key does. Allowed while Plans are off, so an administrator can prepare; an\nadministrator's own Plan limits them only once they stop administering.",
-        "operationId": "assign_plan_api_v1_users__user_id__plan_put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "user_id",
-            "required": true,
-            "schema": {
-              "title": "User Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "calendar_sync_session",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Calendar Sync Session"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssignPlanRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PersonPlanResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Assign Plan"
       }
     },
     "/api/v1/users/{user_id}/role": {

@@ -30,7 +30,7 @@ Plan. Later slices add their own sections here.
 - **Plans live in Identity and Access, and Synchronization enforces them through a port it
   declares.** `domain/plans.py` holds the Plan values and the one decision, `allowance_for`.
   Identity owns the administrator's use cases (`ShowPlans`, `DefinePlan`, `ChangePlan`,
-  `RemovePlan`, `SetPlansSetting`, and `AssignPlan`, in `application/identity/plans.py`) over the
+  `RemovePlan`, and `SetPlansSetting`, in `application/identity/plans.py`) over the
   `PlanCatalog` and `PlanAssignments` ports. Synchronization declares `Allowances` (`of(user)` and
   `of_users(users)`) in `application/sync/ports.py`, as it already declares `SyncCadencePolicy`,
   so it enforces limits without importing Identity. One `SqlitePlans`
@@ -156,9 +156,9 @@ Plan. Later slices add their own sections here.
   `assign(user, plan, change)` for one User or `assign_all` for several, all or none, and `None`
   returns the User to the Default Plan. A Plan that is the Default Plan, read in the same write
   transaction, is stored as `None`, recording the same change, and a dry run answers the same, so
-  giving the default means following it for every client: `PUT /api/v1/users/{user_id}/plan` and
-  `POST /api/v1/plan-assignments`, from the Web UI, the API, and billing later; the MCP server
-  gives no Plans. `change` is `AssignmentChange(source, actor, at)`, whose source is
+  giving the default means following it for every client: `POST /api/v1/plan-assignments`, from
+  the Web UI and the API, and billing later; the MCP server gives no Plans. `change` is
+  `AssignmentChange(source, actor, at)`, whose source is
   `administrator` or `billing`; the User's row keeps the current one in `plan_assigned_by`,
   `plan_assigner_id`, and `plan_assigned_at`. An administrator may assign while Plans are off, to
   prepare. Billing (Commercial Mode, a later phase) will call the same port and decide from
@@ -181,8 +181,8 @@ Plan. Later slices add their own sections here.
   named twice counts once. The use case, `AssignPlans`, lives in Operations beside the Operator
   Overview it reads (`application/operations/plan_assignment.py`), and the store checks that
   every User exists under the same write lock as the update. Unlike People, it fails when Plans
-  cannot be read, so it never says nobody would be over when it could not count.
-  `PUT /api/v1/users/{user_id}/plan` gives a Plan to one User and answers only the Allowance.
+  cannot be read, so it never says nobody would be over when it could not count. One User is
+  given a Plan the same way, as a list of one.
 - **The Operator Overview computes who is over a limit,** so the administrator, who can fix it, is
   not the last to know. Counting another User's rules, accounts, and tokens reads across Users, so
   it lives in the Operator Overview read model (`application/operations/operator_overview.py`),
@@ -246,9 +246,9 @@ the Hosted Service limits its free Plan, and a household administrator can use t
 With Plans off nothing changes, and every existing test keeps its expected behavior.
 
 The Web API gains the administrator's Plans routes (`GET` and `POST /api/v1/plans`, `PUT` and
-`DELETE /api/v1/plans/{plan_key}`, `PUT /api/v1/plan-settings`,
-`PUT /api/v1/users/{user_id}/plan`, and `POST /api/v1/plan-assignments`), the `plan` and `over`
-filters of `GET /api/v1/users`, and `GET /api/v1/account/plan` for Your plan. Rule details gain
+`DELETE /api/v1/plans/{plan_key}`, `PUT /api/v1/plan-settings`, and
+`POST /api/v1/plan-assignments`), the `plan` and `over` filters of `GET /api/v1/users`, and
+`GET /api/v1/account/plan` for Your plan. Rule details gain
 `can_start` and `rule_limit`, rules and rule details gain `keeps_place`, and the person's overview
 and each row of People gain `plan`. The new problem codes are `plan_limit_reached`,
 `plans_need_default`, `plan_not_found`, `plan_key_taken`, `plan_name_taken`, `plan_in_use`,
@@ -290,7 +290,7 @@ multi-user design rebuilds `installation_settings` and must carry `plans_enabled
   what turning them on would do.
 - **A list of each limited person's counts per Plan.** Rejected: it grows with the people a Plan
   limits, where the counts per value stay small.
-- **Giving a Plan to many people through one `PUT /api/v1/users/{user_id}/plan` each.** Rejected: a
-  failure halfway leaves some moved, and nothing says beforehand who would be over.
+- **A route that gives one User a Plan, called once for each person.** Rejected: a failure
+  halfway leaves some moved, and nothing says beforehand who would be over.
 - **Make default turning people whose own Plan becomes the default into followers.** Rejected: it
   changes an administrator's choice without asking.

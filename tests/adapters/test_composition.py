@@ -97,18 +97,12 @@ def test_the_plan_use_cases_share_the_installations_one_plans_store(tmp_path: Pa
     member = limited_user(settings.database_path)
 
     container.plans.define_plan.execute(admin, as_new(FAMILY))
-    assigned = container.administration.assign_plan.execute(admin, member, FAMILY.key)
+    container.plans.assign_plans.execute(admin, [member], FAMILY.key)
     overview = container.plans.set_plans_setting.execute(admin, True, FAMILY.key)
 
-    assert assigned == Allowance(AllowanceBasis.PLANS_OFF, assigned=FAMILY)
     # FAMILY is the default and the member's own: both have it, and it limits the member.
     assert overview.plans == (PlanListing(FAMILY, True, 2, 1),)
     assert container.plans.show_plans.execute(admin) == overview
     assert adapters.allowances.of(member) == Allowance(
         AllowanceBasis.PLAN, plan=FAMILY, assigned=FAMILY
-    )
-    # Giving many people a Plan at once goes through the same store.
-    container.plans.assign_plans.execute(admin, [member], None)
-    assert adapters.allowances.of(member) == Allowance(
-        AllowanceBasis.PLAN, plan=FAMILY, on_default=True
     )

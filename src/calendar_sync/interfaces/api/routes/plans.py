@@ -2,8 +2,6 @@
 setting that turns Plans on, and what the signed-in User's own Plan allows.
 
 Every route here is an Installation Administrator's, except Your plan, which every User reads.
-Giving one User a Plan is in `users.py`, beside the other changes to a User; giving one Plan to
-many people at once is here.
 """
 
 from __future__ import annotations

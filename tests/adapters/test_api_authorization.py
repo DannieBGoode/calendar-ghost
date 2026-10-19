@@ -53,7 +53,6 @@ ADMINISTRATOR_ROUTES = {
     ("PUT", "/api/v1/users/{user_id}/state"),
     ("POST", "/api/v1/users/{user_id}/password-reset-links"),
     ("DELETE", "/api/v1/users/{user_id}"),
-    ("PUT", "/api/v1/users/{user_id}/plan"),
     ("GET", "/api/v1/plans"),
     ("POST", "/api/v1/plans"),
     ("PUT", "/api/v1/plans/{plan_key}"),
@@ -128,15 +127,13 @@ def test_an_administrator_naming_a_malformed_user_is_told_nobody_has_it(tmp_path
         sign_in(client)
         answers = {
             (method, path): client.request(
-                method,
-                path.replace("{user_id}", "%20"),
-                json={"role": "user", "state": "active", "plan": None},
+                method, path.replace("{user_id}", "%20"), json={"role": "user", "state": "active"}
             ).status_code
             for method, path in ADMINISTRATOR_ROUTES | USER_NAMING_ADMINISTRATOR_ROUTES
             if "{user_id}" in path
         }
 
-    assert len(answers) == 6
+    assert len(answers) == 5
     assert set(answers.values()) == {404}, answers
 
 

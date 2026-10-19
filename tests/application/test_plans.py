@@ -1,15 +1,14 @@
 """What Installation Administrators do with Plans (ADR 0038), over the in-memory Plans store."""
 
 import logging
-from collections.abc import Callable, Collection
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 
 import pytest
 
-from calendar_sync.application.identity.administration import AdministratorRequired, UserNotFound
+from calendar_sync.application.identity.administration import AdministratorRequired
 from calendar_sync.application.identity.plans import (
-    AssignPlan,
     ChangePlan,
     DefinePlan,
     PlansOverview,
@@ -20,7 +19,6 @@ from calendar_sync.application.identity.plans import (
 from calendar_sync.application.identity.ports import AssignmentChange, PlanListing, PlansSetting
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.plans import (
-    NO_LIMITS,
     OFFERED_INTERVALS,
     Allowance,
     AllowanceBasis,
@@ -66,21 +64,7 @@ class _Clock:
 
 
 CLOCK = _Clock()
-
-
-class _DeletedMeanwhile:
-    """PlanAssignments as the store answers once the User was deleted after the check."""
-
-    def assign(self, user: UserId, plan: PlanKey | None, change: AssignmentChange) -> bool:
-        return False
-
-    def assign_all(
-        self, users: Collection[UserId], plan: PlanKey | None, change: AssignmentChange
-    ) -> bool:
-        return False
-
-    def last_changes(self, users: Collection[UserId]) -> dict[UserId, AssignmentChange]:
-        return {}
+BY_ADMIN = AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
 
 
 def _plans(*others: User) -> MemoryPlans:
@@ -107,16 +91,6 @@ def _setting(plans: MemoryPlans) -> SetPlansSetting:
     return SetPlansSetting(plans.users, plans, CLOCK)
 
 
-def _assign(plans: MemoryPlans) -> AssignPlan:
-    return AssignPlan(plans.users, plans, plans, CLOCK)
-
-
-def _own_plan(plans: MemoryPlans, user: UserId) -> PlanKey | None:
-    stored = plans.users.get(user)
-    assert stored is not None
-    return stored.plan
-
-
 def _snapshot(plans: MemoryPlans) -> tuple[object, ...]:
     return (
         plans.enabled,
@@ -136,7 +110,6 @@ ATTEMPTS: dict[str, Callable[[MemoryPlans, UserId], object]] = {
     ),
     "remove a plan": lambda plans, actor: _remove(plans).execute(actor, FAMILY.key),
     "turn plans off": lambda plans, actor: _setting(plans).execute(actor, False, FREE.key),
-    "assign a plan": lambda plans, actor: _assign(plans).execute(actor, MEMBER.id, FAMILY.key),
 }
 
 
@@ -167,7 +140,7 @@ def test_only_an_active_administrator_manages_plans(
 def test_show_plans_answers_each_plan_who_has_it_the_setting_and_the_offered_intervals() -> None:
     plans = _plans(NEIGHBOUR)
     plans_on(plans, FREE, FAMILY)
-    _assign(plans).execute(ADMIN.id, NEIGHBOUR.id, FAMILY.key)
+    plans.assign(NEIGHBOUR.id, FAMILY.key, BY_ADMIN)
 
     overview = ShowPlans(plans.users, plans).execute(ADMIN.id)
 
@@ -272,7 +245,7 @@ def test_turning_plans_on_never_clears_a_default_already_chosen() -> None:
 def test_turning_plans_off_is_always_allowed_and_keeps_every_plan(default: PlanKey | None) -> None:
     plans = _plans()
     plans_on(plans, FREE, FAMILY)
-    _assign(plans).execute(ADMIN.id, MEMBER.id, FAMILY.key)
+    plans.assign(MEMBER.id, FAMILY.key, BY_ADMIN)
 
     overview = _setting(plans).execute(ADMIN.id, False, default)
 
@@ -284,7 +257,7 @@ def test_turning_plans_off_is_always_allowed_and_keeps_every_plan(default: PlanK
 def test_a_new_default_applies_at_once_to_everyone_without_a_plan_of_their_own() -> None:
     plans = _plans(NEIGHBOUR)
     plans_on(plans, FREE, FAMILY)
-    _assign(plans).execute(ADMIN.id, NEIGHBOUR.id, FAMILY.key)
+    plans.assign(NEIGHBOUR.id, FAMILY.key, BY_ADMIN)
 
     _setting(plans).execute(ADMIN.id, True, FAMILY.key)
     # Someone who joins later has no Plan of their own either.
@@ -311,82 +284,6 @@ def test_the_default_is_never_removed_nor_cleared_while_plans_are_on() -> None:
     assert plans.get(FREE.key) == FREE
 
 
-# Assigning a Plan
-
-
-def test_assigning_a_plan_records_the_administrator_and_when() -> None:
-    plans = _plans()
-    plans_on(plans, FREE, FAMILY)
-
-    allowance = _assign(plans).execute(ADMIN.id, MEMBER.id, FAMILY.key)
-
-    assert allowance == Allowance(AllowanceBasis.PLAN, plan=FAMILY, assigned=FAMILY)
-    assert _own_plan(plans, MEMBER.id) == FAMILY.key
-    assert plans.changes[MEMBER.id] == AssignmentChange(
-        AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW
-    )
-
-
-def test_a_plan_assigned_while_plans_are_off_applies_once_they_are_on() -> None:
-    plans = _plans()
-    plans.add(as_new(FREE), NOW)
-    plans.add(as_new(FAMILY), NOW)
-
-    allowance = _assign(plans).execute(ADMIN.id, MEMBER.id, FAMILY.key)
-    _setting(plans).execute(ADMIN.id, True, FREE.key)
-
-    assert allowance == Allowance(AllowanceBasis.PLANS_OFF, assigned=FAMILY)
-    assert plans.of(MEMBER.id) == Allowance(AllowanceBasis.PLAN, plan=FAMILY, assigned=FAMILY)
-
-
-@pytest.mark.parametrize("given", [None, FREE.key], ids=["none", "the default"])
-def test_assigning_none_or_the_default_returns_the_user_to_the_default_plan(
-    given: PlanKey | None,
-) -> None:
-    """Giving the default means following it, so they move with it when it changes."""
-    plans = _plans()
-    plans_on(plans, FREE, FAMILY)
-    _assign(plans).execute(ADMIN.id, MEMBER.id, FAMILY.key)
-
-    allowance = _assign(plans).execute(ADMIN.id, MEMBER.id, given)
-
-    assert allowance == Allowance(AllowanceBasis.PLAN, plan=FREE, on_default=True)
-    assert _own_plan(plans, MEMBER.id) is None
-    assert plans.changes[MEMBER.id] == AssignmentChange(
-        AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW
-    )
-
-
-def test_an_administrators_own_plan_is_stored_and_limits_them_not_at_all() -> None:
-    plans = _plans()
-    plans_on(plans, FREE, FAMILY)
-
-    allowance = _assign(plans).execute(ADMIN.id, ADMIN.id, FAMILY.key)
-
-    assert allowance == Allowance(AllowanceBasis.ADMINISTRATOR, assigned=FAMILY)
-    assert allowance.limits == NO_LIMITS
-    assert _own_plan(plans, ADMIN.id) == FAMILY.key
-
-
-def test_assigning_to_an_unknown_user_is_user_not_found() -> None:
-    plans = _plans()
-    plans_on(plans, FREE, FAMILY)
-
-    with pytest.raises(UserNotFound):
-        _assign(plans).execute(ADMIN.id, UserId("nobody"), FAMILY.key)
-
-    assert plans.changes == {}
-
-
-def test_a_user_deleted_before_the_assignment_is_user_not_found() -> None:
-    plans = _plans()
-    plans_on(plans, FREE, FAMILY)
-    assigning = AssignPlan(plans.users, _DeletedMeanwhile(), plans, CLOCK)
-
-    with pytest.raises(UserNotFound):
-        assigning.execute(ADMIN.id, MEMBER.id, FAMILY.key)
-
-
 # Log lines
 
 
@@ -397,9 +294,7 @@ def test_each_change_logs_one_line_naming_only_ids(caplog: pytest.LogCaptureFixt
 
     _define(plans).execute(ADMIN.id, NewPlan("Solo", SOLO.limits))
     _change(plans).execute(ADMIN.id, replace(SOLO, name="Solo, renamed"))
-    _assign(plans).execute(ADMIN.id, MEMBER.id, SOLO.key)
     _setting(plans).execute(ADMIN.id, True, FREE.key)
-    _assign(plans).execute(ADMIN.id, MEMBER.id, None)
     _remove(plans).execute(ADMIN.id, SOLO.key)
     _setting(plans).execute(ADMIN.id, False, None)
     _setting(plans).execute(ADMIN.id, True, None)
@@ -409,9 +304,7 @@ def test_each_change_logs_one_line_naming_only_ids(caplog: pytest.LogCaptureFixt
     assert lines == [
         "plan defined key=solo by=admin",
         "plan changed key=solo by=admin",
-        "plan assigned user=member plan=solo by=admin",
         "plans setting changed enabled=True default=free by=admin",
-        "plan assigned user=member plan=None by=admin",
         "plan removed key=solo by=admin",
         "plans setting changed enabled=False default=None by=admin",
         # The default the change made, not the none it asked for.

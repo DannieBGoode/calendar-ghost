@@ -32,7 +32,6 @@ from calendar_sync.interfaces.api.schemas import (
     OverLimitResponse,
     OwnPlanResponse,
     PersonPlanOverviewResponse,
-    PersonPlanResponse,
     PersonPlanUseResponse,
     PlanAssignmentsResponse,
     PlanLimitsRequest,
@@ -104,16 +103,6 @@ def plans_response(overview: PlansOverview, reach: Mapping[PlanKey, PlanReach]) 
         sync_intervals=[interval.value for interval in overview.offered],
         followers=overview.followers,
         plans=[plan_response(listing, reach[listing.plan.key]) for listing in overview.plans],
-    )
-
-
-def person_plan_response(allowance: Allowance) -> PersonPlanResponse:
-    """A person's Plan as it limits them now: the one that limits them, and their own."""
-    assigned = allowance.assigned
-    return PersonPlanResponse(
-        basis=allowance.basis.value,
-        plan=_applied(allowance),
-        assigned=_named(assigned) if assigned is not None else None,
     )
 
 

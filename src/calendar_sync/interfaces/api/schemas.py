@@ -840,16 +840,6 @@ class PlansResponse(ApiResponse):
     plans: list[PlanResponse]
 
 
-class PersonPlanResponse(ApiResponse):
-    """A person's Plan as it limits them now (ADR 0038)."""
-
-    basis: AllowanceBasisValue
-    plan: AppliedPlanResponse | None
-    """The Plan that limits them; null unless the basis is "plan"."""
-    assigned: PlanNameResponse | None
-    """Their own Plan, whatever the basis; null when they have the Default Plan."""
-
-
 class OverLimitResponse(ApiResponse):
     """One limit a person has more of than their Plan allows: they keep everything, but cannot
     add another until they are within it."""
@@ -884,10 +874,15 @@ class PersonPlanUseResponse(ApiResponse):
     """How soon the Plan they have syncs their rules, which counts nothing."""
 
 
-class PersonPlanOverviewResponse(PersonPlanResponse):
+class PersonPlanOverviewResponse(ApiResponse):
     """A person's Plan, as the Operator Overview shows it on their page and their row of People
     (ADR 0038)."""
 
+    basis: AllowanceBasisValue
+    plan: AppliedPlanResponse | None
+    """The Plan that limits them; null unless the basis is "plan"."""
+    assigned: PlanNameResponse | None
+    """Their own Plan, whatever the basis; null when they have the Default Plan."""
     has: AppliedPlanResponse | None
     """The Plan they have, whether or not it limits them now: their own, or else the Default
     Plan; null when they have neither. People finds them by it."""
@@ -957,12 +952,6 @@ class PlansSettingRequest(BaseModel):
     # and the Plan key's own check refuses one over 32 characters before anything reads it.
     default_plan: str | None
     """Required. Null clears the default, which Plans allow only while they are off."""
-
-
-class AssignPlanRequest(BaseModel):
-    # Bounded by the Plan key's own check, as `PlansSettingRequest.default_plan` is.
-    plan: str | None
-    """Required: the Plan's key, or null to return the User to the Default Plan."""
 
 
 class PlanAssignmentsRequest(BaseModel):

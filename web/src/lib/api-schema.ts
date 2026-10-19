@@ -1066,28 +1066,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/users/{user_id}/plan": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Assign Plan
-         * @description Give a User their own Plan, or with null return them to the Default Plan, as giving the
-         *     Default Plan's key does. Allowed while Plans are off, so an administrator can prepare; an
-         *     administrator's own Plan limits them only once they stop administering.
-         */
-        put: operations["assign_plan_api_v1_users__user_id__plan_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/users/{user_id}/role": {
         parameters: {
             query?: never;
@@ -1183,11 +1161,6 @@ export interface components {
             name: string;
             /** On Default */
             on_default: boolean;
-        };
-        /** AssignPlanRequest */
-        AssignPlanRequest: {
-            /** Plan */
-            plan: string | null;
         };
         /** AuditEntryResponse */
         AuditEntryResponse: {
@@ -1758,19 +1731,6 @@ export interface components {
             over: components["schemas"]["OverLimitResponse"][];
             plan: components["schemas"]["AppliedPlanResponse"] | null;
             use: components["schemas"]["PersonPlanUseResponse"] | null;
-        };
-        /**
-         * PersonPlanResponse
-         * @description A person's Plan as it limits them now (ADR 0038).
-         */
-        PersonPlanResponse: {
-            assigned: components["schemas"]["PlanNameResponse"] | null;
-            /**
-             * Basis
-             * @enum {string}
-             */
-            basis: "plans_off" | "administrator" | "plan";
-            plan: components["schemas"]["AppliedPlanResponse"] | null;
         };
         /**
          * PersonPlanUseResponse
@@ -4970,43 +4930,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssuedLinkResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    assign_plan_api_v1_users__user_id__plan_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: string;
-            };
-            cookie?: {
-                calendar_sync_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AssignPlanRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PersonPlanResponse"];
                 };
             };
             /** @description Validation Error */
