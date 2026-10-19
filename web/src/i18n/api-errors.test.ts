@@ -53,7 +53,7 @@ describe("apiErrorMessage", () => {
     expect(apiErrorMessage(i18n, rules(1))).toBe("Your plan lets 1 rule sync. Pause or remove it to start this rule.")
     expect(apiErrorMessage(i18n, rules(3))).toBe("Your plan lets 3 rules sync. Pause or remove one to start this rule.")
     const tokens = (limit: number) => coded("plan_limit_reached", { reason: "integration_tokens", limit, count: limit })
-    // A Plan that includes no tokens says so, never "0 Integration Tokens".
+    // A Plan that includes no tokens says so, never "0 integration tokens".
     expect(apiErrorMessage(i18n, tokens(0))).toBe(
       "Your plan does not include integration tokens. To get one, ask your administrator.",
     )

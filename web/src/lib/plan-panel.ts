@@ -22,7 +22,7 @@ function countWords({ t }: I18n, { rules, connected_accounts, integration_tokens
 }
 
 /**
- * What a Plan allows, in a sentence: "1 active rule, 1 calendar account, no Integration Tokens,
+ * What a Plan allows, in a sentence: "1 active rule, 1 calendar account, no integration tokens,
  * every 5 minutes.", or, with no limit on any count, "Unlimited, with Instant sync."
  */
 export function planAllowsSentence(i18n: I18n, limits: PlanLimits): string {

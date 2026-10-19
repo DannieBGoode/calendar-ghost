@@ -191,7 +191,7 @@ function speedRow(i18n: I18n, speed: SyncInterval, { name, words }: RowContext):
   }
 }
 
-/** One row per limit, in order: Active rules, Calendar accounts, Integration Tokens, then Sync speed. */
+/** One row per limit, in order: Active rules, Calendar accounts, Integration tokens, then Sync speed. */
 function usageRows(i18n: I18n, use: Use, context: RowContext): UsageRow[] {
   return [
     countRow(i18n, "rules", use.rules, context),
