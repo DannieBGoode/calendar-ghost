@@ -130,6 +130,8 @@ def test_an_allowance_follows_the_setting_then_the_role_then_their_own_plan(
 
     assert allowance == expected
     assert allowance.assigned == own
+    # Manual runs are limited exactly when a Plan limits the User, whether their own or the default.
+    assert allowance.limits_manual_runs is (expected.plan is not None)
 
 
 @pytest.mark.parametrize(
@@ -144,6 +146,7 @@ def test_an_allowance_follows_the_setting_then_the_role_then_their_own_plan(
 def test_only_a_plan_that_applies_limits_anything(allowance: Allowance) -> None:
     assert allowance.limits == NO_LIMITS
     assert allowance.cadence == DEFAULT_CADENCE
+    assert not allowance.limits_manual_runs
 
 
 @pytest.mark.parametrize(
