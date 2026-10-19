@@ -12,10 +12,11 @@ import unicodedata
 from collections import Counter
 from collections.abc import Container, Iterable
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from calendar_sync.domain.cadence import DEFAULT_CADENCE, SCHEDULED_EVERY, SyncCadence
+from calendar_sync.domain.cadence import DEFAULT_CADENCE, SyncCadence
 from calendar_sync.domain.errors import DomainError, DomainValidationError
 
 if TYPE_CHECKING:
@@ -89,11 +90,6 @@ def plan_key_from(name: str, taken: Container[str]) -> PlanKey:
     return PlanKey(key)
 
 
-# Until the scheduler lists each rule once per window of its interval, it lists every enabled
-# rule at every pass, so every interval but instant polls every five minutes.
-_POLLED = SyncCadence(instant=False, poll_every=SCHEDULED_EVERY)
-
-
 class SyncInterval(StrEnum):
     """How soon a Plan's rules sync. Every value is known now, so a Plan saved by a release that
     offers more intervals still reads after a rollback."""
@@ -107,11 +103,21 @@ class SyncInterval(StrEnum):
 
     @property
     def cadence(self) -> SyncCadence:
-        """Instant is Instant Sync plus a 5-minute poll; every other interval is a poll alone."""
+        """Instant is Instant Sync plus a 5-minute poll; every other interval is a poll alone,
+        every as many minutes as it names."""
         if self is SyncInterval.INSTANT:
             return DEFAULT_CADENCE
-        return _POLLED
+        return SyncCadence(instant=False, poll_every=timedelta(minutes=_POLL_MINUTES[self]))
 
+
+_POLL_MINUTES = {
+    SyncInterval.EVERY_5_MINUTES: 5,
+    SyncInterval.EVERY_10_MINUTES: 10,
+    SyncInterval.EVERY_15_MINUTES: 15,
+    SyncInterval.EVERY_30_MINUTES: 30,
+    SyncInterval.EVERY_60_MINUTES: 60,
+}
+"""How many minutes apart Scheduled Sync runs a rule at each interval but instant."""
 
 OFFERED_INTERVALS: tuple[SyncInterval, ...] = (SyncInterval.INSTANT, SyncInterval.EVERY_5_MINUTES)
 """The sync intervals an administrator may choose for a Plan, in the order they are offered."""

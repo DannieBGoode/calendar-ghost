@@ -19,7 +19,7 @@ from tests.plans import FAMILY, FREE, plans_on
 
 ADMIN, MEMBER, OTHER, GONE = UserId("admin"), UserId("member"), UserId("other"), UserId("gone")
 SCHEDULED_ONLY = SyncCadence(instant=False, poll_every=SCHEDULED_EVERY)
-"""A `5_minutes` Plan's cadence in slice 1: no Instant Sync, and a poll every five minutes."""
+"""A `5_minutes` Plan's cadence: no Instant Sync, and a poll every five minutes."""
 LOGGER = "calendar_sync.application.sync.watch_ports"
 
 
