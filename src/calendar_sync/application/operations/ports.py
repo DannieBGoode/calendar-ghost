@@ -218,7 +218,9 @@ class SchedulerProgress:
     last_completed_at: datetime | None
     """When the last pass that raised nothing completed."""
     last_pass_rule_ids: frozenset[str] = frozenset()
-    """The rules that pass listed, so a rule resumed since then is not yet expected to have run."""
+    """The rules that pass listed, those due at it, so a rule resumed since then, or not due
+    then by its Plan's interval, is not yet expected to have run. A failing rule is due at every
+    pass, whatever its interval."""
     next_pass_at: datetime | None = None
     """When the next pass begins, so a User waiting on the provider is told when it is tried
     again; None while a pass runs."""

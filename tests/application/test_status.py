@@ -339,6 +339,24 @@ def test_a_rule_the_last_pass_listed_that_is_still_stale_is_overdue() -> None:
     assert [(p.kind, p.rule_id) for p in status.problems] == [(ProblemKind.OVERDUE, "rule-resumed")]
 
 
+def test_a_failing_hourly_rule_is_still_reported_overdue() -> None:
+    # A failing rule is due at every pass whatever its Plan's interval, so the last pass listed
+    # it, as TICKING says; its last sync failed two minutes ago, and its last success is 25 hours
+    # old.
+    failed = RuleRunOutcome(
+        SyncRuleId("rule-1"),
+        RunKind.SYNC,
+        NOW - timedelta(minutes=2),
+        succeeded=False,
+        last_succeeded_at=NOW - timedelta(hours=25),
+    )
+    failing = replace(_summary(_rule()), last_sync=failed)
+    status = _assess([failing])
+    assert [(p.kind, p.rule_id, p.since) for p in status.problems] == [
+        (ProblemKind.OVERDUE, "rule-1", NOW - timedelta(hours=25))
+    ]
+
+
 def test_running_and_never_synced_rules_are_never_overdue() -> None:
     work = RuleWork(RuleWorkKind.SYNC, NOW - timedelta(minutes=1))
     running = _summary(_rule(), succeeded_at=NOW - timedelta(days=3), running=work)
