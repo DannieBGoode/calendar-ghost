@@ -24,8 +24,8 @@ the whole design and its delivery in four slices, and the
 [catalog design](../superpowers/specs/2026-10-17-plans-ui-catalog-design.md) its Web UI. The
 decision below covers the first slice: Plans, their limits, and a sync interval per Plan. The
 second slice runs each rule once per window of its Plan's interval
-([Slice 2](#slice-2-each-rule-once-per-window-of-its-interval)). Later slices add their own
-sections here.
+([Slice 2](#slice-2-each-rule-once-per-window-of-its-interval)), and the third counts manual runs
+([Slice 3](#slice-3-the-manual-run-limit)). Later slices add their own sections here.
 
 ## Decision
 
@@ -129,10 +129,11 @@ sections here.
   saved. Every other reader falls back to no limits: Instant Sync dispatch, watch upkeep, and
   Installation Hints treat the User as instant, so no Instant Sync Request is dropped and no watch
   retired; `InstantSyncStatus` answers the default cadence; the rule page answers `can_start` true,
-  and the Start still checks; the Operator Overview leaves the Plan out. A fault in Plans never
-  stops synchronization, sign-in, or the rules API. Your plan (`ShowOwnPlan`) fails its own request
-  instead of showing a basis it could not read; the Web UI then shows no limit hints, and the
-  server still checks.
+  and the Start still checks; manual runs go ahead and are not counted
+  ([Slice 3](#slice-3-the-manual-run-limit)); the Operator Overview leaves the Plan out. A fault
+  in Plans never stops synchronization, sign-in, or the rules API. Your plan (`ShowOwnPlan`) fails
+  its own request instead of showing a basis it could not read; the Web UI then shows no limit
+  hints, and the server still checks.
 - **Lowering a limit stops nothing.** Rules beyond a lower rule limit keep syncing, but no rule can
   start until fewer count. Existing Connected Accounts keep their Reauthorization, and existing
   Integration Tokens keep working, because a token that stops on its own breaks a monitor
@@ -258,9 +259,10 @@ The Web API gains the administrator's Plans routes (`GET` and `POST /api/v1/plan
 `can_start` and `rule_limit`, rules and rule details gain `keeps_place`, and the person's overview
 and each row of People gain `plan`. The new problem codes are `plan_limit_reached`,
 `plans_need_default`, `plan_not_found`, `plan_key_taken`, `plan_name_taken`, `plan_in_use`,
-`plan_is_default`, `invalid_plan`, and `invalid_assignment`. A malformed Plan key in a path, the
-default, or an assignment names no Plan, so it answers 404 `plan_not_found`; a malformed new key
-answers 422 `invalid_plan`. `GET /api/v1/status`, Installation Health, and MCP do not change.
+`plan_is_default`, `invalid_plan`, `invalid_assignment`, and, from
+[Slice 3](#slice-3-the-manual-run-limit), `manual_runs_throttled`. A malformed Plan key in a path,
+the default, or an assignment names no Plan, so it answers 404 `plan_not_found`; a malformed new
+key answers 422 `invalid_plan`. `GET /api/v1/status`, Installation Health, and MCP do not change.
 
 A Connected Account can be refused only after the provider's consent, because only then is its
 address known, and the refusal leaves an unused grant at the provider; the Web UI disables Connect
@@ -357,3 +359,48 @@ Accepted edges, none of which loses a change or delays a run by more than one in
   next run may wait up to one interval.
 - The marks live in memory and reset on restart. Each rule then counts from its last run, from
   any origin, and is due in the next window after it.
+
+## Slice 3: the manual-run limit
+
+Slice 3 counts manual runs: Sync Now, Reconcile Now, and Rule Preview. It adds no migration, and
+with Plans off nothing changes. It is the fixed protection
+[ADR 0028](0028-plans-apart-from-commercial-mode.md) promised, amended to count only a User a Plan
+limits. It is not a Plan limit: every Plan has the same, and its refusal never names a Plan.
+
+- **12 manual runs in any 60 minutes,** shared by the three actions, for a User whose Allowance has
+  the basis `plan` (`Allowance.limits_manual_runs`). While Plans are off, and for an Installation
+  Administrator, nothing is counted. `MANUAL_RUNS` and `MANUAL_RUN_WINDOW` in
+  `application/sync/manual_runs.py` hold the numbers.
+- **The floor is the shortest interval.** Sync Now is an incremental poll, so the limit bounds how
+  often a script can poll. Twelve an hour is one run every 5 minutes, the shortest sync interval,
+  so a script pressing Sync Now polls no more often than the fastest Plan syncs. A higher limit
+  would let it poll faster than its own Plan allows: 20 runs per 15 minutes is 80 polls an hour on
+  a 60-minute Plan. Twelve still lets a User set up 5 rules, preview each twice, and run Sync Now a
+  few times.
+- **Admitted in the worker thread, right before the run.** `AdmitManualRun.execute(run, rule_id)`
+  reads the owner's Allowance, asks the throttle, and only then runs the use case. Each route calls
+  it through `asyncio.to_thread` after `available()`, so the Allowance read stays off the event
+  loop, and a 503 (no master key or no calendar provider) uses no budget.
+- **One lock checks and records.** `RunThrottle.admit(user)` drops the User's runs older than the
+  window, then either records the run and answers 0, or records nothing and answers the seconds
+  until a run may start, all under one lock, so concurrent requests cannot all pass the check. A
+  refused request is not recorded, so a client asking again at the limit never pushes its own wait
+  out, and the wait is at most the window, even after the clock is set back. `MemoryRunThrottle`
+  (`infrastructure/throttle.py`), one per process in `Adapters`, keeps the counts.
+- **It fails open.** When the Allowance cannot be read, the run goes ahead and is not counted, and
+  the log names only the error's class and the User's id, so a fault in Plans never stops a run.
+- **The refusal** is 429 `manual_runs_throttled`, with `Retry-After` in seconds, rounded up and at
+  least 1, and the params `retry_after`, the same seconds, and `count`, the minutes rounded up. The
+  Web UI says "You started many runs in a short time. Try again in {count} minutes.", in minutes
+  because the wait is mostly tens of minutes, inside each action's own failure: "Sync did not
+  complete.", "Reconciliation did not complete.", or the preview's failure panel.
+
+Accepted edges, none of which stops a Scheduled Sync:
+
+- The counts live in memory and reset on restart, which only gives runs back.
+- Every admitted request counts, including one that then answers 404, 409, or 424; only a 503,
+  answered before admission, is free. Telling them apart would need the use case to report whether
+  it did any work, and a 429 for a rule the User does not have reveals nothing about it
+  ([ADR 0029](0029-isolate-users-in-one-sqlite-database.md)).
+- Automatic previews count like any other: the Web UI previews a rule when its preview page opens
+  and holds no preview of it yet, so opening the page can use a run, as Refresh does.

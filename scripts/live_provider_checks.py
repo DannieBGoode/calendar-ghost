@@ -15,6 +15,9 @@ docs/development.md, Live provider checks.
     CALENDAR_GHOST_URL=http://127.0.0.1:8000 CALENDAR_GHOST_EMAIL=you@example.test \\
     CALENDAR_GHOST_PASSWORD=... .venv/bin/python scripts/live_provider_checks.py
 
+It stops at once, before it makes anything, when a Plan limits the signed-in User: one run starts
+more manual runs than the limit allows in an hour. Sign in as an administrator, or turn Plans off.
+
 It prints one Markdown table of results and exits 1 if any check failed.
 """
 
@@ -32,6 +35,7 @@ from typing import Any, cast
 
 import httpx
 
+from calendar_sync.application.sync.manual_runs import MANUAL_RUNS
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import calendar_providers
 from calendar_sync.domain.accounts import ProviderKind
@@ -829,6 +833,18 @@ def cleanup(live: Live, google_calendars: tuple[str, str]) -> Iterator[None]:
                 live.check("cleanup", "everything the run made is removed", False, repr(error))
 
 
+def require_unlimited_runs(api: httpx.Client) -> None:
+    """Stop before anything is made when a Plan limits the signed-in User: one run of the checks
+    starts more manual runs than the limit allows in an hour (ADR 0038)."""
+    plan = api.get("/api/v1/account/plan")
+    plan.raise_for_status()
+    if plan.json()["basis"] == "plan":
+        raise SystemExit(
+            f"A Plan limits this User to {MANUAL_RUNS} manual runs an hour, and the checks need "
+            "more: sign in as an administrator, or turn Plans off."
+        )
+
+
 def connect() -> Live:
     settings = Settings.from_environment()
     clock = SystemClock()
@@ -849,6 +865,7 @@ def connect() -> Live:
             "password": os.environ["CALENDAR_GHOST_PASSWORD"],
         },
     ).raise_for_status()
+    require_unlimited_runs(api)
     accounts: dict[str, list[str]] = {}
     for account in api.get("/api/v1/accounts").json():
         accounts.setdefault(account["provider"], []).append(account["id"])

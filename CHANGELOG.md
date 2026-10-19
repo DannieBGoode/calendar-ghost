@@ -27,7 +27,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   A rule's page and the Overview say how often the person's Plan syncs. Reauthorization is never
   refused. A lowered limit refuses only what is new and stops nothing: rules beyond it keep
   syncing, and existing accounts and tokens keep working. Returning to setup turns Plans off and
-  keeps their definitions.
+  keeps their definitions. Sync now, Reconcile now, and Preview together allow someone a Plan
+  limits 12 runs in any hour, one every 5 minutes as the fastest Plan syncs, whatever their Plan;
+  the next one is refused and says in how many minutes to try again.
 - The Plans API: `GET` and `POST /api/v1/plans`, `PUT` and `DELETE /api/v1/plans/{plan_key}`,
   `PUT /api/v1/plan-settings`, and `POST /api/v1/plan-assignments`, which gives each of up to 100
   people the Plan it names for them, all or none, so Undo never gives back only some, and with
@@ -37,8 +39,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   `rule_limit`, and rules and rule details gain `keeps_place`. A Plan's key is made from its name
   unless `POST` names one; no Plan has the key `new`. New problem codes: `plan_limit_reached`,
   `plans_need_default`, `plan_not_found`, `plan_key_taken`,
-  `plan_name_taken`, `plan_in_use`, `plan_is_default`, `invalid_plan`, and `invalid_assignment`; a
-  new account past the limit returns to Connections with the OAuth outcome `account_limit_reached`.
+  `plan_name_taken`, `plan_in_use`, `plan_is_default`, `invalid_plan`, `invalid_assignment`, and
+  `manual_runs_throttled`, a 429 with `Retry-After` for a manual run past the limit; a new account
+  past the limit returns to Connections with the OAuth outcome `account_limit_reached`.
 - Migration 33 adds the `plans` table and the Plan columns. Rolling back to an earlier release
   works with the same database, which ignores them and limits nobody; after upgrading again,
   Plans are as the administrator left them.

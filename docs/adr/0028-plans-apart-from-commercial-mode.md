@@ -69,7 +69,12 @@ open:
   shortest sync interval" above, and the User keeps only their own choice to turn Instant Sync
   off. Plans offer all six intervals, as decided in
   [ADR 0038](0038-plans-allowances-and-limits.md#slice-2-each-rule-once-per-window-of-its-interval).
+- **Manual runs are limited only for a User a Plan limits,** in place of "a fixed rate limit for
+  every User" above. Sync Now, Reconcile Now, and Rule Preview share 12 runs in any 60 minutes,
+  one every 5 minutes, the shortest sync interval, so a script pressing Sync Now polls no more
+  often than the fastest Plan syncs. While Plans are off, and for administrators, nothing counts
+  them. Every Plan has the same limit, so it is not a Plan limit, and its refusal never names a
+  Plan ([ADR 0038](0038-plans-allowances-and-limits.md#slice-3-the-manual-run-limit)).
 
 Until Plan Hold ships, a lowered rule limit refuses new Starts and stops nothing: rules beyond it
-keep syncing, and no grace period starts. The fixed rate limit for manual runs also comes in a
-later release.
+keep syncing, and no grace period starts.
