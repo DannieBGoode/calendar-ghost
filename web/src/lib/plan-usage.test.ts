@@ -17,7 +17,8 @@ const robin: PersonPlanOverview = {
   has: FREE,
   over: [{ limit: "connected_accounts", in_use: 2, allowed: 1 }],
   assigned_by: "dana@example.test",
-  assigned_at: "2026-10-12T09:00:00+00:00",
+  // 9:00 on Oct 12 where the test runs, so the day reads the same in every time zone.
+  assigned_at: new Date(2026, 9, 12, 9).toISOString(),
   use: {
     rules: { in_use: 1, allowed: 1 },
     connected_accounts: { in_use: 2, allowed: 1 },
@@ -51,7 +52,7 @@ describe("planCardSummary", () => {
       { ...robin, assigned_by: null, assigned_at: null },
       "Their own plan, not the default. Plans are on, so it limits robin@example.test now.",
     ],
-    ["a plan given in another year", { ...robin, assigned_at: "2025-12-30T09:00:00+00:00" }, "Given by dana@example.test on Dec 30, 2025. Plans are on, so it limits robin@example.test now."],
+    ["a plan given in another year", { ...robin, assigned_at: new Date(2025, 11, 30, 9).toISOString() }, "Given by dana@example.test on Dec 30, 2025. Plans are on, so it limits robin@example.test now."],
     [
       "no plan yet",
       { ...robin, basis: "plans_off", plan: null, assigned: null, has: null, assigned_by: null, assigned_at: null, use: null },
