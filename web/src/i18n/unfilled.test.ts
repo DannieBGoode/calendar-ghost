@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest"
 
+import type { MessageKey } from "./types"
 import { unfilledText, watchUnfilledText } from "./unfilled"
 
 describe("unfilledText", () => {
@@ -11,7 +12,8 @@ describe("unfilledText", () => {
   })
 
   it("finds a catalog key shown in place of its message, known or not", () => {
-    expect(unfilledText("Never limited: people.plans.status.administrators")).toEqual(["people.plans.status.administrators"])
+    const known: MessageKey = "people.plans.status.limited"
+    expect(unfilledText(`Free: ${known}`)).toEqual([known])
     expect(unfilledText("common.apiError.something_new")).toEqual(["common.apiError.something_new"])
   })
 

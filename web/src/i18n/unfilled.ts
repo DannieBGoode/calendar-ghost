@@ -10,7 +10,7 @@ import type { Catalog } from "./types"
  */
 
 const PLACEHOLDERS = new RegExp(UNFILLED.source, "g")
-/** Words joined by dots, such as `people.plans.status.administrators` or `calendar.google.com`. */
+/** Words joined by dots, such as `people.plans.status.limited` or `calendar.google.com`. */
 const DOTTED = /\b[A-Za-z]\w*(?:\.\w+)+\b/g
 const TEXT_ATTRIBUTES = ["aria-label", "aria-description", "aria-valuetext", "aria-roledescription", "alt", "placeholder", "title"]
 
