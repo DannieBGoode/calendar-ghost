@@ -20,6 +20,9 @@ describe("apiErrorMessage", () => {
     expect(apiErrorMessage(i18n, coded("invalid_state_transition"))).toBe(
       "This rule cannot change to that state right now. Reload and try again.",
     )
+    expect(apiErrorMessage(i18n, coded("insufficient_scope"))).toBe(
+      "This integration token is not allowed to read installation status.",
+    )
   })
 
   it("fills server params and names the provider", () => {

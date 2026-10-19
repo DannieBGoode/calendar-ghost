@@ -57,7 +57,7 @@
     "gone": "That item is no longer available.",
     "incorrect_credentials": "That email and password do not match.",
     "incorrect_password": "That password is incorrect.",
-    "insufficient_scope": "This integration token is not allowed to read Installation Status.",
+    "insufficient_scope": "This integration token is not allowed to read installation status.",
     "integration_token_not_found": "This integration token no longer exists. Reload to see the current tokens.",
     "invalid_activity_age": "Choose one of the offered ages for clearing Activity.",
     "invalid_assignment": "This plan can't be given to these people. Reload and try again.",
