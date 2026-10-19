@@ -2782,8 +2782,9 @@ p {
 }
 
 /* While options sit below the cut edge of a capped popover, they fade out there, so the list shows
-   there is more; scrolled to its end, the fade goes. */
+   there is more; scrolled to its end, the fade goes. A row that takes focus stops above the fade. */
 .plan-change-popover[data-capped] .plan-change-options:not([data-end]) {
+  scroll-padding-bottom: 2rem;
   mask-image: linear-gradient(to bottom, black calc(100% - 2rem), transparent);
 }
 

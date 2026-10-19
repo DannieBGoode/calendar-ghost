@@ -135,6 +135,11 @@ describe("Popovers", () => {
     expect(fade.get("mask-image")).toMatch(/^linear-gradient\(to bottom, .*transparent\)$/)
     expect(declarations(".plan-change-popover .plan-change-options").has("mask-image")).toBe(false)
   })
+
+  it("keep a focused row above that fade: the scroll padding at the cut edge is as tall as the fade", () => {
+    const fade = declarations(".plan-change-popover[data-capped] .plan-change-options:not([data-end])")
+    expect(fade.get("mask-image")).toContain(`black calc(100% - ${fade.get("scroll-padding-bottom")})`)
+  })
 })
 
 describe("Side panels", () => {
