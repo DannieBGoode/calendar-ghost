@@ -126,12 +126,10 @@ export function statusFacts(i18n: I18n, overview: PlansOverview): PlansFact[] {
 /**
  * What Make default says it does: whom it moves, everyone without a Plan of their own, and how many
  * they are now; then who keeps the default now because they were given it as their own Plan, as
- * Make default moves only those without one. Without a count, as a server older than the page
- * sends, it names whom it moves and never says that nobody moves.
+ * Make default moves only those without one.
  */
 export function makeDefaultHint({ t }: I18n, { name }: Pick<PlanSummary, "name">, overview: PlansOverview): string {
   const { followers } = overview
-  if (!Number.isFinite(followers)) return t("people.plans.menu.makeDefaultMovesUncounted", { name })
   const moves =
     followers > 0
       ? t("people.plans.menu.makeDefaultMoves", { count: followers, name })

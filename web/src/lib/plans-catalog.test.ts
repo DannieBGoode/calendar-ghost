@@ -199,12 +199,6 @@ describe("makeDefaultHint", () => {
       "Everyone has a plan of their own now. People who join later get Free. 2 people keep No limits, which was given to them.",
     )
   })
-
-  it("says whom it moves without a number, never that nobody is moved, when the server did not count them", () => {
-    const older: Partial<PlansOverview> = given(2, 1)
-    delete older.followers
-    expect(makeDefaultHint(i18n, free, older as PlansOverview)).toBe("People without a plan of their own move to Free.")
-  })
 })
 
 describe("removeRefusal", () => {

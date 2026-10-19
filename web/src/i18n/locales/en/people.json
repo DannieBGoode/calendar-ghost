@@ -553,7 +553,6 @@
         "other": "People without a plan of their own ({count} now) move to {name}."
       },
       "makeDefaultNobody": "Everyone has a plan of their own now. People who join later get {name}.",
-      "makeDefaultMovesUncounted": "People without a plan of their own move to {name}.",
       "makeDefaultKeeps": {
         "one": "{count} person keeps {name}, which was given to them.",
         "other": "{count} people keep {name}, which was given to them."
