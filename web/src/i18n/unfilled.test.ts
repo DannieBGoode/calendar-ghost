@@ -20,6 +20,10 @@ describe("unfilledText", () => {
       'robin@example.test syncs calendar.google.com with v0.2.0. Bearer ${CALENDAR_GHOST_TOKEN} Bearer {{HOMEPAGE_VAR_TOKEN}} {"url": "https://example.test/mcp"} rules.example.test'
     expect(unfilledText(text)).toEqual([])
   })
+
+  it("leaves alone words named after what every object has, such as constructor.name", () => {
+    expect(unfilledText("constructor.name and people.toString")).toEqual([])
+  })
 })
 
 /** A page of its own, so what these tests show never reaches the document the setup watches. */

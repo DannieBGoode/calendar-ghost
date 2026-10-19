@@ -17,8 +17,8 @@ const TEXT_ATTRIBUTES = ["aria-label", "aria-description", "aria-valuetext", "ar
 /** Whether `path` begins inside the English catalog, such as `people.plans.…`, so it is a key, known or not. */
 function isCatalogPath(path: string): boolean {
   const [namespace = "", group = ""] = path.split(".")
-  const node = (english as Catalog)[namespace]
-  return node !== undefined && typeof node !== "string" && !isPluralMessage(node) && group in node
+  const node = Object.hasOwn(english, namespace) ? (english as Catalog)[namespace] : undefined
+  return node !== undefined && typeof node !== "string" && !isPluralMessage(node) && Object.hasOwn(node, group)
 }
 
 function matches(text: string): RegExpExecArray[] {
