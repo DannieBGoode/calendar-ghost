@@ -157,6 +157,7 @@ def test_three_thousand_hourly_rules_spread_over_the_hour() -> None:
 
 def test_a_full_pass_due_waits_for_the_rules_phase_after_midnight() -> None:
     first_due: Counter[int] = Counter()
+    late_in_the_day = MIDNIGHT + timedelta(hours=14)
 
     for rule in (f"rule-{number}" for number in range(3000)):
         due = [
@@ -176,6 +177,15 @@ def test_a_full_pass_due_waits_for_the_rules_phase_after_midnight() -> None:
         waits = due.index(True)
         assert not any(due[:waits])
         assert all(due[waits:])
+        # Still due hours later, so a restart or Sync Now after 01:00 cannot starve it.
+        assert scheduled_run_due(
+            HOUR,
+            rule,
+            late_in_the_day,
+            late_in_the_day - timedelta(minutes=1),
+            always_due=False,
+            full_pass_due=True,
+        )
         first_due[waits + 1] += 1
 
     assert max(first_due.values()) <= 100
