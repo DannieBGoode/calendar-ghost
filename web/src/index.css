@@ -433,10 +433,8 @@ p {
   color: var(--warning-foreground);
 }
 
-/* An attention hint, or an attention fact on a person's page, names its state with an icon as well
-   as its colour. */
-.field-hint[data-tone="attention"] > svg,
-.person-facts li[data-tone="attention"] > svg {
+/* An attention hint names its state with an icon as well as its colour. */
+.field-hint[data-tone="attention"] > svg {
   display: inline;
   width: 0.875rem;
   height: 0.875rem;
@@ -3633,16 +3631,6 @@ p {
 .person-facts li:not(:last-child)::after {
   margin-left: 0.5rem;
   content: "·";
-}
-
-/* A Plan they have more of a limit than allows: Attention Ochre, with an icon as well as its
-   colour. The separator after it keeps the quiet tone of the others. */
-.person-facts li[data-tone="attention"] {
-  color: var(--warning-foreground);
-}
-
-.person-facts li[data-tone="attention"]::after {
-  color: var(--muted-foreground);
 }
 
 /* People: a search and three filters above a table that pages through everyone here, and two
