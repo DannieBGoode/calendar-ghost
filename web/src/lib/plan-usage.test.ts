@@ -122,7 +122,7 @@ describe("planUsageRows", () => {
       value: "1 in use",
       chip: { text: "Over", tone: "attention" },
       note: {
-        text: "robin@example.test has 1 integration token and Free includes none. Their tokens keep working, but they can't create another. They see the same on Your plan.",
+        text: "robin@example.test has 1 integration token and Free includes none. Their tokens keep working, but they can't issue another. They see the same on Your plan.",
         tone: "attention",
       },
     })
@@ -147,7 +147,7 @@ describe("planUsageRows", () => {
       "robin@example.test has 3 active rules and Free allows 1. Their rules keep syncing, but they can't start another until fewer are active. They see the same on Your plan.",
     )
     expect(over[2]?.note?.text).toBe(
-      "robin@example.test has 2 integration tokens and Free allows 1. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan.",
+      "robin@example.test has 2 integration tokens and Free allows 1. Their tokens keep working, but they can't issue another until one is revoked. They see the same on Your plan.",
     )
   })
 
@@ -209,7 +209,7 @@ describe("ownPlanCard", () => {
       },
       null,
       {
-        text: "You have 2 integration tokens and your plan allows 1. They keep working, but you can't create another until you revoke one in <link>Connections</link>.",
+        text: "You have 2 integration tokens and your plan allows 1. They keep working, but you can't issue another until you revoke one in <link>Connections</link>.",
         tone: "attention",
       },
       null,
@@ -218,7 +218,7 @@ describe("ownPlanCard", () => {
     expect(kept).toMatchObject({
       value: "1 in use",
       chip: { text: "Over", tone: "attention" },
-      note: { text: "You have 1 integration token and your plan includes none. It keeps working, but you can't create another.", tone: "attention" },
+      note: { text: "You have 1 integration token and your plan includes none. It keeps working, but you can't issue another.", tone: "attention" },
     })
   })
 

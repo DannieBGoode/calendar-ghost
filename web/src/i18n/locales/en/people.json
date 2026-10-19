@@ -384,12 +384,12 @@
         "other": "{person} has {count} calendar accounts and {name} allows {allowed}. Their accounts keep syncing, but they can't connect another until one is removed. They see the same on Your plan."
       },
       "tokens": {
-        "one": "{person} has {count} integration token and {name} allows {allowed}. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan.",
-        "other": "{person} has {count} integration tokens and {name} allows {allowed}. Their tokens keep working, but they can't create another until one is revoked. They see the same on Your plan."
+        "one": "{person} has {count} integration token and {name} allows {allowed}. Their tokens keep working, but they can't issue another until one is revoked. They see the same on Your plan.",
+        "other": "{person} has {count} integration tokens and {name} allows {allowed}. Their tokens keep working, but they can't issue another until one is revoked. They see the same on Your plan."
       },
       "tokensNone": {
-        "one": "{person} has {count} integration token and {name} includes none. Their tokens keep working, but they can't create another. They see the same on Your plan.",
-        "other": "{person} has {count} integration tokens and {name} includes none. Their tokens keep working, but they can't create another. They see the same on Your plan."
+        "one": "{person} has {count} integration token and {name} includes none. Their tokens keep working, but they can't issue another. They see the same on Your plan.",
+        "other": "{person} has {count} integration tokens and {name} includes none. Their tokens keep working, but they can't issue another. They see the same on Your plan."
       }
     }
   },

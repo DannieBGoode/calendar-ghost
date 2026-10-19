@@ -103,12 +103,12 @@
         "other": "You have {count} calendar accounts and your plan allows {allowed}. They keep syncing, but you can't connect another until you remove one in <link>Connections</link>."
       },
       "tokens": {
-        "one": "You have {count} integration token and your plan allows {allowed}. It keeps working, but you can't create another until you revoke it in <link>Connections</link>.",
-        "other": "You have {count} integration tokens and your plan allows {allowed}. They keep working, but you can't create another until you revoke one in <link>Connections</link>."
+        "one": "You have {count} integration token and your plan allows {allowed}. It keeps working, but you can't issue another until you revoke it in <link>Connections</link>.",
+        "other": "You have {count} integration tokens and your plan allows {allowed}. They keep working, but you can't issue another until you revoke one in <link>Connections</link>."
       },
       "tokensNone": {
-        "one": "You have {count} integration token and your plan includes none. It keeps working, but you can't create another.",
-        "other": "You have {count} integration tokens and your plan includes none. They keep working, but you can't create another."
+        "one": "You have {count} integration token and your plan includes none. It keeps working, but you can't issue another.",
+        "other": "You have {count} integration tokens and your plan includes none. They keep working, but you can't issue another."
       }
     },
     "close": "To change your plan, ask your administrator."
