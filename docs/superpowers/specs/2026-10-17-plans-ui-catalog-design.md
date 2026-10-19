@@ -325,8 +325,9 @@ behavior and roles, and DESIGN.md describes them:
 - **Checkbox,** with a mixed state for the header.
 - **Meter** (`role="meter"` with `aria-valuetext`, such as "2 of 1, over the limit").
 - **Toast** with one polite live region, an optional Undo or one next step, such as Assign people
-  for a Plan just added, and no timeout shorter than a person needs: it stays until closed or
-  replaced.
+  for a Plan just added, and no timeout shorter than a person needs: one with Undo or a next step,
+  or a refusal, stays until closed or replaced; any other leaves after six seconds, and waits while
+  the pointer or focus is on it.
 - **Popover** for the Change plan chooser in Everyone: it takes focus, Escape or Cancel returns it,
   and it stays inside the window, flipping above its control and capping its height. The row menu
   shares its placement (`keep-in-window.ts`), so a menu never runs under the window's foot, the
