@@ -7,77 +7,36 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 ### Added
 
 - Plans let an administrator limit how much each person uses
-  ([ADR 0038](docs/adr/0038-plans-allowances-and-limits.md)). Under **People → Plans**, an
-  administrator adds Plans by name, each with the most active rules, calendar accounts, and
-  Integration Tokens a person may have, each No limit or Up to a number, and its sync speed,
-  Instant or every 5 minutes. The form says what counts toward each limit, and before a lower limit
-  is saved, how many people it would leave with more than it allows. The Plans tab starts with a card that says
-  whether Plans are on and what they do now, or would do, beside the one **Plans** switch, which
-  applies at once, and counts whom Plans limit and who is over a limit, which you select to list
-  them, and names the default Plan; its sentence says what a limit does, or what the switch would
-  do, and never repeats a count. A table then compares the Plans by limit, with how many people
-  have each and how many of them are over a limit, each linking to them under **Everyone**; its
-  footnote says these counts include administrators, who are never limited. **New plan** sits in
-  the table's head, beside how many Plans there are, or in the empty state before the first Plan.
-  Selecting a Plan, anywhere on its row, opens it in a side panel beside the table, sized so its
-  **Save** is in view, at its own address
-  (`/people/plans/{key}`, its People tab under it, and `/people/plans/new` for New plan), never a
-  modal: **Limits** is the form, with how many changes are not saved, and **People** gives the
-  Plan to people found by email after a dry run says who would be over, then lists who has it now,
-  each with **Change plan**. Saving closes the panel; the message for a new Plan offers **Assign
-  people**, which opens its People tab. Each Plan's **More actions** menu offers **Edit** and
-  **Assign people**, which open its panel, **Make default**, which says whom it moves and who keeps
-  the default because it was given to them,
-  **Duplicate**, which opens New plan with its limits, and **Remove**. Results show at the bottom
-  of the window, most with **Undo**. **Everyone** shows each person's Plan in its own column, its
-  name with **Default**, **Over a limit**, or **Not limited** beside it and which limit they are
-  over under it, and can list only the
-  people who have one Plan, or who are over a limit. Its rows can be selected, a page at a time,
-  and **Change plan** in the bar above the table gives the people selected another Plan from a
-  popover that stays inside the window, its list fading at the cut edge while more Plans sit below: one line per Plan with its limits in short, the default
-  first, where choosing the default means they follow it, what they have now marked **Current**,
-  and, under the Plan chosen, a dry run's word on who would be over which limit, then **Save**,
-  with **Undo** once done. Each row's **More actions** offers the same for one person. A person's
-  page has a **Plan** card: who gave the Plan and when, whether it limits them now, **Change
-  plan**, which opens the same choice inside the card, and a meter for each limit with how much of
-  it they use, saying under a limit they are over what keeps working. Once a Plan is the default, **Invitations** says which Plan someone invited will
-  get. Two Plans cannot share a name, whatever its case; the form says so under Name. Remove is
-  unavailable on the default, saying to make another Plan the default first, and on
-  a Plan someone has, naming the first three of them. Turning Plans on with no default adds a Plan
-  named No limits, which limits nobody, as the default, so nothing changes until someone has a
-  smaller Plan; it can be renamed and changed like any Plan.
-  Plans are off by default, and while they are off nothing changes. Administrators are never
-  limited, and under **Only me** Plans stay hidden. Once Plans are on, starting a rule, connecting a
-  new calendar account, and issuing a token respect the person's Plan: each control says so at the
-  limit and links to **Settings → Your account → Your plan**: a card titled with the Plan's name,
-  **Over a limit** beside it when a count is past its limit, and whether it is the default or the
-  administrator set it. Each limit has a meter with "1 of 1" and **Limit reached** at it, or **Over**
-  with an icon past it and a sentence that says what keeps working and links to **Connections**
-  where an account or token can be removed; a limit the Plan does not set reads **No limit** with
-  how many are in use. The card ends by saying to ask the administrator for a change. **Create sync rule** says how many rules the Plan lets sync at once. Reauthorization is
-  never refused. A lowered rule limit refuses new Starts and stops nothing: rules beyond it keep
-  syncing, and existing calendar accounts and tokens keep working. Returning to setup turns Plans
-  off and keeps their definitions. In the API, a Plan's key is made from its name unless
-  `POST /api/v1/plans` names one, rule details gain `can_start` and `rule_limit`, and rules and rule
-  details gain `keeps_place`. Two Plans may not share a name, whatever its case (409
-  `plan_name_taken`). Each Plan in `GET /api/v1/plans` gains `over_people`, how many of the people
-  it limits have more than it allows, and `use`, how many of them have each count. Each row of
-  `GET /api/v1/users` gains the person's `plan`, as their overview shows it, and both gain `has`,
-  the Plan they have, and `over`, each of its limits they are over. `GET /api/v1/users?plan={key}`
-  lists everyone who has that Plan, their own or as the default, and `?over=true` the people over
-  a limit of the Plan they have. `POST /api/v1/plan-assignments` gives one Plan, or with `null`
-  the default, to up to 100 people at once, all or none, and answers each person's Plan before and
-  after and what they are over; with `dry_run` it gives nothing and answers the same (422
-  `invalid_assignment` for nobody, more than 100 people, or someone who is not a User). Giving
-  the default's key there does as `null` does: the person follows the default. A person's
-  `plan` also gains `assigned_by` and `assigned_at`, who gave their own Plan and when, and `use`,
-  each count beside its limit; `GET /api/v1/plans` gains `followers`, how
-  many people have no Plan of their own. No Plan has the key
-  `new`, which the New plan page's address uses: a Plan named New gets `new-2`, and
-  `POST /api/v1/plans` refuses the key (422 `invalid_plan`). Migration 33 adds the `plans` table
-  and the Plan columns; rolling back to an earlier release works with the same database, which
-  ignores them and limits nobody, and after upgrading again, Plans are as the administrator left
-  them.
+  ([ADR 0038](docs/adr/0038-plans-allowances-and-limits.md)). Plans are off by default, and while
+  they are off nothing changes. Administrators are never limited, and under **Only me** Plans stay
+  hidden. Under **People → Plans**, one **Plans** switch turns them on, and a table compares the
+  Plans: the most active rules, calendar accounts, and Integration Tokens a person may have, each
+  No limit or Up to a number, the sync speed, Instant or every 5 minutes, and how many people have
+  each Plan and are over a limit. A Plan opens in a side panel at its own address
+  (`/people/plans/{key}`) to edit it, or to give it to people after a dry run says who would be
+  over. Everyone without a Plan of their own has the default; turning Plans on with no default adds
+  a Plan named No limits, which limits nobody, as the default. **Everyone** shows each person's
+  Plan, lists who has a Plan or is over a limit, and gives the people selected another Plan, with
+  **Undo**. A person's page and **Settings → Your account → Your plan** show a meter for each
+  limit. Once a Plan is the default, **Invitations** says which Plan someone invited will get.
+- With Plans on, starting a rule, connecting a new calendar account, and issuing a token respect
+  the person's Plan, and each control says so at the limit and links to Your plan. A Plan that
+  syncs every 5 minutes has no Instant Sync. Reauthorization is never refused. A lowered limit
+  refuses only what is new and stops nothing: rules beyond it keep syncing, and existing accounts
+  and tokens keep working. Returning to setup turns Plans off and keeps their definitions.
+- The Plans API: `GET` and `POST /api/v1/plans`, `PUT` and `DELETE /api/v1/plans/{plan_key}`,
+  `PUT /api/v1/plan-settings`, and `POST /api/v1/plan-assignments`, which gives one Plan to up to
+  100 people, all or none, and with `dry_run` only says who would be over; giving the default's key
+  means following the default. `GET /api/v1/account/plan` answers Your plan. People rows and a
+  person's overview gain `plan`, `GET /api/v1/users` filters by `?plan=` and `?over=true`, rule
+  details gain `can_start` and `rule_limit`, and rules and rule details gain `keeps_place`. A
+  Plan's key is made from its name unless `POST` names one; no Plan has the key `new`. New problem
+  codes: `plan_limit_reached`, `plans_need_default`, `plan_not_found`, `plan_key_taken`,
+  `plan_name_taken`, `plan_in_use`, `plan_is_default`, `invalid_plan`, and `invalid_assignment`; a
+  new account past the limit returns to Connections with the OAuth outcome `account_limit_reached`.
+- Migration 33 adds the `plans` table and the Plan columns. Rolling back to an earlier release
+  works with the same database, which ignores them and limits nobody; after upgrading again,
+  Plans are as the administrator left them.
 - Instant Sync: with a public HTTPS address in `CALENDAR_SYNC_PUBLIC_URL` that Google and Microsoft
   reach at `/api/v1/watch-notices/`, a rule runs soon after its provider reports a change in its
   Source Calendar instead of waiting for the next five-minute sync. Scheduled syncs and the daily

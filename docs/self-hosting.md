@@ -280,60 +280,32 @@ their own account, Calendar Ghost returns to setup: the next person to open it c
 administrator, as on a new installation, and the OAuth settings and master key in `.env`
 stay as they were. Plans, if you turned them on, turn off and keep their definitions.
 
-To keep one person from using up what everyone shares, open **People → Plans**. Its card at the
-top says whether Plans are on and what they do now, or would do once on, beside the **Plans**
-switch, which applies at once; a message at the bottom of the window says what changed, with
-**Undo**. Choose **New plan** for each set of limits you want. It opens in a panel beside the
-table, at its own address, never over the page: the Plan's name, then the most active rules,
-calendar accounts, and Integration Tokens a person may have, each **No limit** or **Up to** a
-number (Integration Tokens may also be **None**), and **Sync speed**, Instant or every 5 minutes.
-Selecting a Plan's name, or anywhere else on its row, opens the same panel to change it; its footer counts the
-changes not saved, and **Escape** or **Cancel** closes it. **Save plan** closes it too, and a
-message at the bottom of the window says what was saved; for a new Plan it offers **Assign people**,
-which opens the Plan's **People** tab. Calendar Ghost makes the Plan's key, which names it in the
-API, from its name. Everyone without a Plan of their own has the default, including people who join
-later; the default carries a **Default** badge, and **Make default** in another Plan's **More
-actions** menu says how many people it moves, and who keeps the default because it was given to
-them as their own Plan. Giving someone the default, here or through the API, means they follow
-it. To limit only some people, open the Plan's
-**People** tab, or choose **Assign people** in its menu: search by email, tick each person, and
-give it, as **Give Free to 2 people** does. Before you do, the list shows the Plan each person has
-now and any limit they would be over, and administrators come last, since no Plan limits them.
-Below it, **Have Free now** lists who has the Plan, with any limit they are over, and **Change
-plan** beside each of them gives them another Plan. Under **Everyone**, tick people, or the box
-above the list for the whole page, and choose **Change plan** in the bar above the table. It lists
-each Plan on one line with its limits in short, the default first. Choosing the default means
-they follow it, so they move with it when the default changes. The Plan they have now is chosen
-and marked **Current**, or, when they have different Plans, each Plan says how many have it. Once
-you choose another Plan, a line under it says who would be over a limit, and which one, before you
-**Save**. A message at the bottom of the window says what changed, with **Undo**. **Change plan**
-in a person's **More actions** does the same for one person, and on the **Plan** card of their
-page it opens inside the card, beside how much of their Plan they use. **Duplicate** opens a new Plan with
-another's limits. Two Plans cannot share a name, whatever its case: the form says so
-under **Name**. With no default, turning Plans on adds a Plan named No limits, which limits
-nobody, as the default, so nothing changes until someone has a smaller Plan; you can rename and
-change it like any Plan. Administrators are never limited, and while Plans are off, which is the
-default, nobody is. A lower limit stops nothing: rules beyond it keep syncing, and accounts and
-tokens keep working, but nobody can start a rule, connect a new calendar account, or issue a token
-past it. Each person sees what their Plan allows under **Settings → Your account → Your plan**:
-the Plan's name, a meter for each limit with how much of it they use ("1 of 1", **Limit reached**,
-or **Over** with what keeps working), and that changing it is for their administrator, whom it
-does not name ([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
+To keep one person from using up what everyone shares, open **People → Plans**
+([ADR 0038](adr/0038-plans-allowances-and-limits.md)):
 
-The card counts how many people Plans limit, how many of them are over a limit, which you select
-to list them, and names the default Plan. Below it, a table compares the Plans by limit: active
-rules, calendar accounts, Integration Tokens, sync speed, and how many people have each Plan, which
-lists them under **Everyone**, with how many of them are over a limit; these counts include
-administrators, who are never limited. Before you save a lower limit, the panel says how many people it would leave with more.
-**Everyone** shows each person's Plan in its own column, with **Default**, **Over a limit**, or
-**Not limited** beside it and which limit someone is over under it, and the **Plan** and **Limits** filters list only the people who have
-one Plan, or who are over a limit. A person's page has a **Plan** card: who gave the Plan and when,
-whether it limits them now, and a meter for each limit with how much of it they use ("2 of 1",
-**Over**), saying under a limit they are over what keeps working. The default,
-and a Plan someone has, cannot be removed: **Remove** in its menu says why, naming the first three
-who have it by email; make another Plan the default, or give those people another Plan, first.
+1. Choose **New plan**. A panel opens beside the table, at its own address: give the Plan a name,
+   which no other Plan has, and set the most active rules, calendar accounts, and Integration
+   Tokens a person may have, each **No limit** or **Up to** a number (Integration Tokens may also
+   be **None**), and its **Sync speed**, Instant or every 5 minutes. **Save plan** closes the panel.
+2. Give it to people: **Assign people** in the Plan's **More actions** menu, or tick people under
+   **Everyone** and choose **Change plan**. Before you save, it says who would be over a limit.
+   Everyone without a Plan of their own has the default, marked **Default**; **Make default** in
+   another Plan's menu moves them, and giving someone the default means they follow it.
+3. Turn on the **Plans** switch at the top of the tab. With no default, it adds a Plan named No
+   limits, which limits nobody, as the default, so nothing changes until someone has a smaller
+   Plan. Like giving a Plan and **Make default**, it applies at once, and a message at the bottom
+   of the window says what changed, with **Undo**.
+
+Administrators are never limited, and while Plans are off, which is the default, nobody is. A
+lower limit stops nothing: rules beyond it keep syncing, and accounts and tokens keep working, but
+nobody can start a rule, connect a new calendar account, or issue a token past it. The tab counts
+who is over a limit, and **Everyone** shows each person's Plan and any limit they are over; the
+**Plan** card on a person's page and each person's own **Settings → Your account → Your plan**
+show a meter for each limit with how much of it they use.
 [Someone has more than their plan allows](troubleshooting.md#someone-has-more-than-their-plan-allows)
-says what to do when someone is over a limit.
+says what to do when someone is over a limit, and
+[A plan cannot be removed](troubleshooting.md#a-plan-cannot-be-removed-or-its-name-is-refused)
+explains **Remove**.
 
 ## 5. Use a LAN host or HTTPS
 
