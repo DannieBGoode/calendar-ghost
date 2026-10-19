@@ -230,14 +230,14 @@ The code map behind every file:line below is `.context/slice2/map.md` (not commi
 
 **Files:**
 - Modify: `web/src/i18n/locales/en/overview.json:115`, `web/src/lib/overview-health.ts:128, 437`,
-  `web/src/features/overview.tsx` (pass the own Plan's `poll_every_minutes`)
+  `web/src/features/overview.tsx` (pass the rules answer's `poll_every_minutes`, which the
+  Overview refreshes; Your plan's query does not refresh)
 - Modify: `web/src/i18n/locales/en/rule-details.json:57-60`, `web/src/features/rule-details-facts.tsx:149-170`
 - Test: `web/src/lib/overview-health.test.ts:42-47`, `web/src/features/rule-details.test.tsx:307`,
   `web/src/features/settings-own-plan.test.tsx:273`
 
 **Interfaces:**
-- Produces: `OverviewContext` gains `pollEveryMinutes?: number` (5 when Your plan has not loaded or
-  failed). New keys: `overview.health.healthy.detail` as a plural message with `{count}` minutes,
+- Produces: `OverviewContext` gains `pollEveryMinutes?: number` (5 while no rule has loaded). New keys: `overview.health.healthy.detail` as a plural message with `{count}` minutes,
   `overview.health.healthy.detailHourly`, `ruleDetails.cadence.everyHour`. 60 minutes uses the
   hourly key.
 

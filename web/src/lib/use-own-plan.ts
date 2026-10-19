@@ -65,11 +65,6 @@ export function useTokenLimitReason(): string | undefined {
     : t("common.apiError.plan_limit_reached_integration_tokens", { count: limit })
 }
 
-/** How often, in minutes, Scheduled Sync checks the User's calendars; none while the Plan is unknown. */
-export function useOwnPollEveryMinutes(): number | undefined {
-  return usePlanHints()?.poll_every_minutes
-}
-
 /**
  * How many rules the Plan lets sync at once, for a note beside Create sync rule, so the limit is
  * known before a rule is built and previewed. None while nothing limits rules or the Plan is unknown.

@@ -27,7 +27,7 @@ import { overviewHealth } from "@/lib/overview-health"
 import { isAdministrator } from "@/lib/people"
 import { workRefreshInterval } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
-import { useAccountLimitReason, useOwnPollEveryMinutes } from "@/lib/use-own-plan"
+import { useAccountLimitReason } from "@/lib/use-own-plan"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 import { cn } from "@/lib/utils"
 
@@ -37,7 +37,7 @@ function ruleName(i18n: I18n, endpoints: RuleEndpoints): string {
 
 /**
  * What the Overview reads: the dashboard, the rules and their endpoints, the providers, and how
- * often the reader's own Plan checks their calendars.
+ * often the reader's rules are checked.
  */
 function useOverviewData() {
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, refetchInterval: REFRESH_INTERVAL })
@@ -51,8 +51,9 @@ function useOverviewData() {
   const { endpoints } = useRuleEndpoints(rules.data ?? [])
   // An administrator fixes the installation's own Causes; everyone else is told it is not theirs.
   const administrator = isAdministrator(session.data?.user)
-  // Until Your plan loads, or when it cannot be read, the Overview says the default: every 5 minutes.
-  const pollEveryMinutes = useOwnPollEveryMinutes()
+  // Every rule of one User polls alike, and the rules answer refreshes while the Overview is open,
+  // so a Plan changed meanwhile shows at the next refresh. With no rules it says the default.
+  const pollEveryMinutes = rules.data?.[0]?.poll_every_minutes
   return { dashboard, rules, providers, endpoints, administrator, pollEveryMinutes }
 }
 

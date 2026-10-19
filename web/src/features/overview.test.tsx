@@ -382,16 +382,18 @@ describe("OverviewView", () => {
     expect(row?.lastElementChild?.textContent.trim()).toBe(badge)
   })
 
-  it.each<[string, OwnPlan | "unreadable", string]>([
-    ["checks every hour", { ...atRuleLimit, limits: { ...atRuleLimit.limits!, sync_interval: "60_minutes" }, poll_every_minutes: 60 }, "every hour"],
-    ["checks every 15 minutes", { ...atRuleLimit, limits: { ...atRuleLimit.limits!, sync_interval: "15_minutes" }, poll_every_minutes: 15 }, "every 15 minutes"],
-    ["cannot be read", "unreadable", "every 5 minutes"],
-  ])("says how often a quiet Overview checks when the reader's own plan %s", async (_case, ownPlan, often) => {
+  // The rules answer, which the Overview refreshes, says how often; Your plan, which it does not,
+  // is left unreadable so it cannot be the source.
+  it.each<[string, number, string]>([
+    ["every hour", 60, "every hour"],
+    ["every 15 minutes", 15, "every 15 minutes"],
+    ["every 5 minutes", 5, "every 5 minutes"],
+  ])("says how often a quiet Overview checks when the reader's rules sync %s", async (_case, minutes, often) => {
     const { container } = await renderOverview(testI18n(), {
       dashboard: { ...attentionDashboard, status: "healthy", needs_attention: false, problems: [], open_incidents: 0 },
-      rules: [rule],
+      rules: [{ ...rule, effective_cadence: "not_in_plan", poll_every_minutes: minutes }],
       recentChanges: [],
-      ownPlan,
+      ownPlan: "unreadable",
     })
     expect(container.querySelector("#health-title")?.textContent).toBe("Synchronization is healthy")
     expect(container.querySelector(".health-hero-detail")?.textContent).toBe(
