@@ -149,12 +149,12 @@ export function peopleOver(plan: PlanSummary | null, draft: PlanDraft, name: Lim
   return plan.use[SAVED[name]].reduce((total, { in_use, people }) => (in_use > next ? total + people : total), 0)
 }
 
-/** How one field of a draft would save, so drafts that would save alike compare equal. */
+/** How one field of a draft would save, so drafts that would save alike, such as 05 and 5, compare equal. */
 function savedAs(draft: PlanDraft, field: DraftField): string {
   if (field === "name") return draft.name.trim()
   if (field === "interval") return draft.interval
-  const { choice, amount } = draft[field]
-  return choice === "upTo" ? `${choice}:${amount.trim()}` : choice
+  const value = limitValue(draft, field)
+  return value === undefined ? `upTo:${draft[field].amount.trim()}` : String(value)
 }
 
 /** How many fields of `draft` would save other than `saved` has them, as the editor's footer counts. */

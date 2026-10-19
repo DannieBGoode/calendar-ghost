@@ -423,10 +423,12 @@ describe("PlanEditor", () => {
     expect(onCancel).not.toHaveBeenCalled()
   })
 
-  it("leaves at once with nothing to lose", () => {
+  it("leaves at once with nothing to lose, such as 05 typed for a saved 5", () => {
     edit()
     type(field("plan-edit-family-name"), "Family Large")
     type(field("plan-edit-family-name"), "Family")
+    type(field("plan-edit-family-rules"), "05")
+    expect(changes()).toBe("")
     click(button("Cancel"))
     expect(question()).toBeNull()
     expect(onCancel).toHaveBeenCalledTimes(1)
