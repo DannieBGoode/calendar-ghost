@@ -21,9 +21,11 @@ household administrator needs to keep one User from using up a shared computer a
 quota every User draws from. A self-hosted installation must keep every feature, and with Plans
 off nothing may change. The [Plans design](../superpowers/specs/2026-10-15-plans-design.md) holds
 the whole design and its delivery in four slices, and the
-[catalog design](../superpowers/specs/2026-10-17-plans-ui-catalog-design.md) its Web UI. This
-record covers the first slice: Plans, their limits, and Instant Sync or a five-minute sync per
-Plan. Later slices add their own sections here.
+[catalog design](../superpowers/specs/2026-10-17-plans-ui-catalog-design.md) its Web UI. The
+decision below covers the first slice: Plans, their limits, and a sync interval per Plan. The
+second slice runs each rule once per window of its Plan's interval
+([Slice 2](#slice-2-each-rule-once-per-window-of-its-interval)). Later slices add their own
+sections here.
 
 ## Decision
 
@@ -89,7 +91,7 @@ Plan. Later slices add their own sections here.
   | Rules | Enabled rules, rules stopped only by Lapsed Authorization, and a Rule Replacement's new draft that keeps its previous rule's place | At Start (`EnableSyncRule`). Creating and previewing a rule, and a rule resuming after Lapsed Authorization, are never checked. | 409 `plan_limit_reached`, reason `rules` |
   | Connected Accounts | Every account of the User, Disconnected Accounts included | When the OAuth callback saves a new provider and address | The OAuth outcome `account_limit_reached`, with `limit` |
   | Integration Tokens | Unrevoked tokens | `IssueIntegrationToken` | 409 `plan_limit_reached`, reason `integration_tokens` |
-  | Sync interval | Not a count | Instant Sync, through `PlanCadence` | None |
+  | Sync interval | Not a count | The scheduler and Instant Sync, through `PlanCadence` | None |
 
   Disconnected Accounts count because reconnecting one is Reauthorization, which is never refused;
   otherwise a User could disconnect one account, connect another, and reauthorize the first.
@@ -145,14 +147,13 @@ Plan. Later slices add their own sections here.
   an account with rules, the free place comes from an administrator, who raises the limit or
   assigns a larger Plan for the recovery.
 - **Sync intervals are a fixed server list:** `instant`, `5_minutes`, `10_minutes`, `15_minutes`,
-  `30_minutes`, and `60_minutes`. `instant` means Instant Sync plus a five-minute Scheduled Sync.
-  This slice offers `instant` and `5_minutes`. It reads every value, so a database a later release
-  wrote still works, and it polls every value other than `instant` every five minutes without
-  Instant Sync, because its scheduler runs every rule at every pass. A value it does not know reads
-  as `instant`, with a warning. `PlanCadence` (`application/sync/watch_ports.py`) turns each User's
-  Allowance into their Sync Cadence and replaces `EveryUserInstant` as the installation's
-  `SyncCadencePolicy` ([ADR 0036](0036-instant-sync-through-provider-notices.md), amended). The
-  User keeps only their own choice to turn Instant Sync off.
+  `30_minutes`, and `60_minutes`, all offered, `instant` first. `instant` means Instant Sync plus
+  a five-minute Scheduled Sync; every other value is a Scheduled Sync that often, without Instant
+  Sync ([Slice 2](#slice-2-each-rule-once-per-window-of-its-interval)). A value this release does
+  not know reads as `instant`, with a warning. `PlanCadence` (`application/sync/watch_ports.py`)
+  turns each User's Allowance into their Sync Cadence and replaces `EveryUserInstant` as the
+  installation's `SyncCadencePolicy` ([ADR 0036](0036-instant-sync-through-provider-notices.md),
+  amended). The User keeps only their own choice to turn Instant Sync off.
 - **One assignment port.** `PlanAssignments` is the only way a User's own Plan changes, through
   `assign_all(plans, change)`, which gives one User or several each the Plan `plans` names for
   them, all or none, and `None` returns them to the Default Plan. A Plan that is the Default
@@ -299,3 +300,59 @@ multi-user design rebuilds `installation_settings` and must carry `plans_enabled
   halfway leaves some moved, and nothing says beforehand who would be over.
 - **Make default turning people whose own Plan becomes the default into followers.** Rejected: it
   changes an administrator's choice without asking.
+
+## Slice 2: each rule once per window of its interval
+
+Slice 2 makes Scheduled Sync follow each Plan's sync interval and offers all six. It adds no
+migration, and with Plans off nothing changes. The scheduler still begins a pass
+`SCHEDULED_EVERY` (300 seconds) after the previous one ends; `scheduled_run_due`
+(`domain/cadence.py`) decides which rules each pass lists.
+
+- **Phase and windows.** Each rule has its own phase, the first 8 bytes of the SHA-256 of its id,
+  read big-endian, modulo its interval in seconds. Its windows are `(t - phase) // interval`, with
+  `t` in Unix seconds, so they are anchored at the Unix epoch, and because every offered interval
+  divides a UTC day, one starts at the rule's phase past each 00:00 UTC. A rule is due when a pass
+  begins in a later window than the pass that last listed it. The phases spread one interval's
+  rules over its passes: 3,000 rules on an hourly Plan are listed about 250 at a pass, not all at
+  one, so they never hold up the faster Plans.
+- **Always due.** A rule is due at every pass, whatever its window, when its interval is five
+  minutes or less (`poll_every <= SCHEDULED_EVERY`), so with Instant, every 5 minutes, Plans off,
+  or for an administrator, every rule is listed at every pass, as before; when it never ran, with
+  no `sync` outcome; when it is failing, its last `sync` outcome failed or it has a
+  `rule_failures` row, which Sync Now and Reconcile Now never clear, so a manual success does not
+  stop the retries; when it was previewed after its last run, so "The first sync runs within five
+  minutes" stays true; and when it awaits reprojection after a Material Rule Change.
+  `ScheduledRule` carries `last_run_at`, `failing`, and `previewed_at`, and `always_due` decides
+  it. The in-memory store keeps no `rule_failures`, so there only the last outcome makes a rule
+  failing. A rule whose last success is old is failing or due, so the 24-hour overdue check still
+  sees it.
+- **Marks.** `ScheduledPass` keeps in memory, for each enabled rule, when the pass that last
+  listed it began. `begin` writes it, from its one reading of the clock, for every rule it lists,
+  and forgets rules no longer enabled. A rule it sees for the first time since the start counts
+  from its last run, the `sync` outcome's `completed_at` from any origin. Manual and instant runs
+  never move a mark, so Sync Now cannot keep a rule from being listed.
+- **The daily full pass after a restart.** `_full_pass_due` still decides whether a listed rule's
+  run is its full pass. A rule whose full pass is due is also due once a pass begins at or after
+  its phase past 00:00 UTC. So restarts and Sync Now together cannot keep a rule from its full
+  pass, which comes at most one interval late, and the full passes of an hourly Plan's rules spread
+  over the first hour of the day instead of all running at the first pass after midnight.
+- **Fail open.** `begin` reads each owner's Sync Cadence with `cadences_of`, once for every User of
+  the pass and, when that fails, for each User alone. A User whose read still fails, or whom the
+  read leaves out, has `DEFAULT_CADENCE`, which is due at every pass, so a fault in Plans lists
+  every rule, as with Plans off.
+- **Every interval is offered.** `OFFERED_INTERVALS` is every `SyncInterval`, `instant` first,
+  and stays the API's `sync_intervals`. The refusal of an interval not offered could no longer
+  happen, so it is gone: `require_offered`, `InvalidPlanReason.INTERVAL`, the `invalid_plan`
+  answer with `reason` `interval`, and the Plan editor's hint that longer intervals arrive in a
+  later release. Rule Details and the Overview say how often the reader's own Plan syncs, "every
+  hour" for 60 minutes, as the Plans screens do.
+
+Accepted edges, none of which loses a change or delays a run by more than one interval:
+
+- A run already in flight can record its success after a Pause, a Preview, and a Start. The rule
+  is then no longer previewed since its last run, so the first run after that Start may wait up to
+  one interval. Nothing is lost.
+- A rule resumed after Lapsed Authorization whose own last run succeeded is not always due, so its
+  next run may wait up to one interval.
+- The marks live in memory and reset on restart. Each rule then counts from its last run, from
+  any origin, and is due in the next window after it.

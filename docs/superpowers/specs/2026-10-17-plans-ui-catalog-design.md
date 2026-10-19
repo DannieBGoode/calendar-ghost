@@ -172,11 +172,11 @@ save. Nobody loses anything they already have."
     counted from `use` and naming nobody: "1 person on Pro has more active rules than this. Their
     rules keep syncing, but they can't start another." While Plans are off its second sentence
     starts "Once plans are on, ...".
-- **Sync speed,** "How soon changes reach the other calendars.", as two radio cards: "Instant",
+- **Sync speed,** "How soon changes reach the other calendars.", as six radio cards: "Instant",
   "Changes sync soon after the calendar provider reports them, with a check every 5 minutes as a
-  backup.", and "Every 5 minutes", "Calendars are checked for changes every 5 minutes.", then
-  "Longer intervals arrive in a later release." Instant promises no delivery time, so the card does
-  not say "within seconds".
+  backup.", then "Every 5 minutes", "Calendars are checked for changes every 5 minutes.", and so on
+  for every 10, 15, and 30 minutes, and "Every hour", "Calendars are checked for changes every
+  hour." Instant promises no delivery time, so the card does not say "within seconds".
 - **Footer:** Save plan (primary), Cancel, and how many changes are not saved ("1 change not
   saved"). Save names the field it waits for; a refusal shows under the field it names, which takes
   focus.

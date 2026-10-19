@@ -120,5 +120,6 @@ five-minute Scheduled Sync, as before. `EveryUserInstant` remains the default of
 - A Plan without Instant Sync needs no other code: dispatch drops the User's pending requests,
   upkeep retires their watches, and availability reads `not_in_plan`. The User's own choice is
   kept, so Instant Sync returns by itself if their Plan allows it again.
-- Scheduled Sync still runs every rule every five minutes in this release, whatever the Plan's
-  interval.
+- Scheduled Sync runs each rule once per window of its Plan's interval, and at every pass for an
+  interval of five minutes or less, which is every rule while Plans are off and every rule of an
+  Installation Administrator ([ADR 0038](0038-plans-allowances-and-limits.md#slice-2-each-rule-once-per-window-of-its-interval)).

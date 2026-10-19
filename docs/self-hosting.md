@@ -286,7 +286,8 @@ To keep one person from using up what everyone shares, open **People → Plans**
 1. Choose **New plan**. A panel opens beside the table, at its own address: give the Plan a name,
    which no other Plan has, and set the most active rules, calendar accounts, and Integration
    Tokens a person may have, each **No limit** or **Up to** a number (Integration Tokens may also
-   be **None**), and its **Sync speed**, Instant or every 5 minutes. **Save plan** closes the panel.
+   be **None**), and its **Sync speed**, from **Instant** to **Every hour**. **Save plan** closes
+   the panel.
 2. Give it to people: **Assign people** in the Plan's **More actions** menu, or tick people under
    **Everyone** and choose **Change plan**. Before you save, it says who would be over a limit.
    Everyone without a Plan of their own has the default, marked **Default**; **Make default** in
@@ -330,8 +331,9 @@ for the tunnel and reverse-proxy options.
 
 ### Turn on Instant Sync (optional)
 
-Rules sync every five minutes without anything below. To have a rule run soon after its Source
-Calendar changes, Google and Microsoft must reach this installation at a public HTTPS address:
+Rules sync every five minutes without anything below, unless a Plan sets a longer interval. To
+have a rule run soon after its Source Calendar changes, Google and Microsoft must reach this
+installation at a public HTTPS address:
 
 1. Forward `/api/v1/watch-notices/` through HTTPS with a reverse proxy or Cloudflare Tunnel
    ([examples](instant-sync.md#forward-the-notices-path)). Tailscale Serve keeps a name inside your

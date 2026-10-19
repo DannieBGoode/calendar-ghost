@@ -146,7 +146,7 @@ export const en = {
       },
       {
         title: "Preview, then sync.",
-        body: "See exactly what will be written before anything changes. Then it runs by itself every five minutes.",
+        body: "See exactly what will be written before anything changes. Then it runs by itself every five minutes by default.",
       },
     ] as [Step, Step, Step],
   },
@@ -370,7 +370,7 @@ export const en = {
     privacyBody:
       "calendarghost.com uses cookieless Umami Cloud to count visits, referrers, campaigns, and selected clicks. The tracker runs through calendarghost.com and does not follow you across sites. The installed application sends no analytics or telemetry.",
     /** Under the dozing ghost on the home page's footer: narration, not speech. */
-    watch: "Sync runs every five minutes. In between, the ghost naps.",
+    watch: "Sync runs every five minutes by default. In between, the ghost naps.",
     /** What the dozing ghost mumbles in its sleep, like a child in bed: sync runs every five
      * minutes, so five more minutes is exactly its nap. */
     sleepTalk: "Five more minutes, please.",
