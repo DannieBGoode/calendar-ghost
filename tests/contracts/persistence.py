@@ -2282,6 +2282,66 @@ class PersistenceContract:
             recovered = installation.pending_instant_runs()
 
         request = PendingRequest(RULE.id, 1, 0, NOW, NOW, None)
-        scheduled = ScheduledRule(USER, RULE, None)
-        assert failing == (PendingInstantRun(scheduled, request, last_run_failed=True),)
-        assert recovered == (PendingInstantRun(scheduled, request, last_run_failed=False),)
+        assert failing == (
+            PendingInstantRun(
+                ScheduledRule(USER, RULE, None, last_run_at=NOW, failing=True),
+                request,
+                last_run_failed=True,
+            ),
+        )
+        assert recovered == (
+            PendingInstantRun(
+                ScheduledRule(USER, RULE, None, last_run_at=NOW + HOUR),
+                request,
+                last_run_failed=False,
+            ),
+        )
+
+    # What the scheduler reads across Users
+
+    def test_scheduled_rules_say_when_each_last_ran_failed_and_was_previewed(
+        self, harness: PersistenceHarness
+    ) -> None:
+        never_ran, ran = OTHER_RULE, RULE
+        failed = replace(RULE, id=SyncRuleId("rule-2"), destination=endpoint("work-account", "b"))
+        previewed = replace(
+            RULE, id=SyncRuleId("rule-3"), destination=endpoint("work-account", "c")
+        )
+        reprojecting = replace(
+            RULE,
+            id=SyncRuleId("rule-4"),
+            destination=endpoint("work-account", "d"),
+            reprojection_required=True,
+        )
+        with harness.unit_of_work() as uow:
+            for each in (never_ran, ran, failed, previewed, reprojecting):
+                uow.rules.add(each)
+                uow.previews.record(RulePreviewSummary(each.id, NOW, 1, 0))
+            for each in (ran, reprojecting):
+                uow.run_outcomes.record(RuleRunOutcome(each.id, RunKind.SYNC, NOW + MINUTE, True))
+            uow.run_outcomes.record(
+                RuleRunOutcome(
+                    failed.id,
+                    RunKind.SYNC,
+                    NOW + MINUTE,
+                    False,
+                    failure_kind=ProviderFailureKind.TEMPORARY,
+                )
+            )
+            uow.run_outcomes.record(RuleRunOutcome(previewed.id, RunKind.SYNC, NOW - HOUR, True))
+            uow.commit()
+
+        with harness.installation() as installation:
+            scheduled = installation.scheduled_rules()
+
+        assert scheduled == (
+            ScheduledRule(USER, never_ran, None, previewed_at=NOW),
+            ScheduledRule(USER, ran, None, last_run_at=NOW + MINUTE, previewed_at=NOW),
+            ScheduledRule(
+                USER, failed, None, last_run_at=NOW + MINUTE, failing=True, previewed_at=NOW
+            ),
+            ScheduledRule(USER, previewed, None, last_run_at=NOW - HOUR, previewed_at=NOW),
+            ScheduledRule(USER, reprojecting, None, last_run_at=NOW + MINUTE, previewed_at=NOW),
+        )
+        # Only a rule that ran without failing since its preview waits for its interval.
+        assert [each.always_due for each in scheduled] == [True, False, True, True, True]

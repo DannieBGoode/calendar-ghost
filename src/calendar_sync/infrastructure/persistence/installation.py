@@ -42,6 +42,37 @@ from calendar_sync.infrastructure.persistence.watches import (
     watch_from_row,
 )
 
+_SCHEDULED_COLUMNS = """
+    sync_rules.*, outcome.last_full_succeeded_at, outcome.completed_at AS last_completed_at,
+    outcome.succeeded AS last_succeeded,
+    EXISTS (
+        SELECT 1 FROM rule_failures failure
+        WHERE failure.rule_id = sync_rules.id AND failure.user_id = sync_rules.user_id
+    ) AS failure_recorded,
+    preview.completed_at AS previewed_at
+"""
+"""What the scheduler reads of each enabled rule, from `sync_rules` and `_SCHEDULED_JOINS`."""
+
+_SCHEDULED_JOINS = """
+    JOIN users ON users.id = sync_rules.user_id AND users.state = 'active'
+    LEFT JOIN rule_run_outcomes outcome
+        ON outcome.rule_id = sync_rules.id AND outcome.kind = 'sync'
+    LEFT JOIN rule_previews preview
+        ON preview.rule_id = sync_rules.id AND preview.user_id = sync_rules.user_id
+"""
+"""Keeps only active Users' rules, with each rule's last sync and latest Preview."""
+
+
+def _scheduled_from_row(row: sqlite3.Row) -> ScheduledRule:
+    return ScheduledRule(
+        UserId(str(row["user_id"])),
+        rule_from_row(row),
+        optional_time(row["last_full_succeeded_at"]),
+        last_run_at=optional_time(row["last_completed_at"]),
+        failing=row["last_succeeded"] == 0 or bool(row["failure_recorded"]),
+        previewed_at=optional_time(row["previewed_at"]),
+    )
+
 
 def _cause_sighting(row: sqlite3.Row) -> CauseSighting:
     opened, authorized = optional_time(row["opened_at"]), optional_time(row["authorized_at"])
@@ -87,25 +118,16 @@ class SqliteInstallationUnitOfWork:
     def scheduled_rules(self) -> Sequence[ScheduledRule]:
         assert self._connection is not None
         rows = self._connection.execute(
-            """
-            SELECT sync_rules.*, outcome.last_full_succeeded_at
+            f"""
+            SELECT {_SCHEDULED_COLUMNS}
             FROM sync_rules
-            JOIN users ON users.id = sync_rules.user_id AND users.state = 'active'
-            LEFT JOIN rule_run_outcomes outcome
-              ON outcome.rule_id = sync_rules.id AND outcome.kind = 'sync'
+            {_SCHEDULED_JOINS}
             WHERE sync_rules.state = ?
             ORDER BY sync_rules.user_id, sync_rules.id
-            """,
+            """,  # noqa: S608
             (SyncRuleState.ENABLED.value,),
         ).fetchall()
-        return tuple(
-            ScheduledRule(
-                UserId(str(row["user_id"])),
-                rule_from_row(row),
-                optional_time(row["last_full_succeeded_at"]),
-            )
-            for row in rows
-        )
+        return tuple(_scheduled_from_row(row) for row in rows)
 
     def users_with_unfinished_lapses(self) -> Sequence[UserId]:
         assert self._connection is not None
@@ -261,29 +283,22 @@ class SqliteInstallationUnitOfWork:
     def pending_instant_runs(self) -> Sequence[PendingInstantRun]:
         assert self._connection is not None
         rows = self._connection.execute(
-            """
-            SELECT sync_rules.*, outcome.last_full_succeeded_at,
-                outcome.succeeded AS last_succeeded, request.rule_id, request.requested_seq,
+            f"""
+            SELECT {_SCHEDULED_COLUMNS}, request.rule_id, request.requested_seq,
                 request.handled_seq, request.first_requested_at, request.last_requested_at,
                 request.last_run_at
             FROM instant_sync_requests request
             JOIN sync_rules
                 ON sync_rules.id = request.rule_id AND sync_rules.user_id = request.user_id
-            JOIN users ON users.id = sync_rules.user_id AND users.state = 'active'
-            LEFT JOIN rule_run_outcomes outcome
-                ON outcome.rule_id = sync_rules.id AND outcome.kind = 'sync'
+            {_SCHEDULED_JOINS}
             WHERE sync_rules.state = ? AND request.requested_seq > request.handled_seq
             ORDER BY sync_rules.user_id, sync_rules.id
-            """,
+            """,  # noqa: S608
             (SyncRuleState.ENABLED.value,),
         ).fetchall()
         return tuple(
             PendingInstantRun(
-                ScheduledRule(
-                    UserId(str(row["user_id"])),
-                    rule_from_row(row),
-                    optional_time(row["last_full_succeeded_at"]),
-                ),
+                _scheduled_from_row(row),
                 request_from_row(row),
                 last_run_failed=row["last_succeeded"] == 0,
             )

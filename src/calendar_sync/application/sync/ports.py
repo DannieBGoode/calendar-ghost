@@ -476,6 +476,25 @@ class ScheduledRule:
     rule: SyncRule
     last_full_succeeded_at: datetime | None
     """When the rule's last successful full run completed, so its daily pass is due per rule."""
+    last_run_at: datetime | None = None
+    """When the rule's last sync completed, from any origin, failed or not; None if it never
+    ran."""
+    failing: bool = False
+    """Whether its last sync failed, or a failure streak is recorded that only a scheduled or
+    instant success clears, so a successful Sync Now leaves it failing."""
+    previewed_at: datetime | None = None
+    """When its latest Preview completed; None if it has none."""
+
+    @property
+    def always_due(self) -> bool:
+        """Whether every scheduled pass lists it, whatever its interval: it never ran, it is
+        failing, it was previewed after its last run, or it awaits reprojection."""
+        return (
+            self.last_run_at is None
+            or self.failing
+            or (self.previewed_at is not None and self.previewed_at > self.last_run_at)
+            or self.rule.reprojection_required
+        )
 
 
 class RunIdGenerator(Protocol):

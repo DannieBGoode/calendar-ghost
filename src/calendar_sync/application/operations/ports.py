@@ -128,7 +128,9 @@ class InstallationUnitOfWork(Protocol):
     def commit(self) -> None: ...
 
     def scheduled_rules(self) -> Sequence[ScheduledRule]:
-        """Every enabled rule of a User who is not disabled, by User and then by rule."""
+        """Every enabled rule of a User who is not disabled, by User and then by rule, with when
+        it last ran and was last previewed, and whether it is failing: its last sync failed, or
+        a store that keeps failure streaks has one recorded for it."""
         ...
 
     def users_with_unfinished_lapses(self) -> Sequence[UserId]:
