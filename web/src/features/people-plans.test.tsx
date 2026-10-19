@@ -2168,6 +2168,18 @@ describe("Who has a plan now", () => {
     expect(panelOrNull()).not.toBeNull()
   })
 
+  it("scrolls the chooser fully into view as it opens under them, with focus staying on the plan they have", async () => {
+    await assignFree([ALEX])
+    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
+    await click(
+      element("plan-holders-free").querySelector<HTMLButtonElement>("button[aria-label='Change plan for jordan@example.test']")!,
+    )
+    expect(scrolled).toHaveBeenCalledOnce()
+    expect(scrolled.mock.contexts[0]).toBe(changeOf(JORDAN))
+    expect(scrolled.mock.calls[0]?.[0]).toMatchObject({ block: "nearest" })
+    expect(document.activeElement).toBe(changeChoice(JORDAN, "Free"))
+  })
+
   it("says why a change was refused under the chooser", async () => {
     await assignFree([ALEX])
     await click(

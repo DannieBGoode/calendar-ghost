@@ -37,7 +37,7 @@ export type PlanChooserProps = {
   overview: PlansOverview
   /** Its title's level: 3 on a page or in a popover, 5 under a person in a Plan's panel. */
   level: 3 | 5
-  /** It opens in place in a card, rather than in a popover, so it scrolls fully into view as it opens. */
+  /** It opens in place in a card or a panel, rather than in a popover, so it scrolls fully into view as it opens. */
   inPlace?: boolean
   /** The change is on its way: every control keeps focus and waits. */
   pending: boolean
@@ -272,6 +272,7 @@ export function PlanChange({
       people={[person]}
       overview={overview}
       level={5}
+      inPlace
       pending={assign.isPending}
       refusal={changeRefusal(assign, person.id)}
       onSave={save}

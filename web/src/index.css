@@ -4532,10 +4532,10 @@ p {
   background: var(--destructive-soft);
 }
 
-/* What opens in place scrolls into view a little clear of the top bar and the window's edge, as
-   menus and popovers keep. */
+/* What opens in place scrolls into view a little clear of the top bar and the edge of the window or
+   a panel, as menus and popovers keep. */
 .delete-confirmation,
-.person-plan-card .plan-change {
+.plan-change {
   scroll-margin-block: 1rem;
 }
 
