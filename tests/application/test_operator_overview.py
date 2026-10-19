@@ -315,8 +315,8 @@ def _bob_on_family(overview: OperatorOverview) -> None:
     """Free is the default, and Bob has Family as his own Plan."""
     plans = _plans(overview)
     plans_on(plans, FREE, FAMILY_PLAN)
-    plans.assign(
-        BOB.id, FAMILY_PLAN.key, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
+    plans.assign_all(
+        [BOB.id], FAMILY_PLAN.key, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
     )
 
 
@@ -536,7 +536,9 @@ def test_a_person_plan_names_who_gave_it_only_while_it_is_their_own() -> None:
     overview = _installation()
     _bob_on_family(overview)
     plans = _plans(overview)
-    plans.assign(ALICE.id, None, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW))
+    plans.assign_all(
+        [ALICE.id], None, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
+    )
     gone = UserId("former-admin")
     plans.changes[BOB.id] = AssignmentChange(AssignmentSource.ADMINISTRATOR, gone, NOW + DAY)
 

@@ -278,7 +278,7 @@ def test_a_plan_is_removed_only_when_it_is_not_the_default_and_nobody_has_it(
     plans_on(store.plans, FREE, FAMILY)
     starter = replace(FREE, key=PlanKey("starter"), name="Starter")
     store.plans.add(as_new(starter), NOW)
-    store.plans.assign(MEMBER.id, FAMILY.key, BY_ADMIN)
+    store.plans.assign_all([MEMBER.id], FAMILY.key, BY_ADMIN)
 
     # The default is refused first, even though ADMIN has it too.
     with pytest.raises(PlanIsDefault):
@@ -291,26 +291,6 @@ def test_a_plan_is_removed_only_when_it_is_not_the_default_and_nobody_has_it(
 
     assert in_use.value.people == 1
     assert [listing.plan for listing in store.plans.plans()] == [FAMILY, FREE]
-
-
-def test_assigning_a_plan_records_how_who_and_when(store: PlansStore) -> None:
-    store.people(ADMIN, MEMBER)
-    store.plans.add(as_new(FAMILY), NOW)
-    by_billing = AssignmentChange(AssignmentSource.BILLING, None, LATER)
-
-    assigned = store.plans.assign(MEMBER.id, FAMILY.key, BY_ADMIN)
-    with pytest.raises(PlanNotFound):
-        store.plans.assign(MEMBER.id, PlanKey("missing"), by_billing)
-    kept = (store.users.get(MEMBER.id), store.recorded(MEMBER.id))
-    unknown = store.plans.assign(NOBODY, FAMILY.key, by_billing)
-    returned = store.plans.assign(MEMBER.id, None, by_billing)
-
-    assert assigned
-    assert kept == (replace(MEMBER, plan=FAMILY.key), BY_ADMIN)
-    assert not unknown
-    assert returned
-    assert store.users.get(MEMBER.id) == MEMBER
-    assert store.recorded(MEMBER.id) == by_billing
 
 
 def test_a_plan_is_given_to_many_people_at_once_all_or_none(store: PlansStore) -> None:
@@ -339,9 +319,9 @@ def test_a_plan_is_given_to_many_people_at_once_all_or_none(store: PlansStore) -
 def test_who_last_gave_each_person_their_plan_is_read_at_once(store: PlansStore) -> None:
     store.people(ADMIN, MEMBER, NEWCOMER)
     store.plans.add(as_new(FAMILY), NOW)
-    store.plans.assign(MEMBER.id, FAMILY.key, BY_ADMIN)
+    store.plans.assign_all([MEMBER.id], FAMILY.key, BY_ADMIN)
     by_billing = AssignmentChange(AssignmentSource.BILLING, None, LATER)
-    store.plans.assign(ADMIN.id, None, by_billing)
+    store.plans.assign_all([ADMIN.id], None, by_billing)
 
     changes = store.plans.last_changes([ADMIN.id, MEMBER.id, NEWCOMER.id, NOBODY])
 
@@ -354,8 +334,7 @@ def test_each_users_allowance_follows_the_setting_their_role_and_their_own_plan(
 ) -> None:
     store.people(ADMIN, MEMBER, NEWCOMER)
     plans_on(store.plans, FREE, FAMILY)
-    for user in (ADMIN, MEMBER):
-        store.plans.assign(user.id, FAMILY.key, BY_ADMIN)
+    store.plans.assign_all([ADMIN.id, MEMBER.id], FAMILY.key, BY_ADMIN)
     everyone = [ADMIN.id, MEMBER.id, NEWCOMER.id, NOBODY]
 
     on = store.plans.of_users(everyone)
@@ -384,7 +363,7 @@ def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
 ) -> None:
     store.people(ADMIN, MEMBER, NEWCOMER)
     plans_on(store.plans, FREE, FAMILY)
-    store.plans.assign(MEMBER.id, FAMILY.key, BY_ADMIN)
+    store.plans.assign_all([MEMBER.id], FAMILY.key, BY_ADMIN)
 
     store.plans.change_settings(True, FAMILY.key, LATER)
     joined_later = User(UserId("joined"), "joined@example.test", Role.USER, UserState.ACTIVE, LATER)
@@ -405,8 +384,7 @@ def test_a_plan_counts_everyone_who_has_it_and_the_people_it_limits(store: Plans
     store.people(ADMIN, other_admin, MEMBER, NEWCOMER, AWAY)
     for plan in (FREE, FAMILY):
         store.plans.add(as_new(plan), NOW)
-    for user in (MEMBER, other_admin):
-        store.plans.assign(user.id, FAMILY.key, BY_ADMIN)
+    store.plans.assign_all([MEMBER.id, other_admin.id], FAMILY.key, BY_ADMIN)
 
     without_default = store.plans.plans()
     store.plans.change_settings(False, FREE.key, NOW)
@@ -436,11 +414,10 @@ def test_everyone_without_a_plan_of_their_own_is_counted_whatever_their_role_or_
     store.people(ADMIN, other_admin, MEMBER, NEWCOMER, AWAY)
     before = store.plans.followers()
     plans_on(store.plans, FREE, FAMILY)
-    for user in (MEMBER, other_admin):
-        store.plans.assign(user.id, FAMILY.key, BY_ADMIN)
-    store.plans.assign(NEWCOMER.id, FREE.key, BY_ADMIN)
+    store.plans.assign_all([MEMBER.id, other_admin.id], FAMILY.key, BY_ADMIN)
+    store.plans.assign_all([NEWCOMER.id], FREE.key, BY_ADMIN)
     given = store.plans.followers()
-    store.plans.assign(MEMBER.id, None, BY_ADMIN)
+    store.plans.assign_all([MEMBER.id], None, BY_ADMIN)
 
     assert before == 5
     # The administrator, the disabled member, and the newcomer given the default follow it;

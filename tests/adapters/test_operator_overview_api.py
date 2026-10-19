@@ -423,7 +423,7 @@ def test_the_person_page_shows_the_plan_that_limits_them_and_their_own(
     plans_on(plans, FREE, FAMILY)
     admin = installation.admin.user
     given = AssignmentChange(AssignmentSource.ADMINISTRATOR, admin, datetime.now(UTC))
-    assigned = plans.assign(admin, FAMILY.key, given)
+    assigned = plans.assign_all([admin], FAMILY.key, given)
 
     def plan_of(user: UserId) -> Any:
         return client.get(f"/api/v1/users/{user.value}/overview").json()["plan"]
@@ -497,7 +497,7 @@ def test_people_are_found_by_the_plan_they_have(installation: Installation) -> N
     plans_on(plans, FREE, FAMILY)
     member = installation.member.user
     given = AssignmentChange(AssignmentSource.ADMINISTRATOR, installation.admin.user, NOW)
-    plans.assign(member, FAMILY.key, given)
+    plans.assign_all([member], FAMILY.key, given)
 
     def having(plan: str, **query: str) -> set[str]:
         page = client.get("/api/v1/users", params={"plan": plan, **query}).json()

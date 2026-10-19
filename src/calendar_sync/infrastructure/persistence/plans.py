@@ -159,9 +159,6 @@ class SqlitePlans:
 
     # PlanAssignments
 
-    def assign(self, user: UserId, plan: PlanKey | None, change: AssignmentChange) -> bool:
-        return self.assign_all([user], plan, change)
-
     def assign_all(
         self, users: Collection[UserId], plan: PlanKey | None, change: AssignmentChange
     ) -> bool:

@@ -367,18 +367,13 @@ class AssignmentChange:
 class PlanAssignments(Protocol):
     """The one way a User's own Plan changes; administrators now, billing later (ADR 0038)."""
 
-    def assign(self, user: UserId, plan: PlanKey | None, change: AssignmentChange) -> bool:
-        """Set the User's own Plan, None for the Default Plan, recording the change; False when
-        no such User. Raises PlanNotFound. A `plan` that is the Default Plan, read in the same
-        write, is stored as None: giving the default is following it."""
-        ...
-
     def assign_all(
         self, users: Collection[UserId], plan: PlanKey | None, change: AssignmentChange
     ) -> bool:
-        """Set each of `users`' own Plan in one step, as `assign` does, all or none, recording
-        the same change for each: False, changing nothing, when one of them is not a User.
-        Raises PlanNotFound."""
+        """Set each of `users`' own Plan in one step, None for the Default Plan, all or none,
+        recording the same change for each: False, changing nothing, when one of them is not a
+        User. Raises PlanNotFound. A `plan` that is the Default Plan, read in the same write, is
+        stored as None: giving the default is following it."""
         ...
 
     def last_changes(self, users: Collection[UserId]) -> Mapping[UserId, AssignmentChange]:

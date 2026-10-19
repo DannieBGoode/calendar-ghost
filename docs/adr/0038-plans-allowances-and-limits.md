@@ -153,8 +153,8 @@ Plan. Later slices add their own sections here.
   `SyncCadencePolicy` ([ADR 0036](0036-instant-sync-through-provider-notices.md), amended). The
   User keeps only their own choice to turn Instant Sync off.
 - **One assignment port.** `PlanAssignments` is the only way a User's own Plan changes, through
-  `assign(user, plan, change)` for one User or `assign_all` for several, all or none, and `None`
-  returns the User to the Default Plan. A Plan that is the Default Plan, read in the same write
+  `assign_all(users, plan, change)` for one User or several, all or none, and `None` returns
+  them to the Default Plan. A Plan that is the Default Plan, read in the same write
   transaction, is stored as `None`, recording the same change, and a dry run answers the same, so
   giving the default means following it for every client: `POST /api/v1/plan-assignments`, from
   the Web UI and the API, and billing later; the MCP server gives no Plans. `change` is

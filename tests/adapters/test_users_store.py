@@ -582,7 +582,9 @@ def test_people_are_found_by_the_plan_they_have(kind: str, tmp_path: Path) -> No
         users.add(person, f"hash-{number}")
     plans.add(as_new(FREE), NOW)
     plans.add(as_new(FAMILY), NOW)
-    plans.assign(SECOND.id, FAMILY.key, AssignmentChange(AssignmentSource.ADMINISTRATOR, None, NOW))
+    plans.assign_all(
+        [SECOND.id], FAMILY.key, AssignmentChange(AssignmentSource.ADMINISTRATOR, None, NOW)
+    )
 
     def having(plan: str, **query: object) -> list[UserId]:
         found = users.find(UserQuery(plan=PlanKey(plan), **query))  # type: ignore[arg-type]

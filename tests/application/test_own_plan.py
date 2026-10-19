@@ -167,8 +167,8 @@ def test_a_member_without_a_plan_of_their_own_has_the_default() -> None:
 
 def test_a_member_with_their_own_plan_has_it() -> None:
     plans = _plans()
-    plans.assign(
-        ALICE.id, FAMILY.key, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
+    plans.assign_all(
+        [ALICE.id], FAMILY.key, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
     )
 
     own = _show(plans).execute()
