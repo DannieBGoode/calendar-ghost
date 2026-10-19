@@ -92,8 +92,8 @@ function optionRows(options: readonly ChangeOption[], choice: string | null, ver
 }
 
 /**
- * Marks the options once scrolled to their end, where a capped popover's fade at their cut edge
- * goes; the fade is only drawn, so a screen reader still reads every option.
+ * Marks the options at their end, as they open and as they scroll, where a capped popover's fade
+ * at their cut edge goes; the fade is only drawn, so a screen reader still reads every option.
  */
 function markEnd(list: HTMLElement) {
   list.toggleAttribute("data-end", list.scrollTop + list.clientHeight >= list.scrollHeight - 1)
@@ -125,6 +125,8 @@ function PlanChooser(props: PlanChooserProps) {
   const options = useRef<HTMLDivElement>(null)
   useEffect(() => {
     focusChoice(options.current)
+    // Its popover is placed by now: rows that all fit above the cut edge draw no fade.
+    if (options.current) markEnd(options.current)
   }, [])
   useEffect(() => {
     if (inPlace && chooser.current) scrollFullyIntoView(chooser.current)

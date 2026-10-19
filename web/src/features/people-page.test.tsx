@@ -1356,10 +1356,12 @@ describe("Changing plans from Everyone", () => {
     expect(scrolled.mock.contexts.filter((element) => dialog.contains(element as Node))).toEqual([])
   })
 
-  it("marks the popover's rows once scrolled to their end, where the fade at its cut edge goes, and keeps every row readable", async () => {
+  it("marks the popover's rows at their end as it opens and once scrolled there, where the fade at its cut edge goes, and keeps every row readable", async () => {
     await renderPlanned(testI18n())
     await choose("robin@example.test", "Change plan")
     const list = popover()!.querySelector<HTMLElement>(".plan-change-options")!
+    // Nothing is laid out here, so every row fits above the cut edge: no fade from the start.
+    expect(list.hasAttribute("data-end")).toBe(true)
     // Capped, the rows scroll inside, and some sit below the cut edge.
     Object.defineProperty(list, "clientHeight", { configurable: true, value: 120 })
     Object.defineProperty(list, "scrollHeight", { configurable: true, value: 200 })
@@ -1369,11 +1371,10 @@ describe("Changing plans from Everyone", () => {
         list.dispatchEvent(new Event("scroll"))
       })
     }
+    scrollTo(30)
     expect(list.hasAttribute("data-end")).toBe(false)
     scrollTo(80)
     expect(list.hasAttribute("data-end")).toBe(true)
-    scrollTo(30)
-    expect(list.hasAttribute("data-end")).toBe(false)
     // The fade is only drawn: a screen reader still has every plan.
     expect(choices()).toEqual([
       ["Free Default", false],
