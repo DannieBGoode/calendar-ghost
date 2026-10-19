@@ -410,6 +410,19 @@ describe("PlanEditor", () => {
     expect(changes()).toBe("")
   })
 
+  it("forgets its question once nothing is left to lose, so the question never comes back by itself", () => {
+    edit()
+    type(field("plan-edit-family-rules"), "2")
+    click(button("Cancel"))
+    expect(question()).not.toBeNull()
+    type(field("plan-edit-family-rules"), "5")
+    expect(question()).toBeNull()
+    type(field("plan-edit-family-rules"), "3")
+    expect(question()).toBeNull()
+    expect(changes()).toBe("1 change not saved")
+    expect(onCancel).not.toHaveBeenCalled()
+  })
+
   it("leaves at once with nothing to lose", () => {
     edit()
     type(field("plan-edit-family-name"), "Family Large")

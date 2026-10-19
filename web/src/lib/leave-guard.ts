@@ -54,21 +54,22 @@ export type LeaveQuestion = { leave: () => void; from: Element | null }
 
 /**
  * Guards the page while `unsaved` and holds the question the form shows: `asking` until the
- * person answers it; `keep` puts it away, keeping the changes; `discard` lets the page leave as it
- * was about to. Focus is the form's to move.
+ * person answers it, or until nothing is left to lose, so it never comes back by itself with later
+ * changes; `keep` puts it away, keeping the changes; `discard` lets the page leave as it was about
+ * to. Focus is the form's to move.
  */
 export function useLeaveQuestion(unsaved: boolean) {
   const [asking, setAsking] = useState<LeaveQuestion | null>(null)
+  if (!unsaved && asking !== null) setAsking(null)
   const ask = useCallback((leave: () => void) => setAsking({ leave, from: document.activeElement }), [])
   useLeaveGuard(unsaved, ask)
-  const shown = unsaved ? asking : null
   return {
-    asking: shown,
+    asking,
     keep: () => setAsking(null),
     discard: () => {
       setAsking(null)
       guard = null
-      shown?.leave()
+      asking?.leave()
     },
   }
 }
