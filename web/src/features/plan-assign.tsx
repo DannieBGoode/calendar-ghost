@@ -10,7 +10,7 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { OverLimit, PersonRow, PlanAssignments, PlanSummary } from "@/lib/api"
 import { isAdministrator, personName } from "@/lib/people"
-import { giveWait, heldPlanLine, overNote, PEOPLE_PER_ASSIGNMENT, wouldBeOver, type AssignCandidates } from "@/lib/plan-assignment"
+import { giveWait, heldPlanLine, movesTo, overNote, PEOPLE_PER_ASSIGNMENT, wouldBeOver, type AssignCandidates } from "@/lib/plan-assignment"
 import { usePlanCandidates, usePlanDryRun } from "@/lib/use-plan-assignment"
 import type { PlanCommands } from "@/lib/use-plans"
 
@@ -86,11 +86,11 @@ export function PlanAssign({
   function give() {
     if (chosen.size === 0 || chosen.size > PEOPLE_PER_ASSIGNMENT || pending) return
     assign.mutate(
-      { from: plan.key, via: "give", moves: [{ plan: given, userIds: [...chosen.keys()] }] },
+      { from: plan.key, via: "give", moves: movesTo(given, [...chosen.keys()]) },
       {
-        onSuccess: ([answer]) => {
+        onSuccess: (answer) => {
           setChosen(new Map())
-          if (answer) onGiven(answer)
+          onGiven(answer)
         },
       },
     )

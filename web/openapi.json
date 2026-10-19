@@ -2080,28 +2080,23 @@
             "title": "Dry Run",
             "type": "boolean"
           },
-          "plan": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Plan"
-          },
-          "user_ids": {
-            "items": {
-              "type": "string"
+          "plans": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
-            "title": "User Ids",
-            "type": "array"
+            "title": "Plans",
+            "type": "object"
           }
         },
         "required": [
-          "plan",
-          "user_ids"
+          "plans"
         ],
         "title": "PlanAssignmentsRequest",
         "type": "object"
@@ -6586,7 +6581,7 @@
     },
     "/api/v1/plan-assignments": {
       "post": {
-        "description": "Give one Plan, or with null the Default Plan, to up to 100 people at once, all or none,\nand answer each person's Plan before and after and what they are over. The Default Plan's\nkey is given as null is, so they follow it. With `dry_run`, give nothing and answer the\nsame, so who would be over is known before anyone confirms.",
+        "description": "Give each of up to 100 people their own Plan, or with null the Default Plan, at once,\nall or none, and answer each person's Plan before and after and what they are over. The\nDefault Plan's key is given as null is, so they follow it. With `dry_run`, give nothing and\nanswer the same, so who would be over is known before anyone confirms.",
         "operationId": "assign_plans_api_v1_plan_assignments_post",
         "parameters": [
           {

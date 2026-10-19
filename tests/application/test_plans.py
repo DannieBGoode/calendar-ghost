@@ -140,7 +140,7 @@ def test_only_an_active_administrator_manages_plans(
 def test_show_plans_answers_each_plan_who_has_it_the_setting_and_the_offered_intervals() -> None:
     plans = _plans(NEIGHBOUR)
     plans_on(plans, FREE, FAMILY)
-    plans.assign_all([NEIGHBOUR.id], FAMILY.key, BY_ADMIN)
+    plans.assign_all({NEIGHBOUR.id: FAMILY.key}, BY_ADMIN)
 
     overview = ShowPlans(plans.users, plans).execute(ADMIN.id)
 
@@ -245,7 +245,7 @@ def test_turning_plans_on_never_clears_a_default_already_chosen() -> None:
 def test_turning_plans_off_is_always_allowed_and_keeps_every_plan(default: PlanKey | None) -> None:
     plans = _plans()
     plans_on(plans, FREE, FAMILY)
-    plans.assign_all([MEMBER.id], FAMILY.key, BY_ADMIN)
+    plans.assign_all({MEMBER.id: FAMILY.key}, BY_ADMIN)
 
     overview = _setting(plans).execute(ADMIN.id, False, default)
 
@@ -257,7 +257,7 @@ def test_turning_plans_off_is_always_allowed_and_keeps_every_plan(default: PlanK
 def test_a_new_default_applies_at_once_to_everyone_without_a_plan_of_their_own() -> None:
     plans = _plans(NEIGHBOUR)
     plans_on(plans, FREE, FAMILY)
-    plans.assign_all([NEIGHBOUR.id], FAMILY.key, BY_ADMIN)
+    plans.assign_all({NEIGHBOUR.id: FAMILY.key}, BY_ADMIN)
 
     _setting(plans).execute(ADMIN.id, True, FAMILY.key)
     # Someone who joins later has no Plan of their own either.

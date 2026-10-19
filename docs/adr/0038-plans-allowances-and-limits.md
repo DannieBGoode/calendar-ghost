@@ -154,12 +154,12 @@ Plan. Later slices add their own sections here.
   `SyncCadencePolicy` ([ADR 0036](0036-instant-sync-through-provider-notices.md), amended). The
   User keeps only their own choice to turn Instant Sync off.
 - **One assignment port.** `PlanAssignments` is the only way a User's own Plan changes, through
-  `assign_all(users, plan, change)` for one User or several, all or none, and `None` returns
-  them to the Default Plan. A Plan that is the Default Plan, read in the same write
-  transaction, is stored as `None`, recording the same change, and a dry run answers the same, so
-  giving the default means following it for every client: `POST /api/v1/plan-assignments`, from
-  the Web UI and the API, and billing later; the MCP server gives no Plans. `change` is
-  `AssignmentChange(source, actor, at)`, whose source is
+  `assign_all(plans, change)`, which gives one User or several each the Plan `plans` names for
+  them, all or none, and `None` returns them to the Default Plan. A Plan that is the Default
+  Plan, read in the same write transaction, is stored as `None`, recording the same change, and a
+  dry run answers the same, so giving the default means following it for every client:
+  `POST /api/v1/plan-assignments`, from the Web UI and the API, and billing later; the MCP server
+  gives no Plans. `change` is `AssignmentChange(source, actor, at)`, whose source is
   `administrator` or `billing`; the User's row keeps the current one in `plan_assigned_by`,
   `plan_assigner_id`, and `plan_assigned_at`. An administrator may assign while Plans are off, to
   prepare. Billing (Commercial Mode, a later phase) will call the same port and decide from
@@ -168,22 +168,26 @@ Plan. Later slices add their own sections here.
   Make default changes no User's own Plan: people whose own Plan becomes the default keep it, and
   Make default names them. So Undo, which gives back each person's own Plan, makes someone whose
   own Plan is the default by then follow it.
-- **A Plan for many people at once.** `POST /api/v1/plan-assignments` (administrator) gives one
-  Plan, or the default with `null`, to up to 100 Users, all or none, through `PlanAssignments`,
-  with one `AssignmentChange(administrator, actor, now)` and one log line per User. It answers
-  each User with the Plan they had and have, and the limits of it they are over. Those come from
-  the Operator Overview, through `plan_use` as `over` does, so assigning reads no other User's
-  records outside it ([ADR 0029](0029-isolate-users-in-one-sqlite-database.md)). With `dry_run` it
-  writes nothing and answers the same, so Assign people and Change plan say who would be over
-  before anyone confirms. It refuses a Plan that does not exist with 404 `plan_not_found`, and no
-  Users, more than 100, or an identifier that names no User with 422 `invalid_assignment`, whose
-  `reason` is `no_people`, `too_many` (with `limit`), or `unknown_people`; the Users are in the
-  body, not the path, and only an administrator reaches the route, so 422 reveals nothing. A User
-  named twice counts once. The use case, `AssignPlans`, lives in Operations beside the Operator
-  Overview it reads (`application/operations/plan_assignment.py`), and the store checks that
-  every User exists under the same write lock as the update. Unlike People, it fails when Plans
-  cannot be read, so it never says nobody would be over when it could not count. One User is
-  given a Plan the same way, as a list of one.
+- **Plans for many people at once.** `POST /api/v1/plan-assignments` (administrator) takes
+  `plans`, each User's identifier with the key of the Plan to give them, or `null` for the
+  default, and gives each of up to 100 Users theirs in one write, all or none, through
+  `PlanAssignments`, with one `AssignmentChange(administrator, actor, now)` and one log line per
+  User. So Undo gives each person back the Plan they had in one request: when another
+  administrator has removed one of those Plans or deleted one of the people meanwhile, it is
+  refused and nobody moves. It answers each User with the Plan they had and have, and the limits
+  of it they are over. Those come from the Operator Overview, through `plan_use` as `over` does,
+  so assigning reads no other User's records outside it
+  ([ADR 0029](0029-isolate-users-in-one-sqlite-database.md)). With `dry_run` it writes nothing and
+  answers the same, so Assign people and Change plan say who would be over before anyone confirms.
+  It refuses a Plan that does not exist with 404 `plan_not_found`, and no Users, more than 100, or
+  an identifier that names no User with 422 `invalid_assignment`, whose `reason` is `no_people`,
+  `too_many` (with `limit`), or `unknown_people`; the Users are in the body, not the path, and only
+  an administrator reaches the route, so 422 reveals nothing. A JSON object names each User once.
+  The use case, `AssignPlans`, lives in Operations beside the Operator Overview it reads
+  (`application/operations/plan_assignment.py`), and the store checks that every Plan and every
+  User exists under the same write lock as the update. Unlike People, it fails when Plans cannot
+  be read, so it never says nobody would be over when it could not count. One User is given a Plan
+  the same way, as the only one named.
 - **The Operator Overview computes who is over a limit,** so the administrator, who can fix it, is
   not the last to know. Counting another User's rules, accounts, and tokens reads across Users, so
   it lives in the Operator Overview read model (`application/operations/operator_overview.py`),

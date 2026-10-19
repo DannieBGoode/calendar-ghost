@@ -159,42 +159,34 @@ class SqlitePlans:
 
     # PlanAssignments
 
-    def assign_all(
-        self, users: Collection[UserId], plan: PlanKey | None, change: AssignmentChange
-    ) -> bool:
-        ordered = sorted({user.value for user in users})
-        chunks = [
-            ordered[start : start + USERS_PER_QUERY]
-            for start in range(0, len(ordered), USERS_PER_QUERY)
-        ]
+    def assign_all(self, plans: Mapping[UserId, PlanKey | None], change: AssignmentChange) -> bool:
         with transaction(self._database_path) as connection:
             # Held from the checks to the updates, so nobody is deleted and no Plan removed
             # in between: everyone named moves, or nobody does.
             connection.execute("BEGIN IMMEDIATE")
-            if plan is not None:
-                _require_plan(connection, plan)
-            if plan == _setting(connection).default:
-                # Giving the Default Plan is following it, as None is (ADR 0038).
-                plan = None
-            if sum(_existing(connection, chunk) for chunk in chunks) != len(ordered):
+            for plan in dict.fromkeys(plans.values()):
+                if plan is not None:
+                    _require_plan(connection, plan)
+            everyone = _chunks(sorted(user.value for user in plans))
+            if sum(_existing(connection, chunk) for chunk in everyone) != len(plans):
                 return False
-            values = (
-                plan.value if plan is not None else None,
+            recorded = (
                 change.source.value,
                 change.actor.value if change.actor is not None else None,
                 change.at.isoformat(),
             )
-            for chunk in chunks:
-                marks = ", ".join("?" * len(chunk))
-                # Interpolates only `?` placeholders; values stay bound.
-                connection.execute(
-                    f"""
-                    UPDATE users SET plan_key = ?, plan_assigned_by = ?, plan_assigner_id = ?,
-                        plan_assigned_at = ?
-                    WHERE id IN ({marks})
-                    """,  # noqa: S608
-                    (*values, *chunk),
-                )
+            for key, users in _by_plan(plans, _setting(connection).default).items():
+                for chunk in _chunks(users):
+                    marks = ", ".join("?" * len(chunk))
+                    # Interpolates only `?` placeholders; values stay bound.
+                    connection.execute(
+                        f"""
+                        UPDATE users SET plan_key = ?, plan_assigned_by = ?,
+                            plan_assigner_id = ?, plan_assigned_at = ?
+                        WHERE id IN ({marks})
+                        """,  # noqa: S608
+                        (key, *recorded, *chunk),
+                    )
         return True
 
     def last_changes(self, users: Collection[UserId]) -> dict[UserId, AssignmentChange]:
@@ -239,6 +231,25 @@ def _insert(connection: sqlite3.Connection, new: NewPlan, at: datetime) -> Plan:
         (*_plan_values(plan), at.isoformat(), at.isoformat()),
     )
     return plan
+
+
+def _by_plan(
+    plans: Mapping[UserId, PlanKey | None], default: PlanKey | None
+) -> dict[str | None, list[str]]:
+    """The Users given each Plan, by its key, sorted; None for the Default Plan, which the
+    default's own key also gives: giving the default is following it, as None is (ADR 0038)."""
+    given: dict[str | None, list[str]] = {}
+    for user, plan in sorted(plans.items(), key=lambda item: item[0].value):
+        key = plan.value if plan is not None and plan != default else None
+        given.setdefault(key, []).append(user.value)
+    return given
+
+
+def _chunks(users: Sequence[str]) -> list[Sequence[str]]:
+    """`users` in runs of USERS_PER_QUERY, so no statement passes SQLite's bound values."""
+    return [
+        users[start : start + USERS_PER_QUERY] for start in range(0, len(users), USERS_PER_QUERY)
+    ]
 
 
 def _existing(connection: sqlite3.Connection, users: Sequence[str]) -> int:

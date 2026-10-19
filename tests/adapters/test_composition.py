@@ -97,7 +97,7 @@ def test_the_plan_use_cases_share_the_installations_one_plans_store(tmp_path: Pa
     member = limited_user(settings.database_path)
 
     container.plans.define_plan.execute(admin, as_new(FAMILY))
-    container.plans.assign_plans.execute(admin, [member], FAMILY.key)
+    container.plans.assign_plans.execute(admin, {member: FAMILY.key})
     overview = container.plans.set_plans_setting.execute(admin, True, FAMILY.key)
 
     # FAMILY is the default and the member's own: both have it, and it limits the member.

@@ -1,15 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import {
-  api,
-  type PeoplePage,
-  type PeopleQuery,
-  type PlanAssignments,
-  type PlanChange,
-  type PlanPayload,
-  type PlanSummary,
-} from "@/lib/api"
-import type { AssignMove } from "@/lib/plan-assignment"
+import { api, type PeoplePage, type PeopleQuery, type PlanChange, type PlanPayload, type PlanSummary } from "@/lib/api"
+import type { PlanMoves } from "@/lib/plan-assignment"
 import { OWN_PLAN_QUERY } from "@/lib/use-own-plan"
 
 /** Every Plan and the Plans setting; only Installation Administrators may read them. */
@@ -62,17 +54,11 @@ export function usePlanPeople(plan: string) {
 export type SettingChange = { enabled: boolean; defaultPlan: string | null; undo?: boolean }
 
 /**
- * Giving Plans to people from one Plan's panel, `from`, its key, `via` Assign people's one move
- * (`give`), Change plan's for someone who has it (`change`), or Undo's, one for each Plan the people
- * had; a refusal shows where the command came from. Each move names other people and is all or
- * none.
+ * Giving Plans to people from one Plan's panel, `from`, its key, `via` Assign people (`give`),
+ * Change plan for someone who has it (`change`), or Undo, which gives each person back the Plan they
+ * had; a refusal shows where the command came from. One call gives every move, all or none.
  */
-export type AssignCommand = { from: string; via: "give" | "change" | "undo"; moves: readonly AssignMove[] }
-
-/** Sends each move, one call per Plan, all at once; each is all or none for the people it names. */
-export function sendMoves(moves: readonly AssignMove[]): Promise<PlanAssignments[]> {
-  return Promise.all(moves.map(({ plan, userIds }) => api.assignPlan(plan, userIds, false)))
-}
+export type AssignCommand = { from: string; via: "give" | "change" | "undo"; moves: PlanMoves }
 
 /**
  * Plans and the commands that change them, for Installation Administrators. Every change lists
@@ -102,7 +88,7 @@ export function usePlans() {
   })
   // A refused removal reads the Plans again too: the refusal usually means someone has it now.
   const remove = useMutation({ mutationFn: (key: string) => api.removePlan(key), onSuccess: saved, onError: saved })
-  const assign = useMutation({ mutationFn: ({ moves }: AssignCommand) => sendMoves(moves), onSuccess: saved })
+  const assign = useMutation({ mutationFn: ({ moves }: AssignCommand) => api.assignPlans(moves, false), onSuccess: saved })
   return { plans, setting, define, change, remove, assign }
 }
 

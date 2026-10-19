@@ -112,8 +112,8 @@ describe("api routes", () => {
       ],
       [() => api.removePlan("a b"), { url: "/api/v1/plans/a%20b", method: "DELETE", body: undefined }],
       [
-        () => api.assignPlan(null, ["user-1"], false),
-        { url: "/api/v1/plan-assignments", method: "POST", body: JSON.stringify({ plan: null, user_ids: ["user-1"], dry_run: false }) },
+        () => api.assignPlans({ "user-1": null }, false),
+        { url: "/api/v1/plan-assignments", method: "POST", body: JSON.stringify({ plans: { "user-1": null }, dry_run: false }) },
       ],
     ]
     for (const [send, expected] of cases) {

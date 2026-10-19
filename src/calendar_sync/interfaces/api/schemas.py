@@ -955,13 +955,12 @@ class PlansSettingRequest(BaseModel):
 
 
 class PlanAssignmentsRequest(BaseModel):
-    # Bounded by the Plan key's own check, as `PlansSettingRequest.default_plan` is.
-    plan: str | None
-    """Required: the Plan's key, or null to return everyone named to the Default Plan."""
     # No length bound here: more than 100 people, or none, answers 422 invalid_assignment with
-    # its reason, and an identifier that names no User answers the same.
-    user_ids: list[str]
-    """1 to 100 Users, each once; a User named again counts once."""
+    # its reason, and an identifier that names no User answers the same. Each Plan is bounded by
+    # the Plan key's own check, as `PlansSettingRequest.default_plan` is.
+    plans: dict[str, str | None]
+    """1 to 100 Users by identifier, each with the key of the Plan to give them, or null to
+    return them to the Default Plan; all of them move, or none does."""
     dry_run: bool = False
     """Give nothing, and answer what giving it would do."""
 

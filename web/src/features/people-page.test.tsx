@@ -1251,11 +1251,11 @@ describe("Changing plans from Everyone", () => {
 
     // Free is the default, so they follow it.
     await click(choice("Free"))
-    expect(assignments()).toEqual([{ plan: null, user_ids: ["user-robin", "user-jordan"], dry_run: true }])
+    expect(assignments()).toEqual([{ plans: { "user-robin": null, "user-jordan": null }, dry_run: true }])
     expect(noteUnder("Free")).toBe("Nobody would be over a limit")
 
     await click(button("Save", dialog))
-    expect(assignments().at(-1)).toEqual({ plan: null, user_ids: ["user-robin", "user-jordan"], dry_run: false })
+    expect(assignments().at(-1)).toEqual({ plans: { "user-robin": null, "user-jordan": null }, dry_run: false })
     expect(popover()).toBeNull()
     expect(toast()).toBe("2 people now have Free.")
     // The selection is done with: the bar is at rest, and focus waits on the list's heading.
@@ -1263,7 +1263,7 @@ describe("Changing plans from Everyone", () => {
     expect(document.activeElement?.id).toBe("people-list-title")
 
     await click(button("Undo"))
-    expect(assignments().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin", "user-jordan"], dry_run: false })
+    expect(assignments().at(-1)).toEqual({ plans: { "user-robin": "family", "user-jordan": "family" }, dry_run: false })
     expect(toast()).toBe("2 people have their plans back.")
   })
 
@@ -1291,7 +1291,7 @@ describe("Changing plans from Everyone", () => {
     await click(choice("Family"))
     expect(popover()!.querySelector("[role='alert']")).toBeNull()
     expect(group.hasAttribute("aria-invalid")).toBe(false)
-    expect(assignments()).toEqual([{ plan: "family", user_ids: ["user-robin", "user-sam"], dry_run: true }])
+    expect(assignments()).toEqual([{ plans: { "user-robin": "family", "user-sam": "family" }, dry_run: true }])
     expect(noteUnder("Family")).toBe("Nobody would be over a limit")
   })
 
@@ -1318,7 +1318,7 @@ describe("Changing plans from Everyone", () => {
 
     await giveEveryoneFree()
     await click(button("Undo"))
-    expect(assignments().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin", "user-jordan"], dry_run: false })
+    expect(assignments().at(-1)).toEqual({ plans: { "user-robin": "family", "user-jordan": "family" }, dry_run: false })
     expect(toast()).toBe("2 people have their plans back.")
     expect(rows()).toHaveLength(2)
 
@@ -1343,7 +1343,7 @@ describe("Changing plans from Everyone", () => {
     await click([...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")].find((tab) => tab.textContent === "Plans")!)
     expect(rows()).toHaveLength(0)
     await click(button("Undo"))
-    expect(assignments().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin"], dry_run: false })
+    expect(assignments().at(-1)).toEqual({ plans: { "user-robin": "family" }, dry_run: false })
     expect(toast()).toBe("robin@example.test has their plan back.")
   })
 
@@ -1451,10 +1451,10 @@ describe("Changing plans from Everyone", () => {
     expect(document.activeElement).toBe(choice("Family"))
 
     await click(choice("Free"))
-    expect(assignments().at(-1)).toEqual({ plan: null, user_ids: ["user-robin"], dry_run: true })
+    expect(assignments().at(-1)).toEqual({ plans: { "user-robin": null }, dry_run: true })
     expect(noteUnder("Free")).toBe("Within every limit")
     await click(button("Save", dialog))
-    expect(assignments().at(-1)).toEqual({ plan: null, user_ids: ["user-robin"], dry_run: false })
+    expect(assignments().at(-1)).toEqual({ plans: { "user-robin": null }, dry_run: false })
     expect(popover()).toBeNull()
     expect(toast()).toBe("robin@example.test now has Free.")
     // The toast says it, so no line under the row repeats it.
@@ -1462,7 +1462,7 @@ describe("Changing plans from Everyone", () => {
     expect(document.activeElement?.getAttribute("aria-label")).toBe("Actions for robin@example.test")
 
     await click(button("Undo"))
-    expect(assignments().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin"], dry_run: false })
+    expect(assignments().at(-1)).toEqual({ plans: { "user-robin": "family" }, dry_run: false })
     expect(toast()).toBe("robin@example.test has their plan back.")
   })
 
@@ -1484,7 +1484,7 @@ describe("Changing plans from Everyone", () => {
     expect(document.activeElement?.id).toBe("people-list-title")
 
     await click(button("Undo"))
-    expect(assignments().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin"], dry_run: false })
+    expect(assignments().at(-1)).toEqual({ plans: { "user-robin": "family" }, dry_run: false })
     expect(toast()).toBe("robin@example.test has their plan back.")
     expect(rows()).toHaveLength(1)
   })

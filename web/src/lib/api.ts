@@ -372,11 +372,11 @@ export const api = {
   /** Everyone Assign people may list, by email, narrowed by part of an email. */
   planCandidates: (search: string) => peopleByEmail(search ? { search } : {}, PLAN_CANDIDATES_LISTED),
   /**
-   * Gives one Plan, or the Default Plan with null, to up to 100 people at once, all or none; with
-   * `dryRun`, gives nothing and answers what it would do.
+   * Gives each of up to 100 people the Plan `plans` names by their id, or the Default Plan with
+   * null, at once, all or none; with `dryRun`, gives nothing and answers what it would do.
    */
-  assignPlan: (plan: string | null, userIds: string[], dryRun: boolean) =>
-    call("/api/v1/plan-assignments", "post", { body: { plan, user_ids: userIds, dry_run: dryRun } }),
+  assignPlans: (plans: Record<string, string | null>, dryRun: boolean) =>
+    call("/api/v1/plan-assignments", "post", { body: { plans, dry_run: dryRun } }),
   setPersonRole: (userId: string, role: PersonRole) =>
     call("/api/v1/users/{user_id}/role", "put", { params: { user_id: userId }, body: { role } }),
   setPersonState: (userId: string, state: PersonState) =>

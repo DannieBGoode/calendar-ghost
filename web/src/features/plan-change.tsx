@@ -235,7 +235,7 @@ type Assign = PlanCommands["assign"]
 /** Why the last change for this person was refused, to show under their chooser. */
 function changeRefusal(assign: Assign, personId: string): Error | null {
   if (!assign.error || assign.variables.via !== "change") return null
-  return assign.variables.moves[0]?.userIds[0] === personId ? assign.error : null
+  return Object.hasOwn(assign.variables.moves, personId) ? assign.error : null
 }
 
 /**
@@ -262,8 +262,8 @@ export function PlanChange({
   const i18n = useI18n()
   const save: SaveChange = (plan, chosen) =>
     assign.mutate(
-      { from, via: "change", moves: [{ plan, userIds: [person.id] }] },
-      { onSuccess: ([answer]) => answer && onChanged(answer, changedResult(i18n, [person], chosen)) },
+      { from, via: "change", moves: { [person.id]: plan } },
+      { onSuccess: (answer) => onChanged(answer, changedResult(i18n, [person], chosen)) },
     )
   return (
     <PlanChooser

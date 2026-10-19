@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 
 import { api } from "@/lib/api"
-import { assignCandidates } from "@/lib/plan-assignment"
+import { assignCandidates, movesTo } from "@/lib/plan-assignment"
 
 /**
  * Who Assign people may give the Plan with key `plan` to, by email, narrowed by part of an email.
@@ -28,7 +28,7 @@ export function usePlanCandidates(plan: string, search: string, giving: boolean)
 export function usePlanDryRun(plan: string | null, userIds: readonly string[], giving: boolean) {
   return useQuery({
     queryKey: ["plan-dry-run", plan, userIds],
-    queryFn: () => api.assignPlan(plan, [...userIds], true),
+    queryFn: () => api.assignPlans(movesTo(plan, userIds), true),
     enabled: userIds.length > 0 && !giving,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 0,

@@ -565,10 +565,10 @@ export interface paths {
         put?: never;
         /**
          * Assign Plans
-         * @description Give one Plan, or with null the Default Plan, to up to 100 people at once, all or none,
-         *     and answer each person's Plan before and after and what they are over. The Default Plan's
-         *     key is given as null is, so they follow it. With `dry_run`, give nothing and answer the
-         *     same, so who would be over is known before anyone confirms.
+         * @description Give each of up to 100 people their own Plan, or with null the Default Plan, at once,
+         *     all or none, and answer each person's Plan before and after and what they are over. The
+         *     Default Plan's key is given as null is, so they follow it. With `dry_run`, give nothing and
+         *     answer the same, so who would be over is known before anyone confirms.
          */
         post: operations["assign_plans_api_v1_plan_assignments_post"];
         delete?: never;
@@ -1789,10 +1789,10 @@ export interface components {
              * @default false
              */
             dry_run: boolean;
-            /** Plan */
-            plan: string | null;
-            /** User Ids */
-            user_ids: string[];
+            /** Plans */
+            plans: {
+                [key: string]: string | null;
+            };
         };
         /**
          * PlanAssignmentsResponse

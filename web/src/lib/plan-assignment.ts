@@ -58,20 +58,20 @@ export function giveWait({ t }: I18n, plan: string, count: number): string | nul
   return count > PEOPLE_PER_ASSIGNMENT ? t("common.apiError.invalid_assignment_too_many", { count: PEOPLE_PER_ASSIGNMENT }) : null
 }
 
-/** One call that gives one Plan, or the Default Plan with null, to some people. */
-export type AssignMove = { plan: string | null; userIds: string[] }
+/** What one call gives, all or none: each person's Plan by their id, its key, or null for the Default Plan. */
+export type PlanMoves = Record<string, string | null>
+
+/** One Plan, or the Default Plan with null, for each of `userIds`. */
+export function movesTo(plan: string | null, userIds: readonly string[]): PlanMoves {
+  return Object.fromEntries(userIds.map((userId) => [userId, plan]))
+}
 
 /**
  * What Undo sends: each person back to the Plan they had, their own by its key, or the Default Plan
- * by having none of their own, in the order first named.
+ * by having none of their own, in the order named.
  */
-export function undoMoves(answer: PlanAssignments): AssignMove[] {
-  const moves = new Map<string | null, string[]>()
-  for (const person of answer.people) {
-    const plan = person.had && !person.had.on_default ? person.had.key : null
-    moves.set(plan, [...(moves.get(plan) ?? []), person.user_id])
-  }
-  return [...moves].map(([plan, userIds]) => ({ plan, userIds }))
+export function undoMoves(answer: PlanAssignments): PlanMoves {
+  return Object.fromEntries(answer.people.map((person) => [person.user_id, person.had && !person.had.on_default ? person.had.key : null]))
 }
 
 /** What Undo did: "alex@example.test has their plan back." or "2 people have their plans back." */

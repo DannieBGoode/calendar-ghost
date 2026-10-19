@@ -1792,7 +1792,7 @@ describe("Assigning people from a plan", () => {
     // Everyone by email, from one page of 100, and a dry run for everyone a plan could limit.
     const asked = calls.filter((call) => call.method === "GET" && call.path === "/api/v1/users" && !call.query.has("plan"))
     expect(Object.fromEntries(asked.at(-1)!.query)).toEqual({ sort: "email", order: "asc", page: "1", page_size: "100" })
-    expect(assignCalls()).toEqual([{ plan: "free", user_ids: ["user-alex", "user-sam"], dry_run: true }])
+    expect(assignCalls()).toEqual([{ plans: { "user-alex": "free", "user-sam": "free" }, dry_run: true }])
     expect(assign.querySelector(".plan-assign-found")?.textContent).toBe("3 found")
     expect(assignRows("free")).toEqual([
       ["alex@example.test", "Has Family, the default", "Would be over: 3 active rules, 1 allowed"],
@@ -1827,7 +1827,7 @@ describe("Assigning people from a plan", () => {
     const give = button("Give Free to 2 people", panel())
     focus(give)
     await click(give)
-    expect(assignCalls().at(-1)).toEqual({ plan: "free", user_ids: ["user-alex", "user-sam"], dry_run: false })
+    expect(assignCalls().at(-1)).toEqual({ plans: { "user-alex": "free", "user-sam": "free" }, dry_run: false })
     expect(toast()).toBe("2 people now have Free.")
     // The panel stays, ready for more, with nobody chosen.
     expect(here()).toBe("/people/plans/free/people")
@@ -1836,11 +1836,10 @@ describe("Assigning people from a plan", () => {
     // Plans and People read again, so the counts follow.
     expect(calls.filter((call) => call.method === "GET" && call.path === "/api/v1/plans").length).toBeGreaterThan(1)
 
+    // One call gives each back the Plan they had, so a refusal restores nobody.
+    const before = assignCalls().length
     await click(button("Undo", container))
-    expect(assignCalls().slice(-2)).toEqual([
-      { plan: null, user_ids: ["user-alex"], dry_run: false },
-      { plan: "no-limits", user_ids: ["user-sam"], dry_run: false },
-    ])
+    expect(assignCalls().slice(before)).toEqual([{ plans: { "user-alex": null, "user-sam": "no-limits" }, dry_run: false }])
     expect(toast()).toBe("2 people have their plans back.")
   })
 
@@ -1854,12 +1853,12 @@ describe("Assigning people from a plan", () => {
       "They follow Free, the default plan, at once, and move with it when the default changes. Administrators are listed last; no plan limits them.",
     )
     // Choosing the default means having no plan of their own, as Change plan sends it.
-    expect(assignCalls()).toEqual([{ plan: null, user_ids: ["user-sam"], dry_run: true }])
+    expect(assignCalls()).toEqual([{ plans: { "user-sam": null }, dry_run: true }])
     await check("free", SAM)
     expect(assignOf("free").querySelector(".plan-assign-note")).toBeNull()
     reply("POST /api/v1/plan-assignments", moved([[SAM, []]]))
     await click(button("Give Free to 1 person", panel()))
-    expect(assignCalls().at(-1)).toEqual({ plan: null, user_ids: ["user-sam"], dry_run: false })
+    expect(assignCalls().at(-1)).toEqual({ plans: { "user-sam": null }, dry_run: false })
     expect(toast()).toBe("sam@example.test now has Free.")
   })
 
@@ -1899,7 +1898,7 @@ describe("Assigning people from a plan", () => {
       answers: {
         "GET /api/v1/users": (call) => jsonResponse(candidates(call.query.get("search") === "sam" ? [SAM] : [ALEX, SAM])),
         "POST /api/v1/plan-assignments": (call) => {
-          const ids = (call.body as { user_ids: string[] }).user_ids
+          const ids = Object.keys((call.body as { plans: Record<string, string | null> }).plans)
           return moved(
             [ALEX, SAM].filter((person) => ids.includes(person.id)).map((person) => [person, over[person.id] ?? []]),
             true,
@@ -1920,7 +1919,7 @@ describe("Assigning people from a plan", () => {
     expect(assignRows("free").map(([label]) => label)).toEqual(["sam@example.test"])
     await check("free", SAM)
     expect(assignOf("free").querySelector(".plan-assign-note")?.textContent).toBe(note)
-    expect(assignCalls().at(-1)).toEqual({ plan: "free", user_ids: ["user-sam", "user-alex"], dry_run: true })
+    expect(assignCalls().at(-1)).toEqual({ plans: { "user-sam": "free", "user-alex": "free" }, dry_run: true })
   })
 
   it("asks the dry run about at most 100 people, the chosen first, and gives to at most 100 at a time", async () => {
@@ -1934,7 +1933,7 @@ describe("Assigning people from a plan", () => {
         "GET /api/v1/users": (call) => jsonResponse(call.query.get("search") === "sam" ? candidates([SAM]) : candidates(many, 150)),
         // As the server answers: about at most 100 people at once.
         "POST /api/v1/plan-assignments": (call) => {
-          const ids = (call.body as { user_ids: string[] }).user_ids
+          const ids = Object.keys((call.body as { plans: Record<string, string | null> }).plans)
           if (ids.length > 100) return refusal(422, "invalid_assignment", { reason: "too_many", limit: 100, count: 100 })
           return moved(
             [...many, SAM].filter((person) => ids.includes(person.id)).map((person) => [person, person === many[0] || person === SAM ? over : []]),
@@ -1966,8 +1965,8 @@ describe("Assigning people from a plan", () => {
     expect(give.getAttribute("aria-disabled")).toBe("true")
     expect(element(give.getAttribute("aria-describedby")!).textContent).toBe("Choose at most 100 people at a time.")
     await click(give)
-    expect(assignCalls().every((call) => (call as { dry_run: boolean; user_ids: string[] }).dry_run)).toBe(true)
-    expect(assignCalls().every((call) => (call as { user_ids: string[] }).user_ids.length <= 100)).toBe(true)
+    expect(assignCalls().every((call) => (call as { dry_run: boolean }).dry_run)).toBe(true)
+    expect(assignCalls().every((call) => Object.keys((call as { plans: Record<string, string | null> }).plans).length <= 100)).toBe(true)
   })
 
   it("clears the search with Escape without closing the panel", async () => {
@@ -2018,7 +2017,7 @@ describe("Assigning people from a plan", () => {
     await check("free", SAM)
     await click(button("Cancel", panel()))
     expect(panelOrNull()).toBeNull()
-    expect(assignCalls()).toEqual([{ plan: "free", user_ids: ["user-alex", "user-sam"], dry_run: true }])
+    expect(assignCalls()).toEqual([{ plans: { "user-alex": "free", "user-sam": "free" }, dry_run: true }])
     expect(document.activeElement).toBe(nameLink("free"))
   })
 
@@ -2048,7 +2047,7 @@ describe("Assigning people from a plan", () => {
     await click(button("Give Free to 1 person", panel()))
     await leavePlans()
     await click(toastButton("Undo"))
-    expect(assignCalls().at(-1)).toEqual({ plan: "no-limits", user_ids: ["user-sam"], dry_run: false })
+    expect(assignCalls().at(-1)).toEqual({ plans: { "user-sam": "no-limits" }, dry_run: false })
     expect(toast()).toBe("sam@example.test has their plan back.")
   })
 })
@@ -2139,19 +2138,19 @@ describe("Who has a plan now", () => {
     reply("POST /api/v1/plan-assignments", moved([[ROBIN_OVER, [{ limit: "rules", in_use: 6, allowed: 5 }]]], true))
     // Family is the default, so choosing it means robin follows the default.
     await click(changeChoice(ROBIN_OVER, "Family"))
-    expect(assignCalls().at(-1)).toEqual({ plan: null, user_ids: ["user-robin"], dry_run: true })
+    expect(assignCalls().at(-1)).toEqual({ plans: { "user-robin": null }, dry_run: true })
     const note = chooser.querySelector("[role='status'][data-tone='attention']")
     expect(note?.textContent).toBe("Would be over: 6 active rules, 5 allowed")
 
     reply("POST /api/v1/plan-assignments", moved([[ROBIN_OVER, []]]))
     await click(button("Save", chooser))
-    expect(assignCalls().at(-1)).toEqual({ plan: null, user_ids: ["user-robin"], dry_run: false })
+    expect(assignCalls().at(-1)).toEqual({ plans: { "user-robin": null }, dry_run: false })
     expect(toast()).toBe("robin@example.test now has Family.")
     expect(container.querySelector("#plan-change-user-robin")).toBeNull()
     expect(document.activeElement).toBe(element("plan-holders-free").querySelector("h4"))
 
     await click(button("Undo", container))
-    expect(assignCalls().at(-1)).toEqual({ plan: "free", user_ids: ["user-robin"], dry_run: false })
+    expect(assignCalls().at(-1)).toEqual({ plans: { "user-robin": "free" }, dry_run: false })
     expect(toast()).toBe("robin@example.test has their plan back.")
   })
 

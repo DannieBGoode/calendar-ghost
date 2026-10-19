@@ -1,6 +1,6 @@
-"""Giving one Plan, or the Default Plan, to many people at once (ADR 0038, the catalog).
+"""Giving many people each their own Plan, or the Default Plan, at once (ADR 0038, the catalog).
 
-The Plan is given through `PlanAssignments`, all or none. Who would be over a limit, and who is
+The Plans are given through `PlanAssignments`, all or none. Who would be over a limit, and who is
 once it is given, comes from the Operator Overview, the one reader that counts other Users'
 records (ADR 0029), so a dry run says it before anyone confirms.
 """
@@ -8,7 +8,7 @@ records (ADR 0029), so a dry run says it before anyone confirms.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
 from calendar_sync.application.identity.administration import require_administrator
@@ -45,8 +45,9 @@ class PlanMove:
 
 @dataclass(slots=True)
 class AssignPlans:
-    """Give one Plan, or None for the Default Plan, to up to 100 people at once, all or none.
-    Giving the Default Plan does as None does, so they follow it.
+    """Give each of up to 100 people their own Plan, or None for the Default Plan, at once, all
+    or none, as one Plan for everyone or as Undo gives each back theirs. Giving the Default Plan
+    does as None does, so they follow it.
 
     With a dry run it writes nothing and answers the same, read now. Allowed while Plans are
     off, as giving one person a Plan is; administrators keep the Plan they are given, and no
@@ -59,43 +60,37 @@ class AssignPlans:
     clock: Clock
 
     def execute(
-        self,
-        actor: UserId,
-        people: Sequence[UserId],
-        plan: PlanKey | None,
-        *,
-        dry_run: bool = False,
+        self, actor: UserId, plans: Mapping[UserId, PlanKey | None], *, dry_run: bool = False
     ) -> tuple[PlanMove, ...]:
-        """Each person named, once, in the order first named. Raises InvalidAssignment for
-        nobody, more than 100 people, or someone who is not a User, and PlanNotFound; either
-        way nobody is given anything."""
+        """Each person `plans` names, in the order named. Raises InvalidAssignment for nobody,
+        more than 100 people, or someone who is not a User, and PlanNotFound when one of the
+        Plans does not exist; either way nobody is given anything."""
         require_administrator(self.users, actor)
-        found = self._people(people)
+        found = self._people(plans)
         before = self.overview.plans_of(actor, found)
         if dry_run:
-            after = self.overview.plans_given(actor, found, plan)
+            after = self.overview.plans_given(actor, found, plans)
         else:
-            self._assign(actor, found, plan)
+            self._assign(actor, plans)
             after = self.overview.plans_of(actor, found)
         return tuple(PlanMove(user, before[user.id], after[user.id]) for user in found)
 
-    def _people(self, people: Sequence[UserId]) -> list[User]:
-        named = list(dict.fromkeys(people))
-        require_assignable(len(named))
-        found = [self.users.get(person) for person in named]
+    def _people(self, people: Collection[UserId]) -> list[User]:
+        require_assignable(len(people))
+        found = [self.users.get(person) for person in people]
         known = [user for user in found if user is not None]
-        if len(known) != len(named):
+        if len(known) != len(people):
             raise unknown_people()
         return known
 
-    def _assign(self, actor: UserId, people: Sequence[User], plan: PlanKey | None) -> None:
+    def _assign(self, actor: UserId, plans: Mapping[UserId, PlanKey | None]) -> None:
         change = AssignmentChange(AssignmentSource.ADMINISTRATOR, actor, self.clock.now())
         # Raises PlanNotFound; False when someone was deleted since they were read.
-        if not self.assignments.assign_all([user.id for user in people], plan, change):
+        if not self.assignments.assign_all(plans, change):
             raise unknown_people()
-        logged = plan.value if plan is not None else None
-        for user in people:
-            logger.info("plan assigned user=%s plan=%s by=%s", user.id.value, logged, actor.value)
+        for user, plan in plans.items():
+            logged = plan.value if plan is not None else None
+            logger.info("plan assigned user=%s plan=%s by=%s", user.value, logged, actor.value)
 
 
 def unknown_people() -> InvalidAssignment:

@@ -424,19 +424,17 @@ class MemoryPlans:
         require_removable(key, self.default, people)
         del self.catalog[key]
 
-    def assign_all(
-        self, users: Collection[UserId], plan: PlanKey | None, change: AssignmentChange
-    ) -> bool:
-        if plan is not None:
-            self._require(plan)
-        if plan == self.default:
-            plan = None
-        found = [self.users.get(user) for user in users]
+    def assign_all(self, plans: Mapping[UserId, PlanKey | None], change: AssignmentChange) -> bool:
+        for plan in plans.values():
+            if plan is not None:
+                self._require(plan)
+        found = [self.users.get(user) for user in plans]
         if any(user is None for user in found):
             return False
         for user in found:
             assert user is not None
-            self.users.users[user.id] = replace(user, plan=plan)
+            plan = plans[user.id]
+            self.users.users[user.id] = replace(user, plan=None if plan == self.default else plan)
             self.changes[user.id] = change
         return True
 

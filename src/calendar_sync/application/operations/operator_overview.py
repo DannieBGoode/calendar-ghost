@@ -338,20 +338,15 @@ class OperatorOverview:
         return self._read_person_plans(users)
 
     def plans_given(
-        self, actor: UserId, users: Sequence[User], plan: PlanKey | None
+        self, actor: UserId, users: Sequence[User], plans: Mapping[UserId, PlanKey | None]
     ) -> dict[UserId, PersonPlan]:
-        """What each of `users`' Plan would be were `plan` their own, None or the default's key
-        for the Default Plan, read now and changing nothing: so an administrator sees who would
-        be over before giving it. Raises PlanNotFound before anything is counted, and fails when
-        Plans cannot be read."""
+        """What each of `users`' Plan would be were the one `plans` names their own, None or the
+        default's key for the Default Plan, read now and changing nothing: so an administrator
+        sees who would be over before giving it. Raises PlanNotFound before anything is counted,
+        and fails when Plans cannot be read."""
         require_administrator(self.users, actor)
         setting = self.plans.settings()
-        if plan == setting.default:
-            # Giving the Default Plan is following it, as the store records it (ADR 0038).
-            plan = None
-        own = self.plans.get(plan) if plan is not None else None
-        if plan is not None and own is None:
-            raise PlanNotFound(f"plan {plan.value} does not exist")
+        own = self._own_plans(plans.values(), setting.default)
         default = self.plans.get(setting.default) if setting.default is not None else None
         with self.installation() as installation:
             use = installation.plan_use([user.id for user in users])
@@ -361,7 +356,7 @@ class OperatorOverview:
                 allowance_for(
                     plans_on=setting.enabled,
                     administers=user.administers,
-                    own=own,
+                    own=own[plans[user.id]],
                     default=default,
                 ),
                 default,
@@ -369,6 +364,21 @@ class OperatorOverview:
             )
             for user in users
         }
+
+    def _own_plans(
+        self, keys: Iterable[PlanKey | None], default: PlanKey | None
+    ) -> dict[PlanKey | None, Plan | None]:
+        """The Plan each of `keys` gives as someone's own: none for None and for the default's
+        key, because giving the Default Plan is following it, as the store records it (ADR 0038).
+        Raises PlanNotFound."""
+        own: dict[PlanKey | None, Plan | None] = {None: None, default: None}
+        for key in keys:
+            if key is not None and key not in own:
+                plan = self.plans.get(key)
+                if plan is None:
+                    raise PlanNotFound(f"plan {key.value} does not exist")
+                own[key] = plan
+        return own
 
     def reach_of(self, actor: UserId, plans: Iterable[Plan]) -> dict[PlanKey, PlanReach]:
         """How much the people each of `plans` limits use, for People's Plans tab: those People

@@ -521,7 +521,7 @@ def test_a_new_plan_another_administrator_removed_at_once_is_answered_as_not_fou
 
 def _giving(plan: str) -> dict[str, Any]:
     """A request that gives the member the Plan `plan` names."""
-    return {"plan": plan, "user_ids": [OTHER_USER.value]}
+    return {"plans": {OTHER_USER.value: plan}}
 
 
 @pytest.mark.parametrize(
@@ -799,7 +799,7 @@ THIRD_EMAIL = "third@example.test"
 def _assign(installation: Installation, plan: str | None, *users: UserId, **body: Any) -> Any:
     response = installation.client.post(
         "/api/v1/plan-assignments",
-        json={"plan": plan, "user_ids": [user.value for user in users], **body},
+        json={"plans": {user.value: plan for user in users}, **body},
     )
     assert response.status_code == 200, response.text
     return response.json()
@@ -881,6 +881,35 @@ def test_giving_people_the_default_plan_means_following_it(installation: Install
     assert followers == 2
 
 
+def test_an_undo_to_several_plans_one_of_them_removed_meanwhile_restores_nobody(
+    installation: Installation,
+) -> None:
+    """The member had Family of their own and a third person followed Free, the default; both
+    were given Starter. Undo gives each back their own Plan in one request, so once another
+    administrator removes Family, it is refused and the third person stays on Starter too."""
+    client, member = installation.client, installation.member
+    third = limited_user(installation.database, UserId("user-3"), email=THIRD_EMAIL)
+    installation.define(FREE_BODY, FAMILY_BODY, {**FREE_BODY, "key": "starter", "name": "Starter"})
+    installation.turn_on("free")
+    _assign(installation, "family", member)
+    _assign(installation, "starter", member, third)
+    undo = {member.value: "family", third.value: None}
+
+    planned = client.post("/api/v1/plan-assignments", json={"plans": undo, "dry_run": True})
+    removed = client.delete("/api/v1/plans/family")
+    refused = client.post("/api/v1/plan-assignments", json={"plans": undo})
+
+    assert planned.status_code == 200, planned.text
+    assert [(move["had"]["key"], move["has"]) for move in planned.json()["people"]] == [
+        ("starter", {"key": "family", "name": "Family", "on_default": False}),
+        ("starter", {"key": "free", "name": "Free", "on_default": True}),
+    ]
+    assert removed.status_code == 204
+    assert _problem(refused) == (404, "plan_not_found", {})
+    starter = {"key": "starter", "name": "Starter", "on_default": False}
+    assert [installation.overview_plan(user)["has"] for user in (member, third)] == [starter] * 2
+
+
 def test_a_plan_given_to_nobody_too_many_or_someone_unknown_is_refused_with_its_reason(
     installation: Installation,
 ) -> None:
@@ -888,19 +917,19 @@ def test_a_plan_given_to_nobody_too_many_or_someone_unknown_is_refused_with_its_
     installation.define(FREE_BODY)
     installation.turn_on("free")
 
-    def assigning(**body: Any) -> Any:
+    def assigning(*people: str, plan: str = "free", **body: Any) -> Any:
         return client.post(
-            "/api/v1/plan-assignments", json={"plan": "free", "user_ids": [member], **body}
+            "/api/v1/plan-assignments", json={"plans": dict.fromkeys(people, plan), **body}
         )
 
     answers = {
-        "nobody": assigning(user_ids=[]),
-        "too_many": assigning(user_ids=[f"user-{number}" for number in range(101)]),
-        "unknown": assigning(user_ids=[member, "nobody"]),
-        "malformed": assigning(user_ids=[member, " "], dry_run=True),
-        "unknown_plan": assigning(plan="gold"),
-        "malformed_plan": assigning(plan="Not a key", dry_run=True),
-        "no_plan": client.post("/api/v1/plan-assignments", json={"user_ids": [member]}),
+        "nobody": assigning(),
+        "too_many": assigning(*(f"user-{number}" for number in range(101))),
+        "unknown": assigning(member, "nobody"),
+        "malformed": assigning(member, " ", dry_run=True),
+        "unknown_plan": assigning(member, plan="gold"),
+        "malformed_plan": assigning(member, plan="Not a key", dry_run=True),
+        "no_plans": client.post("/api/v1/plan-assignments", json={"dry_run": True}),
     }
     seen = installation.overview_plan(installation.member)
 
@@ -911,8 +940,7 @@ def test_a_plan_given_to_nobody_too_many_or_someone_unknown_is_refused_with_its_
         "malformed": (422, "invalid_assignment", {"reason": "unknown_people"}),
         "unknown_plan": (404, "plan_not_found", {}),
         "malformed_plan": (404, "plan_not_found", {}),
-        # Null gives the default, so the Plan is never left out by accident.
-        "no_plan": (422, "invalid_request", {"field": "plan", "reason": "missing"}),
+        "no_plans": (422, "invalid_request", {"field": "plans", "reason": "missing"}),
     }
     assert (seen["assigned"], seen["assigned_by"]) == (None, None)
 
@@ -973,7 +1001,7 @@ def test_a_member_is_refused_every_plans_administrator_route_and_reads_their_own
         client.put("/api/v1/plan-settings", json={"enabled": True, "default_plan": "free"}),
         client.post(
             "/api/v1/plan-assignments",
-            json={"plan": "free", "user_ids": [installation.member.value], "dry_run": True},
+            json={"plans": {installation.member.value: "free"}, "dry_run": True},
         ),
     ]
     own = client.get("/api/v1/account/plan")

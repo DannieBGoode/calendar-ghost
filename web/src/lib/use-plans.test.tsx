@@ -174,23 +174,16 @@ describe("usePlans", () => {
     expect(refreshed(OWN_PLAN_QUERY)).toBe(true)
   })
 
-  it("gives Plans to people, one call for each move, then reads again what Plans change", async () => {
-    await render({ "POST /api/v1/plan-assignments": jsonResponse({ dry_run: false, people: [] }) })
+  it("gives each person their own Plan in one call, all or none, then reads again what Plans change", async () => {
+    const answer = { dry_run: false, people: [] }
+    await render({ "POST /api/v1/plan-assignments": jsonResponse(answer) })
     await run((plans) =>
-      plans.assign.mutate({
-        from: "free",
-        via: "undo",
-        moves: [
-          { plan: null, userIds: ["user-alex"] },
-          { plan: "family", userIds: ["user-sam", "user-lee"] },
-        ],
-      }),
+      plans.assign.mutate({ from: "free", via: "undo", moves: { "user-alex": null, "user-sam": "family", "user-lee": "family" } }),
     )
     expect(calls.filter((call) => call.method === "POST").map((call) => call.body)).toEqual([
-      { plan: null, user_ids: ["user-alex"], dry_run: false },
-      { plan: "family", user_ids: ["user-sam", "user-lee"], dry_run: false },
+      { plans: { "user-alex": null, "user-sam": "family", "user-lee": "family" }, dry_run: false },
     ])
-    expect(commands?.assign.data).toHaveLength(2)
+    expect(commands?.assign.data).toEqual(answer)
     expect(calls.filter((call) => call.method === "GET" && call.path === "/api/v1/plans").length).toBe(2)
     expect(refreshed(["people", "overview", "user-robin"])).toBe(true)
     expect(refreshed(OWN_PLAN_QUERY)).toBe(true)

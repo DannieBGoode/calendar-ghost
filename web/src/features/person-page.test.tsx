@@ -630,10 +630,10 @@ describe("A person's page", () => {
     }
 
     /** What Change plan asked the server, dry runs included, in order. */
-    function posted(): { plan: string | null; user_ids: string[]; dry_run: boolean }[] {
+    function posted(): { plans: Record<string, string | null>; dry_run: boolean }[] {
       return calls
         .filter((call) => call.method === "POST" && call.path === "/api/v1/plan-assignments")
-        .map((call) => call.body as { plan: string | null; user_ids: string[]; dry_run: boolean })
+        .map((call) => call.body as { plans: Record<string, string | null>; dry_run: boolean })
     }
 
     function toast(): string | null | undefined {
@@ -790,11 +790,11 @@ describe("A person's page", () => {
       expect(document.activeElement).toBe(choice("Family"))
 
       await click(choice("Free"))
-      expect(posted()).toEqual([{ plan: null, user_ids: ["user-robin"], dry_run: true }])
+      expect(posted()).toEqual([{ plans: { "user-robin": null }, dry_run: true }])
       expect(described(choice("Free"))).toEqual(["1 rule, 1 account, no tokens, every 5 min", "Within every limit"])
       await click(button("Save"))
 
-      expect(posted().at(-1)).toEqual({ plan: null, user_ids: ["user-robin"], dry_run: false })
+      expect(posted().at(-1)).toEqual({ plans: { "user-robin": null }, dry_run: false })
       expect(chooser()).toBeNull()
       expect(toast()).toBe("robin@example.test now has Free.")
       expect(document.activeElement).toBe(changePlan())
@@ -803,7 +803,7 @@ describe("A person's page", () => {
       expect(container.querySelector(".command-result")).toBeNull()
 
       await click(button("Undo"))
-      expect(posted().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin"], dry_run: false })
+      expect(posted().at(-1)).toEqual({ plans: { "user-robin": "family" }, dry_run: false })
       expect(toast()).toBe("robin@example.test has their plan back.")
     })
 

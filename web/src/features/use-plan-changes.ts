@@ -4,7 +4,7 @@ import { useToast } from "@/components/ui/toast-context"
 import type { PlanChooserProps } from "@/features/plan-change"
 import { answerUndo } from "@/features/undo"
 import { useI18n } from "@/i18n/provider"
-import { restoredResult, undoMoves } from "@/lib/plan-assignment"
+import { movesTo, restoredResult, undoMoves } from "@/lib/plan-assignment"
 import { changedResult, type PlanPerson } from "@/lib/plan-change"
 import { useGivePlans } from "@/lib/use-people"
 
@@ -47,12 +47,12 @@ export function usePlanChanges(): PlanChanges {
       onSave: (plan, chosen) => {
         if (give.isPending) return
         setSource(from)
-        give.mutate([{ plan, userIds: people.map((person) => person.id) }], {
-          onSuccess: ([answer]) =>
+        give.mutate(movesTo(plan, people.map((person) => person.id)), {
+          onSuccess: (answer) =>
             done(() =>
               toasts.show({
                 message: changedResult(i18n, people, chosen),
-                action: answer && {
+                action: {
                   label: i18n.t("common.toast.undo"),
                   onSelect: () =>
                     answerUndo(toasts, i18n, undo.mutateAsync(undoMoves(answer)), () => ({ message: restoredResult(i18n, answer) })),

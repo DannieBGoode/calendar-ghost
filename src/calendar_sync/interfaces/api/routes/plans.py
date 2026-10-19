@@ -6,7 +6,7 @@ Every route here is an Installation Administrator's, except Your plan, which eve
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping
 from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, status
@@ -184,16 +184,13 @@ def remove_plan(plan_key: str, services: Services, actor: Administrator) -> None
 def assign_plans(
     payload: PlanAssignmentsRequest, services: Services, actor: Administrator
 ) -> PlanAssignmentsResponse:
-    """Give one Plan, or with null the Default Plan, to up to 100 people at once, all or none,
-    and answer each person's Plan before and after and what they are over. The Default Plan's
-    key is given as null is, so they follow it. With `dry_run`, give nothing and answer the
-    same, so who would be over is known before anyone confirms."""
-    plan = named_plan(payload.plan) if payload.plan is not None else None
+    """Give each of up to 100 people their own Plan, or with null the Default Plan, at once,
+    all or none, and answer each person's Plan before and after and what they are over. The
+    Default Plan's key is given as null is, so they follow it. With `dry_run`, give nothing and
+    answer the same, so who would be over is known before anyone confirms."""
     assign = services.plans.assign_plans
     try:
-        moves = assign.execute(
-            actor, _named_people(payload.user_ids), plan, dry_run=payload.dry_run
-        )
+        moves = assign.execute(actor, _named(payload.plans), dry_run=payload.dry_run)
     except InvalidAssignment as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     except PlanNotFound as error:
@@ -210,11 +207,14 @@ def own_plan(services: OwnServices) -> OwnPlanResponse:
     return own_plan_response(services.show_own_plan.execute())
 
 
-def _named_people(user_ids: Sequence[str]) -> list[UserId]:
-    """The Users a request names; a malformed identifier names nobody, as an unknown one does.
-    Raises InvalidAssignment."""
+def _named(plans: Mapping[str, str | None]) -> dict[UserId, PlanKey | None]:
+    """The Users a request names and the Plan for each. A malformed Plan key names no Plan, and
+    a malformed identifier names nobody, as an unknown one does. Raises InvalidAssignment."""
+    given = {
+        user_id: named_plan(key) if key is not None else None for user_id, key in plans.items()
+    }
     try:
-        return [UserId(user_id) for user_id in user_ids]
+        return {UserId(user_id): plan for user_id, plan in given.items()}
     except DomainValidationError as error:
         raise unknown_people() from error
 

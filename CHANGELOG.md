@@ -25,9 +25,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   refuses only what is new and stops nothing: rules beyond it keep syncing, and existing accounts
   and tokens keep working. Returning to setup turns Plans off and keeps their definitions.
 - The Plans API: `GET` and `POST /api/v1/plans`, `PUT` and `DELETE /api/v1/plans/{plan_key}`,
-  `PUT /api/v1/plan-settings`, and `POST /api/v1/plan-assignments`, which gives one Plan to up to
-  100 people, all or none, and with `dry_run` only says who would be over; giving the default's key
-  means following the default. `GET /api/v1/account/plan` answers Your plan. People rows and a
+  `PUT /api/v1/plan-settings`, and `POST /api/v1/plan-assignments`, which gives each of up to 100
+  people the Plan it names for them, all or none, so Undo never gives back only some, and with
+  `dry_run` only says who would be over; giving the default's key means following the default. `GET /api/v1/account/plan` answers Your plan. People rows and a
   person's overview gain `plan`, `GET /api/v1/users` filters by `?plan=` and `?over=true`, rule
   details gain `can_start` and `rule_limit`, and rules and rule details gain `keeps_place`. A
   Plan's key is made from its name unless `POST` names one; no Plan has the key `new`. New problem

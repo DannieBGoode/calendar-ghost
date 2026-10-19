@@ -1,8 +1,8 @@
-"""Giving one Plan to many people at once, after a dry run that says who would be over
+"""Giving many people each their own Plan at once, after a dry run that says who would be over
 (ADR 0038, the catalog)."""
 
 import logging
-from collections.abc import Collection
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
@@ -24,12 +24,15 @@ from calendar_sync.domain.plans import (
     InvalidAssignmentReason,
     LimitedResource,
     OverLimit,
+    Plan,
     PlanKey,
+    PlanLimits,
+    SyncInterval,
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.helpers import NOW
 from tests.identity_fakes import MemoryPlans, MemoryUsers
-from tests.plans import FAMILY, FREE, plans_on
+from tests.plans import FAMILY, FREE, as_new, plans_on
 
 LOGGER = "calendar_sync.application.operations.plan_assignment"
 DAY = timedelta(days=1)
@@ -43,6 +46,9 @@ AWAY = User(UserId("away"), "away@example.test", Role.USER, UserState.DISABLED, 
 ACCOUNTS = {ALICE: ("alice-1", "alice-2"), BOB: ("bob-1",), AWAY: ("away-1", "away-2")}
 ACCOUNTS_OVER = OverLimit(LimitedResource.CONNECTED_ACCOUNTS, in_use=2, allowed=1)
 GIVEN = AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
+PRO = Plan(PlanKey("pro"), "Pro", PlanLimits(10, 10, 10, SyncInterval.INSTANT))
+UNDO = {ALICE.id: FREE.key, BOB.id: None}
+"""What Undo sends once Alice, who had Free of her own, and Bob, who followed Family, have Pro."""
 
 
 class FixedClock:
@@ -53,11 +59,9 @@ class FixedClock:
 class DeletedMeanwhile(MemoryPlans):
     """Bob is deleted by another administrator between the check and the assignment."""
 
-    def assign_all(
-        self, users: Collection[UserId], plan: PlanKey | None, change: AssignmentChange
-    ) -> bool:
+    def assign_all(self, plans: Mapping[UserId, PlanKey | None], change: AssignmentChange) -> bool:
         self.users.users.pop(BOB.id, None)
-        return super().assign_all(users, plan, change)
+        return super().assign_all(plans, change)
 
 
 @dataclass(frozen=True)
@@ -121,7 +125,7 @@ def test_a_dry_run_says_what_each_person_would_have_and_be_over_and_gives_nothin
     before = installation.stored()
 
     moves = installation.assign.execute(
-        ADMIN.id, [ALICE.id, BOB.id, ADMIN.id, AWAY.id], FREE.key, dry_run=True
+        ADMIN.id, dict.fromkeys([ALICE.id, BOB.id, ADMIN.id, AWAY.id], FREE.key), dry_run=True
     )
 
     # No Plan limits an administrator or a disabled person, so neither is ever over.
@@ -137,7 +141,7 @@ def test_a_dry_run_says_what_each_person_would_have_and_be_over_and_gives_nothin
 def test_giving_a_plan_moves_everyone_at_once_and_records_who_gave_it_and_when() -> None:
     installation = _installation()
 
-    moves = installation.assign.execute(ADMIN.id, [ALICE.id, BOB.id], FREE.key)
+    moves = installation.assign.execute(ADMIN.id, dict.fromkeys([ALICE.id, BOB.id], FREE.key))
 
     assert [installation.own_plan(user) for user in (ALICE, BOB)] == [FREE.key, FREE.key]
     assert installation.plans.changes == {ALICE.id: GIVEN, BOB.id: GIVEN}
@@ -158,10 +162,10 @@ def test_none_or_the_default_returns_people_to_the_default_plan(plan: PlanKey | 
     """Giving the default means following it, so they move with it when it changes."""
     installation = _installation()
     # Given a day earlier, so the record below can only be this assignment's.
-    installation.plans.assign_all([ALICE.id], FREE.key, replace(GIVEN, at=NOW - DAY))
+    installation.plans.assign_all({ALICE.id: FREE.key}, replace(GIVEN, at=NOW - DAY))
 
-    planned = installation.assign.execute(ADMIN.id, [ALICE.id], plan, dry_run=True)
-    moved = installation.assign.execute(ADMIN.id, [ALICE.id], plan)
+    planned = installation.assign.execute(ADMIN.id, {ALICE.id: plan}, dry_run=True)
+    moved = installation.assign.execute(ADMIN.id, {ALICE.id: plan})
 
     expected = [(ALICE.id, FREE, False, FAMILY, True, ())]
     assert _moves(planned) == expected
@@ -174,7 +178,7 @@ def test_while_plans_are_off_a_dry_run_still_says_who_would_be_over() -> None:
     installation = _installation()
     installation.plans.change_settings(False, FAMILY.key, NOW)
 
-    (move,) = installation.assign.execute(ADMIN.id, [ALICE.id], FREE.key, dry_run=True)
+    (move,) = installation.assign.execute(ADMIN.id, {ALICE.id: FREE.key}, dry_run=True)
 
     assert move.after.allowance.basis is AllowanceBasis.PLANS_OFF
     assert (move.after.has, move.after.over) == (FREE, (ACCOUNTS_OVER,))
@@ -187,7 +191,7 @@ def test_only_an_administrator_gives_plans(actor: UserId, dry_run: bool) -> None
     before = installation.stored()
 
     with pytest.raises(AdministratorRequired):
-        installation.assign.execute(actor, [BOB.id], FREE.key, dry_run=dry_run)
+        installation.assign.execute(actor, {BOB.id: FREE.key}, dry_run=dry_run)
 
     assert installation.stored() == before
 
@@ -216,7 +220,7 @@ def test_an_assignment_to_nobody_too_many_or_someone_unknown_moves_nobody(
     before = installation.stored()
 
     with pytest.raises(InvalidAssignment) as refused:
-        installation.assign.execute(ADMIN.id, people, FREE.key, dry_run=dry_run)
+        installation.assign.execute(ADMIN.id, dict.fromkeys(people, FREE.key), dry_run=dry_run)
 
     assert refused.value.reason is reason
     assert installation.stored() == before
@@ -228,28 +232,60 @@ def test_a_plan_that_does_not_exist_moves_nobody(dry_run: bool) -> None:
     before = installation.stored()
 
     with pytest.raises(PlanNotFound):
-        installation.assign.execute(ADMIN.id, [ALICE.id], PlanKey("gold"), dry_run=dry_run)
+        installation.assign.execute(ADMIN.id, {ALICE.id: PlanKey("gold")}, dry_run=dry_run)
 
     assert installation.stored() == before
-
-
-def test_each_person_named_more_than_once_is_given_the_plan_once() -> None:
-    installation = _installation()
-
-    moves = installation.assign.execute(ADMIN.id, [BOB.id] * 150 + [ALICE.id, BOB.id], FREE.key)
-
-    assert [move.user.id for move in moves] == [BOB.id, ALICE.id]
 
 
 def test_someone_deleted_meanwhile_moves_nobody() -> None:
     installation = _installation(DeletedMeanwhile)
 
     with pytest.raises(InvalidAssignment) as refused:
-        installation.assign.execute(ADMIN.id, [ALICE.id, BOB.id], FREE.key)
+        installation.assign.execute(ADMIN.id, dict.fromkeys([ALICE.id, BOB.id], FREE.key))
 
     assert refused.value.reason is InvalidAssignmentReason.UNKNOWN_PEOPLE
     assert installation.own_plan(ALICE) is None
     assert installation.plans.changes == {}
+
+
+def _both_given_pro(installation: Installation) -> None:
+    """Alice had Free of her own and Bob followed Family, the default; a day ago both got Pro."""
+    earlier = replace(GIVEN, at=NOW - DAY)
+    installation.plans.add(as_new(PRO), NOW)
+    installation.plans.assign_all({ALICE.id: FREE.key}, earlier)
+    installation.plans.assign_all(dict.fromkeys([ALICE.id, BOB.id], PRO.key), earlier)
+
+
+def test_undo_gives_each_person_back_the_plan_they_had_in_one_assignment() -> None:
+    installation = _installation()
+    _both_given_pro(installation)
+
+    planned = installation.assign.execute(ADMIN.id, UNDO, dry_run=True)
+    restored = installation.assign.execute(ADMIN.id, UNDO)
+
+    expected = [
+        (ALICE.id, PRO, False, FREE, False, (ACCOUNTS_OVER,)),
+        (BOB.id, PRO, False, FAMILY, True, ()),
+    ]
+    assert _moves(planned) == expected
+    assert _moves(restored) == expected
+    assert [installation.own_plan(user) for user in (ALICE, BOB)] == [FREE.key, None]
+    assert installation.plans.changes == {ALICE.id: GIVEN, BOB.id: GIVEN}
+
+
+@pytest.mark.parametrize("dry_run", [True, False], ids=["dry run", "assignment"])
+def test_an_undo_whose_plan_another_administrator_removed_restores_nobody(dry_run: bool) -> None:
+    """Free was removed once nobody had it, so Bob stays on Pro too, though Family is there."""
+    installation = _installation()
+    _both_given_pro(installation)
+    installation.plans.remove(FREE.key)
+    before = installation.stored()
+
+    with pytest.raises(PlanNotFound):
+        installation.assign.execute(ADMIN.id, UNDO, dry_run=dry_run)
+
+    assert installation.stored() == before
+    assert [installation.own_plan(user) for user in (ALICE, BOB)] == [PRO.key, PRO.key]
 
 
 def test_each_person_given_a_plan_logs_one_line_naming_only_ids(
@@ -258,9 +294,11 @@ def test_each_person_given_a_plan_logs_one_line_naming_only_ids(
     installation = _installation()
 
     with caplog.at_level(logging.INFO, logger=LOGGER):
-        installation.assign.execute(ADMIN.id, [ALICE.id, BOB.id], FREE.key, dry_run=True)
-        installation.assign.execute(ADMIN.id, [ALICE.id, BOB.id], FREE.key)
-        installation.assign.execute(ADMIN.id, [ALICE.id], None)
+        installation.assign.execute(
+            ADMIN.id, dict.fromkeys([ALICE.id, BOB.id], FREE.key), dry_run=True
+        )
+        installation.assign.execute(ADMIN.id, dict.fromkeys([ALICE.id, BOB.id], FREE.key))
+        installation.assign.execute(ADMIN.id, {ALICE.id: None})
 
     # A dry run writes nothing, so it logs nothing.
     assert [record.getMessage() for record in caplog.records if record.name == LOGGER] == [
@@ -275,10 +313,10 @@ def test_a_disabled_person_and_an_administrator_keep_what_they_were_given() -> N
     """Their Plan is stored, and limits them once they are active and stop administering."""
     installation = _installation()
 
-    installation.assign.execute(ADMIN.id, [ADMIN.id, AWAY.id], FREE.key)
+    installation.assign.execute(ADMIN.id, dict.fromkeys([ADMIN.id, AWAY.id], FREE.key))
     stored = installation.users.users
     stored[AWAY.id] = replace(stored[AWAY.id], state=UserState.ACTIVE)
-    (away,) = installation.assign.execute(ADMIN.id, [AWAY.id], FREE.key, dry_run=True)
+    (away,) = installation.assign.execute(ADMIN.id, {AWAY.id: FREE.key}, dry_run=True)
 
     assert [installation.own_plan(user) for user in (ADMIN, AWAY)] == [FREE.key, FREE.key]
     assert (away.before.has, away.before.on_default) == (FREE, False)

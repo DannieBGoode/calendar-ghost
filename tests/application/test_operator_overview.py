@@ -1,7 +1,7 @@
 """The Operator Overview shows each User's Installation Status with calendars by neutral labels."""
 
 import logging
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 
@@ -316,7 +316,7 @@ def _bob_on_family(overview: OperatorOverview) -> None:
     plans = _plans(overview)
     plans_on(plans, FREE, FAMILY_PLAN)
     plans.assign_all(
-        [BOB.id], FAMILY_PLAN.key, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
+        {BOB.id: FAMILY_PLAN.key}, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
     )
 
 
@@ -537,7 +537,7 @@ def test_a_person_plan_names_who_gave_it_only_while_it_is_their_own() -> None:
     _bob_on_family(overview)
     plans = _plans(overview)
     plans.assign_all(
-        [ALICE.id], None, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
+        {ALICE.id: None}, AssignmentChange(AssignmentSource.ADMINISTRATOR, ADMIN.id, NOW)
     )
     gone = UserId("former-admin")
     plans.changes[BOB.id] = AssignmentChange(AssignmentSource.ADMINISTRATOR, gone, NOW + DAY)
@@ -586,6 +586,11 @@ def test_nobody_is_over_while_no_plan_exists_or_plans_cannot_be_read() -> None:
     assert _over(overview) == ([], 0)
 
 
+def _all(people: Sequence[User], plan: PlanKey | None) -> dict[UserId, PlanKey | None]:
+    """One Plan, or None for the Default Plan, for each of `people`."""
+    return dict.fromkeys((user.id for user in people), plan)
+
+
 def test_what_people_would_have_under_another_plan_is_read_without_giving_it() -> None:
     """Bob has 2 calendar accounts and 3 Integration Tokens, where Free allows 1 and none."""
     overview = _installation()
@@ -595,8 +600,8 @@ def test_what_people_would_have_under_another_plan_is_read_without_giving_it() -
     _database(overview).unrevoked_tokens[BOB.id] = 3
     people = [ADMIN, ALICE, BOB]
 
-    given_free = overview.plans_given(ADMIN.id, people, FREE.key)
-    given_default = overview.plans_given(ADMIN.id, people, None)
+    given_free = overview.plans_given(ADMIN.id, people, _all(people, FREE.key))
+    given_default = overview.plans_given(ADMIN.id, people, _all(people, None))
 
     accounts = OverLimit(LimitedResource.CONNECTED_ACCOUNTS, in_use=2, allowed=1)
     tokens = OverLimit(LimitedResource.INTEGRATION_TOKENS, in_use=3, allowed=0)
@@ -624,7 +629,7 @@ def test_what_people_would_have_under_another_plan_is_read_without_giving_it() -
         PlanUse(1, 2, 3),
     )
     # Giving the default's key is following it, as None is.
-    assert overview.plans_given(ADMIN.id, people, FAMILY_PLAN.key) == given_default
+    assert overview.plans_given(ADMIN.id, people, _all(people, FAMILY_PLAN.key)) == given_default
     # Nothing was given: Bob still has Family, and the page says so.
     assert overview.plans_of(ADMIN.id, people)[BOB.id] == _person_plans(overview)[BOB.id]
     assert _person_plans(overview)[BOB.id] == PersonPlan(
@@ -643,7 +648,7 @@ def test_a_plan_that_does_not_exist_is_refused_before_anything_is_counted() -> N
     overview.installation = UnreadablePlanUse(overview.installation)
 
     with pytest.raises(PlanNotFound):
-        overview.plans_given(ADMIN.id, [ALICE], PlanKey("gold"))
+        overview.plans_given(ADMIN.id, [ALICE], {ALICE.id: PlanKey("gold")})
 
 
 def test_only_an_administrator_reads_what_people_have_or_would_have() -> None:
@@ -653,7 +658,7 @@ def test_only_an_administrator_reads_what_people_have_or_would_have() -> None:
     with pytest.raises(AdministratorRequired):
         overview.plans_of(ALICE.id, [BOB])
     with pytest.raises(AdministratorRequired):
-        overview.plans_given(ALICE.id, [BOB], FREE.key)
+        overview.plans_given(ALICE.id, [BOB], {BOB.id: FREE.key})
 
 
 def test_unlike_people_reading_what_people_have_fails_when_plans_cannot_be_read() -> None:
@@ -665,4 +670,4 @@ def test_unlike_people_reading_what_people_have_fails_when_plans_cannot_be_read(
     with pytest.raises(RuntimeError):
         overview.plans_of(ADMIN.id, [BOB])
     with pytest.raises(RuntimeError):
-        overview.plans_given(ADMIN.id, [BOB], FREE.key)
+        overview.plans_given(ADMIN.id, [BOB], {BOB.id: FREE.key})

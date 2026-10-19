@@ -105,19 +105,20 @@ describe("overNote", () => {
 })
 
 describe("undoMoves", () => {
-  it("gives each person back the plan they had: their own, or the default by having none", () => {
-    expect(
-      undoMoves(
-        answer([
-          move("alex@example.test", NO_LIMITS),
-          move("sam@example.test", PRO),
-          move("zoe@example.test", null),
-          move("lee@example.test", PRO),
-        ]),
-      ),
-    ).toEqual([
-      { plan: null, userIds: ["user-alex", "user-zoe"] },
-      { plan: "pro", userIds: ["user-sam", "user-lee"] },
+  it("gives each person back the plan they had, in the order named: their own, or the default by having none", () => {
+    const moves = undoMoves(
+      answer([
+        move("alex@example.test", NO_LIMITS),
+        move("sam@example.test", PRO),
+        move("zoe@example.test", null),
+        move("lee@example.test", PRO),
+      ]),
+    )
+    expect(Object.entries(moves)).toEqual([
+      ["user-alex", null],
+      ["user-sam", "pro"],
+      ["user-zoe", null],
+      ["user-lee", "pro"],
     ])
   })
 })

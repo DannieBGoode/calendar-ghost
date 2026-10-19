@@ -5,9 +5,9 @@ import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
 import { api, type IssuedLink, type PeopleQuery, type Person, type UserDeletion } from "@/lib/api"
 import { deletionMessage, personName } from "@/lib/people"
-import type { AssignMove } from "@/lib/plan-assignment"
+import type { PlanMoves } from "@/lib/plan-assignment"
 import { OWN_PLAN_QUERY } from "@/lib/use-own-plan"
-import { PLANS_QUERY, sendMoves } from "@/lib/use-plans"
+import { PLANS_QUERY } from "@/lib/use-plans"
 
 /**
  * What an Installation Administrator can do to another User. "plan" opens Change plan beside them,
@@ -196,16 +196,17 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
 export type PeopleCommands = ReturnType<typeof usePersonCommands>
 
 /**
- * Giving Plans to people from Change plan, for one person or several, one call per Plan, as Undo
- * needs. It shares the person commands' key, so it and another command on someone never run
- * together, and refreshes People, each person's page, the Plans, and the administrator's own Plan.
- * A refused Plan may have been removed meanwhile, so a refusal reads the Plans again.
+ * Giving Plans to people from Change plan, for one person or several, or Undo's Plan back to each,
+ * in one call, all or none. It shares the person commands' key, so it and another command on
+ * someone never run together, and refreshes People, each person's page, the Plans, and the
+ * administrator's own Plan. A refused Plan may have been removed meanwhile, so a refusal reads the
+ * Plans again.
  */
 export function useGivePlans() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationKey: PERSON_COMMAND,
-    mutationFn: (moves: readonly AssignMove[]) => sendMoves(moves),
+    mutationFn: (moves: PlanMoves) => api.assignPlans(moves, false),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["people"] }),
