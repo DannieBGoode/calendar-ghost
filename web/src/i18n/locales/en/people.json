@@ -733,6 +733,7 @@
       "onNoLimits": "Plans are on. {name} is the default plan, and it limits nobody.",
       "off": "Plans are off. Nobody is limited.",
       "defaultChanged": "{name} is the default plan now.",
+      "noDefault": "No plan is the default now.",
       "defined": "{name} was added.",
       "assign": "Assign people",
       "changed": "{name} was saved.",

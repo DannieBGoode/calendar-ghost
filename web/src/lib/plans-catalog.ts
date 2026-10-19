@@ -169,7 +169,7 @@ export function removeRefusal(i18n: I18n, plan: PlanSummary, holders: PeoplePage
 /**
  * What a change of the Plans setting did, as its toast says it: whom Plans limit once on, naming
  * the No limits Plan the server made the default when there was none; that nobody is limited once
- * off; or the new Default Plan.
+ * off; or the new Default Plan, or that there is none, as once Undo gives back none.
  */
 export function settingResult(i18n: I18n, before: PlansOverview, after: PlansOverview): string {
   const { t } = i18n
@@ -182,7 +182,8 @@ export function settingResult(i18n: I18n, before: PlansOverview, after: PlansOve
     const count = limitedPeople(after.plans)
     return count > 0 ? t("people.plans.results.on", { count }) : t("people.plans.results.onNobody")
   }
-  return t("people.plans.results.defaultChanged", { name: defaultName(after) ?? "" })
+  const name = defaultName(after)
+  return name === null ? t("people.plans.results.noDefault") : t("people.plans.results.defaultChanged", { name })
 }
 
 /**

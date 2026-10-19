@@ -243,6 +243,11 @@ describe("settingResult", () => {
     expect(settingResult(i18n, overview(), overview({ enabled: false }))).toBe("Plans are off. Nobody is limited.")
     expect(settingResult(i18n, overview(), overview({ defaultPlan: "free" }))).toBe("Free is the default plan now.")
   })
+
+  it("says no plan is the default once Undo gives back none, as when Make default had none to replace", () => {
+    const none = overview({ enabled: false, defaultPlan: null })
+    expect(settingResult(i18n, overview({ enabled: false, defaultPlan: "free" }), none)).toBe("No plan is the default now.")
+  })
 })
 
 describe("undoOf", () => {
