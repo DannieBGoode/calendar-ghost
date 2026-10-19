@@ -3101,8 +3101,10 @@ p {
   line-height: 1.5;
 }
 
+/* Inset as the Settings groups above it on a narrow window; with `.page-card`, so it outranks the
+   narrow `.page-card` padding later in this file. */
 @media (max-width: 800px) {
-  .own-plan-card {
+  .page-card.own-plan-card {
     padding: 1rem;
   }
 }

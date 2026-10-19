@@ -1,8 +1,10 @@
+/* @vitest-environment happy-dom */
+
 import { readFileSync } from "node:fs"
 
 import { describe, expect, it } from "vitest"
 
-const stylesheet = readFileSync(new URL("../index.css", import.meta.url), "utf8")
+const stylesheet = readFileSync(`${import.meta.dirname}/../index.css`, "utf8")
 
 /** One rule of the stylesheet: its selectors, its declarations, and the at-rules around it. */
 type Rule = { selectors: string[]; body: string; within: string[] }
@@ -44,6 +46,22 @@ function declarations(selector: string, within?: string): Map<string, string> {
   }
   return found
 }
+
+/** The style the element `markup` makes gets on a window `width` pixels wide, with the whole stylesheet's cascade. */
+function computed(markup: string, width: number): CSSStyleDeclaration {
+  const style = document.createElement("style")
+  style.textContent = stylesheet
+  document.head.replaceChildren(style)
+  ;(window as typeof window & { happyDOM: { setViewport: (size: { width: number }) => void } }).happyDOM.setViewport({ width })
+  document.body.innerHTML = markup
+  return getComputedStyle(document.body.firstElementChild!)
+}
+
+describe("Cards", () => {
+  it("inset Your plan 1rem on a narrow window, as the Settings groups above it", () => {
+    expect(computed('<div class="page-card own-plan-card"></div>', 390).padding).toBe("16px")
+  })
+})
 
 describe("Data tables", () => {
   it.each([".plan-name", ".plan-holders", ".person-email"])(
