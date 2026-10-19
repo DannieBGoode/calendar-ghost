@@ -55,8 +55,11 @@ export function usePlanPeople(plan: string) {
   return useQuery({ queryKey: ["people", "plan-people", plan], queryFn: () => api.planPeople(plan) })
 }
 
-/** The Plans setting's change: whether Plans limit people now, and the Default Plan. */
-export type SettingChange = { enabled: boolean; defaultPlan: string | null }
+/**
+ * The Plans setting's change: whether Plans limit people now, and the Default Plan; `undo` when a
+ * toast's Undo asks for it, whose refusal shows in a toast, where Undo was pressed.
+ */
+export type SettingChange = { enabled: boolean; defaultPlan: string | null; undo?: boolean }
 
 /**
  * Giving Plans to people from one Plan's panel, `from`, its key, `via` Assign people's one move

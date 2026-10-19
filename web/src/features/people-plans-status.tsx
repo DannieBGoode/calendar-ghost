@@ -69,7 +69,7 @@ function PlansSwitch({ overview, commands, onChange }: { overview: PlansOverview
   const toggle = useRef<HTMLButtonElement>(null)
   const pending = setting.isPending
   const checked = pending ? setting.variables.enabled : overview.enabled
-  const refused = setting.error && switchedBy(setting.variables, overview) ? setting.error : null
+  const refused = setting.error && !setting.variables.undo && switchedBy(setting.variables, overview) ? setting.error : null
   useEffect(() => {
     if (refused) toggle.current?.focus()
   }, [refused])

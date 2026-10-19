@@ -8,6 +8,7 @@ import { PlanAssign } from "@/features/plan-assign"
 import { PlanEditor } from "@/features/plan-editor"
 import { PlanHolders } from "@/features/plan-holders"
 import type { ShowPeople } from "@/features/people-plans-status"
+import { answerUndo } from "@/features/undo"
 import { useI18n } from "@/i18n/provider"
 import type { PlanAssignments, PlanSummary, PlansOverview, SyncInterval } from "@/lib/api"
 import { appPathForPlanPanel, type OpenPerson, type PlanPanel as Panel, type PlanPanelTab } from "@/lib/navigation"
@@ -280,10 +281,9 @@ function PlanPeople({ plan, overview, commands, work, currentUserId, onShowPeopl
       action: {
         label: i18n.t("common.toast.undo"),
         onSelect: () =>
-          assign.mutate(
-            { from: plan.key, via: "undo", moves: undoMoves(answer) },
-            { onSuccess: () => toasts.show({ message: restoredResult(i18n, answer) }) },
-          ),
+          answerUndo(toasts, i18n, assign.mutateAsync({ from: plan.key, via: "undo", moves: undoMoves(answer) }), () => ({
+            message: restoredResult(i18n, answer),
+          })),
       },
     })
   return (

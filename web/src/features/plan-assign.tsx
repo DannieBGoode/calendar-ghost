@@ -34,7 +34,7 @@ function dryRunIds(found: readonly PersonRow[], chosen: Chosen): string[] {
  * that gives nothing, what they would be over. Administrators come last, never limited. Whom it
  * chose stays chosen while the search changes. Then `children`, who has the Plan now. Giving the
  * Plan is one command, all or none, from the panel's footer; while it is on its way every control
- * keeps focus and waits, and a refusal of it, or of its Undo, shows under the footer. Once given,
+ * keeps focus and waits, and a refusal of it, not of its Undo, shows under the footer. Once given,
  * nobody is chosen, ready for more. Giving the Default Plan means following it, so it leaves them
  * with no Plan of their own, as Change plan does, and they move with it when the default changes.
  */
@@ -137,9 +137,9 @@ export function PlanAssign({
   )
 }
 
-/** Why giving the Plan, or its Undo, was refused, to show under the footer; Change plan's shows under it. */
+/** Why giving the Plan was refused, to show under the footer; Change plan's shows under it, and Undo's in a toast. */
 function giveRefusal(assign: PlanCommands["assign"], key: string): Error | null {
-  return assign.error && assign.variables.from === key && assign.variables.via !== "change" ? assign.error : null
+  return assign.error && assign.variables.from === key && assign.variables.via === "give" ? assign.error : null
 }
 
 /**
@@ -301,7 +301,7 @@ function CandidateRow({
 /**
  * The panel's footer: give the Plan to whoever was chosen, the one primary action, which waits,
  * with why, until someone is chosen. Then Cancel, which closes the panel, how many are chosen,
- * and why the last give or its Undo was refused.
+ * and why the last give was refused.
  */
 function AssignFooter({
   base,

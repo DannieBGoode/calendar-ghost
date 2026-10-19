@@ -22,15 +22,14 @@ type PlanDetailsProps = {
 
 /**
  * What a Plan's row has open under it: the confirmation of its removal, which returns focus to
- * More actions, and why a command from the row was refused, as Make default, a removal once the
- * Plans read again show someone has the Plan, or the Undo of a Plan given from its panel once the
- * panel no longer shows it.
+ * More actions, and why a command from the row was refused, as Make default, or a removal once the
+ * Plans read again show someone has the Plan.
  */
 export function PlanDetails({ plan, removing, columns, row, overview, commands, work }: PlanDetailsProps) {
   const i18n = useI18n()
   const toasts = useToast()
   const confirming = removing && removable(plan)
-  const refused = removalRefusal(commands, plan.key, confirming) ?? rowRefusal(commands, overview, work, plan.key)
+  const refused = removalRefusal(commands, plan.key, confirming) ?? rowRefusal(commands, overview, plan.key)
   if (!confirming && !refused) return null
   const toMenu = () => row.current?.querySelector<HTMLButtonElement>("[aria-haspopup='menu']")?.focus()
   return (
@@ -68,13 +67,11 @@ function removalRefusal({ remove }: PlanCommands, key: string, confirming: boole
 
 /**
  * Why another command from a Plan's row was refused, to show under it: Make default, which the
- * switch's refusal is not, or the Undo of a Plan given from its panel, while the panel does not
- * show its People, where that refusal shows otherwise.
+ * switch's refusal is not, nor Undo's, which shows in a toast.
  */
-function rowRefusal({ setting, assign }: PlanCommands, overview: PlansOverview, work: PlanWorkControls, key: string): Error | null {
-  if (setting.error && !switchedBy(setting.variables, overview) && setting.variables.defaultPlan === key) {
+function rowRefusal({ setting }: PlanCommands, overview: PlansOverview, key: string): Error | null {
+  if (setting.error && !setting.variables.undo && !switchedBy(setting.variables, overview) && setting.variables.defaultPlan === key) {
     return setting.error
   }
-  const shown = work.panel?.plan === key && work.panel.tab === "people"
-  return assign.error && !shown && assign.variables.via === "undo" && assign.variables.from === key ? assign.error : null
+  return null
 }

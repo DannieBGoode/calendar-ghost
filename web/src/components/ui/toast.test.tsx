@@ -147,6 +147,17 @@ describe("ToastProvider", () => {
     expect(buttonNamed(container, "Undo")).toBeDefined()
   })
 
+  it("shows a refusal with its own icon, and keeps it until it is closed, so it is not missed", () => {
+    vi.useFakeTimers()
+    const { container, show } = render()
+    show({ message: "This plan no longer exists.", refused: true })
+    expect(card(container).querySelector("svg")?.classList.contains("lucide-circle-alert")).toBe(true)
+    act(() => {
+      vi.advanceTimersByTime(10 * 60 * 1000)
+    })
+    expect(liveRegion(container).textContent).toBe("This plan no longer exists.")
+  })
+
   it("closes a result with no Undo on its own after six seconds", () => {
     vi.useFakeTimers()
     const { container, show } = render()

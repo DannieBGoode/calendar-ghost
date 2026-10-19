@@ -332,7 +332,9 @@ and Undo when the change can be reversed, or the one next step it leads to, such
 for a Plan just added. It is announced through one polite live region and never takes focus. A
 toast with Undo or a next step stays until it is closed or the next result replaces it, so its
 action is still there when a keyboard or screen reader user reaches it; one with neither leaves
-after six seconds, and waits while the pointer is on it or focus is in it. While a toast shows,
+after six seconds, and waits while the pointer is on it or focus is in it. Undo answers in the next
+toast, even once the view that made the change is gone: what it gave back, or why it could not,
+with an alert icon in Destructive Red; a refusal stays until it is closed. While a toast shows,
 the page reserves its height, so the page can scroll its last line clear of it and keyboard focus
 stops above it; while a side panel is open, the toast sits at the bottom left, over the list, so it
 never covers the panel's footer. A result about one row still appears on that row.

@@ -5,7 +5,6 @@ import { PlanUsage } from "@/components/plan-usage"
 import { Button } from "@/components/ui/button"
 import { ChooserWithPlans } from "@/features/plan-change"
 import { usePlanChanges, type PlanChanges } from "@/features/use-plan-changes"
-import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { PersonPlanOverview, UserOverview } from "@/lib/api"
 import { isAdministrator, personName } from "@/lib/people"
@@ -134,11 +133,6 @@ export function PersonPlanCard({
             <PlanChips chips={heldPlanChips(i18n, plan, administrator)} />
           </p>
         )
-      )}
-      {changes.undoRefusal && (
-        <p className="field-error" role="alert">
-          {apiErrorMessage(i18n, changes.undoRefusal)}
-        </p>
       )}
       {!administrator && plan.basis !== "administrator" && <PlanUsage rows={planUsageRows(i18n, plan, name)} />}
     </section>

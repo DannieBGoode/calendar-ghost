@@ -1,4 +1,4 @@
-import { CheckCircle2, Undo2, X } from "lucide-react"
+import { AlertCircle, CheckCircle2, Undo2, X } from "lucide-react"
 import {
   useEffect,
   useLayoutEffect,
@@ -21,6 +21,9 @@ type Shown = { id: number; toast: Toast; returnTo: HTMLElement | null }
 
 /** How long a result with no Undo stays once nothing holds it. */
 const PLAIN_RESULT_MS = 6_000
+
+/** Whether a toast stays until it is closed: one with an action, or a refusal. */
+const lasts = (toast: Toast) => toast.action !== undefined || toast.refused === true
 
 /** The space kept between the toast and what the page shows above it, in pixels. */
 const CLEARANCE = 8
@@ -85,7 +88,8 @@ function useHold() {
  * so its action is still there when a keyboard reaches it; one without leaves after six seconds,
  * counted again each time the pointer leaves it or focus leaves it. While one shows, the page
  * reserves its space. When it closes with focus inside it, by its action, Close, or Escape, focus
- * returns to the control that had it when the result appeared.
+ * returns to the control that had it when the result appeared. A refusal has an icon of its own,
+ * and stays until it is closed, so it is not missed.
  */
 function ToastProvider({ closeLabel, children }: { closeLabel: string; children: ReactNode }) {
   const [shown, setShown] = useState<Shown | null>(null)
@@ -95,7 +99,7 @@ function ToastProvider({ closeLabel, children }: { closeLabel: string; children:
   const hold = useHold()
   useReservedSpace(card, shown !== null)
   const shownId = shown?.id
-  const lasting = shown === null || shown.toast.action !== undefined || hold.held
+  const lasting = shown === null || lasts(shown.toast) || hold.held
   useEffect(() => {
     if (lasting) return
     const timer = window.setTimeout(() => setShown(null), PLAIN_RESULT_MS)
@@ -146,7 +150,7 @@ function ToastProvider({ closeLabel, children }: { closeLabel: string; children:
           )}
           {...hold.handlers}
         >
-          {shown && <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-success-foreground" />}
+          {shown && <ToastIcon refused={shown.toast.refused} />}
           <div role="status" aria-live="polite" aria-atomic className="min-w-0 flex-1">
             {shown && <p key={shown.id}>{shown.toast.message}</p>}
           </div>
@@ -173,6 +177,15 @@ function ToastProvider({ closeLabel, children }: { closeLabel: string; children:
         </div>
       </div>
     </ToastContext.Provider>
+  )
+}
+
+/** The toast's icon: a check for a result, or an alert for a refusal. */
+function ToastIcon({ refused }: { refused: boolean | undefined }) {
+  return refused ? (
+    <AlertCircle aria-hidden="true" className="size-4 shrink-0 text-destructive" />
+  ) : (
+    <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-success-foreground" />
   )
 }
 

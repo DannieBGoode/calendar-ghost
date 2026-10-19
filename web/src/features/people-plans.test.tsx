@@ -316,6 +316,12 @@ function toastButton(name: string): HTMLButtonElement {
   return button(name, container.querySelector("[role='status'][aria-atomic]")!.parentElement!)
 }
 
+/** Opens Everyone, so the Plans tab is gone while its toast stays. */
+async function leavePlans() {
+  await click([...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")].find((tab) => tab.textContent === "Everyone")!)
+  expect(container.querySelector("#plans-title")).toBeNull()
+}
+
 function statusCard(): HTMLElement {
   return element("plans-status")
 }
@@ -729,6 +735,31 @@ describe("The Plans switch", () => {
     ])
     expect(toast()).toBe("Plans are off. Nobody is limited.")
     expect(planSwitch().getAttribute("aria-checked")).toBe("false")
+
+    // The next Undo is refused: it says why in a toast, where it was pressed, not under the switch.
+    reply("PUT /api/v1/plan-settings", refusal(404, "plan_not_found"))
+    await click(toastButton("Undo"))
+    expect(toast()).toBe("This plan no longer exists. Reload to see the current plans.")
+    expect(container.querySelector("#plans-switch-error")).toBeNull()
+  })
+
+  it("says what Undo did, with Undo again, and why that one could not, once the Plans tab is gone", async () => {
+    await renderPlans(testI18n(), {
+      plans: overview({ defaultPlan: "free" }),
+      answers: { "PUT /api/v1/plan-settings": jsonResponse(overview({ enabled: true, defaultPlan: "free" })) },
+    })
+    await click(planSwitch())
+    await leavePlans()
+
+    reply("PUT /api/v1/plan-settings", jsonResponse(overview({ defaultPlan: "free" })))
+    await click(toastButton("Undo"))
+    expect(sentAll("PUT", "/api/v1/plan-settings").at(-1)).toEqual({ enabled: false, default_plan: "free" })
+    expect(toast()).toBe("Plans are off. Nobody is limited.")
+
+    reply("PUT /api/v1/plan-settings", refusal(404, "plan_not_found"))
+    await click(toastButton("Undo"))
+    expect(sentAll("PUT", "/api/v1/plan-settings").at(-1)).toEqual({ enabled: true, default_plan: "free" })
+    expect(toast()).toBe("This plan no longer exists. Reload to see the current plans.")
   })
 
   it("turns plans off with the default kept", async () => {
@@ -947,6 +978,12 @@ describe("A plan's row menu", () => {
     expect(sentAll("PUT", "/api/v1/plan-settings").at(-1)).toEqual({ enabled: true, default_plan: "free" })
     expect(toast()).toBe("Free is the default plan now.")
     expect(listed()).toEqual(["free", "family"])
+
+    // The next Undo is refused: it says why in a toast, not on the plan's row.
+    reply("PUT /api/v1/plan-settings", refusal(404, "plan_not_found"))
+    await click(toastButton("Undo"))
+    expect(toast()).toBe("This plan no longer exists. Reload to see the current plans.")
+    expect(detailsOf("family")).toBeNull()
   })
 
   it("says Make default moves nobody now when everyone has a plan of their own", async () => {
@@ -1583,9 +1620,7 @@ describe("A new plan", () => {
     reply("GET /api/v1/plans", jsonResponse(overview({ plans: [family, added, free] })))
     await submit(field("plan-new-name").closest("form")!)
 
-    const everyone = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")].find((tab) => tab.textContent === "Everyone")!
-    await click(everyone)
-    expect(container.querySelector("#plans-title")).toBeNull()
+    await leavePlans()
     await click(toastButton("Assign people"))
     expect(openedPlans).toEqual([{ plan: "family-2", tab: "people" }])
     expect(here()).toBe("/people")
@@ -1936,17 +1971,28 @@ describe("Assigning people from a plan", () => {
     expect(assignCalls()).toEqual([])
   })
 
-  it("says why Undo was refused under the plan's row once its panel is closed", async () => {
+  it("says why Undo was refused in a toast, where it was pressed, not under the panel or the plan's row", async () => {
     await assignFree([SAM], { dryRun: moved([[SAM, []]], true) })
     await check("free", SAM)
     reply("POST /api/v1/plan-assignments", moved([[SAM, []]]))
     await click(button("Give Free to 1 person", panel()))
-    await click(closeButton())
     reply("POST /api/v1/plan-assignments", refusal(404, "plan_not_found"))
-    await click(button("Undo", container))
-    expect(detailsOf("free")?.querySelector("[role='alert']")?.textContent).toBe(
-      "This plan no longer exists. Reload to see the current plans.",
-    )
+    await click(toastButton("Undo"))
+    expect(toast()).toBe("This plan no longer exists. Reload to see the current plans.")
+    expect(panel().querySelector("[role='alert']")).toBeNull()
+    await click(closeButton())
+    expect(detailsOf("free")).toBeNull()
+  })
+
+  it("says what Undo did once the Plans tab is gone", async () => {
+    await assignFree([SAM], { dryRun: moved([[SAM, []]], true) })
+    await check("free", SAM)
+    reply("POST /api/v1/plan-assignments", moved([[SAM, []]]))
+    await click(button("Give Free to 1 person", panel()))
+    await leavePlans()
+    await click(toastButton("Undo"))
+    expect(assignCalls().at(-1)).toEqual({ plan: "no-limits", user_ids: ["user-sam"], dry_run: false })
+    expect(toast()).toBe("sam@example.test has their plan back.")
   })
 })
 

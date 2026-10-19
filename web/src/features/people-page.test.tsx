@@ -1330,10 +1330,21 @@ describe("Changing plans from Everyone", () => {
         : served(input, init),
     )
     await click(button("Undo"))
-    expect(toast()).toBe("")
-    expect(container.querySelector("[role='alert']")?.textContent).toBe(
-      "This plan no longer exists. Reload to see the current plans.",
-    )
+    expect(toast()).toBe("This plan no longer exists. Reload to see the current plans.")
+    expect(container.querySelector(".people-roster [role='alert']")).toBeNull()
+  })
+
+  it("says what Undo did once Everyone is gone, as when Plans opens", async () => {
+    await renderPlanned(testI18n(), { "POST /api/v1/plan-assignments": given([robin]) })
+    await click(checkbox("Select robin@example.test"))
+    await click(button("Change plan", bulkBar()))
+    await click(choice("Free"))
+    await click(button("Save", popover()!))
+    await click([...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")].find((tab) => tab.textContent === "Plans")!)
+    expect(rows()).toHaveLength(0)
+    await click(button("Undo"))
+    expect(assignments().at(-1)).toEqual({ plan: "family", user_ids: ["user-robin"], dry_run: false })
+    expect(toast()).toBe("robin@example.test has their plan back.")
   })
 
   it("leaves the popover where it placed itself: its chooser does not scroll the page as it opens", async () => {

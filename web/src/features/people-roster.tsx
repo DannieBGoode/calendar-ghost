@@ -8,7 +8,6 @@ import { InstallationHealthSummary } from "@/features/people-health"
 import { PeoplePagination } from "@/features/people-pagination"
 import { PeopleTable } from "@/features/people-table"
 import { usePlanChanges, type PlanChanges } from "@/features/use-plan-changes"
-import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { PeoplePage, PeopleQuery, PeopleSort } from "@/lib/api"
@@ -23,7 +22,7 @@ import { useRowSelection } from "@/lib/use-row-selection"
  * People's first tab: Installation Health, then everyone here in one card with its search,
  * filters, table, and pages. Health and invitations load beside the list, not after it. A change
  * of people's plans, from the bar or a row, answers here, not where it was made, since it can
- * leave nobody in the list: a refused Undo shows above the list, empty or not.
+ * leave nobody in the list.
  */
 export function PeopleRoster({
   query,
@@ -65,11 +64,6 @@ export function PeopleRoster({
           plans={plans}
           onChange={(next) => update({ ...next, page: 1 }, "replace")}
         />
-        {changes.undoRefusal && (
-          <p className="field-error people-undo-error" role="alert">
-            {apiErrorMessage(i18n, changes.undoRefusal)}
-          </p>
-        )}
         <p className="sr-only" role="status">
           {resultsStatus(i18n, people.data, people.isPlaceholderData)}
         </p>

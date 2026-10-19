@@ -2,6 +2,7 @@ import { useState } from "react"
 
 import { useToast } from "@/components/ui/toast-context"
 import type { PlanChooserProps } from "@/features/plan-change"
+import { answerUndo } from "@/features/undo"
 import { useI18n } from "@/i18n/provider"
 import { restoredResult, undoMoves } from "@/lib/plan-assignment"
 import { changedResult, type PlanPerson } from "@/lib/plan-change"
@@ -21,8 +22,6 @@ export type PlanChanges = {
   pending: boolean
   /** Puts the last refusal away, as a new choice or closing the chooser does. */
   forget: () => void
-  /** Why the last Undo could not be done, until the next change. */
-  undoRefusal: Error | null
 }
 
 /**
@@ -48,7 +47,6 @@ export function usePlanChanges(): PlanChanges {
       onSave: (plan, chosen) => {
         if (give.isPending) return
         setSource(from)
-        undo.reset()
         give.mutate([{ plan, userIds: people.map((person) => person.id) }], {
           onSuccess: ([answer]) =>
             done(() =>
@@ -57,7 +55,7 @@ export function usePlanChanges(): PlanChanges {
                 action: answer && {
                   label: i18n.t("common.toast.undo"),
                   onSelect: () =>
-                    undo.mutate(undoMoves(answer), { onSuccess: () => toasts.show({ message: restoredResult(i18n, answer) }) }),
+                    answerUndo(toasts, i18n, undo.mutateAsync(undoMoves(answer)), () => ({ message: restoredResult(i18n, answer) })),
                 },
               }),
             ),
@@ -66,5 +64,5 @@ export function usePlanChanges(): PlanChanges {
     }
   }
 
-  return { chooser, pending: give.isPending, forget: () => give.reset(), undoRefusal: undo.error }
+  return { chooser, pending: give.isPending, forget: () => give.reset() }
 }
