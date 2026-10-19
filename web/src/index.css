@@ -3233,13 +3233,6 @@ p {
   line-height: 1.5;
 }
 
-/* A person's Plan card, after Synchronization: who gave the Plan and whether it limits them, with
-   Change plan at its end; the Plan's name as an object title with its chips; then one row per
-   limit with a meter, its numbers, and its chip. */
-.user-overview .person-plan-card {
-  gap: 0.75rem;
-}
-
 /* Change plan sits at the head's end, and below the sentence once the card is too narrow for both. */
 .person-plan-head {
   display: flex;
