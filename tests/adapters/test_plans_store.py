@@ -377,6 +377,8 @@ def test_everyone_without_a_plan_of_their_own_follows_a_new_default_at_once(
     }
     # Nothing was written for the Users who follow the default.
     assert store.recorded(NEWCOMER.id) is None
+    # The member's own Plan is the default now, yet they are not among those who follow it.
+    assert store.plans.followers() == 3
 
 
 def test_a_plan_counts_everyone_who_has_it_and_the_people_it_limits(store: PlansStore) -> None:
