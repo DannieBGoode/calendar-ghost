@@ -124,8 +124,15 @@ type Problem = Omit<OverviewHealth, "facts" | "others"> & { summary: string }
 /** Who reads the Overview: an administrator fixes the installation's own Causes. */
 type Reader = { administrator: boolean }
 
-/** What the Overview knows beyond the dashboard: its rules' names, and whether its reader administers. */
-export type OverviewContext = { ruleName?: (ruleId: string) => string | null; administrator?: boolean }
+/**
+ * What the Overview knows beyond the dashboard: its rules' names, whether its reader administers,
+ * and how often, in minutes, the reader's own Plan checks their calendars (5 unless it says otherwise).
+ */
+export type OverviewContext = {
+  ruleName?: (ruleId: string) => string | null
+  administrator?: boolean
+  pollEveryMinutes?: number | undefined
+}
 
 function reauthorizeInSettings(i18n: I18n): HealthAction {
   return { label: i18n.t("overview.health.action.reauthorizeInSettings"), view: "settings", settingsTab: "connections" }
@@ -352,9 +359,10 @@ function problemsOf(i18n: I18n, dashboard: Dashboard, ruleProblems: RuleProblem[
   return problems
 }
 
-type HealthFacts = { running: string[]; stopped: string[]; lastSync: string | null }
+/** What the hero says of the reader's rules: whether they run, when they last synced, how often they are checked. */
+type HealthFacts = { running: string[]; stopped: string[]; lastSync: string | null; checks: string }
 
-function healthFacts(i18n: I18n, dashboard: Dashboard, now: number): HealthFacts {
+function healthFacts(i18n: I18n, dashboard: Dashboard, now: number, pollEveryMinutes: number): HealthFacts {
   const lastSync = dashboard.last_synced_at
     ? i18n.t("overview.health.lastSync", { relative: i18n.format.relative(dashboard.last_synced_at, now) })
     : null
@@ -370,6 +378,11 @@ function healthFacts(i18n: I18n, dashboard: Dashboard, now: number): HealthFacts
       lastSync ?? i18n.t("overview.health.waitingForRecovery"),
     ],
     lastSync,
+    // A 60-minute Plan reads "every hour", as the Plans screens say it.
+    checks:
+      pollEveryMinutes === 60
+        ? i18n.t("overview.health.healthy.detailHourly")
+        : i18n.t("overview.health.healthy.detail", { count: pollEveryMinutes }),
   }
 }
 
@@ -434,9 +447,7 @@ function quietHealth(i18n: I18n, dashboard: Dashboard, tone: OverviewTone, facts
     })
   }
   if (dashboard.enabled_rules > 0) {
-    return onlyHealth(tone, t("overview.health.healthy.title"), t("overview.health.healthy.detail"), {
-      facts: facts.running,
-    })
+    return onlyHealth(tone, t("overview.health.healthy.title"), facts.checks, { facts: facts.running })
   }
   // A rule that has synced before was paused on purpose; one that never has is still being set up.
   if (facts.lastSync) {
@@ -457,13 +468,13 @@ export function overviewHealth(
   i18n: I18n,
   dashboard: Dashboard,
   now: number = Date.now(),
-  { ruleName = () => null, administrator = false }: OverviewContext = {},
+  { ruleName = () => null, administrator = false, pollEveryMinutes = 5 }: OverviewContext = {},
 ): OverviewHealth {
   const reader: Reader = { administrator }
   const tone = TONE_OF[dashboard.status]
   const setup = accountSetupHealth(i18n, dashboard, tone)
   if (setup) return setup
-  const facts = healthFacts(i18n, dashboard, now)
+  const facts = healthFacts(i18n, dashboard, now, pollEveryMinutes)
   const ruleProblems = ruleProblemsOf(i18n, dashboard, ruleName, now)
   const [main, ...rest] = problemsOf(i18n, dashboard, ruleProblems, reader)
   if (main) {

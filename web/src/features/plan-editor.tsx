@@ -23,17 +23,9 @@ import {
   type PlanDraft,
 } from "@/lib/plan-draft"
 
-/**
- * Moves focus to one of the editor's fields, found by the `data-field` it carries: the field
- * itself, or the radio chosen in a group of them, as Sync speed is.
- */
+/** Moves focus to one of the editor's fields, found by the `data-field` it carries. */
 function focusField(form: HTMLFormElement | null, field: DraftField) {
-  const target = form?.querySelector<HTMLElement>(`[data-field='${field}']`)
-  if (!target || target instanceof HTMLInputElement) {
-    target?.focus()
-    return
-  }
-  ;(target.querySelector<HTMLElement>("input:checked") ?? target.querySelector<HTMLElement>("input"))?.focus()
+  form?.querySelector<HTMLElement>(`[data-field='${field}']`)?.focus()
 }
 
 /**
@@ -184,7 +176,6 @@ export function PlanEditor({
             intervals={intervals}
             value={draft.interval}
             pending={pending}
-            error={errorOf("interval")}
             onChange={(interval) => change({ interval })}
           />
         </fieldset>

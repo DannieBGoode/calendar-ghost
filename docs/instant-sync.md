@@ -2,7 +2,8 @@
 
 Instant Sync runs a rule soon after Google or Microsoft reports that something changed in its
 Source Calendar, instead of waiting for the next Scheduled Sync. It is optional. Without it, every
-rule still syncs every five minutes, and nothing else changes.
+rule still syncs on its schedule, every five minutes unless a Plan sets a longer interval, and
+nothing else changes.
 
 ## What it does, and what it does not promise
 
@@ -163,8 +164,8 @@ the reports they bring until then are answered `404` and change nothing.
 
 ## When Instant Sync is unavailable
 
-Each section below is the one **Settings** or a rule links to. Meanwhile rules sync every five
-minutes, and nothing is lost.
+Each section below is the one **Settings** or a rule links to. Meanwhile rules sync on their
+schedule, every five minutes unless your Plan sets a longer interval, and nothing is lost.
 
 ### Not in your plan
 
@@ -301,9 +302,11 @@ mailbox across every application.
 Instant Sync asks one question of the installation: does this person's Sync Cadence allow it?
 Their Allowance answers ([ADR 0038](adr/0038-plans-allowances-and-limits.md)). With Plans off, the
 default, and for every administrator, it does, and Scheduled Sync runs every five minutes. With
-Plans on, the person's own Plan, or the Default Plan when they have none, decides through its sync
-interval. This release offers two: **Instant sync, and a check every 5 minutes**, and **Every 5
-minutes**, which has no Instant Sync. When a person's Plan stops including Instant Sync, their
+Plans on, the person's own Plan, or the Default Plan when they have none, decides through its
+**Sync speed**: **Instant**, which is Instant Sync with a check every 5 minutes, or **Every 5
+minutes**, **Every 10 minutes**, **Every 15 minutes**, **Every 30 minutes**, or **Every hour**,
+which have no Instant Sync. Scheduled Sync then runs each of their rules once in each interval,
+and a failing rule at every pass. When a person's Plan stops including Instant Sync, their
 pending Instant Sync Requests are dropped, the next watch upkeep retires their watches, and their
 rules show [Not in your plan](#not-in-your-plan). A fault in reading Plans never takes Instant Sync
 away: the installation then treats the person as having it. There is no separate administrator

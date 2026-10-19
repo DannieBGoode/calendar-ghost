@@ -3443,3 +3443,14 @@ def test_the_installation_reads_each_users_cadence_from_their_plan(tmp_path: Pat
     assert cadence.allowances is adapters.allowances
     # FREE, the Default Plan, syncs every 5 minutes without Instant Sync.
     assert cadence.cadence(member) == SyncCadence(instant=False, poll_every=SCHEDULED_EVERY)
+
+
+def test_the_scheduler_lists_rules_by_each_users_plan_every_five_minutes(tmp_path: Path) -> None:
+    settings = Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    adapters = build_adapters(settings)
+
+    scheduler = compose(settings, adapters).scheduler
+
+    assert scheduler is not None
+    assert scheduler._pass.cadence is adapters.sync_cadence
+    assert scheduler._interval_seconds == SCHEDULED_EVERY.total_seconds()

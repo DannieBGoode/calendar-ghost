@@ -10,7 +10,7 @@ import { PlanHolders } from "@/features/plan-holders"
 import type { ShowPeople } from "@/features/people-plans-status"
 import { answerUndo } from "@/features/undo"
 import { useI18n } from "@/i18n/provider"
-import type { PlanAssignments, PlanSummary, PlansOverview, SyncInterval } from "@/lib/api"
+import type { PlanAssignments, PlanSummary, PlansOverview } from "@/lib/api"
 import { appPathForPlanPanel, type OpenPerson, type PlanPanel as Panel, type PlanPanelTab } from "@/lib/navigation"
 import { restoredResult, undoMoves } from "@/lib/plan-assignment"
 import { changedResult } from "@/lib/plan-change"
@@ -190,11 +190,6 @@ function PanelTabs({ plan, tab, work }: { plan: PlanSummary; tab: PlanPanelTab; 
   )
 }
 
-/** The offered intervals, plus a Plan's own when a later release saved one not offered here. */
-function offeredWith(offered: SyncInterval[], own: SyncInterval): SyncInterval[] {
-  return offered.includes(own) ? offered : [...offered, own]
-}
-
 /**
  * A Plan's Limits: its editor, which closes once saved, back on the Plan's row, saying so in a
  * toast. Save with nothing changed only closes it.
@@ -208,7 +203,7 @@ function EditPlanForm({ plan, overview, commands, work }: PanelProps & { plan: P
       plan={plan}
       enabled={overview.enabled}
       others={overview.plans.filter((other) => other.key !== plan.key).map((other) => other.name)}
-      intervals={offeredWith(overview.sync_intervals, plan.limits.sync_interval)}
+      intervals={overview.sync_intervals}
       pending={change.isPending}
       error={change.error}
       onSave={(payload) =>

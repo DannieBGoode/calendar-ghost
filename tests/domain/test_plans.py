@@ -1,10 +1,11 @@
 """Plans: the values an administrator saves, what each User may use now, and the limit checks."""
 
 from collections.abc import Callable
+from datetime import timedelta
 
 import pytest
 
-from calendar_sync.domain.cadence import DEFAULT_CADENCE, SCHEDULED_EVERY, SyncCadence
+from calendar_sync.domain.cadence import DEFAULT_CADENCE, SyncCadence
 from calendar_sync.domain.errors import DomainError, DomainValidationError
 from calendar_sync.domain.plans import (
     NO_LIMITS,
@@ -41,7 +42,6 @@ from calendar_sync.domain.plans import (
     plan_key_from,
     plan_reach,
     require_assignable,
-    require_offered,
     require_removable,
     require_room,
     require_unique_name,
@@ -49,7 +49,12 @@ from calendar_sync.domain.plans import (
 
 FREE = Plan(PlanKey("free"), "Free", PlanLimits(1, 1, 0, SyncInterval.EVERY_5_MINUTES))
 FAMILY = Plan(PlanKey("family"), "Family", PlanLimits(5, 3, 2, SyncInterval.INSTANT))
-POLLED = SyncCadence(instant=False, poll_every=SCHEDULED_EVERY)
+HOURLY = Plan(PlanKey("hourly"), "Hourly", PlanLimits(1, 1, 0, SyncInterval.EVERY_60_MINUTES))
+
+
+def polled_every(minutes: int) -> SyncCadence:
+    """The cadence of an interval that polls every `minutes`, without Instant Sync."""
+    return SyncCadence(instant=False, poll_every=timedelta(minutes=minutes))
 
 
 def refusal(check: Callable[[], None]) -> DomainError | None:
@@ -142,7 +147,12 @@ def test_only_a_plan_that_applies_limits_anything(allowance: Allowance) -> None:
 
 
 @pytest.mark.parametrize(
-    ("plan", "cadence"), [pytest.param(FREE, POLLED), pytest.param(FAMILY, DEFAULT_CADENCE)]
+    ("plan", "cadence"),
+    [
+        pytest.param(FREE, polled_every(5)),
+        pytest.param(HOURLY, polled_every(60)),
+        pytest.param(FAMILY, DEFAULT_CADENCE),
+    ],
 )
 def test_an_allowance_has_its_plans_limits_and_cadence(plan: Plan, cadence: SyncCadence) -> None:
     allowance = allowance_for(plans_on=True, administers=False, own=plan, default=FREE)
@@ -279,31 +289,30 @@ def test_instant_is_instant_sync_and_a_five_minute_poll() -> None:
 
 
 @pytest.mark.parametrize(
-    "interval", [interval for interval in SyncInterval if interval is not SyncInterval.INSTANT]
+    ("interval", "minutes"),
+    [
+        (SyncInterval.EVERY_5_MINUTES, 5),
+        (SyncInterval.EVERY_10_MINUTES, 10),
+        (SyncInterval.EVERY_15_MINUTES, 15),
+        (SyncInterval.EVERY_30_MINUTES, 30),
+        (SyncInterval.EVERY_60_MINUTES, 60),
+    ],
 )
-def test_every_other_interval_polls_every_five_minutes_without_instant_sync(
-    interval: SyncInterval,
+def test_each_interval_polls_every_its_own_minutes_without_instant_sync(
+    interval: SyncInterval, minutes: int
 ) -> None:
-    assert interval.cadence == POLLED
+    assert interval.cadence == polled_every(minutes)
 
 
-def test_administrators_may_offer_instant_or_five_minutes() -> None:
-    assert OFFERED_INTERVALS == (SyncInterval.INSTANT, SyncInterval.EVERY_5_MINUTES)
-
-
-@pytest.mark.parametrize("interval", OFFERED_INTERVALS)
-def test_an_offered_interval_may_be_saved(interval: SyncInterval) -> None:
-    assert refusal(lambda: require_offered(interval)) is None
-
-
-@pytest.mark.parametrize(
-    "interval", [interval for interval in SyncInterval if interval not in OFFERED_INTERVALS]
-)
-def test_an_interval_not_offered_is_refused_with_its_reason(interval: SyncInterval) -> None:
-    with pytest.raises(InvalidPlan) as refused:
-        require_offered(interval)
-
-    assert refused.value.reason is InvalidPlanReason.INTERVAL
+def test_every_interval_is_offered_instant_first() -> None:
+    assert OFFERED_INTERVALS == (
+        SyncInterval.INSTANT,
+        SyncInterval.EVERY_5_MINUTES,
+        SyncInterval.EVERY_10_MINUTES,
+        SyncInterval.EVERY_15_MINUTES,
+        SyncInterval.EVERY_30_MINUTES,
+        SyncInterval.EVERY_60_MINUTES,
+    )
 
 
 def test_assignments_come_from_an_administrator_or_billing() -> None:

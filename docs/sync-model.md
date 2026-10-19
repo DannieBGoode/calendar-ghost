@@ -4,9 +4,11 @@
 
 The first run selects source events ending no earlier than 30 days before the run, with no future
 cutoff, and observes the destination endpoint. A successful initial run establishes separate opaque
-incremental cursors for source and destination. Later runs request both change feeds every five
-minutes, soon after a provider reports a change (Instant Sync), or through Sync Now. Source changes project forward; mapped destination changes load their
-authoritative source and repair edits or deletions during that same run. Google's incremental feed
+incremental cursors for source and destination. Later runs request both change feeds once per
+interval of the rule's Scheduled Sync, five minutes unless its User's Plan sets a longer one, soon
+after a provider reports a change (Instant Sync), or through Sync Now. Source changes project
+forward; mapped destination changes load their authoritative source and repair edits or deletions
+during that same run. Google's incremental feed
 is not bounded by the initial `timeMin`, so it also reports changes to events that ended long ago;
 the Outlook adapter's feed, a Graph delta round plus a listing of everything modified since the
 previous run, reports them too ([ADR 0034](adr/0034-outlook-through-microsoft-graph.md)).
@@ -41,10 +43,23 @@ could have drifted:
   its decision instead of reading it again. Each listed projection is used once; a projection the
   listing did not include is read directly, and absence from the listing never counts as deletion.
 
+The scheduler begins a pass five minutes after the previous one ends, and each pass lists the
+rules due at it. A rule whose interval is five minutes or less is due at every pass. A rule with a
+longer interval, which its User's Plan sets, is due once per window of that interval. Its windows
+start at its own phase, a hash of its id, so the rules of one interval spread over its passes
+instead of all running at one. A rule that never ran, is failing, was previewed since its last
+run, or awaits reprojection is due at every pass. The scheduler keeps in memory when each rule was
+last listed, and after a restart counts each rule from its last run. Sync Now and Instant Sync
+never move that time, so they cannot keep a rule from being listed
+([ADR 0038](adr/0038-plans-allowances-and-limits.md)).
+
 The scheduler runs each rule's daily full pass when that rule has not completed one on the current
-UTC day. Any successful run that listed both calendars in full, including a rule's first run,
-completes that day's pass. The completion time is stored with the rule's run outcome, so restarting the service or
-another rule failing does not repeat a full pass that already completed.
+UTC day, at the rule's first listing after 00:00 UTC. A rule with a longer interval takes it at its
+own phase past 00:00 UTC, so at most one interval late, and the full passes of an hourly Plan's
+rules spread over the first hour of the day. Any successful run that listed both calendars in full,
+including a rule's first run, completes that day's pass. The completion time is stored with the
+rule's run outcome, so restarting the service or another rule failing does not repeat a full pass
+that already completed.
 
 For each changed source event, the decision service chooses one action:
 

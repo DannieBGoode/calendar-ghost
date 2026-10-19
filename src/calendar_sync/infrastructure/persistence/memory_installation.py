@@ -30,7 +30,13 @@ from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry
 from calendar_sync.domain.causes import WITHOUT_CAUSE
 from calendar_sync.domain.incidents import AccountAuthorization
-from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import (
+    ConnectedAccountId,
+    SyncReason,
+    SyncRule,
+    SyncRuleId,
+    SyncRuleState,
+)
 from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.runs import RunKind
 from calendar_sync.domain.watches import (
@@ -70,7 +76,7 @@ class InMemoryInstallationUnitOfWork:
 
     def scheduled_rules(self) -> tuple[ScheduledRule, ...]:
         return tuple(
-            ScheduledRule(owner, rule, _last_full_sync(state, rule.id))
+            _scheduled(owner, state, rule)
             for owner, state in sorted(
                 self._database.partitions.items(), key=lambda item: item[0].value
             )
@@ -343,9 +349,19 @@ def _authorization(state: MemoryState, account: ConnectedAccountId) -> AccountAu
     )
 
 
-def _last_full_sync(state: MemoryState, rule_id: SyncRuleId) -> datetime | None:
-    outcome = state.outcomes.get((rule_id, RunKind.SYNC))
-    return outcome.last_full_succeeded_at if outcome is not None else None
+def _scheduled(owner: UserId, state: MemoryState, rule: SyncRule) -> ScheduledRule:
+    """The rule as the scheduler reads it. This store keeps no failure streaks, so a rule is
+    failing only while its last sync failed."""
+    outcome = state.outcomes.get((rule.id, RunKind.SYNC))
+    preview = state.previews.get(rule.id)
+    return ScheduledRule(
+        owner,
+        rule,
+        None if outcome is None else outcome.last_full_succeeded_at,
+        last_run_at=None if outcome is None else outcome.completed_at,
+        failing=outcome is not None and not outcome.succeeded,
+        previewed_at=None if preview is None else preview.completed_at,
+    )
 
 
 def _pending_runs(owner: UserId, state: MemoryState) -> Iterator[PendingInstantRun]:
@@ -357,7 +373,7 @@ def _pending_runs(owner: UserId, state: MemoryState) -> Iterator[PendingInstantR
             continue
         outcome = state.outcomes.get((rule_id, RunKind.SYNC))
         yield PendingInstantRun(
-            ScheduledRule(owner, rule, _last_full_sync(state, rule_id)),
+            _scheduled(owner, state, rule),
             request,
             last_run_failed=outcome is not None and not outcome.succeeded,
         )

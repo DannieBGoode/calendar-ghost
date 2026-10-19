@@ -123,24 +123,18 @@ export function PlanLimitField({
   )
 }
 
-/**
- * How soon the Plan's calendars sync, as radio cards that each say what they do, then that longer
- * intervals arrive later. `intervals` are the offered ones, plus the Plan's own when a later
- * release saved one this release does not offer.
- */
+/** How soon the Plan's calendars sync, as one radio card for each offered interval that says what it does. */
 export function SpeedField({
   id,
   intervals,
   value,
   pending,
-  error,
   onChange,
 }: {
   id: string
   intervals: SyncInterval[]
   value: SyncInterval
   pending: boolean
-  error: string | null
   onChange: (interval: SyncInterval) => void
 }) {
   const { t } = useI18n()
@@ -152,7 +146,7 @@ export function SpeedField({
     icon: interval === "instant" ? <Zap aria-hidden="true" /> : <Clock aria-hidden="true" />,
   }))
   return (
-    <div className="plan-field plan-speed-field" data-field="interval">
+    <div className="plan-field plan-speed-field">
       <p id={`${fieldId}-label`} className="plan-field-label">
         {t("people.plans.editor.speed")}
       </p>
@@ -161,17 +155,12 @@ export function SpeedField({
       </p>
       <RadioCards
         aria-labelledby={`${fieldId}-label`}
-        aria-describedby={describedBy(`${fieldId}-hint`, `${fieldId}-later`, error && `${fieldId}-error`)}
-        aria-invalid={error ? true : undefined}
+        aria-describedby={`${fieldId}-hint`}
         options={options}
         value={value}
         pending={pending}
         onValueChange={onChange}
       />
-      <p id={`${fieldId}-later`} className="field-hint">
-        {t("people.plans.editor.intervalHint")}
-      </p>
-      <FieldError id={`${fieldId}-error`} text={error} />
     </div>
   )
 }

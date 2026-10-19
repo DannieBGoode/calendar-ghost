@@ -179,13 +179,18 @@ type Scenario = {
   rules: RuleSummary[]
   recentChanges: RecentChange[]
   providers?: CalendarProvider[]
-  /** GET /api/v1/account/plan; `{}`, which names no plan, unless a test says otherwise. */
-  ownPlan?: OwnPlan
+  /**
+   * GET /api/v1/account/plan; `{}`, which names no plan, unless a test says otherwise, and
+   * "unreadable" for the answer when Plans cannot be read.
+   */
+  ownPlan?: OwnPlan | "unreadable"
 }
 
 function jsonResponse(body: unknown): Response {
   return { ok: true, status: 200, json: () => Promise.resolve(body) } as Response
 }
+
+const planUnreadable = { ok: false, status: 500, json: () => Promise.resolve({ detail: "database is locked" }) } as Response
 
 function mockFetch(scenario: Scenario) {
   const responses: Record<string, unknown> = {
@@ -199,6 +204,7 @@ function mockFetch(scenario: Scenario) {
   vi.stubGlobal("fetch", vi.fn((input: string | URL) => Promise.resolve(respond(String(input)))))
   function respond(url: string): Response {
     const path = url.split("?")[0] ?? ""
+    if (path === "/api/v1/account/plan" && scenario.ownPlan === "unreadable") return planUnreadable
     if (path in responses) return jsonResponse(responses[path])
     if (/^\/api\/v1\/accounts\/.+\/calendars$/.test(path)) return jsonResponse([])
     return jsonResponse({})
@@ -374,6 +380,25 @@ describe("OverviewView", () => {
     })
     const row = container.querySelector<HTMLElement>(".overview-rules a[href='/rules/rule-2']")?.closest("li")
     expect(row?.lastElementChild?.textContent.trim()).toBe(badge)
+  })
+
+  // The rules answer, which the Overview refreshes, says how often; Your plan, which it does not,
+  // is left unreadable so it cannot be the source.
+  it.each<[string, number, string]>([
+    ["every hour", 60, "every hour"],
+    ["every 15 minutes", 15, "every 15 minutes"],
+    ["every 5 minutes", 5, "every 5 minutes"],
+  ])("says how often a quiet Overview checks when the reader's rules sync %s", async (_case, minutes, often) => {
+    const { container } = await renderOverview(testI18n(), {
+      dashboard: { ...attentionDashboard, status: "healthy", needs_attention: false, problems: [], open_incidents: 0 },
+      rules: [{ ...rule, effective_cadence: "not_in_plan", poll_every_minutes: minutes }],
+      recentChanges: [],
+      ownPlan: "unreadable",
+    })
+    expect(container.querySelector("#health-title")?.textContent).toBe("Synchronization is healthy")
+    expect(container.querySelector(".health-hero-detail")?.textContent).toBe(
+      `Calendar Ghost checks your calendars for changes ${often}.`,
+    )
   })
 
   it("has no untranslated text for a rule with an open incident and a repeated change", async () => {

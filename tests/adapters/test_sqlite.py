@@ -57,7 +57,10 @@ from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteOperationsQueries
-from calendar_sync.infrastructure.persistence.health import SqliteIncidentRepository
+from calendar_sync.infrastructure.persistence.health import (
+    SqliteIncidentRepository,
+    SqliteRuleHealthRecords,
+)
 from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
 )
@@ -1509,6 +1512,38 @@ def test_the_installation_unit_lists_every_users_enabled_rules_and_holds_disable
         (USER, "rule-1", NOW),
         (OTHER_USER, "theirs", None),
     ]
+
+
+def test_a_rule_with_a_failure_row_stays_failing_after_a_successful_manual_run(
+    tmp_path: Path,
+) -> None:
+    """Sync Now and Reconcile Now never clear a failure streak; only a scheduled or instant
+    success does, so the scheduler keeps listing the rule until one of those succeeds."""
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    units = sqlite_units(database)
+    failures = SqliteRuleHealthRecords(database, USER)
+    with units() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    failures.record_failure(rule().id, ProviderFailureKind.TEMPORARY, NOW)
+    with units() as uow:
+        uow.run_outcomes.record(
+            RuleRunOutcome(rule().id, RunKind.SYNC, NOW + timedelta(minutes=1), True)
+        )
+        uow.commit()
+
+    with SqliteInstallationUnitOfWorkFactory(database)() as installation:
+        (after_sync_now,) = installation.scheduled_rules()
+    failures.clear_failures(rule().id)
+    with SqliteInstallationUnitOfWorkFactory(database)() as installation:
+        (after_scheduled_success,) = installation.scheduled_rules()
+
+    assert after_sync_now.last_run_at == NOW + timedelta(minutes=1)
+    assert after_sync_now.failing
+    assert after_sync_now.always_due
+    assert not after_scheduled_success.failing
+    assert not after_scheduled_success.always_due
 
 
 def test_migration_24_numbers_existing_rules_in_the_order_the_database_holds_them(

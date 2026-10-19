@@ -98,7 +98,7 @@ machine and creates only the destination representation selected by each rule.
 | --- | --- |
 | Events | Timed events, all-day events, recurring series, single-occurrence changes, and cancellations |
 | Policies | Busy-only or detail-copy projection; include or exclude all-day events; include or exclude contacts' birthdays; mark, sync, or skip events answered Maybe; sync unanswered invitations as Maybe or wait for an answer, per rule. Declined events are never synced |
-| Scheduling | Source and destination incremental polling every five minutes plus **Sync Now**; with a public HTTPS address, [Instant Sync](docs/instant-sync.md) runs a rule soon after Google or Microsoft reports a change |
+| Scheduling | Source and destination incremental polling every five minutes, or up to every hour as a Plan sets, plus **Sync Now**; with a public HTTPS address, [Instant Sync](docs/instant-sync.md) runs a rule soon after Google or Microsoft reports a change |
 | Reconciliation | Daily full pass plus **Reconcile Now**, which reports remaining drift and records conflicts as blocked |
 | Loop prevention | Private managed-origin metadata prevents projections from becoming sources |
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |

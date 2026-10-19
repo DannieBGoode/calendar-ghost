@@ -651,7 +651,6 @@
       },
       "speed": "Sync speed",
       "speedHint": "How soon changes reach the other calendars.",
-      "intervalHint": "Longer intervals arrive in a later release.",
       "speedTitle": {
         "instant": "Instant",
         "5_minutes": "Every 5 minutes",

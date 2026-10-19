@@ -71,7 +71,6 @@
     "invalid_email": "Enter an email address, such as name@example.com.",
     "invalid_integration_token_name": "Give the token a name of 1 to 80 characters, without line breaks or other control characters.",
     "invalid_plan": "This plan is not valid. Check its name and limits.",
-    "invalid_plan_interval": "Choose one of the offered sync intervals.",
     "invalid_plan_key": "Use 1 to 32 lower-case letters, digits, and hyphens for the key, starting with a letter or digit.",
     "invalid_plan_limit": "Enter each limit as a whole number up to {max}, at least 1 for rules and calendar accounts, or choose No limit.",
     "invalid_plan_name": "Give the plan a name of 1 to 60 characters, without line breaks or other control characters.",

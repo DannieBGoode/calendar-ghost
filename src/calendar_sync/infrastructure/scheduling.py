@@ -48,7 +48,8 @@ class _Threads:
 
 
 class SyncScheduler:
-    """Runs a scheduled pass each interval, several rules at once (ADR 0029)."""
+    """Runs a scheduled pass each interval, several of the rules it lists at once (ADR 0029); the
+    pass decides which rules are due."""
 
     def __init__(
         self,
@@ -107,7 +108,7 @@ class SyncScheduler:
         )
 
     async def _run_pass(self) -> frozenset[str]:
-        """Runs every enabled rule once; returns the ids of the rules this pass listed."""
+        """Runs each rule the pass lists once; returns the ids of the rules it listed."""
         # In a worker thread: finishing a lapse may wait for a rule's lock.
         runs = await self._threads.run(self._pass.begin)
         # Different rules run side by side, so one waiting on a slow provider does not hold up the

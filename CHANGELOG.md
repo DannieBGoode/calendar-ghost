@@ -11,7 +11,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   they are off nothing changes. Administrators are never limited, and under **Only me** Plans stay
   hidden. Under **People → Plans**, one **Plans** switch turns them on, and a table compares the
   Plans: the most active rules, calendar accounts, and Integration Tokens a person may have, each
-  No limit or Up to a number, the sync speed, Instant or every 5 minutes, and how many people have
+  No limit or Up to a number, the sync speed, from Instant to every hour, and how many people have
   each Plan and are over a limit. A Plan opens in a side panel at its own address
   (`/people/plans/{key}`) to edit it, or to give it to people after a dry run says who would be
   over. Everyone without a Plan of their own has the default; turning Plans on with no default adds
@@ -21,9 +21,13 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   limit. Once a Plan is the default, **Invitations** says which Plan someone invited will get.
 - With Plans on, starting a rule, connecting a new calendar account, and issuing a token respect
   the person's Plan, and each control says so at the limit and links to Your plan. A Plan that
-  syncs every 5 minutes has no Instant Sync. Reauthorization is never refused. A lowered limit
-  refuses only what is new and stops nothing: rules beyond it keep syncing, and existing accounts
-  and tokens keep working. Returning to setup turns Plans off and keeps their definitions.
+  syncs every 5, 10, 15, or 30 minutes, or every hour, has no Instant Sync, and runs each rule once
+  per interval, each at its own time within it, so an hourly Plan's rules spread over the hour; a
+  rule that never ran, is failing, or was just previewed still runs at the next five-minute pass.
+  A rule's page and the Overview say how often the person's Plan syncs. Reauthorization is never
+  refused. A lowered limit refuses only what is new and stops nothing: rules beyond it keep
+  syncing, and existing accounts and tokens keep working. Returning to setup turns Plans off and
+  keeps their definitions.
 - The Plans API: `GET` and `POST /api/v1/plans`, `PUT` and `DELETE /api/v1/plans/{plan_key}`,
   `PUT /api/v1/plan-settings`, and `POST /api/v1/plan-assignments`, which gives each of up to 100
   people the Plan it names for them, all or none, so Undo never gives back only some, and with

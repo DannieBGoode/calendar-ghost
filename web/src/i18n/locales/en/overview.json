@@ -112,7 +112,11 @@
     },
     "healthy": {
       "title": "Synchronization is healthy",
-      "detail": "Calendar Ghost checks your calendars for changes every five minutes."
+      "detail": {
+        "one": "Calendar Ghost checks your calendars for changes every minute.",
+        "other": "Calendar Ghost checks your calendars for changes every {count} minutes."
+      },
+      "detailHourly": "Calendar Ghost checks your calendars for changes every hour."
     },
     "stalled": {
       "title": "Synchronization stopped running",

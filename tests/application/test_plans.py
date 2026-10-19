@@ -23,8 +23,6 @@ from calendar_sync.domain.plans import (
     Allowance,
     AllowanceBasis,
     AssignmentSource,
-    InvalidPlan,
-    InvalidPlanReason,
     NewPlan,
     Plan,
     PlanIsDefault,
@@ -148,7 +146,7 @@ def test_show_plans_answers_each_plan_who_has_it_the_setting_and_the_offered_int
     assert overview == PlansOverview(
         PlansSetting(True, FREE.key),
         (PlanListing(FAMILY, False, 1, 1), PlanListing(FREE, True, 2, 1)),
-        (SyncInterval.INSTANT, SyncInterval.EVERY_5_MINUTES),
+        tuple(SyncInterval),
         followers=2,
     )
 
@@ -156,23 +154,14 @@ def test_show_plans_answers_each_plan_who_has_it_the_setting_and_the_offered_int
 # Defining and changing Plans
 
 
-def test_an_administrator_defines_a_plan_with_an_offered_interval() -> None:
+@pytest.mark.parametrize("plan", [SOLO, HOURLY], ids=["instant", "every-hour"])
+def test_an_administrator_defines_a_plan_with_any_interval(plan: Plan) -> None:
     plans = _plans()
 
-    listing = _define(plans).execute(ADMIN.id, as_new(SOLO))
+    listing = _define(plans).execute(ADMIN.id, as_new(plan))
 
-    assert listing == PlanListing(SOLO, False, 0, 0)
-    assert plans.get(SOLO.key) == SOLO
-
-
-def test_a_new_plan_whose_interval_is_not_offered_is_refused() -> None:
-    plans = _plans()
-
-    with pytest.raises(InvalidPlan) as refused:
-        _define(plans).execute(ADMIN.id, as_new(HOURLY))
-
-    assert refused.value.reason is InvalidPlanReason.INTERVAL
-    assert plans.any_plans() is False
+    assert listing == PlanListing(plan, False, 0, 0)
+    assert plans.get(plan.key) == plan
 
 
 def test_changing_a_plan_keeps_its_key_and_its_new_limits_apply_at_once() -> None:
@@ -185,30 +174,6 @@ def test_changing_a_plan_keeps_its_key_and_its_new_limits_apply_at_once() -> Non
     assert listing == PlanListing(roomier, True, 2, 1)
     assert list(plans.catalog) == [FREE.key]
     assert plans.of(MEMBER.id) == Allowance(AllowanceBasis.PLAN, plan=roomier, on_default=True)
-
-
-def test_a_newly_chosen_interval_must_be_offered() -> None:
-    plans = _plans()
-    plans.add(as_new(FREE), NOW)
-    hourly = replace(FREE, limits=replace(FREE.limits, sync_interval=SyncInterval.EVERY_60_MINUTES))
-
-    with pytest.raises(InvalidPlan) as refused:
-        _change(plans).execute(ADMIN.id, hourly)
-
-    assert refused.value.reason is InvalidPlanReason.INTERVAL
-    assert plans.get(FREE.key) == FREE
-
-
-def test_an_interval_a_later_release_stored_may_be_kept() -> None:
-    plans = _plans()
-    # As a release offering every interval stored it, before a rollback to this one.
-    plans.catalog[HOURLY.key] = HOURLY
-    renamed = replace(HOURLY, name="Every hour")
-
-    listing = _change(plans).execute(ADMIN.id, renamed)
-
-    assert listing.plan == renamed
-    assert plans.get(HOURLY.key) == renamed
 
 
 # The Plans setting and the Default Plan

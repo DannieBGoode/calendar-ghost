@@ -35,7 +35,10 @@ function ruleName(i18n: I18n, endpoints: RuleEndpoints): string {
   return i18n.t("overview.ruleName", { source: endpoints.source.name, destination: endpoints.destination.name })
 }
 
-/** What the Overview reads: the dashboard, the rules and their endpoints, and the providers. */
+/**
+ * What the Overview reads: the dashboard, the rules and their endpoints, the providers, and how
+ * often the reader's rules are checked.
+ */
 function useOverviewData() {
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, refetchInterval: REFRESH_INTERVAL })
   const rules = useQuery({
@@ -48,14 +51,17 @@ function useOverviewData() {
   const { endpoints } = useRuleEndpoints(rules.data ?? [])
   // An administrator fixes the installation's own Causes; everyone else is told it is not theirs.
   const administrator = isAdministrator(session.data?.user)
-  return { dashboard, rules, providers, endpoints, administrator }
+  // Every rule of one User polls alike, and the rules answer refreshes while the Overview is open,
+  // so a Plan changed meanwhile shows at the next refresh. With no rules it says the default.
+  const pollEveryMinutes = rules.data?.[0]?.poll_every_minutes
+  return { dashboard, rules, providers, endpoints, administrator, pollEveryMinutes }
 }
 
 export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
   const i18n = useI18n()
   const { t } = i18n
   const now = useNow()
-  const { dashboard, rules, providers, endpoints, administrator } = useOverviewData()
+  const { dashboard, rules, providers, endpoints, administrator, pollEveryMinutes } = useOverviewData()
 
   if (dashboard.isPending || rules.isPending || providers.isPending) return <PageSkeleton label={t("overview.loading")} />
   if (dashboard.error || rules.error || providers.error) return <LoadFailure title={t("overview.loadFailure")} />
@@ -64,6 +70,7 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   const health = overviewHealth(i18n, dashboard.data, now, {
     ruleName: (ruleId) => ruleNames.get(ruleId) ?? null,
     administrator,
+    pollEveryMinutes,
   })
 
   return (

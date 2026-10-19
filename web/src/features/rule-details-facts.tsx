@@ -152,11 +152,14 @@ function CadenceFact({ detail, sourceName }: { detail: RuleDetail; sourceName: s
   if (detail.state !== "enabled") return null
   const cadence = ruleCadence(detail)
   const words = { source: sourceName, count: cadence.minutes }
+  // A 60-minute Plan reads "every hour", as the Plans screens say it.
+  const scheduled =
+    cadence.minutes === 60 ? t("ruleDetails.cadence.everyHour") : t("ruleDetails.cadence.every", { count: cadence.minutes })
   return (
     <div>
       <dt>{t("ruleDetails.cadence.label")}</dt>
       <dd>
-        {cadence.instant ? t("ruleDetails.cadence.instant") : t("ruleDetails.cadence.every", { count: cadence.minutes })}
+        {cadence.instant ? t("ruleDetails.cadence.instant") : scheduled}
         <span className="rule-fact-explanation">
           {cadence.instant && t("ruleDetails.cadence.instantExplanation", words)}
           {cadence.reason && t(`ruleDetails.cadence.reason.${cadence.reason}`, words)}

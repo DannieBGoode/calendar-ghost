@@ -40,6 +40,9 @@ const family: PlanSummary = {
   },
 }
 
+/** Every sync interval, in the order the server offers them. */
+const INTERVALS: SyncInterval[] = ["instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"]
+
 type Props = {
   plan: PlanSummary | null
   pending: boolean
@@ -84,7 +87,7 @@ function show({ plan, pending, error, enabled = true, others = [] }: Props) {
           plan={plan}
           enabled={enabled}
           others={others}
-          intervals={["instant", "5_minutes"]}
+          intervals={INTERVALS}
           pending={pending}
           error={error}
           onSave={onSave}
@@ -271,21 +274,22 @@ describe("PlanEditor", () => {
     expect(field("plan-edit-family-accounts").closest("[data-stepper]")?.nextElementSibling?.textContent).toBe("account")
   })
 
-  it("offers sync speed as radio cards with what each does, and says longer intervals come later", () => {
+  it("offers every sync speed as radio cards with what each does, Instant first", () => {
     edit()
     const group = speedGroup()
     expect(form().querySelector("fieldset.plan-limits")?.contains(group)).toBe(true)
     expect(element(group.getAttribute("aria-labelledby")!).textContent).toBe("Sync speed")
-    expect(description(group)).toEqual([
-      "How soon changes reach the other calendars.",
-      "Longer intervals arrive in a later release.",
-    ])
+    expect(description(group)).toEqual(["How soon changes reach the other calendars."])
     expect([...group.querySelectorAll<HTMLInputElement>("input[type='radio']")].map((radio) => [labelOf(radio), description(radio)])).toEqual([
       [
         "Instant",
         ["Changes sync soon after the calendar provider reports them, with a check every 5 minutes as a backup."],
       ],
       ["Every 5 minutes", ["Calendars are checked for changes every 5 minutes."]],
+      ["Every 10 minutes", ["Calendars are checked for changes every 10 minutes."]],
+      ["Every 15 minutes", ["Calendars are checked for changes every 15 minutes."]],
+      ["Every 30 minutes", ["Calendars are checked for changes every 30 minutes."]],
+      ["Every hour", ["Calendars are checked for changes every hour."]],
     ])
     expect(speed("instant").checked).toBe(true)
   })
@@ -512,10 +516,10 @@ describe("PlanEditor", () => {
         <StaticI18nProvider i18n={i18n}>
           <PlanEditor
             plan={null}
-            start={{ ...draftOf(family, ["instant", "5_minutes"]), name: "Family copy" }}
+            start={{ ...draftOf(family, INTERVALS), name: "Family copy" }}
             enabled
             others={["Family"]}
-            intervals={["instant", "5_minutes"]}
+            intervals={INTERVALS}
             pending={false}
             error={null}
             onSave={onSave}
@@ -535,7 +539,6 @@ describe("PlanEditor", () => {
       () => field("plan-edit-family-name"),
       "Give the plan a name of 1 to 60 characters, without line breaks or other control characters.",
     ],
-    [refusal("invalid_plan", { reason: "interval" }), () => speed("instant"), "Choose one of the offered sync intervals."],
     [refusal("plan_name_taken", { name: "Free" }), () => field("plan-edit-family-name"), "Another plan is named Free. Choose a different name."],
     [
       refusal("invalid_plan", { reason: "limit", max: 10_000 }),
@@ -550,9 +553,8 @@ describe("PlanEditor", () => {
 
     const refused = refusedField()
     expect(document.activeElement).toBe(refused)
-    const invalid = refused.closest("[role='radiogroup']") ?? refused
-    expect(invalid.getAttribute("aria-invalid")).toBe("true")
-    expect(description(invalid)).toContain(reason)
+    expect(refused.getAttribute("aria-invalid")).toBe("true")
+    expect(description(refused)).toContain(reason)
     const shown = [...form().querySelectorAll("[role='alert']")]
     expect(shown.map((alert) => alert.textContent)).toEqual([reason])
     expect(shown[0]?.closest(".plan-field")?.contains(refused)).toBe(true)

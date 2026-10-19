@@ -2,8 +2,9 @@
 
 The scheduler adapter decides only when a pass starts and how many rules run at once. A pass
 expires what is kept only for a while, finishes interrupted lapses, checks again the accounts an
-administrator's Cause stopped, chooses whose daily full pass is due, runs each rule with its
-owner's services and retries, and records how each run went (ADR 0029).
+administrator's Cause stopped, lists the rules due by their owner's Plan, chooses whose daily full
+pass is due, runs each rule with its owner's services and retries, and records how each run went
+(ADR 0029, ADR 0038).
 """
 
 from __future__ import annotations
@@ -25,7 +26,13 @@ from calendar_sync.application.sync.resource_use import first_counted_day
 from calendar_sync.application.sync.retry import with_retries
 from calendar_sync.application.sync.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.application.sync.synchronization import SyncRunResult
+from calendar_sync.application.sync.watch_ports import (
+    EveryUserInstant,
+    SyncCadencePolicy,
+    cadences_of,
+)
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.cadence import scheduled_run_due
 from calendar_sync.domain.causes import ADMINISTRATOR_CAUSES
 from calendar_sync.domain.model import SyncRule, SyncRuleId
 from calendar_sync.domain.providers import ProviderFailureKind
@@ -73,13 +80,21 @@ class ScheduledPass:
     installation: InstallationUnitOfWorkFactory
     services_for: Callable[[UserId], ScheduledServices]
     clock: Clock
+    cadence: SyncCadencePolicy = field(default_factory=EveryUserInstant)
+    """Each User's Sync Cadence, read once per pass: a Plan's interval longer than a pass makes
+    its rules due once per window of it (ADR 0038)."""
     _checked: dict[UserId, datetime] = field(default_factory=dict)
     """When each User's accounts an administrator's Cause stopped were last checked again."""
     _due: tuple[UserId, ...] = ()
+    _listed: dict[SyncRuleId, datetime] = field(default_factory=dict, init=False)
+    """When the pass that last listed each enabled rule began. A rule not listed since the start
+    counts from its last run, read once, so Sync Now and instant runs never move it."""
 
     def begin(self) -> tuple[ScheduledRun, ...]:
-        """Prepare a pass, then list its runs: every enabled rule of every User who is not
-        disabled, taking turns between Users."""
+        """Prepare a pass, then list its runs: the enabled rules due at it of every User who is
+        not disabled, taking turns between Users. A rule is due once per window of its Plan's
+        interval, and at every pass while it never ran, is failing, was previewed since its last
+        run, or awaits reprojection (`scheduled_run_due`)."""
         now = self.clock.now()
         today = now.astimezone(UTC).date()
         with self.installation() as installation:
@@ -87,16 +102,39 @@ class ScheduledPass:
             installation.forget_change_values(now - SOURCE_CHANGE_RETENTION)
             installation.forget_provider_calls(first_counted_day(today))
             installation.commit()
-            # Before listing the pass's rules, so a rule resumed here runs in this same pass.
+            # Before listing the pass's rules, so a rule resumed here can run in this same pass.
             for owner in installation.users_with_unfinished_lapses():
                 self._finish_lapses(owner)
             self._due = self._choose_checks(installation.failure_causes(now - RECHECK_INTERVAL))
-            # Each rule's daily full pass is due from its own last one, so a restart or another
-            # rule's failure never re-lists calendars that already completed today's pass.
-            return tuple(
-                ScheduledRun(scheduled, _full_pass_due(scheduled.last_full_succeeded_at, today))
-                for scheduled in fairly_ordered(installation.scheduled_rules())
+            rules = installation.scheduled_rules()
+        # A failed read falls back to the default cadence, which is due at every pass.
+        cadences = cadences_of(self.cadence, {scheduled.owner for scheduled in rules})
+        listed = {
+            scheduled.rule.id: self._listed.get(scheduled.rule.id, scheduled.last_run_at)
+            for scheduled in rules
+        }
+        due = [
+            scheduled
+            for scheduled in rules
+            if scheduled_run_due(
+                cadences[scheduled.owner].poll_every,
+                scheduled.rule.id.value,
+                now,
+                listed[scheduled.rule.id],
+                always_due=scheduled.always_due,
+                full_pass_due=_full_pass_due(scheduled.last_full_succeeded_at, today),
             )
+        ]
+        # Rules no longer enabled are forgotten; one not listed keeps the last run it counts from,
+        # and every listed one counts from this pass.
+        self._listed = {rule_id: at for rule_id, at in listed.items() if at is not None}
+        self._listed.update((scheduled.rule.id, now) for scheduled in due)
+        # Each rule's daily full pass is due from its own last one, so a restart or another
+        # rule's failure never re-lists calendars that already completed today's pass.
+        return tuple(
+            ScheduledRun(scheduled, _full_pass_due(scheduled.last_full_succeeded_at, today))
+            for scheduled in fairly_ordered(due)
+        )
 
     def run(self, scheduled: ScheduledRun) -> bool:
         """Run one rule, retrying what may pass, and record how it went; False when it failed."""

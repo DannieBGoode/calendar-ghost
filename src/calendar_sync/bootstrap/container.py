@@ -144,6 +144,7 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.logs import configure_logging
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.cadence import SCHEDULED_EVERY
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.domain.services import (
     EventProjector,
@@ -534,14 +535,23 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         # Read when called, after the scheduler exists: every User's status reads its heartbeat.
         return _compose_user(user_id, adapters, scheduler, instant_status)
 
+    cadence = adapters.sync_cadence
     scheduled_pass = ScheduledPass(
         adapters.installation_units,
         lambda owner: _scheduled_services(user_services(owner)),
         adapters.clock,
+        cadence=cadence,
     )
     runs_rules = adapters.calendar_provider is not None and adapters.accounts is not None
-    scheduler = SyncScheduler(scheduled_pass, clock=adapters.clock) if runs_rules else None
-    cadence = adapters.sync_cadence
+    scheduler = (
+        SyncScheduler(
+            scheduled_pass,
+            interval_seconds=int(SCHEDULED_EVERY.total_seconds()),
+            clock=adapters.clock,
+        )
+        if runs_rules
+        else None
+    )
     address = instant_sync_address(settings) if runs_rules else None
     instant_status = InstantSyncStatus(
         adapters.users,
