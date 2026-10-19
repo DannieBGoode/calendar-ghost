@@ -16,8 +16,8 @@ docs/development.md, Live provider checks.
     CALENDAR_GHOST_PASSWORD=... .venv/bin/python scripts/live_provider_checks.py
 
 It stops at once, before it makes anything, when the signed-in User's Plan limits anything: one
-run starts more manual runs than such a Plan allows in an hour. Sign in as an administrator, or
-turn Plans off.
+run starts more manual runs than such a Plan allows in an hour. Sign in as an administrator, give
+this User a Plan that limits nothing, or turn Plans off.
 
 It prints one Markdown table of results and exits 1 if any check failed.
 """
@@ -852,8 +852,9 @@ def require_unlimited_runs(api: httpx.Client) -> None:
     )
     if applied != NO_LIMITS:
         raise SystemExit(
-            f"A Plan limits this User to {MANUAL_RUNS} manual runs an hour, and the checks need "
-            "more: sign in as an administrator, or turn Plans off."
+            f"A Plan limits this User, so they may start only {MANUAL_RUNS} manual runs an hour, "
+            "and the checks need more: sign in as an administrator, give this User a Plan that "
+            "limits nothing, or turn Plans off."
         )
 
 

@@ -40,5 +40,8 @@ def test_the_checks_run_for_a_user_whose_manual_runs_are_not_counted(
 
 def test_the_checks_stop_before_anything_when_a_plan_limits_the_user() -> None:
     # One run of the checks starts more manual runs than the limit allows in an hour.
-    with pytest.raises(SystemExit, match="sign in as an administrator, or turn Plans off"):
+    with pytest.raises(
+        SystemExit,
+        match="sign in as an administrator, give this User a Plan that limits nothing, or turn",
+    ):
         require_unlimited_runs(_signed_in("plan", {**NO_LIMITS, "sync_interval": "60_minutes"}))
