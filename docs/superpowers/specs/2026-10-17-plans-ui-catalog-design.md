@@ -212,7 +212,8 @@ At `/people/plans/<key>/people`, which Assign people in the row menu opens.
   accounts, 1 allowed") or "Within every limit", and Change plan.
 - **Footer:** "Give Free to 1 person" (primary), Cancel, and "1 selected". The result is a toast,
   "alex@example.test now has Free." or "2 people now have Free.", with Undo, which gives each person
-  back the Plan they had.
+  back the Plan they had. With more than 100 chosen, the most the server gives a Plan to at once,
+  Give waits and says "Choose at most 100 people at a time."
 
 ### Everyone
 

@@ -49,6 +49,15 @@ export function overNote({ t }: I18n, over: readonly string[], plan: string): st
     : t("people.plans.assign.overNote", { count: over.length, name: plan })
 }
 
+/** The most people one call gives a Plan to, or asks a dry run about, as domain/plans.py sets it. */
+export const PEOPLE_PER_ASSIGNMENT = 100
+
+/** Why Give waits, or null when it can give: nobody is chosen yet, or more than one call gives to. */
+export function giveWait({ t }: I18n, plan: string, count: number): string | null {
+  if (count === 0) return t("people.plans.assign.giveReason", { name: plan })
+  return count > PEOPLE_PER_ASSIGNMENT ? t("common.apiError.invalid_assignment_too_many", { count: PEOPLE_PER_ASSIGNMENT }) : null
+}
+
 /** One call that gives one Plan, or the Default Plan with null, to some people. */
 export type AssignMove = { plan: string | null; userIds: string[] }
 

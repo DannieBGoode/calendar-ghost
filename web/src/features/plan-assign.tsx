@@ -10,7 +10,7 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { OverLimit, PersonRow, PlanAssignments, PlanSummary } from "@/lib/api"
 import { isAdministrator, personName } from "@/lib/people"
-import { heldPlanLine, overNote, wouldBeOver, type AssignCandidates } from "@/lib/plan-assignment"
+import { giveWait, heldPlanLine, overNote, PEOPLE_PER_ASSIGNMENT, wouldBeOver, type AssignCandidates } from "@/lib/plan-assignment"
 import { usePlanCandidates, usePlanDryRun } from "@/lib/use-plan-assignment"
 import type { PlanCommands } from "@/lib/use-plans"
 
@@ -19,13 +19,17 @@ type Chosen = ReadonlyMap<string, PersonRow>
 
 /**
  * Whom the dry run asks about: everyone found whom a Plan could limit, then anyone chosen whom the
- * search hides now, so what they would be over is still said.
+ * search hides now, so what they would be over is still said. At most PEOPLE_PER_ASSIGNMENT, as
+ * the server answers, so the last found whom nobody chose make room for the chosen.
  */
 function dryRunIds(found: readonly PersonRow[], chosen: Chosen): string[] {
-  const ids = found.map((person) => person.id)
-  const shown = new Set(ids)
-  const hidden = [...chosen.values()].filter((person) => !isAdministrator(person) && !shown.has(person.id))
-  return [...ids, ...hidden.map((person) => person.id)]
+  const shown = new Set(found.map((person) => person.id))
+  const limited = [...chosen.values()].filter((person) => !isAdministrator(person))
+  const room = Math.max(0, PEOPLE_PER_ASSIGNMENT - limited.length)
+  const others = new Set(found.filter((person) => !chosen.has(person.id)).slice(0, room))
+  const asked = found.filter((person) => chosen.has(person.id) || others.has(person))
+  const hidden = limited.filter((person) => !shown.has(person.id))
+  return [...asked, ...hidden].slice(0, PEOPLE_PER_ASSIGNMENT).map((person) => person.id)
 }
 
 /**
@@ -80,7 +84,7 @@ export function PlanAssign({
   }
 
   function give() {
-    if (chosen.size === 0 || pending) return
+    if (chosen.size === 0 || chosen.size > PEOPLE_PER_ASSIGNMENT || pending) return
     assign.mutate(
       { from: plan.key, via: "give", moves: [{ plan: given, userIds: [...chosen.keys()] }] },
       {
@@ -300,8 +304,8 @@ function CandidateRow({
 
 /**
  * The panel's footer: give the Plan to whoever was chosen, the one primary action, which waits,
- * with why, until someone is chosen. Then Cancel, which closes the panel, how many are chosen,
- * and why the last give was refused.
+ * with why, until someone is chosen and while too many are. Then Cancel, which closes the panel,
+ * how many are chosen, and why the last give was refused.
  */
 function AssignFooter({
   base,
@@ -320,17 +324,19 @@ function AssignFooter({
   onGive: () => void
   onCancel: () => void
 }) {
-  const { t } = useI18n()
+  const i18n = useI18n()
+  const { t } = i18n
   const reasonId = `${base}-give-reason`
   const none = count === 0
+  const reason = giveWait(i18n, plan.name, count)
   return (
     <div className="plan-panel-foot">
       <div className="plan-panel-actions">
         <Button
           type="button"
-          aria-disabled={none || pending || undefined}
+          aria-disabled={reason !== null || pending || undefined}
           aria-busy={pending || undefined}
-          aria-describedby={none ? reasonId : undefined}
+          aria-describedby={reason === null ? undefined : reasonId}
           onClick={onGive}
         >
           {none ? t("people.plans.assign.giveNone", { name: plan.name }) : t("people.plans.assign.give", { count, name: plan.name })}
@@ -340,9 +346,9 @@ function AssignFooter({
         </Button>
         <span className="plan-panel-status plan-assign-selected">{t("people.plans.assign.selected", { count })}</span>
       </div>
-      {none && (
+      {reason !== null && (
         <p id={reasonId} className="field-hint">
-          {t("people.plans.assign.giveReason", { name: plan.name })}
+          {reason}
         </p>
       )}
       {refusal && (

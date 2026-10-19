@@ -1923,6 +1923,53 @@ describe("Assigning people from a plan", () => {
     expect(assignCalls().at(-1)).toEqual({ plan: "free", user_ids: ["user-sam", "user-alex"], dry_run: true })
   })
 
+  it("asks the dry run about at most 100 people, the chosen first, and gives to at most 100 at a time", async () => {
+    const many = Array.from({ length: 100 }, (_, index) =>
+      candidate(`p${String(index).padStart(3, "0")}@example.test`, { key: "no-limits", name: "No limits", on_default: false }),
+    )
+    const over: OverLimit[] = [{ limit: "rules", in_use: 3, allowed: 1 }]
+    await renderPlans(testI18n(), {
+      plans: overview({ enabled: true, defaultPlan: "family" }),
+      answers: {
+        "GET /api/v1/users": (call) => jsonResponse(call.query.get("search") === "sam" ? candidates([SAM]) : candidates(many, 150)),
+        // As the server answers: about at most 100 people at once.
+        "POST /api/v1/plan-assignments": (call) => {
+          const ids = (call.body as { user_ids: string[] }).user_ids
+          if (ids.length > 100) return refusal(422, "invalid_assignment", { reason: "too_many", limit: 100, count: 100 })
+          return moved(
+            [...many, SAM].filter((person) => ids.includes(person.id)).map((person) => [person, person === many[0] || person === SAM ? over : []]),
+            true,
+          )
+        },
+      },
+    })
+    await chooseFromMenu("free", "Assign people")
+    const search = field("plan-assign-free-search")
+    type(search, "sam")
+    act(() => {
+      search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    })
+    await settle()
+    await check("free", SAM)
+    await escape(search)
+    expect(assignRows("free")).toHaveLength(100)
+    expect(assignRows("free")[0]).toEqual(["p000@example.test", "Has No limits", "Would be over: 3 active rules, 1 allowed"])
+    expect(assignOf("free").querySelector(".plan-assign-note")?.textContent).toBe(
+      "sam@example.test will have more than Free allows. Everything they have keeps working, but they can't add more until they are within it.",
+    )
+
+    act(() => {
+      for (const person of many) pick("free", person).click()
+    })
+    await settle()
+    const give = button("Give Free to 101 people", panel())
+    expect(give.getAttribute("aria-disabled")).toBe("true")
+    expect(element(give.getAttribute("aria-describedby")!).textContent).toBe("Choose at most 100 people at a time.")
+    await click(give)
+    expect(assignCalls().every((call) => (call as { dry_run: boolean; user_ids: string[] }).dry_run)).toBe(true)
+    expect(assignCalls().every((call) => (call as { user_ids: string[] }).user_ids.length <= 100)).toBe(true)
+  })
+
   it("clears the search with Escape without closing the panel", async () => {
     await renderPlans(testI18n(), {
       answers: { "GET /api/v1/users": freeAndOthers([ALEX]), "POST /api/v1/plan-assignments": DRY_RUN },
