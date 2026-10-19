@@ -337,7 +337,9 @@ toast, even once the view that made the change is gone: what it gave back, or wh
 with an alert icon in Destructive Red; a refusal stays until it is closed. While a toast shows,
 the page reserves its height, so the page can scroll its last line clear of it and keyboard focus
 stops above it; while a side panel is open, the toast sits at the bottom left, over the list, so it
-never covers the panel's footer. A result about one row still appears on that row.
+never covers the panel's footer. A result about one row still appears on that row, except a change
+of someone's Plan, which is a toast with Undo even from their row, since it can take them out of a
+narrowed list.
 
 ### Popovers
 
@@ -542,8 +544,8 @@ column, the Plan's name with chips ("Default", "Over a limit" in Attention Ochre
 limited" for an administrator) and, on a muted line under them, which limit someone is over ("2
 calendar accounts, 1 allowed"), and the filters a Plan filter and a Limits filter, kept in the
 address like the others. Rows can be selected for Change plan, whose radio rows put the default
-first, where choosing it means following it, with what they have now chosen. The result of any
-change is a toast with Undo.
+first, where choosing it means following it, with what they have now chosen. Change plan's result,
+for one person from their row's More actions as for several, is a toast with Undo.
 
 A person's page starts at their name, and the browser tab names them. It leads with a
 Synchronization card: the verdict with how many rules run, then a problem several rules share,
