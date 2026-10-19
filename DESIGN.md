@@ -218,7 +218,7 @@ Product text uses seven steps: 2rem Fraunces page titles, 1.25rem Figtree object
 - **Title**: Section titles and row titles (rule names, grouped settings, and recovery headings) in Figtree, distinguished by weight rather than size.
 - **Body**: Instructions and explanations, capped near 70 characters per line.
 - **Label**: Field labels, navigation, compact state, and metadata in sentence case.
-- UI labels use sentence case even for glossary terms: "Integration tokens" as a column, "integration tokens" in a sentence; the glossary, documentation, and code keep "Integration Tokens".
+- **Glossary terms**: In UI text, sentence case like any other words: "Integration tokens" as a column, "integration tokens" in a sentence; the glossary, documentation, and code keep "Integration Tokens".
 
 ### Named Rules
 
