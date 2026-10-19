@@ -157,7 +157,8 @@ def test_giving_a_plan_moves_everyone_at_once_and_records_who_gave_it_and_when()
 def test_none_or_the_default_returns_people_to_the_default_plan(plan: PlanKey | None) -> None:
     """Giving the default means following it, so they move with it when it changes."""
     installation = _installation()
-    installation.assign.execute(ADMIN.id, [ALICE.id], FREE.key)
+    # Given a day earlier, so the record below can only be this assignment's.
+    installation.plans.assign_all([ALICE.id], FREE.key, replace(GIVEN, at=NOW - DAY))
 
     planned = installation.assign.execute(ADMIN.id, [ALICE.id], plan, dry_run=True)
     moved = installation.assign.execute(ADMIN.id, [ALICE.id], plan)
