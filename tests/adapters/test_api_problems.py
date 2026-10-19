@@ -209,11 +209,6 @@ FAMILY_KEY = PlanKey("family")
             {"reason": "limit", "max": 10_000},
         ),
         (
-            InvalidPlan(InvalidPlanReason.INTERVAL, "choose one of the offered sync intervals"),
-            "invalid_plan",
-            {"reason": "interval"},
-        ),
-        (
             _refusal(lambda: needs_no_limits_plan(True, None, FAMILY_KEY)),
             "plans_need_default",
             {},

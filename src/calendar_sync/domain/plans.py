@@ -47,11 +47,10 @@ class InvalidPlanReason(StrEnum):
     KEY = "key"
     NAME = "name"
     LIMIT = "limit"
-    INTERVAL = "interval"
 
 
 class InvalidPlan(DomainValidationError):
-    """A Plan's key, name, limits, or sync interval cannot be saved."""
+    """A Plan's key, name, or limits cannot be saved."""
 
     def __init__(self, reason: InvalidPlanReason, message: str) -> None:
         super().__init__(message)
@@ -91,8 +90,7 @@ def plan_key_from(name: str, taken: Container[str]) -> PlanKey:
 
 
 class SyncInterval(StrEnum):
-    """How soon a Plan's rules sync. Every value is known now, so a Plan saved by a release that
-    offers more intervals still reads after a rollback."""
+    """How soon a Plan's rules sync: instantly, or every 5, 10, 15, 30, or 60 minutes."""
 
     INSTANT = "instant"
     EVERY_5_MINUTES = "5_minutes"
@@ -119,8 +117,9 @@ _POLL_MINUTES = {
 }
 """How many minutes apart Scheduled Sync runs a rule at each interval but instant."""
 
-OFFERED_INTERVALS: tuple[SyncInterval, ...] = (SyncInterval.INSTANT, SyncInterval.EVERY_5_MINUTES)
-"""The sync intervals an administrator may choose for a Plan, in the order they are offered."""
+OFFERED_INTERVALS: tuple[SyncInterval, ...] = tuple(SyncInterval)
+"""The sync intervals an administrator may choose for a Plan, in the order they are offered:
+every one, instant first."""
 
 
 class LimitedResource(StrEnum):
@@ -416,12 +415,6 @@ def require_removable(key: PlanKey, default: PlanKey | None, people: int) -> Non
         raise PlanIsDefault("this is the default plan; choose another default before removing it")
     if people > 0:
         raise PlanInUse(people)
-
-
-def require_offered(interval: SyncInterval) -> None:
-    """Refuse saving a sync interval this release does not offer."""
-    if interval not in OFFERED_INTERVALS:
-        raise InvalidPlan(InvalidPlanReason.INTERVAL, "choose one of the offered sync intervals")
 
 
 def has_room(in_use: int, limit: int | None) -> bool:

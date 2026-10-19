@@ -95,14 +95,9 @@ export function draftOf(plan: PlanSummary | null, intervals: readonly SyncInterv
   }
 }
 
-/**
- * A new Plan with another's limits, as Duplicate starts it, under `name`. A sync interval a later
- * release saved, which a new Plan may not be given, starts at the first offered one instead.
- */
+/** A new Plan with another's limits and sync interval, as Duplicate starts it, under `name`. */
 export function copyDraft(plan: PlanSummary, name: string, intervals: readonly SyncInterval[]): PlanDraft {
-  const copied = draftOf(plan, intervals)
-  const interval = intervals.includes(copied.interval) ? copied.interval : (intervals[0] ?? "instant")
-  return { ...copied, name, interval }
+  return { ...draftOf(plan, intervals), name }
 }
 
 /**
@@ -184,12 +179,12 @@ export function nameRefusal(draft: PlanDraft, others: readonly string[]): ApiErr
  * Plan was removed meanwhile. The server does not say which limit it refused, and No limit and
  * None are always allowed, so a limit refusal names the first limit with a number.
  */
-export function refusedField(error: unknown, draft: PlanDraft): DraftField | null {
+export function refusedField(error: unknown, draft: PlanDraft): "name" | LimitName | null {
   if (!(error instanceof ApiError)) return null
   if (error.code === "plan_name_taken") return "name"
   if (error.code !== "invalid_plan") return null
   const { reason } = error.params
-  if (reason === "name" || reason === "interval") return reason
+  if (reason === "name") return reason
   if (reason === "limit") return LIMIT_NAMES.find((name) => draft[name].choice === "upTo") ?? null
   return null
 }

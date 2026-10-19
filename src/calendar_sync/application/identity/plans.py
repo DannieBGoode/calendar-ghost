@@ -26,7 +26,6 @@ from calendar_sync.domain.plans import (
     Plan,
     PlanKey,
     SyncInterval,
-    require_offered,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,7 +84,6 @@ class DefinePlan:
 
     def execute(self, actor: UserId, plan: NewPlan) -> PlanListing:
         require_administrator(self.users, actor)
-        require_offered(plan.limits.sync_interval)
         # Raises PlanKeyTaken for a key asked for that another Plan has.
         stored = self.catalog.add(plan, self.clock.now())
         logger.info("plan defined key=%s by=%s", stored.key.value, actor.value)
@@ -103,12 +101,8 @@ class ChangePlan:
 
     def execute(self, actor: UserId, plan: Plan) -> PlanListing:
         require_administrator(self.users, actor)
-        current = self.catalog.get(plan.key)
-        if current is None:
+        if self.catalog.get(plan.key) is None:
             raise PlanNotFound(f"plan {plan.key.value} does not exist")
-        if plan.limits.sync_interval != current.limits.sync_interval:
-            # A Plan may keep an interval a later release stored; a new choice must be offered.
-            require_offered(plan.limits.sync_interval)
         # Raises PlanNotFound when the Plan was removed since it was read.
         self.catalog.change(plan, self.clock.now())
         logger.info("plan changed key=%s by=%s", plan.key.value, actor.value)

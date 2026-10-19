@@ -42,7 +42,6 @@ from calendar_sync.domain.plans import (
     plan_key_from,
     plan_reach,
     require_assignable,
-    require_offered,
     require_removable,
     require_room,
     require_unique_name,
@@ -305,23 +304,15 @@ def test_each_interval_polls_every_its_own_minutes_without_instant_sync(
     assert interval.cadence == polled_every(minutes)
 
 
-def test_administrators_may_offer_instant_or_five_minutes() -> None:
-    assert OFFERED_INTERVALS == (SyncInterval.INSTANT, SyncInterval.EVERY_5_MINUTES)
-
-
-@pytest.mark.parametrize("interval", OFFERED_INTERVALS)
-def test_an_offered_interval_may_be_saved(interval: SyncInterval) -> None:
-    assert refusal(lambda: require_offered(interval)) is None
-
-
-@pytest.mark.parametrize(
-    "interval", [interval for interval in SyncInterval if interval not in OFFERED_INTERVALS]
-)
-def test_an_interval_not_offered_is_refused_with_its_reason(interval: SyncInterval) -> None:
-    with pytest.raises(InvalidPlan) as refused:
-        require_offered(interval)
-
-    assert refused.value.reason is InvalidPlanReason.INTERVAL
+def test_every_interval_is_offered_instant_first() -> None:
+    assert OFFERED_INTERVALS == (
+        SyncInterval.INSTANT,
+        SyncInterval.EVERY_5_MINUTES,
+        SyncInterval.EVERY_10_MINUTES,
+        SyncInterval.EVERY_15_MINUTES,
+        SyncInterval.EVERY_30_MINUTES,
+        SyncInterval.EVERY_60_MINUTES,
+    )
 
 
 def test_assignments_come_from_an_administrator_or_billing() -> None:

@@ -1530,18 +1530,6 @@ describe("Editing a plan", () => {
       "1 person on Family has more active rules than this. Once plans are on, their rules keep syncing, but they can't start another.",
     )
   })
-
-  it("keeps an interval a later release saved, beside the offered ones", async () => {
-    const hourly: PlanSummary = { ...family, limits: { ...family.limits, sync_interval: "60_minutes" } }
-    await renderPlans(testI18n(), { plans: overview({ plans: [hourly] }) })
-    expect(cell("family", "speed").textContent).toBe("Every hour")
-    await click(nameLink("family"))
-    const offered = [...panel().querySelectorAll<HTMLInputElement>("[role='radiogroup'] input[type='radio']")]
-    expect(offered.map((radio) => radio.value)).toEqual(["instant", "5_minutes", "60_minutes"])
-    expect(labelOf(speedRadio("60_minutes"))).toBe("Every hour")
-    expect(element(speedRadio("60_minutes").getAttribute("aria-describedby")!).textContent).toBe("Calendars are checked for changes every hour.")
-    expect(speedRadio("60_minutes").checked).toBe(true)
-  })
 })
 
 describe("A new plan", () => {

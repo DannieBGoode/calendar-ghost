@@ -73,7 +73,7 @@ NOBODY_ON_IT: dict[str, Any] = {"is_default": False, "people": 0, "limited_peopl
 """What a Plan nobody has says about the people who have it."""
 CHANGE_FREE = {"name": "Free", "limits": FREE_BODY["limits"]}
 CHANGE_FAMILY = {"name": "Family", "limits": FAMILY_BODY["limits"]}
-OFFERED = ["instant", "5_minutes"]
+OFFERED = ["instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"]
 # Your plan for someone no Plan limits.
 UNLIMITED = {
     "plan": None,
@@ -450,9 +450,6 @@ def test_each_refusal_answers_its_code_and_params(installation: Installation) ->
         pytest.param(_with_limits(FREE_BODY, connected_accounts=0), "limit", id="no-accounts"),
         pytest.param(_with_limits(FREE_BODY, integration_tokens=-1), "limit", id="minus-tokens"),
         pytest.param(_with_limits(FREE_BODY, rules=10_001), "limit", id="10001-rules"),
-        pytest.param(
-            _with_limits(FREE_BODY, sync_interval="15_minutes"), "interval", id="not-offered"
-        ),
     ],
 )
 def test_a_new_plan_that_is_not_valid_is_refused_with_its_reason(
@@ -470,9 +467,6 @@ def test_a_new_plan_that_is_not_valid_is_refused_with_its_reason(
         pytest.param({**CHANGE_FREE, "name": ""}, "name", id="empty-name"),
         pytest.param(
             _with_limits(CHANGE_FREE, connected_accounts=10_001), "limit", id="10001-accounts"
-        ),
-        pytest.param(
-            _with_limits(CHANGE_FREE, sync_interval="60_minutes"), "interval", id="not-offered"
         ),
     ],
 )
@@ -599,31 +593,29 @@ def test_a_missing_plan_answer_never_repeats_a_malformed_key(
     assert "aaaa" not in response.json()["detail"]
 
 
-def test_an_interval_a_later_release_offered_may_be_kept_but_not_newly_chosen(
-    installation: Installation,
-) -> None:
-    client = installation.client
-    installation.define(FAMILY_BODY)
-    # Saved by a release that offers every interval, then rolled back.
-    with transaction(installation.database) as connection:
-        connection.execute("UPDATE plans SET sync_interval = '15_minutes' WHERE key = 'family'")
-    listed = client.get("/api/v1/plans").json()["plans"][0]["limits"]["sync_interval"]
-    kept = client.put(
-        "/api/v1/plans/family",
-        json={**_with_limits(CHANGE_FAMILY, sync_interval="15_minutes"), "name": "Household"},
-    )
-    newly_chosen = client.put(
-        "/api/v1/plans/family",
-        json={**_with_limits(CHANGE_FAMILY, sync_interval="30_minutes"), "name": "Household"},
-    )
+def test_every_interval_is_offered_instant_first(installation: Installation) -> None:
+    offered = installation.client.get("/api/v1/plans").json()["sync_intervals"]
 
-    assert listed == "15_minutes"
-    assert kept.status_code == 200
-    assert (kept.json()["name"], kept.json()["limits"]["sync_interval"]) == (
-        "Household",
+    assert offered == [
+        "instant",
+        "5_minutes",
+        "10_minutes",
         "15_minutes",
-    )
-    assert _problem(newly_chosen) == (422, "invalid_plan", {"reason": "interval"})
+        "30_minutes",
+        "60_minutes",
+    ]
+
+
+def test_a_plan_can_sync_every_hour(installation: Installation) -> None:
+    client = installation.client
+    hourly = _with_limits(FAMILY_BODY, sync_interval="60_minutes")
+
+    defined = client.post("/api/v1/plans", json=hourly)
+    listed = client.get("/api/v1/plans").json()["plans"]
+
+    assert defined.status_code == 201
+    assert defined.json() == {**hourly, **NOBODY_ON_IT}
+    assert listed == [{**hourly, **NOBODY_ON_IT}]
 
 
 def test_an_interval_this_release_does_not_know_reads_as_instant(
