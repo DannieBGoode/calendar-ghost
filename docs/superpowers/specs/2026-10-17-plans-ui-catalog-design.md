@@ -170,8 +170,8 @@ save. Nobody loses anything they already have."
     each a full-width row; wider, an option that wraps fills its line.
   - A limit lower than the people on the Plan use warns under it, in Attention Ochre with an icon,
     counted from `use` and naming nobody: "1 person on Pro has more active rules than this. Their
-    rules keep syncing, but they can't start another." While Plans are off it starts "Once plans
-    are on, ...".
+    rules keep syncing, but they can't start another." While Plans are off its second sentence
+    starts "Once plans are on, ...".
 - **Sync speed,** "How soon changes reach the other calendars.", as two radio cards: "Instant",
   "Changes sync soon after the calendar provider reports them, with a check every 5 minutes as a
   backup.", and "Every 5 minutes", "Calendars are checked for changes every 5 minutes.", then
