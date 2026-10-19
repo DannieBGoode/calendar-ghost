@@ -66,11 +66,11 @@ _Avoid_: Base plan, fallback plan
 What one User may use now, decided in this order: no limits while Plans are off, none for an
 Installation Administrator, otherwise their own Plan, or the Default Plan when they have none. It
 decides every limit check and the User's Sync Cadence, and whether their manual runs (Sync Now,
-Reconcile Now, and Rule Preview) are limited: only while a Plan limits them, to 12 in any hour,
-the same for every Plan. A limit check that cannot read it refuses, as for any database error, and
-Your plan says it could not load rather than show limits nobody read; every other reader,
-manual runs included, falls back to no limits, so a fault in Plans never stops synchronization or
-sign-in (ADR 0038).
+Reconcile Now, and Rule Preview) are limited: to 12 in any hour on every Plan that limits
+anything, and not at all on the No limits Plan. A limit check that cannot read it refuses, as for
+any database error, and Your plan says it could not load rather than show limits nobody read;
+every other reader, manual runs included, falls back to no limits, so a fault in Plans never
+stops synchronization or sign-in (ADR 0038).
 _Avoid_: Entitlement
 
 **Plan Hold**:

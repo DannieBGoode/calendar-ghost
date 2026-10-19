@@ -334,9 +334,10 @@ class Allowance:
 
     @property
     def limits_manual_runs(self) -> bool:
-        """Whether their manual runs are counted: only while a Plan limits them, never while
-        Plans are off or for an Installation Administrator."""
-        return self.basis is AllowanceBasis.PLAN and self.plan is not None
+        """Whether their manual runs are counted: only while their Plan limits something, never
+        while Plans are off or for an Installation Administrator. The No limits Plan counts
+        nobody, so turning Plans on still changes nothing."""
+        return self.limits != NO_LIMITS
 
 
 UNLIMITED = Allowance(AllowanceBasis.PLANS_OFF)

@@ -27,9 +27,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   A rule's page and the Overview say how often the person's Plan syncs. Reauthorization is never
   refused. A lowered limit refuses only what is new and stops nothing: rules beyond it keep
   syncing, and existing accounts and tokens keep working. Returning to setup turns Plans off and
-  keeps their definitions. Sync now, Reconcile now, and Preview together allow someone a Plan
-  limits 12 runs in any hour, one every 5 minutes as the fastest Plan syncs, whatever their Plan;
-  the next one is refused and says in how many minutes to try again.
+  keeps their definitions. Sync now, Reconcile now, and Preview together allow someone whose Plan
+  limits anything 12 runs in any hour, one every 5 minutes as the fastest Plan syncs, the same on
+  every such Plan; the next one is refused and says in how many minutes to try again. The No
+  limits Plan counts none, so turning Plans on still changes nothing.
 - The Plans API: `GET` and `POST /api/v1/plans`, `PUT` and `DELETE /api/v1/plans/{plan_key}`,
   `PUT /api/v1/plan-settings`, and `POST /api/v1/plan-assignments`, which gives each of up to 100
   people the Plan it names for them, all or none, so Undo never gives back only some, and with

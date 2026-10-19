@@ -1,6 +1,6 @@
 """The manual-run limit: Sync Now, Reconcile Now, and Rule Preview, counted together for each
-User a Plan limits, so a script pressing them runs no more often than the shortest sync interval
-(ADR 0038)."""
+User whose Plan limits anything, so a script pressing them runs no more often than the shortest
+sync interval (ADR 0038)."""
 
 from __future__ import annotations
 
@@ -19,10 +19,10 @@ from calendar_sync.domain.model import SyncRuleId
 logger = logging.getLogger(__name__)
 
 MANUAL_RUNS = 12
-"""How many manual runs a User a Plan limits may start in any MANUAL_RUN_WINDOW. Twelve an hour
-is one run every 5 minutes, the shortest sync interval, so a script pressing Sync Now polls no
-faster than the fastest polling Plan. It still lets a User set up 5 rules, preview each twice, and
-run Sync Now a few times."""
+"""How many manual runs a User whose Plan limits anything may start in any MANUAL_RUN_WINDOW.
+Twelve an hour is one run every 5 minutes, the shortest sync interval, so a script pressing Sync
+Now polls no faster than the fastest polling Plan. It still lets a User set up 5 rules, preview
+each twice, and run Sync Now a few times."""
 MANUAL_RUN_WINDOW = timedelta(hours=1)
 """The sliding window MANUAL_RUNS is counted over."""
 
@@ -52,8 +52,9 @@ class ManualRunsThrottled(ApplicationError):
 class AdmitManualRun:
     """Admits one manual run of the owner, then runs it.
 
-    Only a User a Plan limits is counted. Fails open: when the owner's Allowance cannot be read,
-    the run goes ahead and nothing is counted, so a fault in Plans never stops a run.
+    Only a User whose Plan limits anything is counted (`Allowance.limits_manual_runs`). Fails
+    open: when the owner's Allowance cannot be read, the run goes ahead and nothing is counted, so
+    a fault in Plans never stops a run.
     """
 
     allowances: Allowances

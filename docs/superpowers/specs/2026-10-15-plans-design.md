@@ -40,8 +40,9 @@ default, and with Plans off nothing in this design limits or changes anything.
    existing Instant Sync on or off preference.
 8. **A slower interval applies at once.** Losing Instant Sync, or a longer interval, needs no
    grace: nothing stops.
-9. **Manual-run limit.** Only while Plans are on, never for administrators: one fixed limit per
-   User, shared by Sync now, Reconcile now, and Rule Preview, kept in memory.
+9. **Manual-run limit.** Only while Plans are on and the User's Plan limits anything, never for
+   administrators: one fixed limit per User, shared by Sync now, Reconcile now, and Rule Preview,
+   kept in memory. The No limits Plan counts nobody, so decision 5 holds.
 10. **Plan Hold emails.** One email when a grace starts, and one when the scheduled pass holds
     rules. The existing per-User email setting governs both, renamed from "Incident emails" to
     "Email notifications". No email on release, and none for holds the User asks for.
@@ -93,8 +94,9 @@ It imports only `domain/cadence.py`. `domain/access.py` imports `PlanKey` from i
   writes `billing`.
 - `Allowance(basis, plan, on_default, assigned)`. `limits` is the Plan's limits when the basis is
   `plan`, and no limits otherwise. `cadence` follows `limits.sync_interval`. Slice 3 adds
-  `limits_manual_runs`, true only when the basis is `plan`. `assigned` is the User's own stored
-  Plan, so an administrator can see a Plan that does not apply yet.
+  `limits_manual_runs`, true only when the basis is `plan` and the Plan limits anything
+  (`limits != NO_LIMITS`), so the No limits Plan keeps decision 5. `assigned` is the User's own
+  stored Plan, so an administrator can see a Plan that does not apply yet.
 
 `allowance_for(plans_on, administers, own, default)` decides in this order:
 
@@ -605,7 +607,8 @@ Today `SyncScheduler` runs a pass, sleeps 300 seconds, and runs every enabled ru
 ## 8. Manual-run limit (slice 3)
 
 - **12 manual runs per User in any 60 minutes**, shared by Sync now, Reconcile now, and Preview,
-  only while the User's Allowance has the basis `plan`.
+  only while the User's Allowance has the basis `plan` and its Plan limits anything. The No limits
+  Plan counts nobody, so turning Plans on still changes nothing (decision 5).
 - **Why 12 per hour.** Sync now is an incremental poll. A higher limit would let a script poll
   faster than the User's Plan allows: 20 runs per 15 minutes is 80 polls an hour on a 60-minute
   Plan. 12 per hour is one run every 5 minutes, the shortest interval. It still lets a User set up

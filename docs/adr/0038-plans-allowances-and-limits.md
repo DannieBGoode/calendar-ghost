@@ -364,13 +364,16 @@ Accepted edges, none of which loses a change or delays a run by more than one in
 
 Slice 3 counts manual runs: Sync Now, Reconcile Now, and Rule Preview. It adds no migration, and
 with Plans off nothing changes. It is the fixed protection
-[ADR 0028](0028-plans-apart-from-commercial-mode.md) promised, amended to count only a User a Plan
-limits. It is not a Plan limit: every Plan has the same, and its refusal never names a Plan.
+[ADR 0028](0028-plans-apart-from-commercial-mode.md) promised, amended to count only a User whose
+Plan limits anything. It is not a Plan limit: every such Plan has the same, and its refusal never
+names a Plan.
 
 - **12 manual runs in any 60 minutes,** shared by the three actions, for a User whose Allowance has
-  the basis `plan` (`Allowance.limits_manual_runs`). While Plans are off, and for an Installation
-  Administrator, nothing is counted. `MANUAL_RUNS` and `MANUAL_RUN_WINDOW` in
-  `application/sync/manual_runs.py` hold the numbers.
+  the basis `plan` and a Plan that limits anything: its limits are not those of the No limits Plan
+  (`Allowance.limits_manual_runs`). While Plans are off, for an Installation Administrator, and on a
+  Plan that limits nothing, nothing is counted, so turning Plans on with no default still changes
+  nothing. `MANUAL_RUNS` and `MANUAL_RUN_WINDOW` in `application/sync/manual_runs.py` hold the
+  numbers.
 - **The floor is the shortest interval.** Sync Now is an incremental poll, so the limit bounds how
   often a script can poll. Twelve an hour is one run every 5 minutes, the shortest sync interval,
   so a script pressing Sync Now polls no more often than the fastest Plan syncs. A higher limit

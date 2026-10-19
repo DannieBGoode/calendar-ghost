@@ -299,12 +299,13 @@ To keep one person from using up what everyone shares, open **People → Plans**
 
 Administrators are never limited, and while Plans are off, which is the default, nobody is. A
 lower limit stops nothing: rules beyond it keep syncing, and accounts and tokens keep working, but
-nobody can start a rule, connect a new calendar account, or issue a token past it. Someone a Plan
-limits may also run **Sync now**, **Reconcile now**, and **Preview** 12 times in any hour
-together, whatever their Plan, and is then told how many minutes to wait. The tab counts
-who is over a limit, and **Everyone** shows each person's Plan and any limit they are over; the
-**Plan** card on a person's page and each person's own **Settings → Your account → Your plan**
-show a meter for each limit with how much of it they use.
+nobody can start a rule, connect a new calendar account, or issue a token past it. Someone whose
+Plan limits anything may also run **Sync now**, **Reconcile now**, and **Preview** 12 times in any
+hour together, the same on every such Plan, and is then told how many minutes to wait; the No
+limits Plan counts none of these runs. The tab counts who is over a limit, and **Everyone** shows
+each person's Plan and any limit they are over; the **Plan** card on a person's page and each
+person's own **Settings → Your account → Your plan** show a meter for each limit with how much of
+it they use.
 [Someone has more than their plan allows](troubleshooting.md#someone-has-more-than-their-plan-allows)
 says what to do when someone is over a limit, and
 [A plan cannot be removed](troubleshooting.md#a-plan-cannot-be-removed-or-its-name-is-refused)

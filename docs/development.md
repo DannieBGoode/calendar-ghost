@@ -170,9 +170,10 @@ It needs:
 - A local installation started with your `.env` (see [Setup](#setup)), signed in with an account
   you made for this, with exactly one Outlook and one Google account connected. Use test accounts
   if you can; it never reads or writes any other calendar of theirs.
-- That account administers the installation, or Plans are off. One run starts more manual runs
-  than the 12 an hour a User a Plan limits may start, so the checks stop at once, before they make
-  anything, when **Your plan** says a Plan limits the account.
+- That account administers the installation, Plans are off, or its Plan limits nothing, as the No
+  limits Plan does. One run starts more manual runs than the 12 an hour any other Plan allows, so
+  the checks stop at once, before they make anything, when **Your plan** shows a limit for the
+  account.
 - Two empty Google calendars, `CG live source` and `CG live destination`, which you create: the
   installation's Google grant may not create calendars. `CALENDAR_GHOST_GOOGLE_SOURCE` and
   `CALENDAR_GHOST_GOOGLE_DESTINATION` name others.

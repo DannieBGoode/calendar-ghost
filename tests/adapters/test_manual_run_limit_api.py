@@ -52,14 +52,16 @@ def test_twelve_manual_runs_are_shared_by_sync_reconcile_and_preview_and_the_thi
 
     with _client(settings, adapters, member) as client:
         admitted = [client.post(_route(number)).status_code for number in range(12)]
-        refused = client.post(_route(12))
+        # A refused run is not recorded, so each of the three is refused in turn.
+        refused = {_route(number): client.post(_route(number)) for number in range(12, 15)}
 
     assert admitted == [404] * 12
-    retry_after = int(refused.headers["Retry-After"])
-    assert (refused.status_code, refused.json()["code"]) == (429, "manual_runs_throttled")
-    # The first run leaves the hour first, and the runs took seconds: one hour, in minutes.
-    assert refused.json()["params"] == {"retry_after": retry_after, "count": 60}
-    assert 3540 < retry_after <= 3600
+    for route, answer in refused.items():
+        retry_after = int(answer.headers["Retry-After"])
+        assert (answer.status_code, answer.json()["code"]) == (429, "manual_runs_throttled"), route
+        # The first run leaves the hour first, and the runs took seconds: one hour, in minutes.
+        assert answer.json()["params"] == {"retry_after": retry_after, "count": 60}
+        assert 3540 < retry_after <= 3600
 
 
 def test_an_administrator_and_plans_off_are_never_limited(tmp_path: Path) -> None:
@@ -73,6 +75,23 @@ def test_an_administrator_and_plans_off_are_never_limited(tmp_path: Path) -> Non
         with_plans_off = {client.post(_route(number)).status_code for number in range(20)}
 
     assert as_administrator == with_plans_off == {404}
+
+
+def test_turning_plans_on_with_no_default_limits_no_manual_run(tmp_path: Path) -> None:
+    """The No limits Plan it makes the default limits nothing, so turning Plans on changes
+    nothing."""
+    settings, adapters = _installation(tmp_path / "test.db", plans=False)
+    admin, member = administrator(adapters), limited_user(settings.database_path)
+
+    with _client(settings, adapters, admin) as client:
+        client.put(
+            "/api/v1/plan-settings", json={"enabled": True, "default_plan": None}
+        ).raise_for_status()
+    with _client(settings, adapters, member) as client:
+        basis = client.get("/api/v1/account/plan").json()["basis"]
+        runs = {client.post(_route(number)).status_code for number in range(20)}
+
+    assert (basis, runs) == ("plan", {404})
 
 
 def test_an_unavailable_run_uses_no_budget(tmp_path: Path) -> None:

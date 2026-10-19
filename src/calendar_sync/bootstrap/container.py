@@ -241,8 +241,8 @@ class UserServices:
     watch_upkeep: UpkeepWatches | None
     """Keeps this User's Calendar Watches; None where accounts cannot be stored."""
     admit_manual_run: AdmitManualRun
-    """Admits each Sync Now, Reconcile Now, and Rule Preview, counted while a Plan limits the
-    User."""
+    """Admits each Sync Now, Reconcile Now, and Rule Preview, counted while the User's Plan
+    limits anything."""
     # Each of these needs the installation master key, and synchronization also a provider.
     list_connected_accounts: ListConnectedAccounts | None
     disconnect_connected_account: DisconnectConnectedAccount | None
