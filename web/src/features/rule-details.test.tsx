@@ -327,6 +327,16 @@ describe("RuleDetailsView", () => {
     await renderDetails(testI18n(), { ...enabledRule, effective_cadence: "off_by_user" })
     expect(runs().textContent).toContain("Syncs every 5 minutesYou turned instant sync off in Settings.")
     expect(runs().querySelector("a[href*='instant-sync']")).toBeNull()
+
+    act(() => root?.unmount())
+    root = null
+    await renderDetails(testI18n(), { ...enabledRule, effective_cadence: "not_in_plan", poll_every_minutes: 15 })
+    expect(runs().textContent).toContain("Syncs every 15 minutesYour plan does not include instant sync.")
+
+    act(() => root?.unmount())
+    root = null
+    await renderDetails(testI18n(), { ...enabledRule, effective_cadence: "not_in_plan", poll_every_minutes: 60 })
+    expect(runs().textContent).toContain("Syncs every hourYour plan does not include instant sync.")
   })
 
   it("says nothing about how soon a rule syncs until it is enabled", async () => {

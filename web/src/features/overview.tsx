@@ -27,7 +27,7 @@ import { overviewHealth } from "@/lib/overview-health"
 import { isAdministrator } from "@/lib/people"
 import { workRefreshInterval } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
-import { useAccountLimitReason } from "@/lib/use-own-plan"
+import { useAccountLimitReason, useOwnPollEveryMinutes } from "@/lib/use-own-plan"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 import { cn } from "@/lib/utils"
 
@@ -35,7 +35,10 @@ function ruleName(i18n: I18n, endpoints: RuleEndpoints): string {
   return i18n.t("overview.ruleName", { source: endpoints.source.name, destination: endpoints.destination.name })
 }
 
-/** What the Overview reads: the dashboard, the rules and their endpoints, and the providers. */
+/**
+ * What the Overview reads: the dashboard, the rules and their endpoints, the providers, and how
+ * often the reader's own Plan checks their calendars.
+ */
 function useOverviewData() {
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, refetchInterval: REFRESH_INTERVAL })
   const rules = useQuery({
@@ -48,14 +51,16 @@ function useOverviewData() {
   const { endpoints } = useRuleEndpoints(rules.data ?? [])
   // An administrator fixes the installation's own Causes; everyone else is told it is not theirs.
   const administrator = isAdministrator(session.data?.user)
-  return { dashboard, rules, providers, endpoints, administrator }
+  // Until Your plan loads, or when it cannot be read, the Overview says the default: every 5 minutes.
+  const pollEveryMinutes = useOwnPollEveryMinutes()
+  return { dashboard, rules, providers, endpoints, administrator, pollEveryMinutes }
 }
 
 export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
   const i18n = useI18n()
   const { t } = i18n
   const now = useNow()
-  const { dashboard, rules, providers, endpoints, administrator } = useOverviewData()
+  const { dashboard, rules, providers, endpoints, administrator, pollEveryMinutes } = useOverviewData()
 
   if (dashboard.isPending || rules.isPending || providers.isPending) return <PageSkeleton label={t("overview.loading")} />
   if (dashboard.error || rules.error || providers.error) return <LoadFailure title={t("overview.loadFailure")} />
@@ -64,6 +69,7 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   const health = overviewHealth(i18n, dashboard.data, now, {
     ruleName: (ruleId) => ruleNames.get(ruleId) ?? null,
     administrator,
+    pollEveryMinutes,
   })
 
   return (

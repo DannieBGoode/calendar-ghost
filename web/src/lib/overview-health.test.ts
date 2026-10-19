@@ -44,9 +44,16 @@ describe("overviewHealth", () => {
     expect(health.tone).toBe("healthy")
     expect(health.headline).toBe("Synchronization is healthy")
     expect(health.title).toBe("")
-    expect(health.detail).toBe("Calendar Ghost checks your calendars for changes every five minutes.")
+    expect(health.detail).toBe("Calendar Ghost checks your calendars for changes every 5 minutes.")
     expect(health.facts).toEqual(["2 rules running", "Last sync 3 minutes ago"])
     expect(health.action).toBeNull()
+  })
+
+  it.each([
+    [15, "Calendar Ghost checks your calendars for changes every 15 minutes."],
+    [60, "Calendar Ghost checks your calendars for changes every hour."],
+  ])("says how often the reader's own plan checks, every %i minutes, when everything is quiet", (minutes, detail) => {
+    expect(overviewHealth(i18n, healthy, now, { pollEveryMinutes: minutes }).detail).toBe(detail)
   })
 
   it("asks for a look at blocked events while rules keep running", () => {

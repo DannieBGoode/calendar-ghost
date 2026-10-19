@@ -58,6 +58,7 @@
       "one": "Syncs every minute",
       "other": "Syncs every {count} minutes"
     },
+    "everyHour": "Syncs every hour",
     "instantExplanation": {
       "one": "Runs soon after a change in {source}, and checks every minute as well.",
       "other": "Runs soon after a change in {source}, and checks every {count} minutes as well."

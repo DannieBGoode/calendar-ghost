@@ -277,6 +277,18 @@ describe("OwnPlanSection", () => {
       { title: "Integration tokens", meter: null, detail: "Your plan does not include integration tokens.", value: "Not included", chip: null, note: null },
       { title: "Sync speed", meter: null, detail: "Instant sync is not part of your plan.", value: "Every 5 minutes", chip: null, note: null },
     ])
+
+    act(() => root?.unmount())
+    root = null
+    const hourly: OwnPlan = {
+      ...freeOverLimit,
+      limits: { ...freeOverLimit.limits!, sync_interval: "60_minutes" },
+      poll_every_minutes: 60,
+    }
+    await renderSection(testI18n(), { ownPlan: jsonResponse(hourly) })
+    expect(rows().at(-1)).toEqual(
+      { title: "Sync speed", meter: null, detail: "Instant sync is not part of your plan.", value: "Every hour", chip: null, note: null },
+    )
   })
 
   it("says No limit where the plan sets none, with how many are in use and no meter", async () => {
