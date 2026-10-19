@@ -90,14 +90,42 @@ def test_the_window_slides() -> None:
     assert throttle.admit(ALICE) == timedelta(minutes=4).total_seconds()
 
 
-def test_a_clock_set_back_never_asks_for_more_than_the_window() -> None:
+def test_a_clock_set_back_forgets_runs_recorded_ahead_of_it() -> None:
     clock = MovableClock(NOW)
     throttle = MemoryRunThrottle(clock, limit=1)
     throttle.admit(ALICE)
 
     clock.moment = NOW - timedelta(days=1)
 
-    assert throttle.admit(ALICE) == timedelta(hours=1).total_seconds()
+    assert throttle.admit(ALICE) == 0.0
+
+
+def test_a_clock_set_back_never_refuses_a_run_the_window_allows() -> None:
+    # Eleven runs, then the clock is set back half an hour for one more. An hour and a minute
+    # later only that one has left the window, so a twelfth fits.
+    clock = MovableClock(NOW)
+    throttle = MemoryRunThrottle(clock)
+    for _ in range(11):
+        throttle.admit(ALICE)
+    clock.moment = NOW - timedelta(minutes=30)
+    throttle.admit(ALICE)
+
+    clock.moment = NOW + timedelta(minutes=31)
+
+    assert throttle.admit(ALICE) == 0.0
+
+
+def test_users_who_stop_running_are_forgotten() -> None:
+    clock = MovableClock(NOW)
+    throttle = MemoryRunThrottle(clock)
+    for number in range(1000):
+        throttle.admit(UserId(f"user-{number}"))
+
+    clock.moment = NOW + timedelta(days=90)
+    throttle.admit(ALICE)
+
+    # No public count exists; what the throttle still holds is the leak this test is about.
+    assert list(throttle._runs) == [ALICE]
 
 
 def test_threads_racing_for_the_last_places_admit_exactly_the_limit() -> None:

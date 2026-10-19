@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import deque
 from datetime import datetime, timedelta
 from threading import Lock
 
@@ -31,7 +30,7 @@ class MemorySignInThrottle:
         self._clock = clock
         self._window = window
         self._limits = {"email": email_limit, "client": client_limit}
-        self._failures: dict[str, deque[datetime]] = {}
+        self._failures: dict[str, list[datetime]] = {}
         self._guard = Lock()
 
     def wait(self, keys: tuple[str, ...]) -> float:
@@ -72,31 +71,43 @@ class MemoryRunThrottle:
         self._clock = clock
         self._limit = limit
         self._window = window
-        self._runs: dict[UserId, deque[datetime]] = {}
+        self._runs: dict[UserId, list[datetime]] = {}
+        self._swept: datetime | None = None
         self._guard = Lock()
 
     def admit(self, user: UserId) -> float:
         with self._guard:
             now = self._clock.now()
+            self._sweep(now)
             recent = _recent(self._runs, user, now, self._window)
             if len(recent) >= self._limit:
                 # A refused run is not recorded, so asking again never pushes the wait out. The
-                # oldest run leaves the window first; a clock set back still waits at most the
-                # window.
-                wait = recent[0] + self._window - now
-                return min(wait, self._window).total_seconds()
+                # oldest run that keeps the count at the limit leaves the window first, within
+                # the window, since no run is later than now.
+                return (recent[-self._limit] + self._window - now).total_seconds()
             recent.append(now)
             self._runs[user] = recent
             return 0.0
 
+    def _sweep(self, now: datetime) -> None:
+        """Forget every User with no run left in the window, once a window, so a User who stops
+        running, or is deleted, is not kept until a restart."""
+        if self._swept is not None and self._swept <= now < self._swept + self._window:
+            return
+        for user in list(self._runs):
+            _recent(self._runs, user, now, self._window)
+        self._swept = now
+
 
 def _recent[K](
-    entries: dict[K, deque[datetime]], key: K, now: datetime, window: timedelta
-) -> deque[datetime]:
-    """The key's entries still in the window; a key with none left is forgotten."""
-    recent = entries.get(key, deque())
-    while recent and recent[0] <= now - window:
-        recent.popleft()
-    if not recent:
+    entries: dict[K, list[datetime]], key: K, now: datetime, window: timedelta
+) -> list[datetime]:
+    """The key's entries still in the window, oldest first; a key with none left is forgotten.
+    An entry later than `now`, left by a clock set back, is dropped too, which only gives
+    attempts back and keeps the rest in order."""
+    recent = [at for at in entries.get(key, ()) if now - window < at <= now]
+    if recent:
+        entries[key] = recent
+    else:
         entries.pop(key, None)
     return recent

@@ -388,8 +388,9 @@ names a Plan.
   window, then either records the run and answers 0, or records nothing and answers the seconds
   until a run may start, all under one lock, so concurrent requests cannot all pass the check. A
   refused request is not recorded, so a client asking again at the limit never pushes its own wait
-  out, and the wait is at most the window, even after the clock is set back. `MemoryRunThrottle`
-  (`infrastructure/throttle.py`), one per process in `Adapters`, keeps the counts.
+  out. A clock set back drops the runs recorded ahead of it, which only gives runs back, so the
+  wait is at most the window. `MemoryRunThrottle` (`infrastructure/throttle.py`), one per process
+  in `Adapters`, keeps the counts, and once a window forgets every User with no run left in it.
 - **It fails open.** When the Allowance cannot be read, the run goes ahead and is not counted, and
   the log names only the error's class and the User's id, so a fault in Plans never stops a run.
 - **The refusal** is 429 `manual_runs_throttled`, with `Retry-After` in seconds, rounded up and at
