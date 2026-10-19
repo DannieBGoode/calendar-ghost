@@ -67,7 +67,8 @@ open:
 - **Sync intervals are a fixed list:** Instant, 5, 10, 15, 30, and 60 minutes, where Instant means
   Instant Sync plus a five-minute Scheduled Sync. The Plan decides the interval, in place of "the
   shortest sync interval" above, and the User keeps only their own choice to turn Instant Sync
-  off. The first release of Plans offers Instant and 5 minutes.
+  off. Plans offer all six intervals, as decided in
+  [ADR 0038](0038-plans-allowances-and-limits.md#slice-2-each-rule-once-per-window-of-its-interval).
 
 Until Plan Hold ships, a lowered rule limit refuses new Starts and stops nothing: rules beyond it
 keep syncing, and no grace period starts. The fixed rate limit for manual runs also comes in a
