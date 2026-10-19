@@ -16,11 +16,12 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90 active:bg-destructive/80",
       },
+      // On a coarse pointer, such as a finger, every size reaches a 44-pixel target.
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
+        default: "h-10 px-4 py-2 pointer-coarse:h-11",
+        sm: "h-8 rounded-md px-3 text-xs pointer-coarse:h-11",
         lg: "h-11 px-5",
-        icon: "size-10",
+        icon: "size-10 pointer-coarse:size-11",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

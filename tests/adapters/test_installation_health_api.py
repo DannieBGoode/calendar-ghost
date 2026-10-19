@@ -1,5 +1,6 @@
 """Installation Health over the status API and MCP, for Installation Administrators only."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -15,9 +16,12 @@ from calendar_sync.application.operations.installation_hints import (
 from calendar_sync.application.operations.status import StatusVerdict
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_container
+from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.status_payload import installation_health_response
 from tests.adapters.test_mcp import JSON_HEADERS
+from tests.helpers import NOW
+from tests.plans import FAMILY, plans_on
 from tests.users import ADMIN_EMAIL, ADMIN_PASSWORD
 
 MEMBER = {"email": "member@example.test", "password": "another long password"}
@@ -103,6 +107,29 @@ def test_only_installation_read_tokens_and_administrators_read_installation_heal
         403,
         "administrator_required",
     )
+
+
+def test_installation_read_is_refused_to_a_member_before_their_plans_token_limit(
+    tmp_path: Path,
+) -> None:
+    plans = SqlitePlans(tmp_path / "test.db")
+    no_tokens = replace(FAMILY, limits=replace(FAMILY.limits, integration_tokens=0))
+    with _client(tmp_path) as admin, _client(tmp_path) as member:
+        _join(admin, member)
+        plans_on(plans, FAMILY)
+        with_room = _issue(member, BOTH)
+        plans.change(no_tokens, NOW)
+        without_room = _issue(member, BOTH)
+        status_only = _issue(member)
+
+    # Installation Health is for administrators whatever their Plan allows, and that is said
+    # before the limit is.
+    assert (with_room.status_code, with_room.json()["code"]) == (403, "administrator_required")
+    assert (without_room.status_code, without_room.json()["code"]) == (
+        403,
+        "administrator_required",
+    )
+    assert (status_only.status_code, status_only.json()["code"]) == (409, "plan_limit_reached")
 
 
 def test_a_token_stops_reading_installation_health_when_its_user_stops_administering(

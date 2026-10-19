@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Literal
 
 BUSY_TIMEOUT_SECONDS = 5.0
+USERS_PER_QUERY = 500
+"""Users read together, well under SQLite's limit on bound values in one statement."""
 
 
 def open_connection(

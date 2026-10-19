@@ -12,6 +12,7 @@ import {
   DEFAULT_SETTINGS_TAB,
   type AppLocation,
   type OpenPerson,
+  type OpenPlan,
   type OpenRule,
   type OpenRulePreview,
   type OpenSettingsTab,
@@ -29,6 +30,7 @@ export function Dashboard({
   onOpenRulePreview,
   onOpenSettingsTab,
   onOpenPerson,
+  onOpenPlan,
 }: {
   location: AppLocation
   arrival: ViewOptions
@@ -38,6 +40,7 @@ export function Dashboard({
   onOpenRulePreview: OpenRulePreview
   onOpenSettingsTab: OpenSettingsTab
   onOpenPerson: OpenPerson
+  onOpenPlan: OpenPlan
 }) {
   const view = location.view
   if (view === "rules") {
@@ -71,6 +74,7 @@ export function Dashboard({
         visit={visit}
         onViewChange={onViewChange}
         onOpenPerson={onOpenPerson}
+        onOpenPlan={onOpenPlan}
         onOpenRule={onOpenRule}
         onOpenSettingsTab={onOpenSettingsTab}
       />
@@ -91,10 +95,11 @@ export function Dashboard({
 /** People, or one person's page under it. */
 function PeopleRoute({
   location: { personId, peopleTab },
-  arrival: { notice },
+  arrival: { notice, planPanelFocus },
   visit,
   onViewChange,
   onOpenPerson,
+  onOpenPlan,
   onOpenRule,
   onOpenSettingsTab,
 }: {
@@ -103,6 +108,7 @@ function PeopleRoute({
   visit: number
   onViewChange: ViewChange
   onOpenPerson: OpenPerson
+  onOpenPlan: OpenPlan
   onOpenRule: OpenRule
   onOpenSettingsTab: OpenSettingsTab
 }) {
@@ -118,7 +124,16 @@ function PeopleRoute({
     )
   }
   // Remounted on every arrival so its search, filters, and page match the address.
-  return <PeopleView key={visit} tab={peopleTab ?? DEFAULT_PEOPLE_TAB} notice={notice ?? null} onOpenPerson={onOpenPerson} />
+  return (
+    <PeopleView
+      key={visit}
+      tab={peopleTab ?? DEFAULT_PEOPLE_TAB}
+      notice={notice ?? null}
+      onOpenPerson={onOpenPerson}
+      onOpenPlan={onOpenPlan}
+      panelFocus={planPanelFocus === true}
+    />
+  )
 }
 
 /** Rules, one rule's details, or its preview page. */

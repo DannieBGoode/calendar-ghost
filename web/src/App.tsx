@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Activity, CalendarCheck2, LogOut, Menu, Settings2, Users, Waypoints, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 
+import { AppToasts } from "@/components/app-toasts"
 import { GhostMark } from "@/components/ghost-mark"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -24,10 +25,12 @@ import {
   isPlainLeftClick,
   type AppLocation,
   type AppView,
+  type PlanPanel,
   type SettingsTab,
   type ViewOptions,
   withSettingsTab,
 } from "@/lib/navigation"
+import { holdHistory, leaveThen } from "@/lib/leave-guard"
 import { publicPageAt } from "@/lib/public-links"
 import { useAdministratorFlag } from "@/lib/use-administrator-flag"
 import { usePeopleAccess } from "@/lib/use-people-access"
@@ -77,8 +80,8 @@ function SignInGate({ setup, session }: { setup: SetupStatus; session: SessionSt
   if (!session?.authenticated) return <AuthScreen mode="login" passwordOnly={setup.password_only_sign_in} />
   if (session.user?.email === null) return <AddEmailScreen />
   // Keyed by the User, so another User signing in drops everything shown or typed for the last
-  // one: a revealed token, an open dialog, a copied link.
-  return <AuthenticatedApp key={session.user?.id} />
+  // one: a revealed token, an open dialog, a copied link, every toast.
+  return <AppToasts key={session.user?.id}><AuthenticatedApp /></AppToasts>
 }
 
 function AuthenticatedApp() {
@@ -118,6 +121,8 @@ function AuthenticatedApp() {
       )
     }
     const handlePopState = () => {
+      // A form with changes not saved, such as a Plan's, asks before Back or Forward drops them.
+      if (holdHistory()) return
       navigated.current = true
       setVisit((count) => count + 1)
       setArrival({})
@@ -166,17 +171,20 @@ function AuthenticatedApp() {
     return () => document.removeEventListener("keydown", close)
   }, [mobileNav])
 
+  // A form with changes not saved, such as a Plan's, asks before the page leaves it.
   function navigate(next: AppLocation, options: ViewOptions = {}) {
-    const nextPath = `${appPathForLocation(next)}${options.search ?? ""}`
-    if (`${window.location.pathname}${window.location.search}` !== nextPath || window.location.hash) {
-      window.history.pushState(null, "", nextPath)
-    }
-    navigated.current = true
-    setVisit((count) => count + 1)
-    setArrival(options)
-    setLocation(withSettingsTab(next, options.search ?? ""))
     setMobileNav(false)
-    window.scrollTo(0, 0)
+    leaveThen(() => {
+      const nextPath = `${appPathForLocation(next)}${options.search ?? ""}`
+      if (`${window.location.pathname}${window.location.search}` !== nextPath || window.location.hash) {
+        window.history.pushState(null, "", nextPath)
+      }
+      navigated.current = true
+      setVisit((count) => count + 1)
+      setArrival(options)
+      setLocation(withSettingsTab(next, options.search ?? ""))
+      window.scrollTo(0, 0)
+    })
   }
 
   function changeView(next: AppView, options?: ViewOptions) {
@@ -194,6 +202,10 @@ function AuthenticatedApp() {
 
   function openPerson(personId: string) {
     navigate({ view: "people", ruleId: null, personId })
+  }
+
+  function openPlan(planPanel: PlanPanel) {
+    navigate({ view: "people", ruleId: null, peopleTab: "plans", planPanel }, { planPanelFocus: true })
   }
 
   function openSettingsTab(settingsTab: SettingsTab) {
@@ -225,7 +237,7 @@ function AuthenticatedApp() {
           <Button ref={menuButton} className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-controls="primary-nav" aria-label={mobileNav ? t("app.nav.close") : t("app.nav.open")}>{mobileNav ? <X /> : <Menu />}</Button>
         </div>
       </header>
-      <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} onOpenRulePreview={openRulePreview} onOpenSettingsTab={openSettingsTab} onOpenPerson={openPerson} /></main>
+      <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} onOpenRulePreview={openRulePreview} onOpenSettingsTab={openSettingsTab} onOpenPerson={openPerson} onOpenPlan={openPlan} /></main>
       <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
       <AppFooter />
     </div>

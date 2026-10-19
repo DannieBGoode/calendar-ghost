@@ -15,6 +15,7 @@ import {
   type ConnectedAccount,
   type IntegrationToken,
   type IssuedIntegrationToken,
+  type OwnPlan,
 } from "@/lib/api"
 import { integrationExamples } from "@/lib/integrations"
 import type { OpenSettingsTab, SettingsTab } from "@/lib/navigation"
@@ -86,6 +87,54 @@ const issued: IssuedIntegrationToken = {
   token: "cgs_synthetic-token-shown-once",
 }
 
+/** Plans are off: Your plan stays hidden and nothing is limited. */
+const plansOff: OwnPlan = {
+  basis: "plans_off",
+  plan: null,
+  limits: null,
+  rules_counted: 2,
+  connected_accounts: 2,
+  integration_tokens: 2,
+  instant: true,
+  poll_every_minutes: 5,
+  may_connect_account: true,
+  may_issue_token: true,
+  over_rule_limit: false,
+}
+
+/** Someone on their own Family plan, with room left everywhere. */
+const familyPlan: OwnPlan = {
+  basis: "plan",
+  plan: { key: "family", name: "Family", on_default: false },
+  limits: { rules: 5, connected_accounts: 3, integration_tokens: 2, sync_interval: "instant" },
+  rules_counted: 3,
+  connected_accounts: 2,
+  integration_tokens: 0,
+  instant: true,
+  poll_every_minutes: 5,
+  may_connect_account: true,
+  may_issue_token: true,
+  over_rule_limit: false,
+}
+
+/** Someone at every limit of their plan, with more rules counting than it allows. */
+const atEveryLimit: OwnPlan = {
+  basis: "plan",
+  plan: { key: "free", name: "Free", on_default: true },
+  limits: { rules: 1, connected_accounts: 1, integration_tokens: 0, sync_interval: "5_minutes" },
+  rules_counted: 2,
+  connected_accounts: 2,
+  integration_tokens: 0,
+  instant: false,
+  poll_every_minutes: 5,
+  may_connect_account: false,
+  may_issue_token: false,
+  over_rule_limit: true,
+}
+
+/** The own-plan answer when Plans cannot be read. */
+const UNREADABLE_PLAN = { detail: "database is locked", code: null, params: {} }
+
 // A few seconds before "now", so `format.relative` resolves to the catalog's "just now" rather
 // than Intl wording such as "3 days ago", which bypasses the pseudo locale.
 const justNow = new Date(Date.now() - 10_000).toISOString()
@@ -134,6 +183,10 @@ type Scenario = {
   clearable?: Response
   cleared?: Response
   tokens?: IntegrationToken[]
+  /** GET /api/v1/account/plan; Plans are off unless a test says otherwise. */
+  ownPlan?: Response
+  /** GET /api/v1/registration; Only Me unless a test says otherwise. */
+  registration?: Response
 }
 
 /** Google as GET /api/v1/providers describes it once configured. */
@@ -151,6 +204,14 @@ function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
 }
 
+/** What the Plans and Registration routes answer: Plans off and Only Me unless a test says otherwise. */
+function planRoutes({
+  ownPlan = jsonResponse(plansOff),
+  registration = jsonResponse({ policy: "only_me", only_me_available: true }),
+}: Scenario): Record<string, Response> {
+  return { "/api/v1/registration": registration, "/api/v1/account/plan": ownPlan }
+}
+
 function mockFetch({
   providers,
   configured = true,
@@ -160,6 +221,7 @@ function mockFetch({
   clearable,
   cleared,
   tokens = [kuma, homepage],
+  ...rest
 }: Scenario) {
   const responses: Record<string, Response> = {
     "/api/v1/providers": jsonResponse(providers ?? (configured ? [googleProvider(redirectUri)] : [])),
@@ -169,7 +231,7 @@ function mockFetch({
     "/api/v1/storage/activity/clear": cleared ?? jsonResponse({ removed: 41880, database: usage.database }),
     "/api/v1/integration-tokens": jsonResponse(tokens),
     "/api/v1/session": jsonResponse(adminSession),
-    "/api/v1/registration": jsonResponse({ policy: "only_me", only_me_available: true }),
+    ...planRoutes(rest),
   }
   vi.stubGlobal(
     "fetch",
@@ -342,6 +404,39 @@ describe("SettingsPage", () => {
       ["Connect Google account", "/api/v1/oauth/google/start"],
     ])
     expect([...container.querySelectorAll("button")].some((item) => item.textContent.includes("Connect an account"))).toBe(false)
+  })
+
+  it("keeps Connect in place but unavailable at the plan's account limit, saying why, and keeps Reauthorize", async () => {
+    await renderSettings(testI18n(), { ownPlan: jsonResponse(atEveryLimit) })
+
+    const heading = container.querySelector<HTMLElement>("[aria-labelledby='accounts-title'] .section-heading")!
+    const connect = heading.querySelector("button")!
+    expect(connect.textContent.trim()).toBe("Connect Google account")
+    expect(connect.getAttribute("aria-disabled")).toBe("true")
+    // Nothing starts a provider's consent: no link, no menu.
+    expect(heading.querySelector("a[href^='/api/v1/oauth']")).toBeNull()
+    expect(heading.querySelector("[aria-haspopup='menu']")).toBeNull()
+    const reason = document.getElementById(connect.getAttribute("aria-describedby") ?? "")
+    expect(reason?.textContent).toBe("Your plan allows 1 calendar account, and disconnected accounts count too. See your plan")
+    expect(reason?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+    // Reauthorization is never refused, so the disconnected account keeps its way back.
+    expect(container.querySelector("#account-acct-b a")?.getAttribute("href")).toBe("/api/v1/oauth/google/start?account=acct-b")
+  })
+
+  it("keeps the empty state's Connect unavailable at the plan's account limit, as disconnected accounts count", async () => {
+    await renderSettings(testI18n(), { accounts: [], ownPlan: jsonResponse(atEveryLimit) })
+
+    const connect = container.querySelector<HTMLButtonElement>(".account-empty button")!
+    expect(connect.textContent.trim()).toBe("Connect Google account")
+    expect(connect.getAttribute("aria-disabled")).toBe("true")
+    expect(container.querySelector(".account-empty a[href^='/api/v1/oauth']")).toBeNull()
+  })
+
+  it("offers Connect as usual when the plan cannot be read, since the server still checks", async () => {
+    await renderSettings(testI18n(), { ownPlan: jsonResponse(UNREADABLE_PLAN, 500) })
+
+    const connect = [...container.querySelectorAll<HTMLAnchorElement>(".section-heading a")]
+    expect(connect.map((link) => link.getAttribute("href"))).toEqual(["/api/v1/oauth/google/start"])
   })
 
   it("opens consent in a new tab when Google returns elsewhere, and offers to finish here at once", async () => {
@@ -536,6 +631,37 @@ describe("SettingsPage", () => {
     )
   })
 
+  it("says a new account met the plan's limit, and links to Your plan in place of Try again", async () => {
+    window.history.replaceState(null, "", "/settings?oauth=account_limit_reached&provider=google&limit=1")
+    await renderSettings(testI18n())
+
+    const notice = container.querySelector(".oauth-feedback")!
+    expect(notice.getAttribute("role")).toBe("alert")
+    expect(notice.querySelector("h2")?.textContent).toBe("Your plan's calendar accounts are all in use")
+    expect(notice.querySelector("p")?.textContent).toBe(
+      "No account was connected. Your plan allows 1 calendar account, and disconnected accounts count too. Delete one you no longer use, or ask your administrator for a larger plan.",
+    )
+    const links = [...notice.querySelectorAll("a")].map((link) => [link.textContent, link.getAttribute("href")])
+    expect(links).toEqual([["See your plan", "/settings/account#your-plan"]])
+    // A reload does not announce the refusal again: every arrival parameter, `limit` too, is gone.
+    expect(window.location.search).toBe("")
+  })
+
+  it("has no untranslated text when a new account met the plan's limit", async () => {
+    window.history.replaceState(null, "", "/settings?oauth=account_limit_reached&provider=google&limit=2")
+    await renderSettings(pseudoI18n())
+    expect(container.querySelector(".oauth-feedback")).not.toBeNull()
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+  })
+
+  it("still offers to try again when authorization failed", async () => {
+    window.history.replaceState(null, "", "/settings?oauth=authorization_failed&provider=google")
+    await renderSettings(testI18n())
+    const notice = container.querySelector(".oauth-feedback")!
+    expect(notice.getAttribute("role")).toBe("alert")
+    expect([...notice.querySelectorAll("a")].map((link) => link.textContent)).toEqual(["Try again"])
+  })
+
   it("keeps the English copy", async () => {
     window.history.replaceState(null, "", "/settings?oauth=connected&provider=google")
     await renderSettings(testI18n())
@@ -568,6 +694,63 @@ describe("SettingsPage", () => {
     expect(container.querySelector("#disconnect-acct-a p")?.textContent).toBe(
       "Its stored credentials will be removed. 2 affected rules will require reauthorization before they can run.",
     )
+  })
+
+  it("warns before a disconnect that the plan may not let its rules start again, while more rules count than it allows", async () => {
+    await renderSettings(testI18n(), { ownPlan: jsonResponse(atEveryLimit) })
+    await click(container.querySelector<HTMLButtonElement>("#account-acct-a [aria-haspopup='menu']")!)
+    const disconnect = [...container.querySelectorAll<HTMLButtonElement>("[role='menuitem']")].find(
+      (item) => item.querySelector(".overflow-menu-label")?.textContent === "Disconnect account",
+    )!
+    await click(disconnect)
+    expect(container.querySelector("#disconnect-acct-a p")?.textContent).toBe(
+      "Its stored credentials will be removed. 2 affected rules will require reauthorization before they can run. Your plan may not let these rules start again.",
+    )
+  })
+
+  it("warns before a disconnect that the plan may not let its one rule start again", async () => {
+    await renderSettings(testI18n(), { accounts: [{ ...connected, rule_count: 1 }, disconnected], ownPlan: jsonResponse(atEveryLimit) })
+    await click(container.querySelector<HTMLButtonElement>("#account-acct-a [aria-haspopup='menu']")!)
+    const disconnect = [...container.querySelectorAll<HTMLButtonElement>("[role='menuitem']")].find(
+      (item) => item.querySelector(".overflow-menu-label")?.textContent === "Disconnect account",
+    )!
+    await click(disconnect)
+    expect(container.querySelector("#disconnect-acct-a p")?.textContent).toBe(
+      "Its stored credentials will be removed. 1 affected rule will require reauthorization before it can run. Your plan may not let this rule start again.",
+    )
+  })
+
+  const NO_DISCONNECT_NOTE: [string, Scenario][] = [
+    ["an account no rule uses", { accounts: [{ ...connected, rule_count: 0 }, disconnected], ownPlan: jsonResponse(atEveryLimit) }],
+    ["a plan that cannot be read", { ownPlan: jsonResponse(UNREADABLE_PLAN, 500) }],
+  ]
+
+  it.each(NO_DISCONNECT_NOTE)("says nothing about the plan before disconnecting %s", async (_case, scenario) => {
+    await renderSettings(testI18n(), scenario)
+    await click(container.querySelector<HTMLButtonElement>("#account-acct-a [aria-haspopup='menu']")!)
+    const disconnect = [...container.querySelectorAll<HTMLButtonElement>("[role='menuitem']")].find(
+      (item) => item.querySelector(".overflow-menu-label")?.textContent === "Disconnect account",
+    )!
+    await click(disconnect)
+    expect(container.querySelector("#disconnect-acct-a p")?.textContent).not.toContain("Your plan")
+  })
+
+  it("has no untranslated text at every limit of a plan", async () => {
+    // The page's own address, so the Integrations examples match the fixture text.
+    page().happyDOM.setURL(`${PUBLIC_ORIGIN}/settings`)
+    await renderSettings(pseudoI18n(), { ownPlan: jsonResponse(atEveryLimit) })
+    await click(container.querySelector<HTMLButtonElement>("[aria-labelledby='integrations-title'] .group-summary")!)
+    await click(container.querySelector<HTMLButtonElement>("#account-acct-a [aria-haspopup='menu']")!)
+    // The item's description id ends with its id, "disconnect"; its label is pseudo-translated.
+    const disconnect = [...container.querySelectorAll<HTMLButtonElement>("#account-acct-a [role='menuitem']")].find((item) =>
+      item.getAttribute("aria-describedby")?.endsWith("-disconnect"),
+    )!
+    await click(disconnect)
+
+    expect(container.querySelector(".action-hint a")).not.toBeNull()
+    expect(container.querySelector("#integration-limit")).not.toBeNull()
+    expect(container.querySelector("#disconnect-acct-a")).not.toBeNull()
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
   })
 
   it("summarizes storage on Administration", async () => {
@@ -629,6 +812,36 @@ describe("Settings tabs", () => {
   ] as const)("shows the %s tab's sections", async (tab, shown) => {
     await renderSettings(testI18n(), { tab })
     expect(sections()).toEqual(shown)
+  })
+
+  it("shows Your plan between the account section and Appearance once a plan limits you", async () => {
+    await renderSettings(testI18n(), { tab: "account", ownPlan: jsonResponse(familyPlan) })
+    expect(sections()).toEqual(["own-account-title", "your-plan-title", "appearance-title"])
+    expect(container.querySelector("#your-plan h3")?.textContent).toBe("Family")
+  })
+
+  it("opens Connections from Your plan's sentence about calendar accounts past the limit", async () => {
+    await renderSettings(testI18n(), { tab: "account", ownPlan: jsonResponse(atEveryLimit) })
+    const link = [...container.querySelectorAll<HTMLAnchorElement>("#your-plan .plan-usage-note a")].find(
+      (anchor) => anchor.textContent === "Connections",
+    )
+    expect(link?.getAttribute("href")).toBe("/settings/connections")
+    await click(link!)
+    expect(openTab).toHaveBeenCalledWith("connections")
+    // The sentence goes with Your account, so focus moves to the tab it opened, not to the page.
+    expect(document.activeElement).toBe(tabs().find((tab) => tab.textContent === "Connections"))
+  })
+
+  it("keeps the rest of Your account working when Your plan cannot load", async () => {
+    await renderSettings(testI18n(), {
+      tab: "account",
+      ownPlan: jsonResponse({ detail: "database is locked" }, 500),
+      registration: jsonResponse({ policy: "invitation_only", only_me_available: false }),
+    })
+    expect(sections()).toEqual(["own-account-title", "your-plan-title", "appearance-title"])
+    expect(container.querySelector("#your-plan [role='alert']")?.textContent).toContain("Your plan could not load.")
+    expect(container.querySelector("#own-account-title")?.textContent).toBe("Sign-in, email, and sync")
+    expect(container.querySelector("#appearance-title")).not.toBeNull()
   })
 
   it("links each tab to its own address and marks the one shown", async () => {
@@ -729,6 +942,8 @@ describe("IntegrationsSection", () => {
     vi.spyOn(api, "integrationTokens").mockResolvedValue([kuma, homepage])
     vi.spyOn(api, "issueIntegrationToken").mockResolvedValue(issued)
     vi.spyOn(api, "revokeIntegrationToken").mockResolvedValue(undefined)
+    // The form reads the own plan for its token limit; Plans are off unless a test says otherwise.
+    vi.spyOn(api, "ownPlan").mockResolvedValue(plansOff)
   })
 
   it("stays collapsed to a summary of the tokens in use", async () => {
@@ -796,6 +1011,79 @@ describe("IntegrationsSection", () => {
     await openGroup()
     await issueToken("Claude Code")
     expect(api.issueIntegrationToken).toHaveBeenCalledWith("Claude Code", ["status:read"])
+  })
+
+  it("keeps the token form in place but unusable when the plan includes no tokens, saying why without at most 0", async () => {
+    vi.mocked(api.ownPlan).mockResolvedValue(atEveryLimit)
+    await renderSection()
+    await openGroup()
+    await tick()
+    await tick()
+
+    const input = container.querySelector<HTMLInputElement>("#integration-name")!
+    const submit = labelledButton("Issue token")
+    // Both stay focusable, so keyboard and screen reader users reach the reason.
+    expect(input.getAttribute("aria-disabled")).toBe("true")
+    expect(input.readOnly).toBe(true)
+    expect(input.disabled).toBe(false)
+    expect(submit.getAttribute("aria-disabled")).toBe("true")
+    expect(submit.disabled).toBe(false)
+    const reason = container.querySelector("#integration-limit")
+    expect(reason?.textContent).toBe(
+      "Your plan does not include integration tokens. To get one, ask your administrator. See your plan",
+    )
+    expect(reason?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+    expect(input.getAttribute("aria-describedby")).toBe("integration-name-hint integration-limit")
+    expect(submit.getAttribute("aria-describedby")).toBe("integration-limit")
+    expect(container.textContent).not.toContain("at most")
+
+    // Pressing Issue token keeps focus there and sends nothing; nor does Enter in the field.
+    act(() => submit.focus())
+    press(submit)
+    await tick()
+    expect(document.activeElement).toBe(submit)
+    await issueToken("Claude Code")
+    expect(api.issueIntegrationToken).not.toHaveBeenCalled()
+  })
+
+  it("says a plan's tokens are all in use, and how to make room", async () => {
+    vi.mocked(api.ownPlan).mockResolvedValue({
+      ...atEveryLimit,
+      limits: { rules: 1, connected_accounts: 1, integration_tokens: 2, sync_interval: "5_minutes" },
+      integration_tokens: 2,
+    })
+    await renderSection()
+    await openGroup()
+    await tick()
+    await tick()
+
+    expect(labelledButton("Issue token").getAttribute("aria-disabled")).toBe("true")
+    expect(container.querySelector("#integration-limit")?.textContent).toBe(
+      "Your plan allows 2 integration tokens, and all are in use. Revoke one to issue another. See your plan",
+    )
+  })
+
+  it("offers Issue token as usual when the plan cannot be read, since the server still checks", async () => {
+    vi.mocked(api.ownPlan).mockRejectedValue(new Error("database is locked"))
+    await renderSection()
+    await openGroup()
+    await tick()
+    await tick()
+
+    expect(container.querySelector("#integration-limit")).toBeNull()
+    expect(container.querySelector("#integration-name")?.getAttribute("aria-disabled")).toBeNull()
+    expect(labelledButton("Issue token").getAttribute("aria-disabled")).toBeNull()
+    await issueToken("Claude Code")
+    expect(api.issueIntegrationToken).toHaveBeenCalledWith("Claude Code", ["status:read"])
+  })
+
+  it("offers Issue token as usual while Plans are off", async () => {
+    await renderSection()
+    await openGroup()
+    await tick()
+
+    expect(container.querySelector("#integration-limit")).toBeNull()
+    expect(container.querySelector("#integration-name")?.getAttribute("aria-describedby")).toBe("integration-name-hint")
   })
 
   it("closes the reveal with Done and returns to the name field", async () => {

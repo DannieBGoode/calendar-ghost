@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from threading import Thread
 
 import pytest
 
-from calendar_sync.application.sync.errors import ConnectedAccountRequired, RuleNotFound
+from calendar_sync.application.sync.errors import (
+    ConnectedAccountRequired,
+    DuplicateDirectionalRelationship,
+    RuleNotFound,
+)
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.sync.rules import (
     ChangeSyncRulePolicy,
@@ -22,6 +27,7 @@ from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     BirthdayPolicy,
     ProjectionContent,
+    SyncRule,
     SyncRuleId,
     SyncRuleState,
     TentativeEventPolicy,
@@ -31,7 +37,8 @@ from calendar_sync.domain.model import (
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from tests.application.test_execute_sync_rule import FixedClock
 from tests.helpers import rule
-from tests.users import memory_units
+from tests.identity_fakes import MemoryPlans
+from tests.users import USER, memory_units
 
 MARK = TentativeEventPolicy.MARK
 AS_TENTATIVE = UnansweredInvitationPolicy.AS_TENTATIVE
@@ -112,14 +119,18 @@ def test_details_report_mapping_count_and_latest_outcomes() -> None:
     synced = RuleRunOutcome(rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True)
     unit_of_work.state.outcomes[(rule().id, RunKind.SYNC)] = synced
 
-    details = GetSyncRuleDetails(unit_of_work, locks=RuleLocks()).execute(rule().id)
+    get_details = GetSyncRuleDetails(unit_of_work, RuleLocks(), MemoryPlans(), USER)
+
+    details = get_details.execute(rule().id)
 
     assert details.rule == rule()
     assert details.mapping_count == 0
     assert details.last_sync == synced
     assert details.last_reconciliation is None
+    # Plans are off, so nothing limits a Start.
+    assert (details.can_start, details.rule_limit) == (True, None)
     with pytest.raises(RuleNotFound):
-        GetSyncRuleDetails(unit_of_work, locks=RuleLocks()).execute(SyncRuleId("missing"))
+        get_details.execute(SyncRuleId("missing"))
 
 
 def test_policy_change_waits_for_an_in_flight_provider_write() -> None:
@@ -150,7 +161,7 @@ def test_enabling_a_previewed_rule_saves_it_enabled() -> None:
     unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.PREVIEWED)
 
-    enabled = EnableSyncRule(unit_of_work, RuleLocks()).execute(rule().id)
+    enabled = EnableSyncRule(unit_of_work, RuleLocks(), MemoryPlans(), USER).execute(rule().id)
 
     assert enabled.state is SyncRuleState.ENABLED
     assert unit_of_work.state.rules[rule().id] == enabled
@@ -159,7 +170,7 @@ def test_enabling_a_previewed_rule_saves_it_enabled() -> None:
 def test_enabling_is_blocked_for_missing_or_unpreviewed_rules() -> None:
     unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.DRAFT)
-    enable = EnableSyncRule(unit_of_work, RuleLocks())
+    enable = EnableSyncRule(unit_of_work, RuleLocks(), MemoryPlans(), USER)
 
     with pytest.raises(RuleNotFound):
         enable.execute(SyncRuleId("missing"))
@@ -189,10 +200,14 @@ def test_lifecycle_changes_wait_for_an_in_flight_provider_write(change: str) -> 
     starting = SyncRuleState.PREVIEWED if change == "enable" else SyncRuleState.ENABLED
     unit_of_work.state.rules[rule().id] = rule(state=starting)
     locks = RuleLocks()
-    use_case = (EnableSyncRule if change == "enable" else PauseSyncRule)(unit_of_work, locks)
+    execute: Callable[[SyncRuleId], SyncRule] = (
+        EnableSyncRule(unit_of_work, locks, MemoryPlans(), USER).execute
+        if change == "enable"
+        else PauseSyncRule(unit_of_work, locks).execute
+    )
     writing = locks.for_writes(rule().id)
     writing.acquire()
-    worker = Thread(target=use_case.execute, args=(rule().id,))
+    worker = Thread(target=execute, args=(rule().id,))
     worker.start()
     worker.join(0.1)
     blocked_while_writing = worker.is_alive()
@@ -231,7 +246,7 @@ def test_listing_reports_each_rule_with_its_latest_outcomes_and_running_work() -
 
     with locks.working(rule().id, work):
         (running,) = ListSyncRules(unit_of_work, locks).execute()
-        details = GetSyncRuleDetails(unit_of_work, locks).execute(rule().id)
+        details = GetSyncRuleDetails(unit_of_work, locks, MemoryPlans(), USER).execute(rule().id)
     (idle,) = ListSyncRules(unit_of_work, locks).execute()
 
     assert running.rule == rule()
@@ -261,3 +276,14 @@ def test_new_rules_require_both_connected_accounts_to_exist(missing: str) -> Non
         CreateSyncRule(unit_of_work).execute(rule(state=SyncRuleState.DRAFT))
 
     assert unit_of_work.state.rules == {}
+
+
+def test_new_rules_refuse_a_relationship_another_rule_has() -> None:
+    unit_of_work = memory_units()
+    unit_of_work.state.rules[rule().id] = rule()
+    twin = SyncRule(SyncRuleId("twin"), rule().source, rule().destination)
+
+    with pytest.raises(DuplicateDirectionalRelationship):
+        CreateSyncRule(unit_of_work).execute(twin)
+
+    assert unit_of_work.state.rules == {rule().id: rule()}

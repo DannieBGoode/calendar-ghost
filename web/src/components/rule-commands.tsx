@@ -3,29 +3,35 @@ import { CheckCircle2, CircleAlert, CircleDot, CirclePause, LoaderCircle, Shield
 import { OverflowMenu, type OverflowMenuItem } from "@/components/overflow-menu"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { YourPlanLink } from "@/components/your-plan-link"
 import { useI18n } from "@/i18n/provider"
+import type { I18n } from "@/i18n/translator"
 import type { PreviewSummary } from "@/lib/api"
 import { accountSearch, appPathForRulePreview, connectionsPath, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
 import { ruleStateLabel } from "@/lib/rule-change"
 import { previewReadyLabel } from "@/lib/rule-run"
 import { workDescription, workLabel, workMeta, type RuleWork, type RuleWorkKind } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
+import { usePlanWarning } from "@/lib/use-own-plan"
 import type { RuleCommand, RuleFeedback, RunnableCommand } from "@/lib/use-rule-commands"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
 /**
  * `removing` is a display state for a running Rule Removal, not a stored one. `working` names
- * other work running now, which says more than the stored state while it lasts.
+ * other work running now, which says more than the stored state while it lasts. A previewed rule
+ * whose Start the User's Plan would refuse reads "Previewed", not "Ready to start".
  */
 export function RuleStatusBadge({
   state,
   stopped,
   working,
+  refused,
 }: {
   state: string
   stopped: boolean
   working?: RuleWorkKind | undefined
+  refused?: boolean
 }) {
   const i18n = useI18n()
   if (state === "removing" || working) {
@@ -53,9 +59,14 @@ export function RuleStatusBadge({
   return (
     <Badge variant="neutral">
       {state === "paused" ? <CirclePause aria-hidden="true" /> : <CircleDot aria-hidden="true" />}{" "}
-      {ruleStateLabel(i18n, state)}
+      {restingLabel(i18n, state, refused === true)}
     </Badge>
   )
+}
+
+/** A rule's state while it neither runs nor stopped; "Previewed" when its Plan would refuse Start. */
+function restingLabel(i18n: I18n, state: string, refused: boolean): string {
+  return state === "dry_run_validated" && refused ? i18n.t("ruleDetails.state.previewed") : ruleStateLabel(i18n, state)
 }
 
 /** The one visible next step for a rule; routine commands live in the overflow menu. */
@@ -151,7 +162,10 @@ export function RuleCommandMenu({
   reserveSpace?: boolean
   onRun: (command: RunnableCommand) => void
 }) {
-  const { t } = useI18n()
+  const i18n = useI18n()
+  const { t } = i18n
+  // Read before any return, as the rules of hooks require.
+  const mayNotRestart = usePlanWarning() && countsTowardPlan(state, unauthorized)
   const busy = pending !== undefined
   const items: OverflowMenuItem[] = []
   if (state === "enabled" && !unauthorized) {
@@ -176,7 +190,7 @@ export function RuleCommandMenu({
     items.push({
       id: "pause",
       label: t("ruleDetails.commands.pause"),
-      description: t("ruleDetails.commands.pauseDescription", { destination }),
+      description: pauseDescription(i18n, destination, mayNotRestart),
       disabled: busy,
       onSelect: () => onRun("pause"),
     })
@@ -185,18 +199,47 @@ export function RuleCommandMenu({
   return <OverflowMenu label={t("ruleDetails.commands.moreActions", { source, destination })} items={items} />
 }
 
-/** What the latest preview found, which Review and start leads back to. */
+/**
+ * Whether the rule counts toward its User's plan, as the Web UI can tell: enabled, or stopped
+ * only until an account of it is reauthorized.
+ */
+function countsTowardPlan(state: string, unauthorized: boolean): boolean {
+  return state === "enabled" || (state === "degraded" && unauthorized)
+}
+
+/**
+ * What Pause does; and, while more rules count than the plan allows, that the plan may not let
+ * the rule start again, since a paused rule gives up its place (decision 4).
+ */
+function pauseDescription({ t }: I18n, destination: string, mayNotRestart: boolean): string {
+  const description = t("ruleDetails.commands.pauseDescription", { destination })
+  return mayNotRestart ? `${description} ${t("common.plan.mayNotRestart")}` : description
+}
+
+/**
+ * What the latest preview found, which Review and start leads back to; or, when the User's Plan
+ * would refuse Start, why, in the words the preview page uses, with a link to Your plan.
+ */
 export function PreviewReadyNote({
   id,
   preview,
   destination,
+  refusal = null,
 }: {
   id: string
   preview: PreviewSummary | null | undefined
   destination: string
+  refusal?: string | null
 }) {
   const i18n = useI18n()
   const now = useNow()
+  if (refusal !== null) {
+    return (
+      <p id={id} className="rule-note">
+        {refusal} <YourPlanLink />
+      </p>
+    )
+  }
   return (
     <p id={id} className="rule-note">
       {previewReadyLabel(i18n, preview, destination, now)}

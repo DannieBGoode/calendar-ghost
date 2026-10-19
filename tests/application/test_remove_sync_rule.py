@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta
+from pathlib import Path
+from threading import Thread
 
 import pytest
 
 from calendar_sync.application.sync.errors import (
+    ConnectedAccountDisconnected,
+    ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
     NotACalendarChange,
     ProjectionOwnershipMismatch,
@@ -16,10 +20,16 @@ from calendar_sync.application.sync.errors import (
     ReplacementInterrupted,
 )
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import AccountAuthorizations, ProjectionDeleter
+from calendar_sync.application.sync.ports import (
+    AccountAuthorizations,
+    ProjectionDeleter,
+    UnitOfWorkFactory,
+)
 from calendar_sync.application.sync.removal import RemoveSyncRule
-from calendar_sync.application.sync.rules import CreateSyncRule, ReplaceSyncRuleCalendars
+from calendar_sync.application.sync.rules import EnableSyncRule, ReplaceSyncRuleCalendars
+from calendar_sync.domain.access import Role, User, UserState
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
+from calendar_sync.domain.errors import InvalidStateTransition
 from calendar_sync.domain.model import (
     CalendarEvent,
     ConnectedAccountId,
@@ -38,13 +48,17 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
+from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryUserUnitOfWorkFactory,
 )
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from tests.application.test_execute_sync_rule import FakeCalendarProvider, FixedClock
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
-from tests.helpers import endpoint, event, occurrence, rule, series, week_start
-from tests.users import memory_units
+from tests.helpers import NOW, endpoint, event, occurrence, rule, series, week_start
+from tests.identity_fakes import MemoryPlans, MemoryUsers
+from tests.plans import FREE, plans_on
+from tests.users import USER, memory_units, sqlite_units
 
 
 class Accounts:
@@ -100,6 +114,12 @@ def _with_mappings(
         unit_of_work.state.accounts[endpoint_.connected_account_id] = (
             ConnectedAccountState.CONNECTED
         )
+    _add_mappings(unit_of_work, count)
+    return unit_of_work
+
+
+def _add_mappings(unit_of_work: InMemoryUserUnitOfWorkFactory, count: int) -> None:
+    """`count` mappings of rule-1, each to a projection of its own."""
     for index in range(count):
         source = EventRef(rule().source, EventId(f"source-{index}"))
         unit_of_work.state.mappings[(rule().id, source)] = EventMapping(
@@ -110,7 +130,6 @@ def _with_mappings(
             "revision-1",
             ProjectionFingerprint("fingerprint"),
         )
-    return unit_of_work
 
 
 def _remover(
@@ -253,32 +272,66 @@ def test_removal_interrupted_names_the_provider_that_failed() -> None:
     )
 
 
-def test_replacement_rejects_a_duplicate_relationship_before_removing_anything() -> None:
-    unit_of_work = _with_mappings(1)
-    new_destination = endpoint("work-account", "other-calendar")
-    unit_of_work.state.rules[SyncRuleId("existing")] = SyncRule(
-        SyncRuleId("existing"), rule().source, new_destination
-    )
-    provider = RecordingProvider()
-    replace_rule = ReplaceSyncRuleCalendars(
-        unit_of_work, _remover(unit_of_work, provider), CreateSyncRule(unit_of_work), Ids()
+REPLACEMENT = SyncRuleId("replacement-rule")
+NEW_DESTINATION = endpoint("work-account", "other-calendar")
+
+
+def _other(name: str) -> SyncRule:
+    """Another enabled rule of the User, from a calendar of its own."""
+    return SyncRule(
+        SyncRuleId(name),
+        endpoint("personal-account", f"{name}-calendar"),
+        rule().destination,
+        state=SyncRuleState.ENABLED,
     )
 
+
+def _ordered(old: SyncRule) -> InMemoryUserUnitOfWorkFactory:
+    """`old`, with two mappings, created between an older and a newer enabled rule."""
+    unit_of_work = memory_units()
+    with unit_of_work() as uow:
+        for each in (_other("older"), old, _other("newer")):
+            uow.rules.add(each)
+        uow.commit()
+    _add_mappings(unit_of_work, 2)
+    return unit_of_work
+
+
+def _counting(unit_of_work: InMemoryUserUnitOfWorkFactory) -> int:
+    """How many of the User's rules count toward their Plan's rule limit."""
+    return sum(each.counts_toward_plan for each in unit_of_work.state.rules.values())
+
+
+def _replacer(
+    unit_of_work: InMemoryUserUnitOfWorkFactory, remover: RemoveSyncRule | None = None
+) -> ReplaceSyncRuleCalendars:
+    return ReplaceSyncRuleCalendars(
+        unit_of_work, remover if remover is not None else _remover(unit_of_work), Ids()
+    )
+
+
+def test_replacement_rejects_a_duplicate_relationship_before_removing_anything() -> None:
+    unit_of_work = _with_mappings(1)
+    unit_of_work.state.rules[SyncRuleId("existing")] = SyncRule(
+        SyncRuleId("existing"), rule().source, NEW_DESTINATION
+    )
+    provider = RecordingProvider()
+
     with pytest.raises(DuplicateDirectionalRelationship):
-        replace_rule.execute(rule().id, rule().source, new_destination, ProjectionHandling.DELETE)
+        _replacer(unit_of_work, _remover(unit_of_work, provider)).execute(
+            rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DELETE
+        )
 
     assert provider.deleted_refs == []
     assert unit_of_work.state.rules[rule().id].state is SyncRuleState.ENABLED
+    assert REPLACEMENT not in unit_of_work.state.rules
 
 
 def test_replacement_rejects_unchanged_calendars() -> None:
     unit_of_work = _with_mappings(0)
-    replace_rule = ReplaceSyncRuleCalendars(
-        unit_of_work, _remover(unit_of_work), CreateSyncRule(unit_of_work), Ids()
-    )
 
     with pytest.raises(NotACalendarChange):
-        replace_rule.execute(
+        _replacer(unit_of_work).execute(
             rule().id, rule().source, rule().destination, ProjectionHandling.DELETE
         )
     assert rule().id in unit_of_work.state.rules
@@ -288,96 +341,357 @@ def test_replacement_removes_the_rule_and_creates_a_draft_with_the_same_policy()
     unit_of_work = _with_mappings(1)
     details = TransformationPolicy(content=ProjectionContent.DETAILS)
     unit_of_work.state.rules[rule().id] = replace(rule(), transformation=details)
-    new_destination = endpoint("work-account", "other-calendar")
-    replace_rule = ReplaceSyncRuleCalendars(
-        unit_of_work, _remover(unit_of_work), CreateSyncRule(unit_of_work), Ids()
-    )
 
-    replacement = replace_rule.execute(
-        rule().id, rule().source, new_destination, ProjectionHandling.DETACH
+    replacement = _replacer(unit_of_work).execute(
+        rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DETACH
     )
 
     assert replacement.removal.detached == 1
-    assert list(unit_of_work.state.rules) == [SyncRuleId("replacement-rule")]
+    assert list(unit_of_work.state.rules) == [REPLACEMENT]
     assert replacement.rule.state is SyncRuleState.DRAFT
     assert replacement.rule.transformation == details
-    assert replacement.rule.destination == new_destination
+    assert replacement.rule.destination == NEW_DESTINATION
+    # The draft as inserted, with the place it took.
+    assert replacement.rule == unit_of_work.state.rules[REPLACEMENT]
+    assert replacement.removal.successor == replacement.rule
 
 
-class CompetingCreate(CreateSyncRule):
-    """Simulates another request creating the same relationship just before this one."""
+class CompetingRemoval(RemoveSyncRule):
+    """Simulates another request creating the same relationship just after the checks pass."""
 
-    def execute(self, rule: SyncRule) -> SyncRule:
-        self.unit_of_work.state.rules[SyncRuleId("competitor")] = SyncRule(  # type: ignore[attr-defined]
-            SyncRuleId("competitor"), rule.source, rule.destination
-        )
-        return CreateSyncRule.execute(self, rule)
+    def check(self, rule_id: SyncRuleId, handling: ProjectionHandling) -> None:
+        RemoveSyncRule.check(self, rule_id, handling)
+        with self.unit_of_work() as uow:
+            uow.rules.add(SyncRule(SyncRuleId("competitor"), rule().source, NEW_DESTINATION))
+            uow.commit()
 
 
-def test_replacement_reserves_the_new_rule_before_removing_the_old_one() -> None:
+def test_a_duplicate_that_appears_after_the_checks_is_refused_before_anything_changes() -> None:
     unit_of_work = _with_mappings(1)
     provider = RecordingProvider()
-    replace_rule = ReplaceSyncRuleCalendars(
-        unit_of_work,
-        _remover(unit_of_work, provider),
-        CompetingCreate(unit_of_work),
-        Ids(),
-    )
+    remover = CompetingRemoval(unit_of_work, provider, Accounts(), FixedClock(), RuleLocks())
 
     with pytest.raises(DuplicateDirectionalRelationship):
-        replace_rule.execute(
-            rule().id,
-            rule().source,
-            endpoint("work-account", "other-calendar"),
-            ProjectionHandling.DELETE,
+        _replacer(unit_of_work, remover).execute(
+            rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DELETE
         )
 
     assert provider.deleted_refs == []
     assert unit_of_work.state.rules[rule().id].state is SyncRuleState.ENABLED
+    assert REPLACEMENT not in unit_of_work.state.rules
     assert len(unit_of_work.state.mappings) == 1
 
 
 def test_replacement_creates_nothing_when_removal_cannot_start() -> None:
     unit_of_work = _with_mappings(1)
-    replace_rule = ReplaceSyncRuleCalendars(
-        unit_of_work,
-        _remover(unit_of_work, accounts=Accounts(connected=False)),
-        CreateSyncRule(unit_of_work),
-        Ids(),
-    )
+    remover = _remover(unit_of_work, accounts=Accounts(connected=False))
 
     with pytest.raises(RemovalRequiresAuthorization):
-        replace_rule.execute(
-            rule().id,
-            rule().source,
-            endpoint("work-account", "other-calendar"),
-            ProjectionHandling.DELETE,
+        _replacer(unit_of_work, remover).execute(
+            rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DELETE
         )
 
     assert list(unit_of_work.state.rules) == [rule().id]
 
 
-def test_interrupted_replacement_keeps_the_new_draft_and_a_retryable_old_rule() -> None:
-    unit_of_work = _with_mappings(2)
-    replace_rule = ReplaceSyncRuleCalendars(
-        unit_of_work,
-        _remover(unit_of_work, RecordingProvider(fail_on_call=2)),
-        CreateSyncRule(unit_of_work),
-        Ids(),
-    )
+class LapsingAccounts:
+    """Authorized for the replacement's own check, then lapsed when the removal begins."""
 
-    with pytest.raises(ReplacementInterrupted) as interrupted:
-        replace_rule.execute(
+    def __init__(self) -> None:
+        self.asked = 0
+
+    def is_connected(self, account_id: ConnectedAccountId) -> bool:
+        self.asked += 1
+        return self.asked == 1
+
+
+def test_a_check_that_fails_when_the_removal_begins_leaves_the_old_rule_and_no_draft() -> None:
+    unit_of_work = _with_mappings(1)
+    provider = RecordingProvider()
+    remover = RemoveSyncRule(unit_of_work, provider, LapsingAccounts(), FixedClock(), RuleLocks())
+
+    with pytest.raises(RemovalRequiresAuthorization):
+        _replacer(unit_of_work, remover).execute(
+            rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DELETE
+        )
+
+    assert provider.deleted_refs == []
+    assert unit_of_work.state.rules == {rule().id: rule()}
+    assert len(unit_of_work.state.mappings) == 1
+
+
+def test_a_calendar_of_an_account_the_user_lacks_leaves_the_old_rule_and_no_draft() -> None:
+    unit_of_work = _with_mappings(1)
+    provider = RecordingProvider()
+
+    with pytest.raises(ConnectedAccountRequired):
+        _replacer(unit_of_work, _remover(unit_of_work, provider)).execute(
             rule().id,
-            rule().source,
-            endpoint("work-account", "other-calendar"),
+            endpoint("someone-elses-account", "calendar"),
+            rule().destination,
             ProjectionHandling.DELETE,
         )
 
-    assert interrupted.value.replacement_rule_id == SyncRuleId("replacement-rule")
+    assert provider.deleted_refs == []
+    assert unit_of_work.state.rules == {rule().id: rule()}
+    assert len(unit_of_work.state.mappings) == 1
+
+
+def test_no_draft_exists_before_the_old_rules_removal_begins() -> None:
+    unit_of_work = _with_mappings(1)
+    locks = RuleLocks()
+    remover = RemoveSyncRule(unit_of_work, RecordingProvider(), Accounts(), FixedClock(), locks)
+    running = locks.for_rule(rule().id)
+    running.acquire()
+    worker = Thread(
+        target=_replacer(unit_of_work, remover).execute,
+        args=(rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DETACH),
+    )
+
+    worker.start()
+    worker.join(0.2)
+    waited_for_the_run = worker.is_alive()
+    rules_while_the_run_lasts = set(unit_of_work.state.rules)
+    running.release()
+    worker.join(5)
+
+    assert waited_for_the_run
+    assert rules_while_the_run_lasts == {rule().id}
+    assert set(unit_of_work.state.rules) == {REPLACEMENT}
+
+
+def test_the_draft_keeps_the_place_from_the_commit_that_begins_the_removal() -> None:
+    unit_of_work = _ordered(rule())
+    counting_before = _counting(unit_of_work)
+    order = unit_of_work.state.rule_order[rule().id]
+    seen: list[tuple[SyncRuleState, bool, int, int]] = []
+
+    class ObservingProvider(RecordingProvider):
+        def delete_projection(
+            self, destination: EventRef, source: EventRef, rule_id: SyncRuleId, operation_key: str
+        ) -> None:
+            committed = unit_of_work.state
+            seen.append(
+                (
+                    committed.rules[rule().id].state,
+                    committed.rules[REPLACEMENT].keeps_place,
+                    committed.rule_order[REPLACEMENT],
+                    _counting(unit_of_work),
+                )
+            )
+            super().delete_projection(destination, source, rule_id, operation_key)
+
+    replacement = _replacer(unit_of_work, _remover(unit_of_work, ObservingProvider())).execute(
+        rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DELETE
+    )
+
+    assert seen == [(SyncRuleState.REMOVING, True, order, counting_before)] * 2
+    assert replacement.rule.keeps_place is True
+    assert replacement.rule == unit_of_work.state.rules[REPLACEMENT]
+    assert _counting(unit_of_work) == counting_before
+    ranks = unit_of_work.state.rule_order
+    assert ranks[SyncRuleId("older")] < ranks[REPLACEMENT] < ranks[SyncRuleId("newer")]
+
+
+@pytest.mark.parametrize(
+    ("old", "keeps_place"),
+    [
+        (rule(state=SyncRuleState.ENABLED), True),
+        (rule().degrade(awaiting_reauthorization=True), True),
+        (replace(rule(state=SyncRuleState.DRAFT), keeps_place=True), True),
+        (rule(state=SyncRuleState.PAUSED), False),
+        (rule(state=SyncRuleState.DEGRADED), False),
+        (rule(state=SyncRuleState.DRAFT), False),
+        (rule(state=SyncRuleState.PREVIEWED), False),
+    ],
+)
+def test_the_draft_keeps_a_place_only_when_the_old_rule_counted(
+    old: SyncRule, keeps_place: bool
+) -> None:
+    unit_of_work = _ordered(old)
+    order = unit_of_work.state.rule_order[rule().id]
+
+    replacement = _replacer(unit_of_work).execute(
+        rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DETACH
+    )
+
+    assert replacement.rule.keeps_place is keeps_place
+    ranks = unit_of_work.state.rule_order
+    if keeps_place:
+        assert ranks[REPLACEMENT] == order
+    else:
+        # It keeps its own new order, so it is the newest rule.
+        assert ranks[REPLACEMENT] > ranks[SyncRuleId("newer")]
+
+
+def test_a_successor_that_is_not_a_new_draft_is_refused_and_nothing_changes() -> None:
+    unit_of_work = _with_mappings(1)
+    enabled = SyncRule(REPLACEMENT, rule().source, NEW_DESTINATION, state=SyncRuleState.ENABLED)
+
+    with pytest.raises(InvalidStateTransition):
+        _remover(unit_of_work).execute(rule().id, ProjectionHandling.DETACH, successor=enabled)
+
+    assert unit_of_work.state.rules == {rule().id: rule()}
+    assert len(unit_of_work.state.mappings) == 1
+
+
+def test_interrupted_replacement_keeps_the_new_draft_its_place_and_a_retryable_old_rule() -> None:
+    unit_of_work = _with_mappings(2)
+
+    with pytest.raises(ReplacementInterrupted) as interrupted:
+        _replacer(unit_of_work, _remover(unit_of_work, RecordingProvider(fail_on_call=2))).execute(
+            rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DELETE
+        )
+
+    assert interrupted.value.replacement_rule_id == REPLACEMENT
     assert "retry" in str(interrupted.value)
-    assert unit_of_work.state.rules[SyncRuleId("replacement-rule")].state is SyncRuleState.DRAFT
+    draft = unit_of_work.state.rules[REPLACEMENT]
+    assert (draft.state, draft.keeps_place) == (SyncRuleState.DRAFT, True)
     assert unit_of_work.state.rules[rule().id].state is SyncRuleState.REMOVING
+    assert _counting(unit_of_work) == 1
+
+    _remover(unit_of_work).execute(rule().id, ProjectionHandling.DETACH)
+
+    assert unit_of_work.state.rules == {REPLACEMENT: draft}
+
+
+class DisconnectedDestination(RecordingProvider):
+    """The destination account lost its credentials once the removal began."""
+
+    def delete_projection(
+        self, destination: EventRef, source: EventRef, rule_id: SyncRuleId, operation_key: str
+    ) -> None:
+        raise ConnectedAccountDisconnected("reauthorize the account before using it")
+
+
+def test_an_error_after_the_removal_began_keeps_the_draft() -> None:
+    unit_of_work = _with_mappings(1)
+
+    with pytest.raises(ConnectedAccountDisconnected):
+        _replacer(unit_of_work, _remover(unit_of_work, DisconnectedDestination())).execute(
+            rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DELETE
+        )
+
+    assert unit_of_work.state.rules[REPLACEMENT].keeps_place is True
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.REMOVING
+    assert len(unit_of_work.state.mappings) == 1
+
+
+def test_a_replacement_over_the_rule_limit_keeps_the_place_and_its_start_succeeds() -> None:
+    users = MemoryUsers()
+    users.add(User(USER, "member@example.test", Role.USER, UserState.ACTIVE, NOW), "x")
+    plans = MemoryPlans(users=users)
+    plans_on(plans, FREE)
+    unit_of_work = _ordered(rule())
+    assert plans.of(USER).limits.rules == 1
+    assert _counting(unit_of_work) == 3
+
+    _replacer(unit_of_work).execute(
+        rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DETACH
+    )
+    with unit_of_work() as uow:
+        draft = uow.rules.get(REPLACEMENT)
+        assert draft is not None
+        uow.rules.save(draft.mark_previewed())
+        uow.commit()
+    started = EnableSyncRule(unit_of_work, RuleLocks(), plans, USER).execute(REPLACEMENT)
+
+    assert started.state is SyncRuleState.ENABLED
+    assert started.keeps_place is False
+    assert _counting(unit_of_work) == 3
+
+
+def test_a_replacement_in_flight_keeps_its_place_when_plans_turn_on_during_the_removal() -> None:
+    users = MemoryUsers()
+    users.add(User(USER, "member@example.test", Role.USER, UserState.ACTIVE, NOW), "x")
+    plans = MemoryPlans(users=users)
+    unit_of_work = _ordered(rule())
+    assert plans.of(USER).limits.rules is None
+
+    class PlansTurnOn(RecordingProvider):
+        """An administrator turns Plans on, with a one-rule default, while the removal runs."""
+
+        def delete_projection(
+            self, destination: EventRef, source: EventRef, rule_id: SyncRuleId, operation_key: str
+        ) -> None:
+            if not plans.enabled:
+                plans_on(plans, FREE)
+            super().delete_projection(destination, source, rule_id, operation_key)
+
+    _replacer(unit_of_work, _remover(unit_of_work, PlansTurnOn())).execute(
+        rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DELETE
+    )
+    with unit_of_work() as uow:
+        draft = uow.rules.get(REPLACEMENT)
+        assert draft is not None
+        uow.rules.save(draft.mark_previewed())
+        uow.commit()
+    assert plans.of(USER).limits.rules == 1
+    assert _counting(unit_of_work) == 3
+    started = EnableSyncRule(unit_of_work, RuleLocks(), plans, USER).execute(REPLACEMENT)
+
+    assert started.state is SyncRuleState.ENABLED
+    assert _counting(unit_of_work) == 3
+
+
+def _creation_orders(database: Path) -> dict[str, int]:
+    """Each rule's creation order, which ranks the User's rules (ADR 0038)."""
+    with transaction(database) as connection:
+        rows = connection.execute("SELECT id, creation_order FROM sync_rules").fetchall()
+    return {str(row["id"]): int(row["creation_order"]) for row in rows}
+
+
+def _sqlite_replacer(units: UnitOfWorkFactory) -> ReplaceSyncRuleCalendars:
+    return ReplaceSyncRuleCalendars(
+        units, RemoveSyncRule(units, None, None, FixedClock(), RuleLocks()), Ids()
+    )
+
+
+def test_on_sqlite_the_draft_takes_the_place_and_rank_of_the_rule_it_replaces(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    units = sqlite_units(database)
+    with units() as uow:
+        for each in (_other("older"), rule(), _other("newer")):
+            uow.rules.add(each)
+        uow.commit()
+    order = _creation_orders(database)[rule().id.value]
+
+    replacement = _sqlite_replacer(units).execute(
+        rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DETACH
+    )
+
+    with units() as uow:
+        stored = uow.rules.get(REPLACEMENT)
+    assert stored == replacement.rule
+    assert replacement.rule.keeps_place is True
+    assert _creation_orders(database) == {
+        "older": order - 1,
+        REPLACEMENT.value: order,
+        "newer": order + 1,
+    }
+
+
+def test_on_sqlite_a_refused_draft_rolls_back_the_start_of_the_removal(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    units = sqlite_units(database)
+    with units() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+
+    with pytest.raises(ConnectedAccountRequired):
+        _sqlite_replacer(units).execute(
+            rule().id,
+            endpoint("someone-elses-account", "calendar"),
+            rule().destination,
+            ProjectionHandling.DETACH,
+        )
+
+    with units() as uow:
+        assert tuple(uow.rules.list()) == (rule(),)
 
 
 def _synced_series() -> tuple[FakeCalendars, InMemoryUserUnitOfWorkFactory, EventRef]:

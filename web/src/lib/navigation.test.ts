@@ -10,6 +10,7 @@ import {
   appPathForLocation,
   appPathForPeopleTab,
   appPathForPerson,
+  appPathForPlanPanel,
   appPathForRule,
   appPathForRulePreview,
   appPathForSettingsTab,
@@ -19,6 +20,8 @@ import {
   isKnownAppPath,
   isPlainLeftClick,
   isViewingRule,
+  planCopyFromSearch,
+  yourPlanPath,
 } from "./navigation"
 
 describe("application section URLs", () => {
@@ -93,6 +96,50 @@ describe("People tab URLs", () => {
     expect(appPathForLocation({ view: "people", ruleId: null, peopleTab: "invitations" })).toBe("/people/invitations")
     expect(isKnownAppPath("/people/invitations")).toBe(true)
   })
+
+  it("opens Plans at its own address, never as a person named plans", () => {
+    expect(appPathForPeopleTab("plans")).toBe("/people/plans")
+    for (const path of ["/people/plans", "/people/plans/"]) {
+      expect(appLocationFromPathname(path)).toEqual({ view: "people", ruleId: null, peopleTab: "plans" })
+    }
+    expect(appPathForLocation({ view: "people", ruleId: null, peopleTab: "plans" })).toBe("/people/plans")
+    expect(isKnownAppPath("/people/plans")).toBe(true)
+  })
+
+  it("opens one Plan's panel at its own address, with its People tab under it", () => {
+    expect(appPathForPlanPanel({ plan: "free plan", tab: "limits" })).toBe("/people/plans/free%20plan")
+    expect(appPathForPlanPanel({ plan: "free", tab: "people" })).toBe("/people/plans/free/people")
+    for (const [path, tab] of [
+      ["/people/plans/free%20plan", "limits"],
+      ["/people/plans/free%20plan/", "limits"],
+      ["/people/plans/free%20plan/people", "people"],
+    ] as const) {
+      const location = { view: "people", ruleId: null, peopleTab: "plans", planPanel: { plan: "free plan", tab } }
+      expect(appLocationFromPathname(path)).toEqual(location)
+      expect(isKnownAppPath(path)).toBe(true)
+    }
+    expect(
+      appPathForLocation({ view: "people", ruleId: null, peopleTab: "plans", planPanel: { plan: "free", tab: "people" } }),
+    ).toBe("/people/plans/free/people")
+    expect(isKnownAppPath("/people/plans/free/limits")).toBe(false)
+    expect(appLocationFromPathname("/people/plans/%E0").view).toBe("overview")
+  })
+
+  it("opens New plan at /people/plans/new, which no Plan's key can be, carrying the Plan it copies", () => {
+    expect(appPathForPlanPanel({ plan: null, tab: "limits" })).toBe("/people/plans/new")
+    expect(appPathForPlanPanel({ plan: null, tab: "limits" }, "free plan")).toBe("/people/plans/new?copy=free+plan")
+    for (const path of ["/people/plans/new", "/people/plans/new/people"]) {
+      expect(appLocationFromPathname(path)).toEqual({
+        view: "people",
+        ruleId: null,
+        peopleTab: "plans",
+        planPanel: { plan: null, tab: "limits" },
+      })
+    }
+    expect(planCopyFromSearch("?copy=free+plan")).toBe("free plan")
+    expect(planCopyFromSearch("?copy=")).toBeNull()
+    expect(planCopyFromSearch("")).toBeNull()
+  })
 })
 
 describe("Settings tab URLs", () => {
@@ -119,7 +166,14 @@ describe("Settings tab URLs", () => {
     expect(defaultSettingsTab("?unrelated=1")).toBe("account")
   })
 
-  it.each(["?oauth=connected&provider=google&account=acct-a&resumed=0", "?oauth=authorization_failed", "?account=acct-a", "?resumed=2"])(
+  it.each([
+    "?oauth=connected&provider=google&account=acct-a&resumed=0",
+    "?oauth=authorization_failed",
+    "?oauth=account_limit_reached&provider=google&limit=1",
+    "?account=acct-a",
+    "?resumed=2",
+    "?limit=1",
+  ])(
     "shows Connections when a provider returns or an account is named (%s)",
     (search) => {
       expect(defaultSettingsTab(search)).toBe("connections")
@@ -140,6 +194,11 @@ describe("Settings tab URLs", () => {
   it("links calendar accounts to Connections", () => {
     expect(connectionsPath()).toBe("/settings/connections")
     expect(connectionsPath(accountSearch("acct a"))).toBe("/settings/connections?account=acct%20a")
+  })
+
+  it("links to Your plan on the Your account tab", () => {
+    expect(yourPlanPath()).toBe("/settings/account#your-plan")
+    expect(appLocationFromUrl("/settings/account", "")).toEqual({ view: "settings", ruleId: null, settingsTab: "account" })
   })
 
   it.each(["/settings/unknown", "/settings/installation", "/settings/account/more", "/settingsx/account"])("falls back safely for %s", (path) => {

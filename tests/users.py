@@ -53,6 +53,18 @@ def add_user(
     return user
 
 
+def limited_user(
+    database: Path, user: UserId = OTHER_USER, *, plan: str | None = None, email: str | None = None
+) -> UserId:
+    """A User Plans can limit: role `user`, with `plan` as their own Plan when given (it must
+    exist). `add_user` records an Installation Administrator, whom no Plan limits."""
+    add_user(database, user, email=email, role="user")
+    if plan is not None:
+        with transaction(database) as connection:
+            connection.execute("UPDATE users SET plan_key = ? WHERE id = ?", (plan, user.value))
+    return user
+
+
 def add_account(
     database: Path, account_id: str, user: UserId = USER, *, state: str = "connected"
 ) -> None:

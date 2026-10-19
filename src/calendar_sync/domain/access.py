@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 
 from calendar_sync.domain.errors import DomainValidationError
+from calendar_sync.domain.plans import PlanKey
 
 EMAIL_LIMIT = 254
 """The longest address SMTP can deliver to."""
@@ -67,6 +68,8 @@ class User:
     instant_sync: bool = True
     """Whether their rules run soon after a change is reported, where their Plan and the
     installation allow it."""
+    plan: PlanKey | None = None
+    """Their own Plan; None means the Default Plan (ADR 0038)."""
 
     @property
     def needs_email(self) -> bool:
@@ -76,6 +79,12 @@ class User:
     def administers(self) -> bool:
         """Whether they hold the Installation Administrator role."""
         return self.role is Role.INSTALLATION_ADMINISTRATOR
+
+    @property
+    def limited_by_plans(self) -> bool:
+        """Whether the Plan they have limits them while Plans are on: they are active and do not
+        administer. A disabled User adds nothing, so no Plan counts them (ADR 0038)."""
+        return self.state is UserState.ACTIVE and not self.administers
 
     def with_email(self, email: str) -> User:
         return replace(self, email=email_address(email))

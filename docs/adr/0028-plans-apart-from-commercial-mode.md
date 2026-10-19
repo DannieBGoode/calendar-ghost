@@ -1,6 +1,7 @@
 # Separate Plans from Commercial Mode
 
-Amends [ADR 0023](0023-hosted-service-runs-the-open-codebase.md).
+Amends [ADR 0023](0023-hosted-service-runs-the-open-codebase.md). Amended by
+[ADR 0038](0038-plans-allowances-and-limits.md), which records how Plans work.
 
 ## Context
 
@@ -49,3 +50,25 @@ self-resuming stop beside Lapsed Authorization (ADR 0027).
   not protect shared resources, and the Hosted Service could not run plans before billing exists.
 - **Installation-wide resource settings without plans.** Rejected: the Hosted Service needs plans
   anyway, so this would build two limit mechanisms.
+
+## Amendment: what the design of Plans settled (2026-10-15)
+
+The design of Plans ([ADR 0038](0038-plans-allowances-and-limits.md)) settled what this record left
+open:
+
+- **The Hosted Service drives Plans.** On the Hosted Service, Instant Sync may be only for Plans
+  that cost more, and a free Plan may sync every 5 to 10 minutes. A self-hosted installation has
+  every feature and no limits unless its own administrator turns Plans on.
+- **A Default Plan.** The administrator marks one Plan as the default, which every User without a
+  Plan of their own has, and billing will return a User to it when a payment ends. Turning Plans
+  on with no default makes a Plan named "No limits" the default.
+- **Installation Administrators are never limited.** Under Only Me the only User administers, so
+  Plans have no effect there, and the Web UI hides them.
+- **Sync intervals are a fixed list:** Instant, 5, 10, 15, 30, and 60 minutes, where Instant means
+  Instant Sync plus a five-minute Scheduled Sync. The Plan decides the interval, in place of "the
+  shortest sync interval" above, and the User keeps only their own choice to turn Instant Sync
+  off. The first release of Plans offers Instant and 5 minutes.
+
+Until Plan Hold ships, a lowered rule limit refuses new Starts and stops nothing: rules beyond it
+keep syncing, and no grace period starts. The fixed rate limit for manual runs also comes in a
+later release.

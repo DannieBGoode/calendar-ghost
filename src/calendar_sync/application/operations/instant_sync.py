@@ -31,9 +31,11 @@ from calendar_sync.application.sync.watch_ports import (
     DeliveryEvidenceLog,
     PendingRequest,
     SyncCadencePolicy,
+    cadences_of,
 )
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.cadence import DEFAULT_CADENCE, SyncCadence
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     ConnectedAccountId,
@@ -68,7 +70,8 @@ class WatchUpkeep:
 
     Each cycle visits Users with nothing planned yet first, then the others in order of their
     earliest due work, so what waited longest goes first. Disabled Users are visited too: nothing
-    is wanted for them, so their watches stop.
+    is wanted for them, so their watches stop. A User whose Sync Cadence cannot be read counts
+    as instant, so a Plans fault never retires their watches (ADR 0038).
     """
 
     installation: InstallationUnitOfWorkFactory
@@ -85,9 +88,11 @@ class WatchUpkeep:
         calls = CallBudget(budget)
         with self.installation() as installation:
             owners = self._in_turn(installation.instant_sync_owners())
+        # One read of every listed User's cadence per cycle, outside any unit of work.
+        cadences = cadences_of(self.cadence, [owner.user for owner in owners])
         self._carried = ()
         for position, owner in enumerate(owners):
-            self._keep(owner, calls)
+            self._keep(owner, cadences[owner.user], calls)
             if calls.exhausted:
                 # The Users it never reached go first next cycle, then this one, whose upkeep
                 # the budget may have cut short. So a User with a large backlog never stays
@@ -112,12 +117,14 @@ class WatchUpkeep:
 
         return sorted(owners, key=turn)
 
-    def _keep(self, owner: InstantSyncOwner, calls: CallBudget) -> None:
+    def _keep(self, owner: InstantSyncOwner, cadence: SyncCadence, calls: CallBudget) -> None:
         """One User's upkeep; a failure waits for the next cycle and holds up nobody else."""
         try:
             upkeep = self.upkeep_for(owner.user)
             if upkeep is not None:
-                upkeep.execute(allowed=self._allowed(owner), address=self.address, budget=calls)
+                upkeep.execute(
+                    allowed=self._allowed(owner, cadence), address=self.address, budget=calls
+                )
         except Exception as error:
             # Only the class: a provider's text, which the error may carry along, can quote a
             # token or a registration address.
@@ -126,15 +133,10 @@ class WatchUpkeep:
                 error.__class__.__name__,
             )
 
-    def _allowed(self, owner: InstantSyncOwner) -> bool:
+    def _allowed(self, owner: InstantSyncOwner, cadence: SyncCadence) -> bool:
         """Whether the User may have watches: the installation can be reached, the User is
-        active and wants Instant Sync, and their Plan includes it."""
-        return (
-            self.address is not None
-            and not owner.disabled
-            and owner.wanted
-            and self.cadence.cadence(owner.user).instant
-        )
+        active and wants Instant Sync, and their Plan includes it, or could not be read."""
+        return self.address is not None and not owner.disabled and owner.wanted and cadence.instant
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,7 +165,8 @@ class InstantDispatch:
     Instant Sync off, their Plan no longer includes it, or the rule's last run failed, which
     Scheduled Sync retries with its own backoff. Requests of a paused rule or a disabled User are
     not listed, so they wait, and run or are dropped once the rule or User is active again.
-    Delivery Evidence never holds a run back: an authenticated notice proves delivery works.
+    Delivery Evidence never holds a run back: an authenticated notice proves delivery works. A
+    User whose Sync Cadence cannot be read counts as instant, so a Plans fault drops nothing.
     """
 
     installation: InstallationUnitOfWorkFactory
@@ -254,12 +257,10 @@ class InstantDispatch:
         return current, instant
 
     def _instant_users(self, owners: Sequence[InstantSyncOwner]) -> frozenset[UserId]:
-        """The Users whose rules may run instantly now."""
-        return frozenset(
-            owner.user
-            for owner in owners
-            if owner.wanted and not owner.disabled and self.cadence.cadence(owner.user).instant
-        )
+        """The Users whose rules may run instantly now, their cadences read in one batch."""
+        wanting = [owner.user for owner in owners if owner.wanted and not owner.disabled]
+        cadences = cadences_of(self.cadence, wanting)
+        return frozenset(user for user in wanting if cadences[user].instant)
 
     def _drop(self, item: PendingInstantRun, now: datetime) -> None:
         """Acknowledge a request no instant run will answer; Scheduled Sync runs the rule."""
@@ -356,16 +357,29 @@ class InstantSyncStatus:
 
     def poll_every(self, user: UserId) -> timedelta:
         """How often Scheduled Sync runs the User's rules, as their Plan says."""
-        return self.cadence.cadence(user).poll_every
+        return self._cadence(user).poll_every
 
     def _availability(self, user: UserId, watches: Sequence[CalendarWatch]) -> Availability:
         found = self.users.get(user)
         return instant_sync_availability(
             address_is_https=self.address is not None,
-            cadence=self.cadence.cadence(user),
+            cadence=self._cadence(user),
             wanted=found is not None and found.instant_sync,
             delivery=self._delivery(watches),
         )
+
+    def _cadence(self, user: UserId) -> SyncCadence:
+        """The User's cadence, or the default one when it cannot be read, so a Plans fault never
+        breaks sign-in or the rules API (ADR 0038)."""
+        try:
+            return self.cadence.cadence(user)
+        except Exception as error:
+            # Only the class: the error's text could quote the database's own words.
+            logger.warning(
+                "Could not read a User's Sync Cadence; showing the default one (%s)",
+                error.__class__.__name__,
+            )
+            return DEFAULT_CADENCE
 
     def _delivery(self, watches: Sequence[CalendarWatch]) -> tuple[DeliveryState, ...]:
         """The Delivery State of each provider the User's watched sources use, at this

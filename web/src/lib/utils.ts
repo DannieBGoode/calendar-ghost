@@ -9,3 +9,8 @@ export function cn(...inputs: ClassValue[]) {
 export function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> {
   return Object.fromEntries(Object.entries(record).filter(([entryKey]) => entryKey !== key))
 }
+
+/** The ids an element's aria-describedby names, leaving out those not shown. */
+export function describedBy(...ids: (string | false | null | undefined)[]): string | undefined {
+  return ids.filter(Boolean).join(" ") || undefined
+}

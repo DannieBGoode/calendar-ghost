@@ -6,6 +6,7 @@ import type { Catalog, MessageKey } from "./types"
 const english: Catalog = {
   greeting: "Hello {name}",
   rules: { one: "{count} rule", other: "{count} rules" },
+  seats: { one: "One seat for {name}", other: "{count} seats for {name}" },
   onlyEnglish: "Fallback",
 }
 const french: Catalog = {
@@ -62,13 +63,34 @@ describe("createI18n", () => {
     expect(i18n.has("absent")).toBe(false)
   })
 
-  it("leaves the placeholder and warns once outside tests", () => {
+  it("says whether params fill every placeholder of a message, the plural count included", () => {
+    const i18n = createI18n({ locale: "fr", catalog: french, fallback: english })
+    expect(i18n.fills("greeting", { name: "Sam" })).toBe(true)
+    expect(i18n.fills("greeting", {})).toBe(false)
+    expect(i18n.fills("rules", { count: 2 })).toBe(true)
+    expect(i18n.fills("rules", {})).toBe(false)
+    expect(i18n.fills("rules", { count: "2" })).toBe(false)
+    // Only the form the count selects needs filling.
+    expect(i18n.fills("seats", { count: 1, name: "Sam" })).toBe(true)
+    expect(i18n.fills("seats", { count: 2 })).toBe(false)
+    expect(i18n.fills("onlyEnglish")).toBe(true)
+    expect(i18n.fills("absent")).toBe(false)
+  })
+
+  it("throws under test when what it fills in still shows a placeholder", () => {
+    const i18n = createI18n({ locale: "en", catalog: english, fallback: english })
+    expect(() => i18n.t(key("greeting"), { name: "{count} people" })).toThrow("unfilled placeholder {count}")
+    expect(i18n.t(key("greeting"), { name: "${HOME} {{HOME}}" })).toBe("Hello ${HOME} {{HOME}}")
+  })
+
+  it("never shows a placeholder's braces outside tests, leaving out what is missing and warning once", () => {
     vi.stubEnv("MODE", "production")
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
     const i18n = createI18n({ locale: "en", catalog: english, fallback: english })
-    expect(i18n.t(key("greeting"))).toBe("Hello {name}")
+    expect(i18n.t(key("greeting"))).toBe("Hello ")
     i18n.t(key("greeting"))
     expect(warn).toHaveBeenCalledTimes(1)
+    expect(i18n.t(key("rules"))).not.toContain("{")
     vi.unstubAllEnvs()
     warn.mockRestore()
   })

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { CheckCircle2, ShieldAlert } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
@@ -10,8 +10,10 @@ import { api, type CalendarProvider, type SessionStatus } from "@/lib/api"
 import {
   DEFAULT_SETTINGS_TAB,
   SETTINGS_ARRIVAL_PARAMS,
+  appPathForSettingsTab,
   type OpenSettingsTab,
   type SettingsTab,
+  yourPlanPath,
 } from "@/lib/navigation"
 import {
   OAUTH_OUTCOME_MESSAGES,
@@ -30,6 +32,7 @@ import { AccountsSection } from "@/features/settings-accounts"
 import { AppearanceSection } from "@/features/settings-appearance"
 import { IntegrationsSection } from "@/features/settings-integrations"
 import { OwnAccountSection } from "@/features/settings-own-account"
+import { OwnPlanSection } from "@/features/settings-own-plan"
 import { RegistrationSection } from "@/features/settings-registration"
 import { StorageSection } from "@/features/settings-storage"
 import { SettingsTabs } from "@/features/settings-tabs"
@@ -75,6 +78,8 @@ type SettingsArrival = {
   accountId: string | null
   /** Rules that resumed because the account was reauthorized. */
   resumed: number
+  /** The plan's account limit a new account met, when it was refused. */
+  limit: number
 }
 
 /** What brought the administrator here, read once; returning ends the authorization attempt. */
@@ -88,6 +93,7 @@ function useSettingsArrival(): SettingsArrival {
       provider: oauthProvider(window.location.search),
       accountId: params.get("account"),
       resumed: Number(params.get("resumed")) || 0,
+      limit: Number(params.get("limit")) || 0,
     }
   })
   useEffect(() => {
@@ -114,31 +120,63 @@ function SettingsView({ session, tab, onOpenTab, onOpenPeople, ...connections }:
   const administrator = isAdministrator(user)
   // Someone else opening Administration's address sees Your account, as Settings itself shows.
   const shown = tab === "administration" && !administrator ? DEFAULT_SETTINGS_TAB : tab
+  const page = useRef<HTMLDivElement>(null)
+  // A link in Your plan's sentences goes with Your account, so focus moves to the tab it opens.
+  const openConnections = () => {
+    onOpenTab("connections")
+    page.current?.querySelector<HTMLElement>(`.page-tabs a[href="${appPathForSettingsTab("connections")}"]`)?.focus()
+  }
 
   return (
-    <div className="page-section settings-page">
+    <div ref={page} className="page-section settings-page">
       <div>
         <h1>{t("settings.page.title")}</h1>
         <p className="page-intro">{t(administrator ? "settings.page.introAdministrator" : "settings.page.intro")}</p>
       </div>
       <SettingsTabs current={shown} administrator={administrator} onOpen={onOpenTab} />
-      {shown === "account" && user && (
-        <OwnAccountSection user={user} sendsEmail={session.installation_sends_email} onOpenPeople={onOpenPeople} />
+      {shown === "account" && (
+        <AccountTab session={session} administrator={administrator} onOpenConnections={openConnections} onOpenPeople={onOpenPeople} />
       )}
-      {shown === "account" && <AppearanceSection />}
       {shown === "connections" && <ConnectionsTab providers={connections.providers} administrator={administrator} />}
       {shown === "administration" && <AdministrationTab />}
     </div>
   )
 }
 
+/**
+ * The signed-in User's own sign-in and sync, Your plan once a Plan applies, and how the app looks.
+ * Your plan opens Connections where it says to remove a calendar account or revoke a token.
+ */
+function AccountTab({
+  session,
+  administrator,
+  onOpenConnections,
+  onOpenPeople,
+}: {
+  session: SessionStatus
+  administrator: boolean
+  onOpenConnections: () => void
+  onOpenPeople: () => void
+}) {
+  const { user } = session
+  return (
+    <>
+      {user && <OwnAccountSection user={user} sendsEmail={session.installation_sends_email} onOpenPeople={onOpenPeople} />}
+      <OwnPlanSection administrator={administrator} onOpenConnections={onOpenConnections} />
+      <AppearanceSection />
+    </>
+  )
+}
+
 /** Calendar accounts, with what brought the User back from a provider above them, and Integrations. */
 function ConnectionsTab({ providers, administrator }: { providers: CalendarProvider[]; administrator: boolean }) {
-  const { outcome, provider, accountId, resumed } = useSettingsArrival()
+  const { outcome, provider, accountId, resumed, limit } = useSettingsArrival()
   const returnHelp = useOAuthReturn(providers)
   return (
     <>
-      {outcome && <OAuthOutcomeNotice outcome={outcome} provider={provider} resumed={resumed} providers={providers} />}
+      {outcome && (
+        <OAuthOutcomeNotice outcome={outcome} provider={provider} resumed={resumed} limit={limit} providers={providers} />
+      )}
       <AccountsSection
         providers={providers}
         justConnected={outcome === "connected"}
@@ -152,7 +190,8 @@ function ConnectionsTab({ providers, administrator }: { providers: CalendarProvi
 
 /**
  * Who can join, and storage. Only an Installation Administrator sees them; the server refuses
- * everyone else. The people here and their invitations have their own page.
+ * everyone else. The people here, their invitations, and the Plans that limit them have their own
+ * page, People.
  */
 function AdministrationTab() {
   const registration = useRegistration()
@@ -164,43 +203,66 @@ function AdministrationTab() {
   )
 }
 
-/** The notice for the outcome the OAuth callback reported; failures offer to try again. */
+/** Outcomes announced at once, because the person acts before connecting again. */
+const ALERT_OUTCOMES: ReadonlySet<OAuthOutcome> = new Set<OAuthOutcome>(["authorization_failed", "account_limit_reached"])
+
+/** The notice for the outcome the OAuth callback reported, with its one next step. */
 function OAuthOutcomeNotice({
   outcome,
   provider,
   resumed,
+  limit,
   providers,
 }: {
   outcome: OAuthOutcome
   provider: string | null
   resumed: number
+  limit: number
   providers: CalendarProvider[]
 }) {
   const i18n = useI18n()
-  const { t } = i18n
-  const messages = OAUTH_OUTCOME_MESSAGES[outcome]
   const succeeded = outcome === "connected"
   const names = { account: accountNoun(i18n, provider, providers), provider: providerDisplayName(i18n, provider, providers) }
-  const retry = providerOf(providers, provider)
   return (
     <div
       className={cn("oauth-feedback", succeeded ? "oauth-feedback-success" : "oauth-feedback-warning")}
-      role={outcome === "authorization_failed" ? "alert" : "status"}
+      role={ALERT_OUTCOMES.has(outcome) ? "alert" : "status"}
     >
       {succeeded ? <CheckCircle2 aria-hidden="true" /> : <ShieldAlert aria-hidden="true" />}
       <div>
-        <h2>{t(messages.title, names)}</h2>
-        <p>
-          {succeeded && resumed > 0 ? t("settings.oauthOutcome.connected.resumed", { count: resumed }) : t(messages.body)}
-        </p>
+        <h2>{i18n.t(OAUTH_OUTCOME_MESSAGES[outcome].title, names)}</h2>
+        <OAuthOutcomeBody outcome={outcome} resumed={resumed} limit={limit} />
       </div>
-      {!succeeded && retry && (
-        <Button variant="outline" asChild>
-          <a {...connectLink(retry)}>
-            {t("settings.oauthOutcome.tryAgain")}
-          </a>
-        </Button>
-      )}
+      <OAuthOutcomeStep outcome={outcome} retry={providerOf(providers, provider)} />
     </div>
+  )
+}
+
+/** What happened: how many rules a reauthorization restarted, or the plan's account limit. */
+function OAuthOutcomeBody({ outcome, resumed, limit }: { outcome: OAuthOutcome; resumed: number; limit: number }) {
+  const { t } = useI18n()
+  const body = OAUTH_OUTCOME_MESSAGES[outcome].body
+  if (outcome === "connected" && resumed > 0) return <p>{t("settings.oauthOutcome.connected.resumed", { count: resumed })}</p>
+  return <p>{outcome === "account_limit_reached" ? t(body, { count: limit }) : t(body)}</p>
+}
+
+/**
+ * The one next step after a failure: connecting again, or, at the plan's account limit, Your plan,
+ * because connecting again would meet the same limit.
+ */
+function OAuthOutcomeStep({ outcome, retry }: { outcome: OAuthOutcome; retry: CalendarProvider | null }) {
+  const { t } = useI18n()
+  if (outcome === "account_limit_reached") {
+    return (
+      <Button variant="outline" asChild>
+        <a href={yourPlanPath()}>{t("common.plan.seeYourPlan")}</a>
+      </Button>
+    )
+  }
+  if (outcome === "connected" || !retry) return null
+  return (
+    <Button variant="outline" asChild>
+      <a {...connectLink(retry)}>{t("settings.oauthOutcome.tryAgain")}</a>
+    </Button>
   )
 }

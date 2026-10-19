@@ -4,27 +4,41 @@ import { OverflowMenu, type OverflowMenuItem } from "@/components/overflow-menu"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
-import type { Person } from "@/lib/api"
+import type { Person, PersonPlanOverview } from "@/lib/api"
 import { isAdministrator } from "@/lib/people"
 import { passwordResetLink } from "@/lib/public-links"
 import type { PeopleCommands, PersonCommand } from "@/lib/use-people"
 
-/** The menu of what an administrator can do to someone else. */
-export function PersonMenu({ person, name, commands }: { person: Person; name: string; commands: PeopleCommands }) {
+/**
+ * The menu of what an administrator can do to someone else. In People's table, Change plan shows
+ * once any Plan exists: there `plan` is their Plan, null while no Plan exists. Their page passes
+ * none, since its Plan card holds Change plan.
+ */
+export function PersonMenu({
+  person,
+  name,
+  commands,
+  plan,
+}: {
+  person: Person
+  name: string
+  commands: PeopleCommands
+  plan?: PersonPlanOverview | null
+}) {
   const i18n = useI18n()
   return (
     <OverflowMenu
       label={i18n.t("people.actions.label", { email: name })}
-      items={personActions(i18n, person, commands)}
+      items={personActions(i18n, person, commands, Boolean(plan))}
     />
   )
 }
 
 /**
- * Someone else's commands: their role, whether they can sign in, a new password, or deletion.
- * They wait while any command runs.
+ * Someone else's commands: their role, whether they can sign in, their Plan, a new password, or
+ * deletion. They wait while any command runs.
  */
-function personActions({ t }: I18n, person: Person, { busy, start }: PeopleCommands): OverflowMenuItem[] {
+function personActions({ t }: I18n, person: Person, { busy, start }: PeopleCommands, offersPlan: boolean): OverflowMenuItem[] {
   const item = (id: PersonCommand["action"], label: string, description: string): OverflowMenuItem => ({
     id,
     label,
@@ -39,12 +53,16 @@ function personActions({ t }: I18n, person: Person, { busy, start }: PeopleComma
     person.state === "disabled"
       ? item("enable", t("people.actions.enable"), t("people.actions.enableHint"))
       : item("disable", t("people.actions.disable"), t("people.actions.disableHint")),
+    ...(offersPlan ? [item("plan", t("people.actions.changePlan"), t("people.actions.changePlanHint"))] : []),
     item("reset", t("people.actions.passwordReset"), t("people.actions.passwordResetHint")),
     item("delete", t("people.actions.delete"), t("people.actions.deleteHint")),
   ]
 }
 
-/** What a command on this person shows beside them: its error, the deletion to confirm, or a link. */
+/**
+ * What a command on this person shows beside them: its result or error, the deletion to confirm,
+ * or a link. Change plan shows its own refusal where it opened, and its result in a toast.
+ */
 export function PersonDetails({ person, name, commands }: { person: Person; name: string; commands: PeopleCommands }) {
   const i18n = useI18n()
   const { t } = i18n

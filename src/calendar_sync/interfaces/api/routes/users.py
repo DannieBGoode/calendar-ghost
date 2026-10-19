@@ -60,6 +60,7 @@ from calendar_sync.domain.access import (
     UserState,
 )
 from calendar_sync.domain.errors import DomainValidationError
+from calendar_sync.domain.plans import PlanKey
 from calendar_sync.interfaces.api.dependencies import (
     Identity,
     administrator,
@@ -67,6 +68,7 @@ from calendar_sync.interfaces.api.dependencies import (
     current_user,
     set_session_cookie,
 )
+from calendar_sync.interfaces.api.plan_payload import person_plan_overview_response
 from calendar_sync.interfaces.api.problems import ApiProblem, problem_from
 from calendar_sync.interfaces.api.routes.session import SignedInAnswers, signed_in
 from calendar_sync.interfaces.api.schemas import (
@@ -76,6 +78,7 @@ from calendar_sync.interfaces.api.schemas import (
     LinkStatusResponse,
     PendingInvitationResponse,
     PeopleQuery,
+    PersonPlanOverviewResponse,
     PersonResponse,
     RegistrationRequest,
     RegistrationResponse,
@@ -260,8 +263,9 @@ def users(
     query: Annotated[PeopleQuery, Query()],
     response: Response,
 ) -> UserPageResponse:
-    """One page of the people here, by part of their email, role, state, and Installation
-    Status, each with what the Operator Overview shows about them; never their calendars."""
+    """One page of the people here, by part of their email, role, state, Installation Status,
+    Plan, and whether they are over a limit of it, each with what the Operator Overview shows
+    about them; never their calendars."""
     response.headers.update(NO_STORE)
     found = services.operator_overview.page(actor, _overview_query(query))
     return UserPageResponse(
@@ -387,6 +391,8 @@ def _overview_query(query: PeopleQuery) -> OverviewQuery:
             search=query.search.strip(),
             role=Role(query.role) if query.role else None,
             state=UserState(query.state) if query.state else None,
+            # The query's pattern admits only well-formed keys.
+            plan=PlanKey(query.plan) if query.plan else None,
             # Within a verdict, people keep the order they joined in.
             sort=UserSort.JOINED if by_verdict else UserSort(query.sort),
             descending=query.order == "desc",
@@ -395,6 +401,7 @@ def _overview_query(query: PeopleQuery) -> OverviewQuery:
         ),
         verdict=StatusVerdict(query.verdict) if query.verdict else None,
         by_verdict=by_verdict,
+        over=query.over,
     )
 
 
@@ -403,7 +410,13 @@ def user_overview_response(overview: UserOverview) -> UserOverviewResponse:
         user=_user(overview.user),
         status=status_response(overview.status),
         resources=resource_use_response(overview),
+        plan=_person_plan(overview),
     )
+
+
+def _person_plan(overview: UserOverview) -> PersonPlanOverviewResponse | None:
+    plan = overview.plan
+    return person_plan_overview_response(plan) if plan is not None else None
 
 
 def _person(overview: UserOverview) -> PersonResponse:
@@ -416,6 +429,7 @@ def _person(overview: UserOverview) -> PersonResponse:
         if (last_synced := status_.overview.last_synced_at)
         else None,
         resources=resource_use_response(overview),
+        plan=_person_plan(overview),
     )
 
 

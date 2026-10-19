@@ -83,6 +83,9 @@ class MemoryState:
     authorized_at: dict[ConnectedAccountId, datetime] = field(default_factory=dict)
     """When each account was last authorized; one missing was authorized before any request."""
     rules: dict[SyncRuleId, SyncRule] = field(default_factory=dict)
+    rule_order: dict[SyncRuleId, int] = field(default_factory=dict)
+    """Each rule's creation order, as SQLite's `creation_order` keeps it. A rule a test seeded
+    into `rules` directly has none and ranks as 0."""
     mappings: dict[tuple[SyncRuleId, EventRef], EventMapping] = field(default_factory=dict)
     occurrences: dict[tuple[EventMappingId, OccurrenceStart], OccurrenceMapping] = field(
         default_factory=dict
@@ -237,6 +240,7 @@ class InMemorySyncRuleRepository:
         if self.relationship_exists(rule.source, rule.destination):
             raise _duplicate_relationship()
         self._state.rules[rule.id] = rule
+        self._state.rule_order[rule.id] = max(self._state.rule_order.values(), default=0) + 1
 
     def save(self, rule: SyncRule) -> None:
         if rule.id not in self._state.rules:
@@ -253,6 +257,7 @@ class InMemorySyncRuleRepository:
     def remove(self, rule_id: SyncRuleId) -> None:
         self._incidents.resolve_rule(rule_id, self._clock.now())
         self._state.rules.pop(rule_id, None)
+        self._state.rule_order.pop(rule_id, None)
         removed = {m.id for key, m in self._state.mappings.items() if key[0] == rule_id}
         self._state.occurrences = {
             key: occurrence
@@ -278,6 +283,11 @@ class InMemorySyncRuleRepository:
         self.remove(rule_id)
         self._state.audit = [entry for entry in self._state.audit if entry.rule_id != rule_id]
         self._incidents.delete_rule(rule_id)
+
+    def inherit_place(self, rule: SyncRuleId, of: SyncRuleId) -> None:
+        # Both must be this User's, as SQLite's update requires.
+        if rule in self._state.rules and of in self._state.rules:
+            self._state.rule_order[rule] = self._state.rule_order.get(of, 0)
 
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
         return any(
@@ -824,6 +834,9 @@ class MemoryDatabase:
         default_factory=dict
     )
     """Whether each provider reached each public address, as SQLite's installation table keeps."""
+    unrevoked_tokens: dict[UserId, int] = field(default_factory=dict)
+    """How many Integration Tokens each User has not revoked. Tokens are kept in their own store,
+    which tests stand in for apart; this records only what the installation unit counts."""
 
     def state_of(self, user_id: UserId) -> MemoryState:
         return self.partitions.setdefault(user_id, MemoryState())

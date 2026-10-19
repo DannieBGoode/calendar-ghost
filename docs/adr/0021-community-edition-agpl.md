@@ -2,6 +2,9 @@
 
 Amended by [ADR 0023](0023-hosted-service-runs-the-open-codebase.md): the hosted service runs this
 open codebase with no closed components, so the separate hosted boundary below no longer applies.
+Amended by [ADR 0038](0038-plans-allowances-and-limits.md): the Hosted Service may also charge
+for Plans that differ in limits and in how soon calendars sync, while a self-hosted installation
+keeps every feature, as ADR 0023's Plans amendment says.
 
 ## Context
 

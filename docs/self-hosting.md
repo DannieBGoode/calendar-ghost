@@ -257,12 +257,14 @@ join and the app shows nothing about other people. To share it with your househo
 1. Open **Settings → Administration → Who can join** and choose **Invitation only**. A **People**
    page appears in the main navigation.
 2. On **People**, choose **Invite someone** and pass the link on yourself. It works once and expires
-   after 7 days; the person chooses their own email and password.
+   after 7 days; the person chooses their own email and password. Once a Plan is the default,
+   **Invitations** says which Plan they will get; you can change it after they join.
 3. Everyone's calendar accounts, rules, Activity, and tokens are their own. As the administrator you
-   see each person's email, role, whether they may sign in, when they joined, and when they last
-   signed in, never their calendars or events. Search by part of an email, filter by role or
-   state, sort by email, joining, or last sign-in, and page through 50 people at a time; the
-   address keeps your choices, so a reload or a shared link shows the same list.
+   see each person's email, role, whether they may sign in, when they joined, when they last signed
+   in, and, once you define a Plan, their Plan, never their calendars or events. Search by part of
+   an email, filter by role, state, or sync status, and, once you define a Plan, by Plan, sort by
+   email, joining, or last sign-in, and page through 50 people at a time; the address keeps your
+   choices, so a reload or a shared link shows the same list.
 
 From **People** you can also make someone an administrator, disable someone, which signs them out
 and holds their rules until you enable them again, create a password reset link for someone who
@@ -276,7 +278,34 @@ off, or delete their own account under **Settings → Your account**, choosing w
 their rules wrote are deleted too. When the last person deletes
 their own account, Calendar Ghost returns to setup: the next person to open it creates the
 administrator, as on a new installation, and the OAuth settings and master key in `.env`
-stay as they were.
+stay as they were. Plans, if you turned them on, turn off and keep their definitions.
+
+To keep one person from using up what everyone shares, open **People → Plans**
+([ADR 0038](adr/0038-plans-allowances-and-limits.md)):
+
+1. Choose **New plan**. A panel opens beside the table, at its own address: give the Plan a name,
+   which no other Plan has, and set the most active rules, calendar accounts, and Integration
+   Tokens a person may have, each **No limit** or **Up to** a number (Integration Tokens may also
+   be **None**), and its **Sync speed**, Instant or every 5 minutes. **Save plan** closes the panel.
+2. Give it to people: **Assign people** in the Plan's **More actions** menu, or tick people under
+   **Everyone** and choose **Change plan**. Before you save, it says who would be over a limit.
+   Everyone without a Plan of their own has the default, marked **Default**; **Make default** in
+   another Plan's menu moves them, and giving someone the default means they follow it.
+3. Turn on the **Plans** switch at the top of the tab. With no default, it adds a Plan named No
+   limits, which limits nobody, as the default, so nothing changes until someone has a smaller
+   Plan. Like giving a Plan and **Make default**, it applies at once, and a message at the bottom
+   of the window says what changed, with **Undo**.
+
+Administrators are never limited, and while Plans are off, which is the default, nobody is. A
+lower limit stops nothing: rules beyond it keep syncing, and accounts and tokens keep working, but
+nobody can start a rule, connect a new calendar account, or issue a token past it. The tab counts
+who is over a limit, and **Everyone** shows each person's Plan and any limit they are over; the
+**Plan** card on a person's page and each person's own **Settings → Your account → Your plan**
+show a meter for each limit with how much of it they use.
+[Someone has more than their plan allows](troubleshooting.md#someone-has-more-than-their-plan-allows)
+says what to do when someone is over a limit, and
+[A plan cannot be removed](troubleshooting.md#a-plan-cannot-be-removed-or-its-name-is-refused)
+explains **Remove**.
 
 ## 5. Use a LAN host or HTTPS
 

@@ -17,12 +17,14 @@ export default {
   ignore: {
     overrides: [
       {
-        // The Activity, Incidents, People, and Rule Preview tables set explicit table roles on purpose: narrow screens
-        // restyle their rows with CSS display values, which drop the native table semantics in
-        // some browsers.
+        // The Activity, Incidents, People, Plans, and Rule Preview tables set explicit table roles on purpose: narrow
+        // screens restyle their rows with CSS display values, which drop the native table semantics
+        // in some browsers.
         files: [
           "src/features/activity-table.tsx",
           "src/features/activity-incidents.tsx",
+          "src/features/people-plan-details.tsx",
+          "src/features/people-plans-table.tsx",
           "src/features/people-table.tsx",
           "src/features/rule-preview-table.tsx",
         ],

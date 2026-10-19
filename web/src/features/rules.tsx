@@ -16,6 +16,7 @@ import {
 } from "@/components/rule-commands"
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { Button } from "@/components/ui/button"
+import { YourPlanLink } from "@/components/your-plan-link"
 import { RuleBuilder } from "@/features/rule-builder"
 import { useI18n } from "@/i18n/provider"
 import { rich } from "@/i18n/rich"
@@ -35,6 +36,7 @@ import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
 import { busyCommand, ruleWork, workRefreshInterval, type RuleWork } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
+import { usePreviewedStartRefusal, useRuleLimitNote } from "@/lib/use-own-plan"
 import { useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 
@@ -169,6 +171,10 @@ function RulesHeading({
 }) {
   const { t } = useI18n()
   const saving = useRuleDraftSaving()
+  // Read here, outside the condition below, as the rules of hooks require.
+  const ruleLimit = useRuleLimitNote()
+  // Until an account is connected, connecting one is the only next step.
+  const planNote = noAccounts ? undefined : ruleLimit
   return (
     <div className="page-heading-row">
       <div>
@@ -183,7 +189,7 @@ function RulesHeading({
           onClick={onToggleBuilder}
           aria-expanded={showBuilder}
           aria-controls="rule-builder"
-          aria-describedby={noAccounts ? "create-rule-hint" : undefined}
+          aria-describedby={noAccounts ? "create-rule-hint" : planNote ? "create-rule-plan" : undefined}
         >
           {showBuilder ? t("rules.list.closeBuilder") : <><Plus aria-hidden="true" /> {t("rules.list.createButton")}</>}
         </Button>
@@ -203,6 +209,11 @@ function RulesHeading({
                 </a>
               ),
             })}
+          </p>
+        )}
+        {planNote && (
+          <p id="create-rule-plan" className="action-hint">
+            {planNote} <YourPlanLink />
           </p>
         )}
       </div>
@@ -287,6 +298,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
   })
   const pending = busyCommand(commands.pending[rule.id], work)
   const state = removing ? "removing" : rule.state
+  const refusal = usePreviewedStartRefusal()({ state, keeps_place: rule.keeps_place })
   const headingId = `rule-${rule.id}-name`
   const previewId = `rule-${rule.id}-preview`
   const run = (command: Parameters<typeof commands.run>[1]) =>
@@ -305,7 +317,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
       <div className="rule-main">
         <RuleSummaryLine rule={rule} endpoints={endpoints} headingId={headingId} now={now} />
         <div className="rule-actions">
-          <RuleStatusBadge state={state} stopped={stopped} working={work?.kind} />
+          <RuleStatusBadge state={state} stopped={stopped} working={work?.kind} refused={refusal !== null} />
           <RuleNextAction
             ruleId={rule.id}
             state={state}
@@ -346,6 +358,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
         work={work}
         feedback={commands.feedback[rule.id]}
         previewId={previewId}
+        refusal={refusal}
       />
     </li>
   )
@@ -404,6 +417,7 @@ function RuleNotes({
   work,
   feedback,
   previewId,
+  refusal,
 }: {
   rule: RuleSummary
   endpoints: RuleEndpoints
@@ -412,6 +426,8 @@ function RuleNotes({
   work: RuleWork | null
   feedback: RuleFeedback | undefined
   previewId: string
+  /** Why the User's Plan would refuse a previewed rule's Start; null when it may start. */
+  refusal: string | null
 }) {
   const { t, format } = useI18n()
   const { source, destination, unauthorized } = endpoints
@@ -428,7 +444,7 @@ function RuleNotes({
         </p>
       )}
       {state === "dry_run_validated" && (
-        <PreviewReadyNote id={previewId} preview={rule.latest_preview} destination={destination.name} />
+        <PreviewReadyNote id={previewId} preview={rule.latest_preview} destination={destination.name} refusal={refusal} />
       )}
       {work ? (
         <RuleWorkNote work={work} source={source.name} destination={destination.name} />

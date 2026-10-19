@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Protocol
+from typing import Annotated, Literal, Protocol, get_args
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, status
@@ -17,6 +17,7 @@ from calendar_sync.application.sync.accounts import (
 )
 from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
+    AccountLimitReached,
     AuthorizationFailed,
     AuthorizationNotConfigured,
     CalendarPermissionRequired,
@@ -56,6 +57,12 @@ CONNECTIONS = "/settings/connections"
 # OAuth errors that mean the person, or their organization, did not grant what was asked, rather
 # than that the flow failed: RFC 6749 section 4.1.2.1 and OpenID Connect Core section 3.1.2.6.
 REFUSED = frozenset({"access_denied", "consent_required"})
+OAuthOutcome = Literal[
+    "connected", "calendar_permission_required", "authorization_failed", "account_limit_reached"
+]
+"""How a provider's connection flow ended, as Settings reads it from `?oauth=`. The Web UI's
+`OAuthOutcome` names the same values (`tests/adapters/test_oauth_outcomes.py`)."""
+OAUTH_OUTCOMES: tuple[str, ...] = get_args(OAuthOutcome)
 
 
 class AccountServices(Protocol):
@@ -201,6 +208,10 @@ def complete_oauth(
         raise problem_from(status.HTTP_400_BAD_REQUEST, state_error) from state_error
     except CalendarPermissionRequired:
         return returned.outcome("calendar_permission_required")
+    except AccountLimitReached as limited:
+        # A new account at the Plan's limit: trying again cannot help, so Settings links to
+        # Your plan, with the limit it names.
+        return returned.outcome("account_limit_reached", limit=limited.limit)
     except AuthorizationFailed:
         return returned.outcome("authorization_failed")
     # The User who began the flow finished it; the account and its rules are theirs.
@@ -218,7 +229,7 @@ class _ReturnTo:
     def __init__(self, provider: str) -> None:
         self._provider = provider
 
-    def outcome(self, outcome: str, **details: str | int) -> RedirectResponse:
+    def outcome(self, outcome: OAuthOutcome, **details: str | int) -> RedirectResponse:
         query = urlencode({"oauth": outcome, "provider": self._provider, **details})
         return RedirectResponse(f"{CONNECTIONS}?{query}", status_code=303)
 

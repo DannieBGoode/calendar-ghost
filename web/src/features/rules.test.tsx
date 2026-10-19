@@ -9,7 +9,7 @@ import { RuleBuilder, RulesView } from "./rules"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { ConnectedAccount, DiscoveredCalendar, RuleSummary, RunOutcome } from "@/lib/api"
+import type { ConnectedAccount, DiscoveredCalendar, OwnPlan, RuleSummary, RunOutcome } from "@/lib/api"
 import type { ViewChange } from "@/lib/navigation"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -296,6 +296,7 @@ function ruleSummary(id: string, overrides: Partial<RuleSummary>): RuleSummary {
     last_sync: lastSync,
     latest_preview: null,
     running: null,
+    keeps_place: false,
     ...overrides,
   }
 }
@@ -328,19 +329,39 @@ function jsonResponse(body: unknown): Response {
   return { ok: true, status: 200, json: () => Promise.resolve(body) } as Response
 }
 
+/** Someone whose rules count past their plan's limit, so a rule they stop may not start again. */
+const overTheLimit: OwnPlan = {
+  basis: "plan",
+  plan: { key: "free", name: "Free", on_default: true },
+  limits: { rules: 1, connected_accounts: 1, integration_tokens: 0, sync_interval: "5_minutes" },
+  rules_counted: 3,
+  connected_accounts: 2,
+  integration_tokens: 0,
+  instant: false,
+  poll_every_minutes: 5,
+  may_connect_account: false,
+  may_issue_token: false,
+  over_rule_limit: true,
+}
+
+/** The own-plan answer when Plans cannot be read. */
+const planUnreadable = { ok: false, status: 500, json: () => Promise.resolve({ detail: "database is locked" }) } as Response
+
 async function renderRulesList(
   i18n: I18n,
   {
     rows = RULE_ROWS,
     accounts = [accountA, accountB, accountC, accountD],
     onViewChange = () => undefined,
-  }: { rows?: RuleSummary[]; accounts?: ConnectedAccount[]; onViewChange?: ViewChange } = {},
+    ownPlan = jsonResponse({}),
+  }: { rows?: RuleSummary[]; accounts?: ConnectedAccount[]; onViewChange?: ViewChange; ownPlan?: Response } = {},
 ) {
   vi.stubGlobal("fetch", vi.fn((input: string | URL) => Promise.resolve(respond(String(input)))))
   function respond(url: string): Response {
     const path = url.split("?")[0] ?? ""
     if (path === "/api/v1/rules") return jsonResponse(rows)
     if (path === "/api/v1/accounts") return jsonResponse(accounts)
+    if (path === "/api/v1/account/plan") return ownPlan
     const calendars = /^\/api\/v1\/accounts\/(.+)\/calendars$/.exec(path)
     if (calendars) return jsonResponse(calendarsByAccount[decodeURIComponent(calendars[1] ?? "")] ?? [])
     return jsonResponse({})
@@ -365,6 +386,16 @@ async function renderRulesList(
     })
   }
   return container
+}
+
+/** Opens a rule's More actions menu and reads what its Pause item says. */
+function pauseDescription(menuLabel: string) {
+  const trigger = container.querySelector<HTMLButtonElement>(`[aria-label="${menuLabel}"]`)!
+  click(trigger)
+  const pause = [...trigger.closest(".overflow-menu")!.querySelectorAll("[role='menuitem']")].find(
+    (item) => item.querySelector(".overflow-menu-label")?.textContent === "Pause rule",
+  )
+  return pause?.querySelector(".overflow-menu-description")?.textContent
 }
 
 describe("RulesView", () => {
@@ -399,6 +430,127 @@ describe("RulesView", () => {
     expect(link?.getAttribute("href")).toBe("/settings/connections?account=b")
     click(link!)
     expect(onViewChange).toHaveBeenCalledWith("settings", { search: "?account=b", settingsTab: "connections" })
+  })
+
+  function createButton(): HTMLButtonElement {
+    return [...container.querySelectorAll("button")].find((item) => item.textContent.includes("Create sync rule"))!
+  }
+
+  it("says beside Create sync rule how many rules the plan lets sync, before a rule is built, and keeps it available at the limit, since creating is never limited", async () => {
+    await renderRulesList(testI18n(), { ownPlan: jsonResponse(overTheLimit) })
+    expect(createButton().disabled).toBe(false)
+    expect(createButton().getAttribute("aria-disabled")).toBeNull()
+    const note = document.getElementById(createButton().getAttribute("aria-describedby") ?? "")
+    expect(note?.textContent).toBe("Your plan lets 1 rule sync at once. See your plan")
+    expect(note?.className).toBe("action-hint")
+    expect(note?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+  })
+
+  it.each([
+    ["names no plan", jsonResponse({})],
+    ["cannot be read", planUnreadable],
+    ["sets no rule limit", jsonResponse({ ...overTheLimit, limits: { ...overTheLimit.limits, rules: null }, over_rule_limit: false })],
+  ])("adds no note beside Create sync rule when the own plan %s", async (_case, ownPlan) => {
+    await renderRulesList(testI18n(), { ownPlan })
+    expect(container.querySelector(".heading-action .action-hint")).toBeNull()
+    expect(createButton().getAttribute("aria-describedby")).toBeNull()
+  })
+
+  it("keeps only the way to connect an account beside Create sync rule while none is connected", async () => {
+    await renderRulesList(testI18n(), { accounts: [], rows: [], ownPlan: jsonResponse(overTheLimit) })
+    expect([...container.querySelectorAll(".heading-action .action-hint")].map((hint) => hint.id)).toEqual(["create-rule-hint"])
+  })
+
+  it("has no untranslated text in the note beside Create sync rule", async () => {
+    await renderRulesList(pseudoI18n(), { ownPlan: jsonResponse(overTheLimit) })
+    expect(container.querySelector(".heading-action .action-hint")).not.toBeNull()
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+  })
+
+  it("warns in Pause that the plan may not let a rule that counts start again", async () => {
+    await renderRulesList(testI18n(), { ownPlan: jsonResponse(overTheLimit) })
+    expect(pauseDescription("More actions for Work A to Work B1")).toBe(
+      "Stop writing to Work B1. Existing events stay; resuming needs a new preview. Your plan may not let this rule start again.",
+    )
+    // A rule a provider failure stopped no longer counts, so pausing it frees nothing.
+    expect(pauseDescription("More actions for Work A to Work B2")).toBe(
+      "Stop writing to Work B2. Existing events stay; resuming needs a new preview.",
+    )
+  })
+
+  it("warns in Pause for a rule stopped only until its account is reauthorized, which still counts", async () => {
+    const lapsed = { ...accountB, authorization_lapsed_at: justNow }
+    const stopped = ruleSummary("stopped", {
+      state: "degraded",
+      last_sync: { ...lastSync, succeeded: false, failure_kind: "authentication", failure_provider: "google" },
+    })
+    await renderRulesList(testI18n(), { rows: [stopped], accounts: [accountA, lapsed], ownPlan: jsonResponse(overTheLimit) })
+    expect(pauseDescription("More actions for Work A to Work B1")).toBe(
+      "Stop writing to Work B1. Existing events stay; resuming needs a new preview. Your plan may not let this rule start again.",
+    )
+  })
+
+  it.each([
+    ["names no plan", jsonResponse({})],
+    ["cannot be read", planUnreadable],
+  ])("says nothing about the plan in Pause when the own plan %s", async (_case, ownPlan) => {
+    await renderRulesList(testI18n(), { ownPlan })
+    expect(pauseDescription("More actions for Work A to Work B1")).toBe(
+      "Stop writing to Work B1. Existing events stay; resuming needs a new preview.",
+    )
+  })
+
+  describe("a previewed rule the plan will not let start", () => {
+    /** At the rule limit, but not past it: one more rule may not start. */
+    const atTheLimit: OwnPlan = { ...overTheLimit, rules_counted: 1, over_rule_limit: false }
+    const REFUSAL = "Your plan lets 1 rule sync. Pause or remove it to start this rule."
+
+    function previewedRow(): HTMLElement {
+      return container.querySelector<HTMLElement>("#rule-previewed-name")!.closest("li")!
+    }
+
+    it("says why it cannot start, with a link to Your plan, instead of Ready to start", async () => {
+      await renderRulesList(testI18n(), { ownPlan: jsonResponse(atTheLimit) })
+      const row = previewedRow()
+      expect(row.querySelector(".rule-actions")?.textContent).toContain("PreviewedReview and start")
+      expect(row.textContent).not.toContain("Ready to start")
+      const note = row.querySelector<HTMLElement>("#rule-previewed-preview")!
+      expect(note.textContent).toBe(`${REFUSAL} See your plan`)
+      expect(note.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+      // Review and start still leads to the preview, and says why first.
+      const review = [...row.querySelectorAll("a")].find((anchor) => anchor.textContent === "Review and start")!
+      expect(review.getAttribute("aria-describedby")).toBe("rule-previewed-name rule-previewed-preview")
+    })
+
+    it("reads Ready to start when it keeps a replaced rule's place, which starts whatever the limit", async () => {
+      const rows = RULE_ROWS.map((row) => (row.id === "previewed" ? { ...row, keeps_place: true } : row))
+      await renderRulesList(testI18n(), { rows, ownPlan: jsonResponse(atTheLimit) })
+      expect(previewedRow().textContent).toContain("Ready to startReview and start")
+      expect(previewedRow().textContent).not.toContain(REFUSAL)
+    })
+
+    it.each([
+      ["has room", jsonResponse({ ...atTheLimit, rules_counted: 0 })],
+      ["names no plan", jsonResponse({})],
+      ["cannot be read", planUnreadable],
+    ])("reads Ready to start when the own plan %s", async (_case, ownPlan) => {
+      await renderRulesList(testI18n(), { ownPlan })
+      expect(previewedRow().textContent).toContain("Ready to startReview and start")
+      expect(previewedRow().textContent).toContain("Previewed just now: 3 events will appear in Work D1, 1 excluded.")
+    })
+
+    it("has no untranslated text", async () => {
+      await renderRulesList(pseudoI18n(), { ownPlan: jsonResponse(atTheLimit) })
+      expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+    })
+  })
+
+  it("has no untranslated text in Pause's plan note", async () => {
+    const i18n = pseudoI18n()
+    await renderRulesList(i18n, { ownPlan: jsonResponse(overTheLimit) })
+    for (const menu of container.querySelectorAll('[aria-haspopup="menu"]')) click(menu)
+    expect(container.textContent).toContain(i18n.t("common.plan.mayNotRestart"))
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
   })
 
   it("has no untranslated text in rule rows, their status, and their commands", async () => {

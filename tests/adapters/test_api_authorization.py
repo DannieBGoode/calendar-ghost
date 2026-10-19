@@ -41,7 +41,7 @@ PUBLIC_API_ROUTES = {
     ("POST", "/api/v1/password-resets"),
     ("POST", "/api/v1/watch-notices/{provider_slug}/{registration_id}"),
 }
-# Only an Installation Administrator may use these (ADR 0030).
+# Only an Installation Administrator may use these (ADR 0030), Plans among them (ADR 0038).
 ADMINISTRATOR_ROUTES = {
     ("GET", "/api/v1/registration"),
     ("PUT", "/api/v1/registration"),
@@ -53,6 +53,12 @@ ADMINISTRATOR_ROUTES = {
     ("PUT", "/api/v1/users/{user_id}/state"),
     ("POST", "/api/v1/users/{user_id}/password-reset-links"),
     ("DELETE", "/api/v1/users/{user_id}"),
+    ("GET", "/api/v1/plans"),
+    ("POST", "/api/v1/plans"),
+    ("PUT", "/api/v1/plans/{plan_key}"),
+    ("DELETE", "/api/v1/plans/{plan_key}"),
+    ("PUT", "/api/v1/plan-settings"),
+    ("POST", "/api/v1/plan-assignments"),
     ("GET", "/api/v1/storage"),
     ("GET", "/api/v1/storage/activity"),
     ("POST", "/api/v1/storage/activity/clear"),

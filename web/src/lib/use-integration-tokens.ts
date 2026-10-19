@@ -5,6 +5,7 @@ import { useI18n } from "@/i18n/provider"
 import { api, type IntegrationToken, type IssuedIntegrationToken } from "@/lib/api"
 import { tokenScopes } from "@/lib/integrations"
 import { useCopyState } from "@/lib/use-copy-state"
+import { OWN_PLAN_QUERY } from "@/lib/use-own-plan"
 
 export type { CopyState } from "@/lib/use-copy-state"
 
@@ -30,7 +31,10 @@ export function useIntegrationTokens() {
       setCopyState("idle")
       // Announce the issue, never the token: a screen reader would read the secret aloud.
       setMessage(t("settings.integrations.status.issued", { name: token.name }))
-      await queryClient.invalidateQueries({ queryKey: ["integration-tokens"] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["integration-tokens"] }),
+        queryClient.invalidateQueries({ queryKey: OWN_PLAN_QUERY }),
+      ])
     },
   })
   const revoke = useMutation({
@@ -41,7 +45,10 @@ export function useIntegrationTokens() {
       // revokes it right away, stop showing a secret that no longer works.
       setIssued((current) => (current?.id === token.id ? null : current))
       setMessage(t("settings.integrations.status.revoked", { name: token.name }))
-      await queryClient.invalidateQueries({ queryKey: ["integration-tokens"] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["integration-tokens"] }),
+        queryClient.invalidateQueries({ queryKey: OWN_PLAN_QUERY }),
+      ])
       // The revoked row loses its button, so focus returns to the group it belongs to.
       summaryButton.current?.focus()
     },

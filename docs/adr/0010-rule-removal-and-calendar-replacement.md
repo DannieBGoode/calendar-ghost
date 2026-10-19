@@ -1,5 +1,8 @@
 # Remove rules explicitly and replace calendars instead of editing them
 
+Amended by [ADR 0038](0038-plans-allowances-and-limits.md): a Rule Replacement's new draft is
+created in the transaction that begins the previous rule's removal.
+
 ## Context
 
 Administrators need to change or retire Directional Sync Rules. A rule's Event Mappings and
@@ -35,3 +38,20 @@ stripping ownership from retained events would let a reverse rule treat them as 
 Replacement produces a new rule identity; its history starts fresh, while the removed rule's audit
 entries remain. Detached Events can never be adopted by a later rule. Interrupted removals are
 visible as "Removal incomplete" until retried.
+
+## Amendment: the new draft is created when the removal begins (2026-10-15)
+
+A Rule Replacement no longer creates its new draft first. It checks for a duplicate relationship,
+then hands the draft to Rule Removal as the previous rule's successor. Once the removal has waited
+for the previous rule's run, it inserts the draft, with the checks every new rule passes, in the
+same transaction that moves the previous rule to Removing. If a check fails, such as a duplicate
+relationship that appeared meanwhile or an account the User no longer has, the transaction rolls
+back: the previous rule stays as it was, and no draft exists.
+
+Before, the draft was visible while the removal waited, and a removal that then failed deleted it
+without its locks, even after a client had started it. Now no client sees the draft before the
+removal begins, and no cleanup path deletes it. The uniqueness constraint still reserves the
+relationship before anything destructive happens, and an interrupted removal still leaves the new
+draft and a retryable previous rule. When the previous rule counted toward its User's Plan, the
+draft also keeps its place under the rule limit
+([ADR 0038](0038-plans-allowances-and-limits.md)).

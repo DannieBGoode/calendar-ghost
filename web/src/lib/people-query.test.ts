@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest"
 
-import { DEFAULT_PEOPLE_QUERY, nextSort, pageRange, peopleQueryFromSearch, peopleSearch } from "./people-query"
+import { DEFAULT_PEOPLE_QUERY, nextSort, pageRange, peoplePath, peopleQueryFromSearch, peopleSearch } from "./people-query"
 
 describe("the People page address", () => {
   it("reads every part of the query", () => {
     expect(
-      peopleQueryFromSearch("?search=rob&role=user&state=disabled&verdict=stopped&sort=verdict&order=desc&page=3"),
+      peopleQueryFromSearch(
+        "?search=rob&role=user&state=disabled&verdict=stopped&plan=family-2&over=true&sort=verdict&order=desc&page=3",
+      ),
     ).toEqual({
       search: "rob",
       role: "user",
       state: "disabled",
       verdict: "stopped",
+      plan: "family-2",
+      over: true,
       sort: "verdict",
       order: "desc",
       page: 3,
@@ -26,6 +30,20 @@ describe("the People page address", () => {
     expect(peopleQueryFromSearch("?search=%20%20").search).toBe("")
   })
 
+  it("reads a Plan only by a key a Plan could have, as the server checks it", () => {
+    expect(peopleQueryFromSearch("?plan=no-limits").plan).toBe("no-limits")
+    for (const wrong of ["Family", "-free", "fam ily", "a".repeat(33), ""]) {
+      expect(peopleQueryFromSearch(`?plan=${encodeURIComponent(wrong)}`).plan).toBe("")
+    }
+  })
+
+  it("narrows to people over a limit only when the address says so exactly", () => {
+    expect(peopleQueryFromSearch("?over=true").over).toBe(true)
+    for (const wrong of ["false", "1", "yes", "TRUE", ""]) {
+      expect(peopleQueryFromSearch(`?over=${wrong}`).over).toBe(false)
+    }
+  })
+
   it("writes only what differs from the defaults", () => {
     expect(peopleSearch(DEFAULT_PEOPLE_QUERY)).toBe("")
     expect(peopleSearch({ ...DEFAULT_PEOPLE_QUERY, search: " a b ", role: "installation_administrator", page: 2 })).toBe(
@@ -37,6 +55,8 @@ describe("the People page address", () => {
     expect(peopleSearch({ ...DEFAULT_PEOPLE_QUERY, verdict: "review", sort: "verdict" })).toBe(
       "?verdict=review&sort=verdict",
     )
+    expect(peopleSearch({ ...DEFAULT_PEOPLE_QUERY, plan: "family", state: "active" })).toBe("?state=active&plan=family")
+    expect(peopleSearch({ ...DEFAULT_PEOPLE_QUERY, plan: "free", over: true })).toBe("?plan=free&over=true")
   })
 
   it("round-trips through the address", () => {
@@ -45,11 +65,22 @@ describe("the People page address", () => {
       role: "user",
       state: "active",
       verdict: "waiting",
+      plan: "free",
+      over: true,
       sort: "email",
       order: "desc",
       page: 4,
     } as const
     expect(peopleQueryFromSearch(peopleSearch(query))).toEqual(query)
+  })
+})
+
+describe("peoplePath", () => {
+  it("opens Everyone from its first page with only the filters given", () => {
+    expect(peoplePath({ plan: "free" })).toBe("/people?plan=free")
+    expect(peoplePath({ plan: "free", over: true })).toBe("/people?plan=free&over=true")
+    expect(peoplePath({ over: true })).toBe("/people?over=true")
+    expect(peoplePath({})).toBe("/people")
   })
 })
 

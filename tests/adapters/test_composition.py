@@ -1,4 +1,5 @@
-"""The composed installation shares one rule lock registry across every use case.
+"""The composed installation shares one rule lock registry across every use case, and one
+Plans store across every Plan use case.
 
 Rule execution is serialized only when every use case that runs, previews, reconciles, removes,
 or changes a rule holds the same `RuleLocks`. No use case creates a registry of its own, so the
@@ -8,11 +9,14 @@ container is the one place a registry is made.
 from collections.abc import Iterator
 from pathlib import Path
 
+from calendar_sync.application.identity.ports import PlanListing
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose
+from calendar_sync.domain.plans import Allowance, AllowanceBasis
 from calendar_sync.infrastructure.security import CredentialCipher
-from tests.users import OTHER_USER, USER
+from tests.plans import FAMILY, as_new
+from tests.users import OTHER_USER, USER, administrator, limited_user
 
 # Holders the walk must reach, so a change in how the container nests them cannot make it pass
 # by finding nothing.
@@ -83,3 +87,22 @@ def test_every_composed_use_case_shares_the_installations_rule_locks(tmp_path: P
 
     assert {name for name, _ in holders} >= EXPECTED_HOLDERS
     assert {id(locks) for _, locks in holders} == {id(adapters.locks)}
+
+
+def test_the_plan_use_cases_share_the_installations_one_plans_store(tmp_path: Path) -> None:
+    settings = Settings(tmp_path / "test.db")
+    adapters = build_adapters(settings)
+    container = compose(settings, adapters)
+    admin = administrator(adapters)
+    member = limited_user(settings.database_path)
+
+    container.plans.define_plan.execute(admin, as_new(FAMILY))
+    container.plans.assign_plans.execute(admin, {member: FAMILY.key})
+    overview = container.plans.set_plans_setting.execute(admin, True, FAMILY.key)
+
+    # FAMILY is the default and the member's own: both have it, and it limits the member.
+    assert overview.plans == (PlanListing(FAMILY, True, 2, 1),)
+    assert container.plans.show_plans.execute(admin) == overview
+    assert adapters.allowances.of(member) == Allowance(
+        AllowanceBasis.PLAN, plan=FAMILY, assigned=FAMILY
+    )

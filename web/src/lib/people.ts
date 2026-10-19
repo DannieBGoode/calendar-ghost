@@ -6,7 +6,7 @@ export function isAdministrator(user: { role: PersonRole } | null | undefined): 
 }
 
 /** How the People page names someone: their email, which the upgraded first User may lack. */
-export function personName(i18n: I18n, person: Person): string {
+export function personName(i18n: I18n, person: Pick<Person, "email">): string {
   return person.email ?? i18n.t("people.noEmail")
 }
 

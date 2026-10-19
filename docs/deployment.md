@@ -241,6 +241,19 @@ source compared with the rule's Source Observation ([ADR 0037](adr/0037-record-a
 Earlier entries keep `NULL`. Rolling back works with the same database: earlier releases ignore the
 columns, and record the repeated skips the newer release leaves out.
 
+Migration 33 adds Plans ([ADR 0028](adr/0028-plans-apart-from-commercial-mode.md),
+[ADR 0038](adr/0038-plans-allowances-and-limits.md)): the installation table `plans`; the columns
+`installation_settings.plans_enabled` (default `0`, off) and
+`installation_settings.default_plan_key`; each User's own Plan in `users.plan_key`, with who
+assigned it and when (`plan_assigned_by`, `plan_assigner_id`, `plan_assigned_at`); and
+`sync_rules.keeps_place`, which marks a Rule Replacement draft that keeps the place of the rule it
+replaced under its User's rule limit. Nothing is backfilled: Plans start off and limit nobody, and
+a User with no Plan of their own has the Default Plan once one exists. The database refuses to
+delete a Plan that a User or the default still names. Once an administrator turns Plans on, a
+lowered rule limit refuses new Starts and stops nothing. Rolling back works with the same
+database: earlier releases ignore the table and the columns, and limit nobody. After upgrading
+again, Plans are as the administrator left them.
+
 Sign-in failures are counted per email and per client address for 15 minutes: after five failures
 for one email, or twenty from one address, sign-in answers `429` with a `Retry-After` header until
 the oldest failure leaves the window. Behind a reverse proxy every request comes from the proxy's

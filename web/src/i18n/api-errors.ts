@@ -36,17 +36,13 @@ export function messageParams(i18n: I18n, params: ServerParams): MessageParams {
   }
 }
 
-/** A server-coded message, or null when there is none or the server left out one of its params. */
+/**
+ * A server-coded message, or null when there is none or the server left out one of its params,
+ * as a server older or newer than the page can. The caller then shows the server's detail, which
+ * reads better than a sentence with a gap where the param belongs.
+ */
 function coded(i18n: I18n, key: string, params: MessageParams): string | null {
-  if (!i18n.has(key)) return null
-  try {
-    const text = i18n.t(key, params)
-    // Outside tests a missing param stays as `{name}`; the server's detail reads better.
-    return /\{\w+\}/.test(text) ? null : text
-  } catch {
-    // Under test a missing param throws.
-    return null
-  }
+  return i18n.has(key) && i18n.fills(key, params) ? i18n.t(key, params) : null
 }
 
 /** A validation error's length limit, as the `count` its plural message selects a form by. */
@@ -58,8 +54,11 @@ function lengthLimit(params: ServerParams): MessageParams {
 function serverMessage(i18n: I18n, error: ApiError): string | null {
   if (!error.code) return null
   const params = { ...messageParams(i18n, error.params), ...lengthLimit(error.params) }
-  const reason = error.params.reason
-  const specific = typeof reason === "string" ? coded(i18n, `common.apiError.${error.code}_${reason}`, params) : null
+  const { reason, limit } = error.params
+  const refined = typeof reason === "string" ? `common.apiError.${error.code}_${reason}` : null
+  // A limit of none has its own message where one exists, so no refusal reads "0".
+  const none = refined !== null && limit === 0 ? coded(i18n, `${refined}_none`, params) : null
+  const specific = none ?? (refined === null ? null : coded(i18n, refined, params))
   return specific ?? coded(i18n, `common.apiError.${error.code}`, params)
 }
 

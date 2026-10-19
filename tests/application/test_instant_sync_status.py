@@ -3,7 +3,7 @@ rules syncs as it does (ADR 0036)."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import replace
 from datetime import datetime, timedelta
 
@@ -12,6 +12,7 @@ import pytest
 from calendar_sync.application.operations.instant_sync import InstantSyncStatus, WatchedSources
 from calendar_sync.application.sync.watch_ports import (
     EveryUserInstant,
+    PlanCadence,
     Receipt,
     SyncCadencePolicy,
     notice_address,
@@ -38,7 +39,8 @@ from calendar_sync.infrastructure.persistence.memory import (
 )
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, rule
-from tests.identity_fakes import MemoryUsers
+from tests.identity_fakes import BrokenAllowances, MemoryPlans, MemoryUsers
+from tests.plans import FREE, plans_on
 from tests.users import OTHER_USER, USER, memory_units
 
 ADDRESS = "https://ghost.example.test"
@@ -78,6 +80,9 @@ class Plan:
 
     def cadence(self, user: UserId) -> SyncCadence:
         return self.allowed
+
+    def cadences(self, users: Collection[UserId]) -> Mapping[UserId, SyncCadence]:
+        return dict.fromkeys(users, self.allowed)
 
 
 def _user(user_id: UserId = USER, *, wanted: bool = True) -> User:
@@ -271,3 +276,38 @@ def test_rules_are_polled_as_often_as_the_plan_says() -> None:
     status = _status(InMemoryUnitOfWorkFactory(), plan=Plan(poll_every=timedelta(minutes=15)))
 
     assert status.poll_every(USER) == timedelta(minutes=15)
+
+
+def test_a_plans_fault_shows_the_default_cadence(caplog: pytest.LogCaptureFixture) -> None:
+    database = InMemoryUnitOfWorkFactory()
+    _watched(_with_rule(database), confirmed=True)
+    status = _status(database, plan=PlanCadence(BrokenAllowances()))
+
+    with caplog.at_level("WARNING", logger="calendar_sync.application.operations.instant_sync"):
+        availability = status.availability(USER)
+        reasons = status.cadences(USER)
+        poll_every = status.poll_every(USER)
+
+    # Sign-in and the rules API keep working: a Plans fault never takes Instant Sync away.
+    assert availability is Availability.ON
+    assert reasons == {rule().id: CadenceReason.INSTANT}
+    assert poll_every == SCHEDULED_EVERY
+    assert "RuntimeError" in caplog.text
+    assert "database is locked" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
+
+
+def test_a_plan_without_instant_sync_makes_it_not_in_plan() -> None:
+    database = InMemoryUnitOfWorkFactory()
+    _watched(_with_rule(database), confirmed=True)
+    users = MemoryUsers()
+    users.add(_user(), "hashed:synthetic")
+    plans = MemoryPlans(users=users)
+    plans_on(plans, FREE)
+
+    status = _status(database, plan=PlanCadence(plans))
+
+    # FREE syncs every 5 minutes: the User keeps their own wish, but their Plan rules it out.
+    assert status.availability(USER) is Availability.NOT_IN_PLAN
+    assert status.cadences(USER) == {rule().id: CadenceReason.NOT_IN_PLAN}
+    assert status.poll_every(USER) == SCHEDULED_EVERY

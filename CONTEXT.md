@@ -26,17 +26,58 @@ to operate it themselves, with Commercial Mode on. It sells managed upgrades, ba
 availability. It runs the same open code, with no closed components (ADR 0023).
 
 **Plan**:
-A named set of limits, such as how many rules a User may have or how often they synchronize, that
-an Installation Administrator defines and assigns to Users. A Plan limits only how much a User
-uses, never how a rule projects events or how a User sees and recovers from a problem. Plans are an installation setting that
-is off by default; when off, every User has every feature with no limits (ADR 0028).
+A named set of limits that an Installation Administrator defines and assigns to Users: how many
+Active Rules, Connected Accounts, and Integration Tokens a User may have, and how soon their rules
+sync. Each Plan has a stable key, made from its name and never changed, and a name that can change
+but that no other Plan has, whatever its case; each count is a number or unlimited, and Integration
+Tokens may also be none. Every Connected Account counts, Disconnected Accounts included, so a Plan
+limits calendar accounts, never only "active" ones; every Integration Token not revoked counts too.
+A Plan limits only how much a User uses, never how a rule projects events or how a User sees and
+recovers from a problem. Plans are an installation setting that is off by default; when off, every
+User has every feature with no limits (ADR 0028). An Installation Administrator is never limited.
+A User's own Plan is set by an Installation Administrator, and later also by billing under
+Commercial Mode, through one assignment that records who set it and when (ADR 0038).
 _Avoid_: Tier, subscription, quota
+
+**Active Rule**:
+A Directional Sync Rule that counts toward its User's Plan: an enabled rule, a rule stopped only by
+Lapsed Authorization, or a Rule Replacement's new draft that keeps its previous rule's place.
+Drafts, previewed rules, paused rules, and rules stopped for any other reason are not active; nor,
+once Plan Hold ships, are the rules it holds. A Plan's rule limit is a maximum of Active Rules,
+checked at Start, so pausing a rule frees its place (ADR 0038). The code calls it
+`SyncRule.counts_toward_plan`.
+_Avoid_: Counted rule, rule that can sync
+
+**Default Plan**:
+The Plan an Installation Administrator marks as the default. Every User without a Plan of their own
+has it, including Users who join later, so changing the default changes their limits at once.
+Turning Plans on with no default makes an ordinary Plan named "No limits" ("No limits 2" when a Plan
+already has that name), which limits nobody, the default, so turning Plans on changes nothing until
+an administrator gives someone a smaller Plan. Plans are never on without a default: it cannot be
+cleared while they are on, nor removed while it is the default. An administrator chooses it with
+Make default on another Plan; "no default" is never offered as a choice. Giving someone the Default
+Plan, from the Web UI or the API, means they follow it: they have no Plan of their own, so they
+move with the default when it changes. A User whose own Plan became the default keeps it when
+another Plan becomes the default, and Make default says so. Billing will return a User to it when
+a payment ends.
+_Avoid_: Base plan, fallback plan
+
+**Allowance**:
+What one User may use now, decided in this order: no limits while Plans are off, none for an
+Installation Administrator, otherwise their own Plan, or the Default Plan when they have none. It
+decides every limit check and the User's Sync Cadence. A limit check that cannot read it refuses,
+as for any database error, and Your plan says it could not load rather than show limits nobody
+read; every other reader falls back to no limits, so a fault in Plans never stops synchronization
+or sign-in (ADR 0038).
+_Avoid_: Entitlement
 
 **Plan Hold**:
 The pause of a User's Directional Sync Rules beyond their Plan's rule limit, applied after a 7-day
-grace period. The User chooses which rules stay enabled; otherwise the most recently created are
-held. A held rule keeps its mappings and projections, and resumes by itself without a new preview
-once the User's limit allows it again.
+grace period. Plan Hold is planned for a later release: until then a lowered rule limit only
+refuses new Starts and stops nothing, so rules beyond it keep syncing (ADR 0038). Once it ships,
+the User chooses which rules stay enabled; otherwise the most recently created are held. A held
+rule keeps its mappings and projections, and resumes by itself without a new preview once the
+User's limit allows it again.
 _Avoid_: Suspension, plan pause, downgrade deletion
 
 **Commercial Mode**:
@@ -49,7 +90,7 @@ _Avoid_: SaaS mode, billing mode
 
 **Connected Account**:
 A calendar-service identity authorized on this installation by one User, such as a Google account or a Microsoft account authorized through one OAuth grant. It belongs to exactly one Provider Kind and one User. Two Users may each connect the same calendar-service identity; each gets a Connected Account of their own, and neither learns of the other's. A sync rule may use different connected accounts, even of different providers, for its source and destination calendars, but both belong to the rule's User.
-_Avoid_: Account, user, login
+_Avoid_: Account, user, login, active account, active calendar account
 
 **Provider Kind**:
 The calendar service a Connected Account belongs to: `google` or `outlook` (a Microsoft account, whose calendars Outlook shows). It is recorded when the account is first connected and never changes. Every request about the account's calendars goes to that provider's adapter (ADR 0022, ADR 0034). The domain and application name a provider only by its Provider Kind; what a provider is called, how it connects, and how its reasons read as Causes live in its adapter's descriptor.
@@ -238,8 +279,12 @@ _Avoid_: Real-time sync, push sync, live sync
 
 **Sync Cadence**:
 How a User's rules may synchronize: whether Instant Sync is allowed, and how often Scheduled Sync
-runs. With Plans off, every User has Instant Sync and a five-minute Scheduled Sync; once Plans
-exist, a Plan's shortest sync interval decides it, whose shortest value is "instant".
+runs. The User's Allowance decides it from their Plan's sync interval, one of a fixed list:
+instant, 5, 10, 15, 30, or 60 minutes, where instant means Instant Sync plus a five-minute
+Scheduled Sync. With Plans off, and for an Installation Administrator, it is instant. An
+administrator can choose instant or 5 minutes for now; until the longer intervals are offered,
+every interval other than instant syncs every five minutes without Instant Sync. The User keeps
+only their own choice to turn Instant Sync off.
 _Avoid_: Sync frequency, polling interval
 
 **Calendar Watch**:
@@ -354,7 +399,7 @@ A User who holds the role that operates the installation. The first User holds i
 _Avoid_: Owner, superuser, admin user
 
 **Operator Overview**:
-The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, and Resource Use. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content. What it shows and never shows is documented, so every User can know it; Settings does not repeat it to them (ADR 0030, amended).
+The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, Resource Use, and, once any Plan exists, their Plan: who gave it to them and when, how many Active Rules, Connected Accounts, and Integration Tokens they have, as the Plan counts them, and each of its limits they have more of than it allows. For People's Plans tab it also counts, per Plan, how many of the people it limits have more than it allows, and, before an administrator gives people a Plan, which of its limits each of them would have more of. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content. What it shows and never shows is documented, so every User can know it; Settings does not repeat it to them (ADR 0030, amended).
 _Avoid_: Admin dashboard, user management, support view
 
 **Resource Use**:
@@ -412,7 +457,7 @@ Permanent removal of a rule after its User explicitly chooses to delete its mapp
 _Avoid_: Disable rule, pause rule
 
 **Rule Replacement**:
-A change of a rule's source or destination calendar, performed as a new draft rule with the same transformation policy followed by Rule Removal of the previous rule. The new draft is created first, so a duplicate relationship is rejected before anything is removed; if the removal is interrupted, the new draft remains and the previous rule's removal can be retried.
+A change of a rule's source or destination calendar, performed as a new draft rule with the same transformation policy followed by Rule Removal of the previous rule. The new draft is created in the step that begins the previous rule's removal, so a duplicate relationship is refused before anything is removed, and no draft exists without that removal. When the previous rule counted toward its User's rule limit, the new draft keeps its place until it starts or is removed. If the removal is interrupted, the new draft remains with its place, and the previous rule's removal can be retried.
 _Avoid_: Calendar edit, rule move
 
 **Detached Event**:
@@ -465,7 +510,7 @@ diagnostics keep the glossary terms above.
 | Details Projection | "Copy title, description, and location" |
 | Invitation Response | "you answered Maybe", "you declined", "you haven't answered"; "Your response" in a change |
 | Material Rule Change | "A change stops the rule from writing until you preview it again" |
-| Rule Preview, then enable | "Preview rule", then "Start syncing", which exists only on the preview page; a previewed rule reads "Ready to start" with "Review and start". Each previewed event "Will sync" (with Add, Update, Remove, or Already up to date) or "Not synced", with its reason ("Not synced: birthday") |
+| Rule Preview, then enable | "Preview rule", then "Start syncing", which exists only on the preview page; a previewed rule reads "Ready to start" with "Review and start", or "Previewed" with the refusal and "See your plan" when its User's Plan would refuse its Start. Each previewed event "Will sync" (with Add, Update, Remove, or Already up to date) or "Not synced", with its reason ("Not synced: birthday") |
 | Degraded Rule | "Stopped", with the cause and its one next step: "Reauthorize account" when an account it uses has Lapsed Authorization, otherwise "Preview to restart" |
 | Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote from the starting point onward and reports any that still differ; never "repaired" for what the check only reported |
 | Instant Sync | "Instant sync" under Settings → Your account, a choice between "Instantly", the default, and "On schedule"; where it cannot run, it says why and offers "Learn why", opening that reason's section of the Instant Sync guide, and keeps the choice only while providers cannot reach the installation, so a person can stop the retries. On a rule, "Syncs instantly", or "Syncs every 5 minutes" with why |
@@ -475,7 +520,11 @@ diagnostics keep the glossary terms above.
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
 | Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the User's step when one exists, otherwise that Calendar Ghost checks again daily |
 | Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
-| Operator Overview | "People", with a "Sync" status per person and "Installation health" above them |
+| Operator Overview | "People", with a "Sync" status per person and "Installation health" above them; once a Plan exists, a "Plan" column per person, a "Plan" filter ("Any plan", each Plan, the default as "Free (default)"), and a "Limits" filter ("Anyone", "Over a limit"), and people can be selected to "Change plan" together |
+| Plan | "plan" in lower case: "Your plan" under Settings → Your account, "Plans" as a tab of People, "New plan", and "Change plan" on a person's page, in each row's More actions on Everyone, and for the people selected there. The Plans tab leads with one switch, "Plans are on" or "Plans are off" with "On" or "Off" beside it, and one sentence that says what its facts cannot, never a count or a name they show: "People can't add more than their plan allows. Anyone without a plan of their own, including people who join later, gets the default plan." while on, "Nobody is limited. Turning plans on applies each person's plan at once." while off, or, with no Plan, "Turning plans on adds a plan named No limits as the default, so nobody is limited until you give someone a smaller plan." Its facts are "Limited now" ("Would limit" while off), "Over a limit" ("Would be over a limit"), whose number is the link to those people ("Show the 1 person over a limit"), and "Default plan". The catalog's footnote is "People counts include administrators, who are never limited. Paused rules and drafts are not active." A Plan's limits are "Maximum active rules", "Maximum calendar accounts", "Maximum integration tokens", and "Sync speed" in the editor, and "Active rules", "Calendar accounts", "Integration tokens", and "Sync speed" in columns and usage. Each count is "No limit" or "Up to 3" in the editor, and "Unlimited" or the number elsewhere; Integration Tokens may also be "None", which Your plan and a person's page read as "Not included". Sync speed is "Instant" or "Every 5 minutes" ("Every 5 min" in a table cell), with "Longer intervals arrive in a later release." Cells and chips say nouns and numbers ("2 people", "1 over a limit"); sentences belong to hints, descriptions, and results. The Web UI never shows a Plan's key. A Plan's row menu holds Edit, Assign people, Make default, Duplicate, and Remove; Remove on a Plan someone has says who has it, the first three by email and then how many more, the count alone until the names arrive ("2 people have Free. Give them another plan first."). A name another Plan has, whatever its case, is refused under Name: "Another plan is named Free. Choose a different name." A limit typed lower says how many people it leaves with more: "1 person on Pro has more active rules than this. Their rules keep syncing, but they can't start another." Before anyone is given a Plan, each person says what they would be over ("Would be over: 3 active rules, Free allows 1"), administrators "Never limited, whatever plan they have", and the button names the effect ("Give Free to 2 people"). A result names it: "robin@example.test now has Free.", "2 people now have Pro." A person's Plan reads as its name with chips: "Default", "Over a limit" in Attention Ochre with an icon ("Would be over" and neutral while Plans are off), or "Not limited" for an administrator. On their page and on Your plan each limit reads "1 of 1" with "Limit reached", or "2 of 1" with "Over" and a sentence on what keeps working and how to make room: "robin@example.test has 2 calendar accounts and Free allows 1. Their accounts keep syncing, but they can't connect another until one is removed." Your plan says it in the person's words ("You have 2 calendar accounts and your plan allows 1. They keep syncing, but you can't connect another until you remove one in Connections."), says "To start another rule, pause one first." at the rule limit, and closes with "To change your plan, ask your administrator.", naming nobody. Invite someone says which Plan the person gets once one is the default: "They get the default plan, Free. You can change it after they join." "Create sync rule" notes the rule limit: "Your plan lets 5 rules sync at once." A refusal names the limit and one way to make room, with "See your plan"; a Plan that includes no Integration Tokens says so ("Your plan does not include integration tokens. To get one, ask your administrator."), never "0" |
+| Active Rule | "active rules": "Maximum active rules" in the editor and "Active rules" in columns and usage, with what counts as the hint ("Running rules count, and rules waiting for an account to be reauthorized. Paused rules and drafts don't.") |
+| Default Plan | "Default plan": a "Default" badge beside its name and the status card's "Default plan" fact on the Plans tab, and "Make default" on every other Plan, which says whom it moves ("People without a plan of their own (2 now) move to Free."), and who keeps the default they were given as their own Plan ("1 person keeps No limits, which was given to them."); never "No default". Assign people on the default's panel gives it as following it: "They follow Free, the default plan, at once, and move with it when the default changes." Change plan offers it once, first, with its "Default" badge: choosing it means the person follows the default, as the line under the Plans says ("People on the default plan move with it when the default changes."), and someone whose own Plan is the default has it as "Current" too; while no Plan is the default, Change plan offers "No plan" instead. A filter names it "Free (default)". Remove on it says "Make another plan the default first." |
+| Allowance | never named: Your plan says which Plan limits the person, or "You administer this installation, so no plan limits you." |
 | Cause | "Likely cause:" and the cause in plain words, naming the provider that raised it, such as "the Google Calendar API is turned off for this installation" or "Microsoft no longer accepts this installation's OAuth client"; neutral words ("the calendar provider") when the server names none. To the User, an administrator's Cause says only "Temporarily unavailable", naming neither the cause nor the administrator, with Check access to try again when the account lapsed; their own Cause offers its one step ("Reauthorize account", or "Open the rule" to choose another calendar or remove it), or says it fixes itself with when it was last and will next be tried. To an administrator, a User's Cause says "{name} can fix this from their dashboard" ("{name} can try again from their dashboard" when `unknown`) and offers no action |
 | Installation Hint, on People | the pattern in one sentence with how many people it affects, then "How to fix", linking to its troubleshooting section |
 | Installation Status verdict, on People | "Not running" (stalled), "Stopped", "Needs a look" (review), "Waiting for the provider", "Paused", "Not set up" (setup), "Healthy" |

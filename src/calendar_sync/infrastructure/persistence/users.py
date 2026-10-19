@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 import sqlite3
 from collections.abc import Callable
@@ -13,12 +14,16 @@ from calendar_sync.application.identity.errors import EmailTaken
 from calendar_sync.application.identity.ports import Session, UserPage, UserQuery, UserSort
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import Role, User, UserId, UserState, require_administrator_remains
+from calendar_sync.domain.plans import InvalidPlan, PlanKey
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import token_hash
 
+logger = logging.getLogger(__name__)
+
 SESSION_LIFETIME = timedelta(days=7)
 _COLUMNS = (
-    "id, email, role, state, language, notify_by_email, instant_sync, created_at, last_sign_in_at"
+    "id, email, role, state, language, notify_by_email, instant_sync, created_at, "
+    "last_sign_in_at, plan_key"
 )
 _SORT_COLUMNS = {
     UserSort.JOINED: "created_at",
@@ -238,13 +243,21 @@ def _conditions(query: UserQuery) -> tuple[list[str], list[str]]:
     if query.state is not None:
         conditions.append("state = ?")
         parameters.append(query.state.value)
+    if query.plan is not None:
+        # Their own Plan, or else the Default Plan, as a Plan's listing counts who has it.
+        conditions.append(
+            "COALESCE(plan_key, (SELECT default_plan_key FROM installation_settings"
+            " WHERE singleton = 1)) = ?"
+        )
+        parameters.append(query.plan.value)
     return conditions, parameters
 
 
 def _user(row: sqlite3.Row) -> User:
     signed_in = row["last_sign_in_at"]
+    user_id = UserId(str(row["id"]))
     return User(
-        id=UserId(str(row["id"])),
+        id=user_id,
         email=str(row["email"]) if row["email"] is not None else None,
         role=Role(str(row["role"])),
         state=UserState(str(row["state"])),
@@ -253,7 +266,23 @@ def _user(row: sqlite3.Row) -> User:
         language=str(row["language"]) if row["language"] is not None else None,
         notify_by_email=bool(row["notify_by_email"]),
         instant_sync=bool(row["instant_sync"]),
+        plan=_own_plan(user_id, row["plan_key"]),
     )
+
+
+def _own_plan(user_id: UserId, stored: object) -> PlanKey | None:
+    """The User's own Plan, or None for the Default Plan. A key this release cannot read names
+    no Plan, so a key a later release wrote never stops anyone from signing in."""
+    if stored is None:
+        return None
+    try:
+        return PlanKey(str(stored))
+    except InvalidPlan:
+        logger.warning(
+            "User %s names a plan this release cannot read; the Default Plan applies",
+            user_id.value,
+        )
+        return None
 
 
 class SqliteSessions:

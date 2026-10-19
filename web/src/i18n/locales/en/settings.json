@@ -77,6 +77,42 @@
       "pending": "Deleting…"
     }
   },
+  "ownPlan": {
+    "title": "Your plan",
+    "intro": "What you can use here, and how much of it you use now.",
+    "administrator": "You administer this installation, so no plan limits you.",
+    "loadError": "Your plan could not load.",
+    "setByAdministrator": "Set by your administrator",
+    "default": "The default plan",
+    "rulesHint": "Running rules, and rules waiting for you to reauthorize an account. Paused rules and drafts don't count.",
+    "accountsHint": "Every account you connected counts, disconnected ones too.",
+    "tokensHint": "Revoked tokens don't count.",
+    "speedHint": "How soon changes reach your other calendars.",
+    "includesNone": "Your plan does not include integration tokens.",
+    "noInstant": "Instant sync is not part of your plan.",
+    "reached": {
+      "rules": "To start another rule, pause one first."
+    },
+    "note": {
+      "rules": {
+        "one": "You have {count} active rule and your plan allows {allowed}. It keeps syncing, but you can't start another until fewer are active.",
+        "other": "You have {count} active rules and your plan allows {allowed}. They keep syncing, but you can't start another until fewer are active."
+      },
+      "accounts": {
+        "one": "You have {count} calendar account and your plan allows {allowed}. It keeps syncing, but you can't connect another until you remove it in <link>Connections</link>.",
+        "other": "You have {count} calendar accounts and your plan allows {allowed}. They keep syncing, but you can't connect another until you remove one in <link>Connections</link>."
+      },
+      "tokens": {
+        "one": "You have {count} integration token and your plan allows {allowed}. It keeps working, but you can't issue another until you revoke it in <link>Connections</link>.",
+        "other": "You have {count} integration tokens and your plan allows {allowed}. They keep working, but you can't issue another until you revoke one in <link>Connections</link>."
+      },
+      "tokensNone": {
+        "one": "You have {count} integration token and your plan includes none. It keeps working, but you can't issue another.",
+        "other": "You have {count} integration tokens and your plan includes none. They keep working, but you can't issue another."
+      }
+    },
+    "close": "To change your plan, ask your administrator."
+  },
   "registration": {
     "title": "Who can join",
     "intro": "Everyone keeps their own calendars, rules, and Activity private. This decides only who can join.",
@@ -146,6 +182,13 @@
     "authorizationFailed": {
       "title": "{provider} authorization could not be completed",
       "body": "The account was not connected. Try again, then use Check access to confirm permissions."
+    },
+    "accountLimitReached": {
+      "title": "Your plan's calendar accounts are all in use",
+      "body": {
+        "one": "No account was connected. Your plan allows {count} calendar account, and disconnected accounts count too. Delete one you no longer use, or ask your administrator for a larger plan.",
+        "other": "No account was connected. Your plan allows {count} calendar accounts, and disconnected accounts count too. Delete one you no longer use, or ask your administrator for a larger plan."
+      }
     },
     "tryAgain": "Try again"
   },

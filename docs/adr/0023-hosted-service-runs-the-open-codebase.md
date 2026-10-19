@@ -3,7 +3,8 @@
 Supersedes [ADR 0020](0020-single-installation-community-edition.md) and amends the hosted-service
 decision in [ADR 0021](0021-community-edition-agpl.md). Amended by
 [ADR 0028](0028-plans-apart-from-commercial-mode.md): Plans are their own setting, and Commercial
-Mode now means billing only.
+Mode now means billing only. [ADR 0038](0038-plans-allowances-and-limits.md) records how Plans
+limit Users.
 
 ## Context
 
@@ -73,3 +74,15 @@ separate composition boundary change now.
   would not stay private without a CLA that self-hosting users distrust.
 - **Open core with a commercially licensed `ee/` directory.** Rejected: it creates two licenses in
   one repository and invites the open-core distrust that ADR 0021 set out to avoid.
+
+## Amendment: Plans (2026-10-15)
+
+Two bullets of the decision read differently now. Plan limits no longer depend on Commercial Mode
+([ADR 0028](0028-plans-apart-from-commercial-mode.md)): they apply only while an installation's
+own administrator turns Plans on, and never to its Installation Administrators
+([ADR 0038](0038-plans-allowances-and-limits.md)). The Hosted Service runs this same code with
+Plans on. Its Plans may differ in how many rules, Connected Accounts, and Integration Tokens a
+User has and how soon their calendars sync, including Instant Sync, but never in how a rule
+protects privacy or in the tools to see and recover from a problem. A self-hosted installation has
+every feature and no limits unless its own administrator turns Plans on. The operator overview
+shows each User's Plan once any Plan exists.

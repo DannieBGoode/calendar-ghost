@@ -542,6 +542,49 @@ access: for Google, both calendar-list and event access; for Microsoft, **Have f
 calendars**. Calendar Ghost verifies those permissions before it stores the Connected Account.
 Declining consent does not create an account or retain any credentials.
 
+## Connect is unavailable: your plan's calendar accounts
+
+When an administrator has turned Plans on, your Plan may limit how many calendar accounts you
+have. Every account under **Settings → Connections → Connected accounts** counts, Disconnected
+Accounts too: connecting one of them again is Reauthorization, which a Plan never refuses. At the
+limit, **Connect an account** is unavailable and says why, but Reauthorization is never refused
+by the account limit: an account that needs it still offers **Reauthorize account**.
+**Settings → Your account → Your plan** shows how many
+calendar accounts you have and how many your Plan allows, as "2 of 1" beside a meter, and past the
+limit a sentence that links to **Connections**. Installation Administrators are never limited.
+
+Calendar Ghost learns an account's address only after the provider's consent. So when you choose
+an address you have not connected, and your Plan has no room for it, you return to Connections
+with "Your plan's calendar accounts are all in use". No account was saved, and your existing
+accounts and rules are unchanged. The provider may keep the consent you gave; you can remove
+Calendar Ghost from your Google or Microsoft account's security settings.
+
+To make room, delete an account you no longer use ([A calendar account was
+disconnected](#a-calendar-account-was-disconnected) explains what deleting removes), or ask your
+administrator for a larger Plan.
+
+If connecting a new account ends on an error page instead of Connections while Plans are on,
+Calendar Ghost could not read your Plan, for example because its database was busy. No account was
+saved; connect again. Reauthorizing an account you already have never reads your Plan.
+
+### An account's address changed
+
+Calendar Ghost knows each account by its provider and email address. When the address of a
+Microsoft or Google Workspace account changes, for example after a rename, the provider reports
+the new address, so reauthorizing connects a new account and the old one stays. At the limit, the
+new address is refused. To move every rule to the new address without losing one:
+
+1. Free one account place: delete an account you no longer use, or ask your administrator to raise
+   your Plan's account limit, or give you a larger Plan, for the move.
+2. Connect the new address.
+3. On each rule that uses the old account, choose **Replace calendars…** and choose the same
+   calendar under the new address. Where the old account holds the rule's destination, keep its
+   events as ordinary events: the old account may no longer be able to delete them.
+4. Disconnect the old account, then delete it.
+
+Delete the old account only after every rule has moved: deleting an account deletes the rules that
+use it.
+
 ## Microsoft sign-in stops with an error
 
 Microsoft shows its own page, with a code beginning `AADSTS`, instead of returning to Calendar
@@ -649,6 +692,101 @@ sends email. Until then that page says who can set email up, and every incident 
 - **The SMTP recipient and webhook stopped receiving rule incidents.** Since Users, they receive only
   incidents about the installation itself, such as a stalled scheduler. Each person receives their
   own rule incidents at their email.
+
+## Start syncing is unavailable: your plan's rule limit
+
+Start syncing is unavailable on a rule's preview page, or starting it answers that your plan's
+limit is reached, when an administrator turned Plans on and the rules that count toward your Plan
+already reach its rule limit. Under **Settings → Your account → Your plan**, **Active rules**
+shows how many rules count and how many your Plan allows, as "1 of 1" with **Limit reached**, and
+beside **Create sync rule** on Rules a note says how many your Plan lets sync at once.
+
+- Rules that count are enabled rules and rules stopped only because an account's access lapsed.
+  Draft, previewed, and paused rules do not count, and creating or previewing a rule is never
+  limited.
+- Pause or remove a rule you no longer need, then start this one.
+- A rule stopped by any other error, or paused by a change to its policy, gave up its place. Its
+  restart is checked like any Start, so it may be refused while other rules fill your Plan. When
+  more rules count than your Plan allows, Calendar Ghost warns "Your plan may not let this rule
+  start again." before such a change.
+- **Replace calendars…** on a rule that counts (enabled, or stopped only because an account's
+  access lapsed) gives the new draft that rule's place, so the new rule can start whatever the
+  limit. Replacing a paused rule, or one stopped by any other error, keeps no place.
+- A rule that stopped because an account's access lapsed already counts, so it resumes after
+  Reauthorization whatever the limit.
+- A lower limit stops nothing: rules beyond it keep syncing, but no rule can start until fewer
+  count. Ask your administrator for a larger Plan; administrators are never limited.
+
+An API client receives `409` with the code `plan_limit_reached` and the reason `rules`.
+
+## Issue token is unavailable: your plan's token limit
+
+Under **Settings → Connections → Integrations**, **Issue token** is unavailable when your
+unrevoked Integration Tokens reach your Plan's token limit, and the form says why: "Your plan
+allows 2 integration tokens, and all are in use. Revoke one to issue another." Revoke a token you
+no longer use, then issue the new one: revoked tokens do not count. A Plan may include no
+Integration Tokens at all; the form then says "Your plan does not include integration tokens. To
+get one, ask your administrator." **Integration tokens** under **Settings → Your account → Your
+plan** shows how many you have against the limit, or **Not included**. Tokens you already have
+keep working when a limit is lowered,
+so no monitor stops on its own. A token that reads Installation Health is for administrators, who
+are never limited. An API client receives `409` with the code `plan_limit_reached` and the reason
+`integration_tokens`.
+
+## Someone has more than their plan allows
+
+This is for administrators. After you lower a limit, or give someone a smaller Plan, some people
+can have more than their Plan allows. Nothing stops for them: their rules keep syncing, and their
+calendar accounts and Integration Tokens keep working. But they cannot start another rule, connect
+another calendar account, or issue another token until they are within the limit. Before you save
+a lower limit, the Plan form says how many people it would leave with more: "1 person on Free has
+more calendar accounts than this. They keep them, but can't connect another."
+
+**People** shows who they are, in Attention Ochre with an icon:
+
+- On **Plans**, the card at the top counts everyone over a limit, a number you select to list them, and
+  each Plan's row says how many of the people it limits are over: "1 over a limit", which lists
+  them too. A Plan's **People** tab lists who has it now, each with any limit they are over.
+- On **Everyone**, the **Plan** column marks a person over a limit with **Over a limit** beside
+  their Plan, and says which limit under it ("2 calendar accounts, 1 allowed"). Choose the Plan in the **Plan** filter to list only the people who have it, and
+  **Over a limit** in the **Limits** filter to list only the people over one.
+- On the person's page, the **Plan** card shows a meter for each limit with how much they use,
+  "2 of 1" and **Over** past it, and says under it what keeps working: "robin@example.test has 2
+  calendar accounts and Free allows 1. Their accounts keep syncing, but they can't connect another
+  until one is removed."
+
+The person sees the same under **Settings → Your account → Your plan**, in their own words, with
+**Over a limit** beside their Plan's name: "You have 2 calendar accounts and your plan allows 1.
+They keep syncing, but you can't connect another until you remove one in Connections."
+
+Each count is made as the limit counts it: rules that count toward the Plan ([Start syncing is
+unavailable](#start-syncing-is-unavailable-your-plans-rule-limit) says which), every calendar
+account, Disconnected Accounts too, and Integration Tokens not revoked. Administrators and
+disabled people are never limited, so they are never shown over a limit. While Plans are off, the
+same marks show what turning them on would do.
+
+To fix it, do one of these:
+
+- Give the person a larger Plan with **Change plan** on their page's **Plan** card, in their
+  **More actions** under **Everyone**, or beside them in the Plan's **People** tab. To move several
+  people at once, tick them under **Everyone** and choose **Change plan** above the table.
+- Raise the limit on the Plan's **Limits** tab, which **Edit** in its menu opens.
+- Ask the person to make room: pause a rule, delete a calendar account they no longer use, or
+  revoke a token.
+
+## A plan cannot be removed, or its name is refused
+
+- **Remove is unavailable on the default Plan.** In its **More actions** menu, Remove says "Make
+  another plan the default first." Choose **Make default** on another Plan, then remove it.
+- **Remove names who has the Plan.** A Plan someone has cannot be removed. In its menu, Remove says
+  who has it, the first three by email and then how many more: "robin@example.test has Family. Give
+  them another plan first." Choose how many people have it, in the Plan's **People** column, to
+  list everyone who has it, give each of them another Plan with **Change plan**, or **Assign
+  people** on another Plan, then remove it.
+- **"Another plan is named Free. Choose a different name."** Two Plans cannot share a name, whatever
+  its case or the spaces around it. Choose another name, or rename the other Plan first.
+
+An API client receives `409` with the code `plan_in_use`, `plan_is_default`, or `plan_name_taken`.
 
 ## Getting more help
 

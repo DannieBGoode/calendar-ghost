@@ -31,6 +31,7 @@ from calendar_sync.domain.audit import AuditAction, AuditEntry
 from calendar_sync.domain.causes import WITHOUT_CAUSE
 from calendar_sync.domain.incidents import AccountAuthorization
 from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId, SyncRuleState
+from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.runs import RunKind
 from calendar_sync.domain.watches import (
     CalendarWatchId,
@@ -93,6 +94,9 @@ class InMemoryInstallationUnitOfWork:
 
     def resource_use(self, users: Collection[UserId], since: date) -> dict[UserId, ResourceUse]:
         return {user: _resource_use(self._database.partitions.get(user), since) for user in users}
+
+    def plan_use(self, users: Collection[UserId]) -> dict[UserId, PlanUse]:
+        return {user: _plan_use(self._database, user) for user in users}
 
     def forget_provider_calls(self, before: date) -> None:
         for state in self._database.partitions.values():
@@ -197,6 +201,15 @@ def _resource_use(state: MemoryState | None, since: date) -> ResourceUse:
     )
 
 
+def _plan_use(database: MemoryDatabase, user: UserId) -> PlanUse:
+    state = database.partitions.get(user) or MemoryState()
+    return PlanUse(
+        rules=sum(rule.counts_toward_plan for rule in state.rules.values()),
+        connected_accounts=len(state.accounts),
+        integration_tokens=database.unrevoked_tokens.get(user, 0),
+    )
+
+
 def _incident_sighting(
     owner: UserId, incident: MemoryIncident, state: MemoryState
 ) -> CauseSighting:
@@ -250,12 +263,15 @@ def _status_records(database: MemoryDatabase, user: UserId) -> StatusRecords:
         if kind is RunKind.SYNC and outcome.last_succeeded_at is not None
     ]
     return StatusRecords(
-        # Rules keep the order they were added in, as a dictionary keeps its keys'.
+        # Rules in the order they were created, then by identifier, as SQLite lists them.
         rules=tuple(
             RecordedRule(
                 rule, state.outcomes.get((rule.id, RunKind.SYNC)), state.previews.get(rule.id)
             )
-            for rule in state.rules.values()
+            for rule in sorted(
+                state.rules.values(),
+                key=lambda rule: (state.rule_order.get(rule.id, 0), rule.id.value),
+            )
         ),
         overview=OperationsOverview(
             connected_accounts=sum(s is ConnectedAccountState.CONNECTED for s in standings),

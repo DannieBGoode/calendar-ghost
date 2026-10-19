@@ -6,6 +6,7 @@ import { useI18n } from "@/i18n/provider"
 import type { PendingInvitation } from "@/lib/api"
 import { invitationLink } from "@/lib/public-links"
 import type { InvitationCommands } from "@/lib/use-invitations"
+import { usePlanList } from "@/lib/use-plans"
 
 const LINK_EXPIRY: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" }
 
@@ -25,6 +26,7 @@ export function InvitationsSection({ commands, now }: { commands: InvitationComm
             {t("people.invitations.title")}
           </h2>
           <p>{t("people.invitations.body")}</p>
+          <InvitedPlan />
         </div>
       </div>
       {invite.error && (
@@ -55,6 +57,19 @@ export function InvitationsSection({ commands, now }: { commands: InvitationComm
       )}
     </section>
   )
+}
+
+/**
+ * Which Plan someone invited gets once a Plan is the default: the default, which an administrator
+ * can change once they join. Invitations carry no Plan. With no default, or when the Plans cannot
+ * be read, it says nothing.
+ */
+function InvitedPlan() {
+  const { t } = useI18n()
+  const plans = usePlanList().data
+  const name = plans?.plans.find((plan) => plan.key === plans.default_plan)?.name
+  if (name === undefined) return null
+  return <p className="invitation-plan">{t("people.invitations.plan", { name })}</p>
 }
 
 function NoInvitations() {

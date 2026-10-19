@@ -23,11 +23,12 @@ type Options = ProblemOptions
 
 /**
  * What the Operator Overview shows about one User, on their page under People: their sync health,
- * then each rule with its problem and who takes the next step, then their accounts, Activity, and
- * calls. Calendars appear only as "Calendar 1", "Calendar 2", except on an administrator's own
- * page. With nothing wrong, it is one card, and the use is a quiet part of it.
+ * then each rule with its problem and who takes the next step, then `plan`, their Plan card once
+ * any Plan exists, then their accounts, Activity, and calls. Calendars appear only as "Calendar
+ * 1", "Calendar 2", except on an administrator's own page. With nothing wrong, the use is a quiet
+ * part of the Synchronization card.
  */
-export function UserOverviewDetails({ overview, ...options }: Options & { overview: UserOverview }) {
+export function UserOverviewDetails({ overview, plan, ...options }: Options & { overview: UserOverview; plan?: ReactNode }) {
   const { t } = useI18n()
   const quiet = overview.status.problems.length === 0
   return (
@@ -35,6 +36,7 @@ export function UserOverviewDetails({ overview, ...options }: Options & { overvi
       <SyncBlock status={overview.status} options={options}>
         {quiet && <UseFacts resources={overview.resources} />}
       </SyncBlock>
+      {plan}
       {!quiet && (
         <Block title={t("people.overview.resourcesTitle")}>
           <UseFacts resources={overview.resources} />

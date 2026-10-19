@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { ApiError, UnreadableResponseError } from "@/lib/api"
 
@@ -19,6 +19,9 @@ describe("apiErrorMessage", () => {
     )
     expect(apiErrorMessage(i18n, coded("invalid_state_transition"))).toBe(
       "This rule cannot change to that state right now. Reload and try again.",
+    )
+    expect(apiErrorMessage(i18n, coded("insufficient_scope"))).toBe(
+      "This integration token is not allowed to read installation status.",
     )
   })
 
@@ -45,6 +48,41 @@ describe("apiErrorMessage", () => {
     expect(apiErrorMessage(i18n, other)).toBe("Some of the information is not valid. Check it and try again.")
   })
 
+  it("words a plan's refusals with the numbers the server sends", () => {
+    const rules = (limit: number) => coded("plan_limit_reached", { reason: "rules", limit, count: limit })
+    expect(apiErrorMessage(i18n, rules(1))).toBe("Your plan lets 1 rule sync. Pause or remove it to start this rule.")
+    expect(apiErrorMessage(i18n, rules(3))).toBe("Your plan lets 3 rules sync. Pause or remove one to start this rule.")
+    const tokens = (limit: number) => coded("plan_limit_reached", { reason: "integration_tokens", limit, count: limit })
+    // A Plan that includes no tokens says so, never "0 integration tokens".
+    expect(apiErrorMessage(i18n, tokens(0))).toBe(
+      "Your plan does not include integration tokens. To get one, ask your administrator.",
+    )
+    expect(apiErrorMessage(i18n, tokens(1))).toBe(
+      "Your plan allows 1 integration token, and it is in use. Revoke it to issue another.",
+    )
+    expect(apiErrorMessage(i18n, tokens(2))).toBe(
+      "Your plan allows 2 integration tokens, and all are in use. Revoke one to issue another.",
+    )
+    // A limit of none with no message of its own reads as any other.
+    expect(apiErrorMessage(i18n, rules(0))).toBe("Your plan lets 0 rules sync. Pause or remove one to start this rule.")
+    const later = coded("plan_limit_reached", { reason: "a_later_resource", limit: 2, count: 2 })
+    expect(apiErrorMessage(i18n, later)).toBe(
+      "Your plan's limit is reached. Settings, Your account, Your plan shows what it allows.",
+    )
+    expect(apiErrorMessage(i18n, coded("plan_in_use", { people: 1, count: 1 }))).toBe(
+      "1 person has this plan. Give them another plan before you remove it.",
+    )
+    expect(apiErrorMessage(i18n, coded("plan_in_use", { people: 2, count: 2 }))).toBe(
+      "2 people have this plan. Give them another plan before you remove it.",
+    )
+    expect(apiErrorMessage(i18n, coded("invalid_plan", { reason: "key" }))).toBe(
+      "Use 1 to 32 lower-case letters, digits, and hyphens for the key, starting with a letter or digit.",
+    )
+    expect(apiErrorMessage(i18n, coded("plans_need_default"))).toBe(
+      "Plans can't be on without a default plan. Choose another default instead.",
+    )
+  })
+
   it("shows the server's detail for an unknown code or a missing param, then a generic message", () => {
     expect(apiErrorMessage(i18n, coded("brand_new"))).toBe("English detail")
     expect(apiErrorMessage(i18n, coded("removal_interrupted", {}, "removal stopped"))).toBe("removal stopped")
@@ -53,10 +91,26 @@ describe("apiErrorMessage", () => {
     expect(apiErrorMessage(i18n, new ApiError("x", 422, null))).toBe("The request could not be completed.")
   })
 
-  it("never shows an unfilled placeholder outside tests", () => {
-    // Production leaves a missing `{name}` in place instead of throwing; the detail reads better.
-    const production = { ...i18n, t: ((key, params) => (key === "common.apiError.removal_interrupted" ? "{processed} of {total}" : i18n.t(key, params))) as typeof i18n.t }
-    expect(apiErrorMessage(production, coded("removal_interrupted", {}, "removal stopped"))).toBe("removal stopped")
+  it("shows the server's detail in production when the server left out one of a message's params", () => {
+    // Production fills a missing param with nothing, so the message must not be used at all.
+    vi.stubEnv("MODE", "production")
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    try {
+      const production = testI18n()
+      expect(apiErrorMessage(production, coded("removal_interrupted", {}, "removal stopped"))).toBe("removal stopped")
+      expect(apiErrorMessage(production, coded("plan_name_taken", {}, "That name is taken"))).toBe("That name is taken")
+      // Without its length, a too-short value gets the general validation message.
+      const tooShort = coded("invalid_request", { field: "password", reason: "string_too_short" })
+      expect(apiErrorMessage(production, tooShort)).toBe("Some of the information is not valid. Check it and try again.")
+      const rules = coded("plan_limit_reached", { reason: "rules", limit: 2 }, "Limit reached")
+      expect(apiErrorMessage(production, rules)).toBe(
+        "Your plan's limit is reached. Settings, Your account, Your plan shows what it allows.",
+      )
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+      warn.mockRestore()
+    }
   })
 
   it("describes an unreadable response", () => {

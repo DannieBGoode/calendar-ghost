@@ -17,11 +17,16 @@ from dataclasses import dataclass
 from threading import Lock
 
 from calendar_sync.application.identity.errors import UserDisabled
-from calendar_sync.application.sync.errors import AuthorizationFailed, InvalidAuthorizationState
+from calendar_sync.application.sync.errors import (
+    AccountLimitReached,
+    AuthorizationFailed,
+    InvalidAuthorizationState,
+)
 from calendar_sync.application.sync.ports import AuthorizedAccount
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.domain.plans import PlanLimitReached
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
@@ -112,11 +117,14 @@ def connect_account(
     provider: ProviderKind,
     avatar_url: str | None = None,
 ) -> AuthorizedAccount:
-    """Connect, or reauthorize, `owner`'s account; nothing when they were disabled meanwhile."""
+    """Connect, or reauthorize, `owner`'s account; nothing when they were disabled meanwhile, or
+    when a new account would pass their Plan's account limit (ADR 0038)."""
     try:
         account = accounts.for_user(owner).save(
             display_name, email, credentials, provider=provider, avatar_url=avatar_url
         )
     except UserDisabled as error:
         raise AuthorizationFailed("the User was disabled during authorization") from error
+    except PlanLimitReached as error:
+        raise AccountLimitReached(error.limit) from error
     return AuthorizedAccount(owner, account)

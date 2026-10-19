@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
+from calendar_sync.domain.access import Role
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -23,12 +24,26 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
 )
+from calendar_sync.domain.plans import Plan, PlanKey, PlanLimits, SyncInterval
 from calendar_sync.interfaces.access import StatusAccess, StatusPrincipal
 from calendar_sync.interfaces.api import dependencies
 from calendar_sync.interfaces.api.app import create_app
-from calendar_sync.interfaces.api.dependencies import StatusReaderServices, status_reader
+from calendar_sync.interfaces.api.dependencies import (
+    SESSION_COOKIE,
+    StatusReaderServices,
+    status_reader,
+)
 from tests.helpers import endpoint, rule
-from tests.users import add_account, administrator, sign_in
+from tests.plans import FREE, plans_on
+from tests.users import (
+    OTHER_USER,
+    add_account,
+    add_user,
+    administrator,
+    limited_user,
+    session_for,
+    sign_in,
+)
 
 PASSWORD = {"password": "correct horse battery staple"}
 SECRETS = {
@@ -37,6 +52,7 @@ SECRETS = {
     "calendar": "c_secret9b1e@group.calendar.example.test",
     "title": "Secret dentist visit",
 }
+ONE_TOKEN = Plan(PlanKey("one-token"), "One token", PlanLimits(None, None, 1, SyncInterval.INSTANT))
 
 
 def _installation(tmp_path: Path) -> tuple[Container, Adapters]:
@@ -82,6 +98,55 @@ def test_tokens_are_managed_only_with_an_administrator_session(tmp_path: Path) -
             ).status_code
             == 401
         )
+
+
+def test_a_member_at_their_plans_token_limit_is_refused_with_the_limit(tmp_path: Path) -> None:
+    container, adapters = _installation(tmp_path)
+    database = tmp_path / "test.db"
+    member = limited_user(database)
+    plans_on(adapters.plan_catalog, ONE_TOKEN)
+    with TestClient(create_app(container)) as client:
+        client.cookies.set(SESSION_COOKIE, session_for(database, member))
+        _issue(client)
+        refused = client.post("/api/v1/integration-tokens", json={"name": "Homepage"})
+        listed = client.get("/api/v1/integration-tokens").json()
+
+    assert (refused.status_code, refused.json()["code"], refused.json()["params"]) == (
+        409,
+        "plan_limit_reached",
+        {"reason": "integration_tokens", "limit": 1, "count": 1},
+    )
+    assert [token["name"] for token in listed] == ["Uptime Kuma"]
+
+
+def test_a_demoted_administrator_keeps_their_tokens_but_issues_none_past_the_limit(
+    tmp_path: Path,
+) -> None:
+    container, adapters = _installation(tmp_path)
+    database = tmp_path / "test.db"
+    other = add_user(database, OTHER_USER)
+    plans_on(adapters.plan_catalog, FREE)
+    with TestClient(create_app(container)) as client:
+        client.cookies.set(SESSION_COOKIE, session_for(database, other))
+        kept = _issue(client)
+        adapters.users.set_role(other, Role.USER)
+        refused = client.post("/api/v1/integration-tokens", json={"name": "Homepage"})
+        health = client.post(
+            "/api/v1/integration-tokens",
+            json={"name": "Health monitor", "scopes": ["status:read", "installation:read"]},
+        )
+        still_reads = client.get("/api/v1/status", headers={"Authorization": f"Bearer {kept}"})
+        adapters.users.set_role(other, Role.INSTALLATION_ADMINISTRATOR)
+        promoted = client.post("/api/v1/integration-tokens", json={"name": "Homepage"})
+
+    assert (refused.status_code, refused.json()["code"], refused.json()["params"]) == (
+        409,
+        "plan_limit_reached",
+        {"reason": "integration_tokens", "limit": 0, "count": 0},
+    )
+    assert (health.status_code, health.json()["code"]) == (403, "administrator_required")
+    assert still_reads.status_code == 200
+    assert promoted.status_code == 201
 
 
 class _RefusingSessions:

@@ -6,11 +6,12 @@ everything they expose is declared here (ADR 0036). Nothing here carries event c
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+import logging
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.application.sync.errors import ProviderFailure
@@ -26,6 +27,12 @@ from calendar_sync.domain.watches import (
     WatchRegistrationId,
     WatchScope,
 )
+
+if TYPE_CHECKING:
+    # ports.py imports this module, so the Allowances port is named here for type checking only.
+    from calendar_sync.application.sync.ports import Allowances
+
+logger = logging.getLogger(__name__)
 
 NOTICE_PATH = "/api/v1/watch-notices"
 """Where providers deliver notices, below the installation's public address."""
@@ -286,17 +293,81 @@ class DeliveryEvidenceLog(Protocol):
 
 
 class SyncCadencePolicy(Protocol):
-    """Each User's Sync Cadence, as their Plan allows (ADR 0028)."""
+    """Each User's Sync Cadence, as their Plan allows (ADR 0028, ADR 0038).
 
-    def cadence(self, user: UserId) -> SyncCadence: ...
+    Both reads raise when the cadence cannot be read; readers that must not fail read through
+    `cadences_of`, or fall back to `DEFAULT_CADENCE` themselves.
+    """
+
+    def cadence(self, user: UserId) -> SyncCadence:
+        """One User's cadence."""
+        ...
+
+    def cadences(self, users: Collection[UserId]) -> Mapping[UserId, SyncCadence]:
+        """Each User's cadence, in one read."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
 class EveryUserInstant:
-    """The cadence policy while Plans are off: every User has every feature (ADR 0028)."""
+    """Every User may sync instantly, as while Plans are off (ADR 0028): the default of
+    `Adapters.sync_cadence`, and a policy for tests."""
 
-    # The port names the User so Plans can tell Users apart; while they are off, none differ.
+    # The port names the User so Plans can tell Users apart; this policy tells none apart.
     def cadence(self, user: UserId) -> SyncCadence:  # noqa: ARG002
+        return DEFAULT_CADENCE
+
+    def cadences(self, users: Collection[UserId]) -> Mapping[UserId, SyncCadence]:
+        return dict.fromkeys(users, DEFAULT_CADENCE)
+
+
+@dataclass(frozen=True, slots=True)
+class PlanCadence:
+    """Each User's Sync Cadence, as their Allowance says (ADR 0038).
+
+    A failed read raises here: each reader decides how to fail open.
+    """
+
+    allowances: Allowances
+
+    def cadence(self, user: UserId) -> SyncCadence:
+        return self.allowances.of(user).cadence
+
+    def cadences(self, users: Collection[UserId]) -> Mapping[UserId, SyncCadence]:
+        """Every User's cadence in one Allowances read; a User missing from its answer gets
+        the default cadence."""
+        allowances = self.allowances.of_users(users)
+        return {
+            user: allowances[user].cadence if user in allowances else DEFAULT_CADENCE
+            for user in users
+        }
+
+
+def cadences_of(policy: SyncCadencePolicy, users: Collection[UserId]) -> dict[UserId, SyncCadence]:
+    """Each User's cadence in one batch read; when the batch raises, each User read alone;
+    `DEFAULT_CADENCE`, which is instant, for a User whose own read raises too, or whom the batch
+    left out, so a Plans fault never drops an Instant Sync Request, retires a watch, or hides
+    Instant Sync from Installation Hints (ADR 0038). Logs only the error's class.
+    """
+    try:
+        batch = policy.cadences(users)
+    except Exception as error:
+        logger.warning(
+            "Could not read Sync Cadences in one batch; reading each User alone (%s)",
+            error.__class__.__name__,
+        )
+        return {user: _cadence_alone(policy, user) for user in users}
+    return {user: batch.get(user, DEFAULT_CADENCE) for user in users}
+
+
+def _cadence_alone(policy: SyncCadencePolicy, user: UserId) -> SyncCadence:
+    try:
+        return policy.cadence(user)
+    except Exception as error:
+        logger.warning(
+            "Could not read a User's Sync Cadence; they count as instant (%s)",
+            error.__class__.__name__,
+        )
         return DEFAULT_CADENCE
 
 

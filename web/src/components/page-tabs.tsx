@@ -17,31 +17,37 @@ export type PageTab<T extends string> = {
 /**
  * Links to the parts of one page, underlined like the primary navigation's items. Each has its
  * own address, so they are navigation rather than an ARIA tablist; a plain click opens the part in
- * place, and any other click is left to the browser.
+ * place, and any other click is left to the browser. While `waiting`, as for a command on its way
+ * in the part shown, the other tabs keep focus but stay put, so its answer has a place to show.
  */
 export function PageTabs<T extends string>({
   label,
   tabs,
   current,
   onOpen,
+  waiting = false,
+  className,
 }: {
   label: string
   tabs: PageTab<T>[]
   current: T
   onOpen: (tab: T) => void
+  waiting?: boolean
+  className?: string
 }) {
   return (
-    <nav className="page-tabs" aria-label={label}>
+    <nav className={cn("page-tabs", className)} aria-label={label}>
       {tabs.map((tab) => (
         <a
           key={tab.id}
           href={tab.href}
           className={cn("page-tab", tab.id === current && "active")}
           aria-current={tab.id === current ? "page" : undefined}
+          aria-disabled={waiting && tab.id !== current ? true : undefined}
           onClick={(event) => {
             if (!isPlainLeftClick(event)) return
             event.preventDefault()
-            onOpen(tab.id)
+            if (!waiting) onOpen(tab.id)
           }}
         >
           {tab.label}

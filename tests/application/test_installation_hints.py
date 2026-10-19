@@ -1,5 +1,6 @@
 """Installation Hints: likely causes from patterns across Users, never one User's content."""
 
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -275,12 +276,22 @@ KIM = UserId("kim")
 
 @dataclass(frozen=True)
 class Cadences:
-    """A Sync Cadence Policy that gives Instant Sync to everyone but some Users."""
+    """A Sync Cadence Policy that gives Instant Sync to everyone but some Users. Once any User is
+    unreadable, the batch read fails, and so does reading that User alone, as a locked database
+    would."""
 
     without_instant: frozenset[UserId] = frozenset()
+    unreadable: frozenset[UserId] = frozenset()
 
     def cadence(self, user: UserId) -> SyncCadence:
+        if user in self.unreadable:
+            raise RuntimeError("database is locked")
         return SyncCadence(instant=user not in self.without_instant, poll_every=SCHEDULED_EVERY)
+
+    def cadences(self, users: Collection[UserId]) -> Mapping[UserId, SyncCadence]:
+        if self.unreadable:
+            raise RuntimeError("database is locked")
+        return {user: self.cadence(user) for user in users}
 
 
 def owner(user: UserId, *, wanted: bool = True, disabled: bool = False) -> InstantSyncOwner:
@@ -306,6 +317,21 @@ def test_only_users_who_may_sign_in_want_it_and_may_use_it_count() -> None:
     signals = instant_sync_signals(owners, Cadences(frozenset({KIM})), HTTPS, {})
 
     assert signals == InstantSyncSignals(wanting=1)
+
+
+def test_a_user_whose_cadence_cannot_be_read_counts_as_wanting_instant_sync(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # The batch read fails, so each User is read alone: ROBIN's read fails too, and KIM's Plan
+    # has no Instant Sync.
+    cadences = Cadences(frozenset({KIM}), unreadable=frozenset({ROBIN}))
+    owners = [owner(ROBIN), owner(SAM), owner(KIM)]
+
+    with caplog.at_level("WARNING"):
+        signals = instant_sync_signals(owners, cadences, HTTPS, {})
+
+    assert signals == InstantSyncSignals(wanting=2)
+    assert "database is locked" not in caplog.text
 
 
 @pytest.mark.parametrize(

@@ -7,6 +7,10 @@
     "closeBuilder": "Close rule builder",
     "createButton": "Create sync rule",
     "connectAccountHint": "<link>Connect a calendar account</link> first.",
+    "planLimit": {
+      "one": "Your plan lets {count} rule sync at once.",
+      "other": "Your plan lets {count} rules sync at once."
+    },
     "reviewInActivity": "Review in Activity",
     "dismiss": "Dismiss",
     "empty": {

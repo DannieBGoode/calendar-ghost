@@ -1,5 +1,6 @@
 """Users and failed sign-ins as the installation stores them."""
 
+import logging
 import sqlite3
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -8,7 +9,16 @@ from pathlib import Path
 import pytest
 
 from calendar_sync.application.identity.errors import EmailTaken
-from calendar_sync.application.identity.ports import IssuedLink, UserPage, UserQuery, UserSort
+from calendar_sync.application.identity.ports import (
+    AssignmentChange,
+    IssuedLink,
+    PlansSetting,
+    RegistrationSettings,
+    UserDirectory,
+    UserPage,
+    UserQuery,
+    UserSort,
+)
 from calendar_sync.domain.access import (
     LastAdministrator,
     OnlyMeNeedsOneUser,
@@ -18,7 +28,10 @@ from calendar_sync.domain.access import (
     UserId,
     UserState,
 )
+from calendar_sync.domain.plans import UNLIMITED, AssignmentSource, PlanKey
+from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
+from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.infrastructure.persistence.registration import (
     SqliteInvitations,
     SqlitePasswordResetLinks,
@@ -31,7 +44,8 @@ from tests.adapters.test_user_migration import (
     database_at_version,
     seed_single_administrator,
 )
-from tests.identity_fakes import MemoryUsers
+from tests.identity_fakes import MemoryPlans, MemoryRegistration, MemoryUsers
+from tests.plans import FAMILY, FREE, as_new, plans_on
 
 NOW = datetime(2026, 10, 9, 9, 0, tzinfo=UTC)
 FIRST = User(
@@ -252,6 +266,41 @@ def test_a_new_user_wants_instant_sync(tmp_path: Path) -> None:
 
     assert stored is not None
     assert stored.instant_sync
+
+
+def test_a_users_own_plan_is_read_and_a_key_this_release_cannot_read_names_none(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    users = _users(tmp_path)
+    later = replace(SECOND, id=UserId("later"), email="later@example.test")
+    for user in (FIRST, SECOND, later):
+        users.add(user, "hash")
+    with transaction(tmp_path / "test.db") as connection:
+        # A later release may write a key this one refuses; the foreign key still needs its Plan.
+        for key in ("family", "Later Key"):
+            connection.execute(
+                """
+                INSERT INTO plans (key, name, sync_interval, created_at, updated_at)
+                VALUES (?, 'Family', 'instant', ?, ?)
+                """,
+                (key, NOW.isoformat(), NOW.isoformat()),
+            )
+        connection.execute("UPDATE users SET plan_key = 'family' WHERE id = ?", (SECOND.id.value,))
+        connection.execute(
+            "UPDATE users SET plan_key = 'Later Key' WHERE id = ?", (later.id.value,)
+        )
+
+    with caplog.at_level(logging.WARNING, logger="calendar_sync.infrastructure.persistence"):
+        found = users.get(later.id)
+        listed = users.list()
+
+    assert users.get(FIRST.id) == FIRST
+    assert users.get(SECOND.id) == replace(SECOND, plan=PlanKey("family"))
+    assert found == later
+    assert listed == (FIRST, replace(SECOND, plan=PlanKey("family")), later)
+    assert [record.getMessage() for record in caplog.records] == [
+        "User later names a plan this release cannot read; the Default Plan applies"
+    ] * 2
 
 
 def test_one_email_signs_in_one_user_whatever_its_case(tmp_path: Path) -> None:
@@ -480,6 +529,77 @@ def test_returning_to_setup_chooses_only_me_and_revokes_every_invitation_in_one_
     assert invitations.pending(later) == ()
     assert not invitations.usable(first.token, later)
     assert not invitations.usable(second.token, later)
+
+
+def _setup_with_plans(
+    kind: str, tmp_path: Path
+) -> tuple[UserDirectory, RegistrationSettings, SqlitePlans | MemoryPlans]:
+    if kind == "memory":
+        users = MemoryUsers()
+        plans = MemoryPlans(users)
+        return users, MemoryRegistration(users, plans=plans), plans
+    database = _database(tmp_path)
+    return (
+        SqliteUserDirectory(database),
+        SqliteRegistrationSettings(database),
+        SqlitePlans(database),
+    )
+
+
+@pytest.mark.parametrize("kind", ["sqlite", "memory"])
+def test_returning_to_setup_turns_plans_off_and_keeps_them_for_the_next_administrator(
+    kind: str, tmp_path: Path
+) -> None:
+    users, registration, plans = _setup_with_plans(kind, tmp_path)
+    users.add(FIRST, "hash-1")
+    plans_on(plans, FREE, FAMILY)
+    # The last User deletes their account, and the installation returns to setup.
+    users.delete(FIRST.id)
+
+    registration.return_to_setup(NOW)
+    new_first = replace(FIRST, id=UserId("new-first"), email="new-first@example.test")
+    assert users.add_first(new_first, "hash-2")
+    users.add(SECOND, "hash-3")
+
+    assert plans.settings() == PlansSetting(enabled=False, default=FREE.key)
+    assert [listing.plan for listing in plans.plans()] == [FAMILY, FREE]
+    # Nobody inherits a limit the earlier installation set: neither the new first User nor
+    # anyone who joins later, until an administrator turns Plans on again.
+    assert plans.of_users([new_first.id, SECOND.id]) == {
+        new_first.id: UNLIMITED,
+        SECOND.id: UNLIMITED,
+    }
+
+
+@pytest.mark.parametrize("kind", ["sqlite", "memory"])
+def test_people_are_found_by_the_plan_they_have(kind: str, tmp_path: Path) -> None:
+    """Everyone with a Plan of their own, and, for the default, everyone without one, whatever
+    their role or state and whether Plans are on or off, as a Plan counts the people who have
+    it."""
+    users, _, plans = _setup_with_plans(kind, tmp_path)
+    away = User(UserId("away"), "away@example.test", Role.USER, UserState.DISABLED, NOW)
+    for number, person in enumerate((FIRST, SECOND, away)):
+        users.add(person, f"hash-{number}")
+    plans.add(as_new(FREE), NOW)
+    plans.add(as_new(FAMILY), NOW)
+    plans.assign_all(
+        {SECOND.id: FAMILY.key}, AssignmentChange(AssignmentSource.ADMINISTRATOR, None, NOW)
+    )
+
+    def having(plan: str, **query: object) -> list[UserId]:
+        found = users.find(UserQuery(plan=PlanKey(plan), **query))  # type: ignore[arg-type]
+        assert found.total == len(found.users)
+        return [user.id for user in found.users]
+
+    # With no default yet, only a Plan of one's own counts.
+    assert having("free") == []
+    assert having("family") == [SECOND.id]
+    plans.change_settings(False, FREE.key, NOW)
+    assert having("free") == [FIRST.id, away.id]
+    assert having("free", role=Role.USER) == [away.id]
+    assert having("family") == [SECOND.id]
+    assert having("missing") == []
+    assert [listing.people for listing in plans.plans()] == [1, 2]
 
 
 def test_a_reset_link_sets_the_password_once_and_a_newer_one_replaces_it(tmp_path: Path) -> None:

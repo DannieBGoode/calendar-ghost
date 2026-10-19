@@ -1,14 +1,15 @@
-"""Ports of identity and access: Users, sessions, links, and Integration Tokens."""
+"""Ports of identity and access: Users, sessions, links, Integration Tokens, and Plans."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
 from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId, UserState
+from calendar_sync.domain.plans import AssignmentSource, NewPlan, Plan, PlanKey
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +35,9 @@ class UserQuery:
     """Part of an email, in any case."""
     role: Role | None = None
     state: UserState | None = None
+    plan: PlanKey | None = None
+    """Only Users who have this Plan: as their own, or, for the Default Plan, by having none of
+    their own, whatever their role or state and whether Plans are on (ADR 0038)."""
     sort: UserSort = UserSort.JOINED
     descending: bool = False
     offset: int = 0
@@ -140,9 +144,10 @@ class RegistrationSettings(Protocol):
         ...
 
     def return_to_setup(self, at: datetime) -> None:
-        """Choose Only Me and revoke every Invitation still usable at `at`, in one step, so a
-        failure between them cannot leave an old Invitation for the next setup. Raises
-        OnlyMeNeedsOneUser, changing nothing, while another User exists."""
+        """Choose Only Me, revoke every Invitation still usable at `at`, and turn Plans off,
+        keeping their definitions, in one step, so a failure between them cannot leave an old
+        Invitation or a hidden limit for the next setup. Raises OnlyMeNeedsOneUser, changing
+        nothing, while another User exists."""
         ...
 
 
@@ -263,7 +268,16 @@ class IntegrationTokens(Protocol):
         self,
         name: str,
         scopes: frozenset[IntegrationTokenScope] = frozenset({IntegrationTokenScope.STATUS_READ}),
-    ) -> IssuedIntegrationToken: ...
+        *,
+        within: Callable[[], int | None] | None = None,
+    ) -> IssuedIntegrationToken:
+        """Issue a token; raises InvalidIntegrationTokenName before anything is stored.
+
+        `within`, when given, reads the token limit once this store holds the write lock;
+        raises PlanLimitReached(INTEGRATION_TOKENS, limit), issuing nothing, when the User's
+        unrevoked tokens already reach it. A `within` that raises fails the issue.
+        """
+        ...
 
     def list(self) -> Sequence[IntegrationTokenSummary]:
         """Every token, newest first, revoked ones last."""
@@ -278,4 +292,90 @@ class IntegrationTokenAuthentication(Protocol):
     def authenticate(self, token: str) -> IntegrationTokenSummary | None:
         """The token's summary, naming its owner, when it is well formed, known, and not
         revoked."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class PlansSetting:
+    """Whether Plans limit anyone, and the Default Plan of everyone with no Plan of their own."""
+
+    enabled: bool
+    default: PlanKey | None
+
+
+@dataclass(frozen=True, slots=True)
+class PlanListing:
+    """A Plan as Administration lists it."""
+
+    plan: Plan
+    is_default: bool
+    people: int
+    """Everyone who has it: their own Plan, plus, for the default, everyone with none."""
+    limited_people: int
+    """Active Users who do not administer and have it, whom it limits while Plans are on."""
+
+
+class PlanCatalog(Protocol):
+    """The Plans an Installation Administrator defines, and whether they are on (ADR 0038)."""
+
+    def settings(self) -> PlansSetting: ...
+
+    def change_settings(self, enabled: bool, default: PlanKey | None, at: datetime) -> PlansSetting:
+        """One step: raises PlanNotFound when `default` names no Plan, and PlansNeedDefault when
+        it would clear a chosen default with Plans on. Turning Plans on when neither `default`
+        nor the installation names one first adds NO_LIMITS_PLAN, at `at`, as the default."""
+        ...
+
+    def plans(self) -> Sequence[PlanListing]:
+        """Every Plan, by name then key."""
+        ...
+
+    def followers(self) -> int:
+        """How many Users have no Plan of their own, whatever their role or state: the people
+        the Default Plan is theirs for, and whom making another Plan the default moves."""
+        ...
+
+    def any_plans(self) -> bool: ...
+
+    def get(self, key: PlanKey) -> Plan | None: ...
+
+    def add(self, plan: NewPlan, at: datetime) -> Plan:
+        """Store the Plan under the key it asks for, or under the first key made from its name
+        that no Plan has, and answer it as stored. Raises PlanKeyTaken when another Plan has the
+        key it asks for."""
+        ...
+
+    def change(self, plan: Plan, at: datetime) -> None:
+        """The key never changes; raises PlanNotFound."""
+        ...
+
+    def remove(self, key: PlanKey) -> None:
+        """One step: raises PlanNotFound, PlanIsDefault, or PlanInUse(people)."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class AssignmentChange:
+    """How a User's own Plan was last set: by an administrator now, by billing later."""
+
+    source: AssignmentSource
+    actor: UserId | None
+    """The administrator who set it; None when billing set it."""
+    at: datetime
+
+
+class PlanAssignments(Protocol):
+    """The one way a User's own Plan changes; administrators now, billing later (ADR 0038)."""
+
+    def assign_all(self, plans: Mapping[UserId, PlanKey | None], change: AssignmentChange) -> bool:
+        """Set each User's own Plan as `plans` names it, None for the Default Plan, in one step,
+        all or none, recording the same change for each: False, changing nothing, when one of
+        them is not a User. Raises PlanNotFound when one of the Plans does not exist. A Plan that
+        is the Default Plan, read in the same write, is stored as None: giving the default is
+        following it."""
+        ...
+
+    def last_changes(self, users: Collection[UserId]) -> Mapping[UserId, AssignmentChange]:
+        """How each of `users`' own Plan was last set, read at once; a User whose own Plan
+        nobody ever set is left out. The actor is None once that administrator is deleted."""
         ...

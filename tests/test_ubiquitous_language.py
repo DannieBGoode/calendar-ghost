@@ -10,24 +10,32 @@ GLOSSARY = REPOSITORY / "CONTEXT.md"
 
 # Avoided terms that always name the wrong concept. Many other avoided terms, such as "user" or
 # "pause rule", are also ordinary English or interface labels, so they are left to review.
+# "quota" and "subscription", which CONTEXT.md also avoids for Plan, stay out:
+# `Cause.QUOTA_EXCEEDED` and Microsoft Graph subscriptions use them for other things.
 AVOIDED = (
+    "active account",
+    "active calendar account",
     "bidirectional rule",
     "cloned event",
     "copied event",
     "copy mode",
     "disable rule",
     "disabled rule",
+    "downgrade deletion",
     "downstream calendar",
     "event copy",
     "master mapping",
     "origin calendar",
     "parent mapping",
+    "plan pause",
     "push sync",
     "real-time sync",
     "recurring master",
+    "suspension",
     "sync job",
     "sync pair",
     "target calendar",
+    "tier",
     "upstream calendar",
 )
 
@@ -110,6 +118,17 @@ def test_landing_page_copy_is_searched() -> None:
         "two event copies",
         "EventCopies",
         "target calendars",
+        "a free tier",
+        "PLAN_TIERS",
+        "a plan pause",
+        "PlanPause",
+        "downgrade deletion",
+        "downgrade\n  deletion",
+        "rule suspensions",
+        "Maximum active accounts",
+        "active calendar accounts",
+        "ACTIVE_ACCOUNTS",
+        "activeCalendarAccount",
     ],
 )
 def test_avoided_terms_are_found_in_any_spelling(text: str) -> None:
@@ -118,7 +137,22 @@ def test_avoided_terms_are_found_in_any_spelling(text: str) -> None:
 
 @pytest.mark.parametrize(
     "text",
-    ["async pairing", "sync pairing", "resync pair", "event copyright", "retarget calendar"],
+    [
+        "async pairing",
+        "sync pairing",
+        "resync pair",
+        "event copyright",
+        "retarget calendar",
+        "frontier",
+        "a planned pause",
+        "suspended",
+        "active rules",
+        "an active User's accounts",
+        "interactive accounts",
+        # CONTEXT.md avoids these two for Plan as well, but other concepts need them.
+        "Cause.QUOTA_EXCEEDED",
+        "a Graph subscription",
+    ],
 )
 def test_words_that_merely_contain_an_avoided_term_are_allowed(text: str) -> None:
     assert not avoided_terms_in(text)

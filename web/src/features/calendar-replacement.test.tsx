@@ -52,6 +52,9 @@ function detail(sourceCalendar: string, destinationCalendar: string): RuleDetail
     last_reconciliation: null,
     latest_preview: null,
     running: null,
+    can_start: true,
+    rule_limit: null,
+    keeps_place: false,
   }
 }
 

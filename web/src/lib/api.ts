@@ -212,6 +212,33 @@ export type IntegrationScope = IntegrationToken["scopes"][number]
 /** Who may become a User: Only Me, the default, or Invitation Only. */
 export type Registration = Schemas["RegistrationResponse"]
 export type RegistrationPolicy = Registration["policy"]
+/** Every Plan, whether Plans limit people, the Default Plan, and the sync intervals offered now. */
+export type PlansOverview = Schemas["PlansResponse"]
+/** One Plan as an administrator manages it: its limits, and who has it. */
+export type PlanSummary = Schemas["PlanResponse"]
+/** What a Plan allows; null means unlimited. */
+export type PlanLimits = Schemas["PlanLimitsResponse"]
+/** How soon a Plan's rules sync (ADR 0038). */
+export type SyncInterval = PlanLimits["sync_interval"]
+/** A new Plan: its name and limits. Without a key, the server makes one from the name; it never changes. */
+export type PlanPayload = Schemas["DefinePlanRequest"]
+/** A Plan's new name and limits; its key never changes. */
+export type PlanChange = Schemas["ChangePlanRequest"]
+/**
+ * A person's Plan as the Operator Overview shows it on their page and their row of People: which
+ * Plan limits them, the Plan they have whether or not it limits them, and each limit they are over.
+ */
+export type PersonPlanOverview = Schemas["PersonPlanOverviewResponse"]
+/** One limit a person has more of than their Plan allows, as after it was lowered. */
+export type OverLimit = Schemas["OverLimitResponse"]
+/** How many of one thing a person has, beside what the Plan they have allows; null allows any. */
+export type LimitUse = Schemas["LimitUseResponse"]
+/** Everyone a Plan was given to at once, or would be in a dry run, each with the Plan they had. */
+export type PlanAssignments = Schemas["PlanAssignmentsResponse"]
+/** One person given a Plan: the Plan they had, the one they have, and what they are over under it. */
+export type PlanMove = Schemas["PlanMoveResponse"]
+/** What the signed-in User's Plan allows and how much of it they have, for Your plan. */
+export type OwnPlan = Schemas["OwnPlanResponse"]
 /** A User as an Installation Administrator sees them: never their calendars, rules, or events. */
 export type Person = Schemas["UserResponse"]
 export type PersonRole = Person["role"]
@@ -235,13 +262,17 @@ export type PeoplePage = Schemas["UserPageResponse"]
 type PeopleParams = NonNullable<paths["/api/v1/users"]["get"]["parameters"]["query"]>
 export type PeopleSort = NonNullable<PeopleParams["sort"]>
 export type SortOrder = NonNullable<PeopleParams["order"]>
-/** What the People page asks for; an empty role, state, or verdict matches everyone. */
+/** What the People page asks for; an empty role, state, verdict, or Plan matches everyone. */
 export type PeopleQuery = {
   /** Part of an email, in any case. */
   search: string
   role: PersonRole | ""
   state: PersonState | ""
   verdict: Verdict | ""
+  /** The key of the Plan people have, their own or as the default, as the Plans tab counts them. */
+  plan: string
+  /** Only the people over a limit of the Plan they have, whether or not Plans are on. */
+  over: boolean
   sort: PeopleSort
   order: SortOrder
   /** From 1. */
@@ -256,6 +287,18 @@ export const ACTIVITY_PAGE_SIZE = 100
 /** How many incidents the server lists at a time, as `INCIDENTS_READ` sets it. */
 export const INCIDENTS_PAGE_SIZE = 100
 const PEOPLE_PAGE_SIZE = 50
+/** How many people the Remove note on a Plan names before "and 2 more". */
+const PLAN_HOLDERS_NAMED = 3
+/**
+ * How many people Assign people lists at a time, by email, and how many a Plan's panel lists as
+ * having it; a search, or Everyone, finds the others.
+ */
+const PLAN_CANDIDATES_LISTED = 100
+
+/** The first `pageSize` people a query finds, by email. */
+function peopleByEmail(query: { plan: string } | { search?: string }, pageSize: number) {
+  return call("/api/v1/users", "get", { query: { ...query, sort: "email", order: "asc", page: 1, page_size: pageSize } })
+}
 
 export const api = {
   setup: () => call("/api/v1/setup", "get"),
@@ -279,6 +322,8 @@ export const api = {
   /** Whether the signed-in User's rules run soon after their provider reports a change. */
   setInstantSync: (instantSync: boolean) =>
     call("/api/v1/account/instant-sync", "put", { body: { instant_sync: instantSync } }),
+  /** What the signed-in User's Plan allows and how much of it they have. */
+  ownPlan: () => call("/api/v1/account/plan", "get"),
   /** What the Operator Overview shows administrators about the signed-in User. */
   /** Whether the signed-in User may delete themself now, and whether nobody would remain. */
   ownAccountDeletion: () => call("/api/v1/account/deletion", "get"),
@@ -286,6 +331,14 @@ export const api = {
     call("/api/v1/account", "delete", { body: { password, projections } }),
   registration: () => call("/api/v1/registration", "get"),
   setRegistrationPolicy: (policy: RegistrationPolicy) => call("/api/v1/registration", "put", { body: { policy } }),
+  plans: () => call("/api/v1/plans", "get"),
+  /** Turning Plans off keeps every Plan; send the current default when only the switch changes. */
+  setPlansSetting: (enabled: boolean, defaultPlan: string | null) =>
+    call("/api/v1/plan-settings", "put", { body: { enabled, default_plan: defaultPlan } }),
+  definePlan: (payload: PlanPayload) => call("/api/v1/plans", "post", { body: payload }),
+  changePlan: (key: string, payload: PlanChange) =>
+    call("/api/v1/plans/{plan_key}", "put", { params: { plan_key: key }, body: payload }),
+  removePlan: (key: string) => call("/api/v1/plans/{plan_key}", "delete", { params: { plan_key: key } }),
   invitations: () => call("/api/v1/invitations", "get"),
   invite: () => call("/api/v1/invitations", "post"),
   revokeInvitation: (invitationId: string) =>
@@ -297,19 +350,33 @@ export const api = {
   checkPasswordReset: (token: string) => call("/api/v1/password-resets/check", "post", { body: { token } }),
   resetPassword: (token: string, password: string) =>
     call("/api/v1/password-resets", "post", { body: { token, password } }),
-  people: ({ search, role, state, verdict, sort, order, page }: PeopleQuery) =>
+  people: ({ search, role, state, verdict, plan, over, sort, order, page }: PeopleQuery) =>
     call("/api/v1/users", "get", {
       query: {
         ...(search.trim() ? { search: search.trim() } : {}),
         role: role || null,
         state: state || null,
         verdict: verdict || null,
+        plan: plan || null,
+        ...(over ? { over } : {}),
         sort,
         order,
         page,
         page_size: PEOPLE_PAGE_SIZE,
       },
     }),
+  /** The first people who have a Plan, by email, and how many have it, for its Remove note. */
+  planHolders: (plan: string) => peopleByEmail({ plan }, PLAN_HOLDERS_NAMED),
+  /** Who has a Plan, by email, as its panel lists them under "Have Free now". */
+  planPeople: (plan: string) => peopleByEmail({ plan }, PLAN_CANDIDATES_LISTED),
+  /** Everyone Assign people may list, by email, narrowed by part of an email. */
+  planCandidates: (search: string) => peopleByEmail(search ? { search } : {}, PLAN_CANDIDATES_LISTED),
+  /**
+   * Gives each of up to 100 people the Plan `plans` names by their id, or the Default Plan with
+   * null, at once, all or none; with `dryRun`, gives nothing and answers what it would do.
+   */
+  assignPlans: (plans: Record<string, string | null>, dryRun: boolean) =>
+    call("/api/v1/plan-assignments", "post", { body: { plans, dry_run: dryRun } }),
   setPersonRole: (userId: string, role: PersonRole) =>
     call("/api/v1/users/{user_id}/role", "put", { params: { user_id: userId }, body: { role } }),
   setPersonState: (userId: string, state: PersonState) =>

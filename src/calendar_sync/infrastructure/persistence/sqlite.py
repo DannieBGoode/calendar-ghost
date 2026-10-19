@@ -44,6 +44,7 @@ from calendar_sync.domain.audit import AuditAction, AuditEntry, RecordedDecision
 from calendar_sync.domain.causes import NO_CAUSE, WITHOUT_CAUSE, Cause
 from calendar_sync.domain.incidents import IncidentResolution
 from calendar_sync.domain.model import (
+    KEEPS_PLACE,
     AllDayRange,
     AllDaySyncPolicy,
     BirthdayPolicy,
@@ -197,9 +198,9 @@ class SqliteSyncRuleRepository:
                     privacy_policy, all_day_policy, busy_title,
                     tentative_policy, unanswered_policy, birthday_policy,
                     initial_lookback_days, state, reprojection_required,
-                    awaiting_reauthorization, user_id, creation_order
+                    awaiting_reauthorization, keeps_place, user_id, creation_order
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     (SELECT COALESCE(MAX(creation_order), 0) + 1 FROM sync_rules)
                 )
                 """,
@@ -221,7 +222,7 @@ class SqliteSyncRuleRepository:
                 privacy_policy = ?, all_day_policy = ?, busy_title = ?,
                 tentative_policy = ?, unanswered_policy = ?, birthday_policy = ?,
                 initial_lookback_days = ?, state = ?, reprojection_required = ?,
-                awaiting_reauthorization = ?
+                awaiting_reauthorization = ?, keeps_place = ?
             WHERE id = ? AND user_id = ?
             """,
             (*_rule_values(rule)[1:], rule.id.value, self._user),
@@ -248,6 +249,19 @@ class SqliteSyncRuleRepository:
         )
         self._connection.execute("DELETE FROM incidents WHERE rule_id = ? AND user_id = ?", owned)
         self._connection.execute("DELETE FROM sync_rules WHERE id = ? AND user_id = ?", owned)
+
+    def inherit_place(self, rule: SyncRuleId, of: SyncRuleId) -> None:
+        # creation_order is not unique: until `of` is removed, the two rank together, by id.
+        self._connection.execute(
+            """
+            UPDATE sync_rules SET creation_order = (
+                SELECT creation_order FROM sync_rules WHERE id = :of AND user_id = :user
+            )
+            WHERE id = :rule AND user_id = :user
+                AND EXISTS (SELECT 1 FROM sync_rules WHERE id = :of AND user_id = :user)
+            """,
+            {"rule": rule.value, "of": of.value, "user": self._user},
+        )
 
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
         row = self._connection.execute(
@@ -1067,10 +1081,12 @@ def _rule_values(rule: SyncRule) -> tuple[object, ...]:
         rule.state.value,
         int(rule.reprojection_required),
         int(rule.awaiting_reauthorization),
+        int(rule.keeps_place),
     )
 
 
 def rule_from_row(row: sqlite3.Row) -> SyncRule:
+    state = SyncRuleState(str(row["state"]))
     return SyncRule(
         id=SyncRuleId(str(row["id"])),
         source=CalendarEndpoint(
@@ -1090,9 +1106,11 @@ def rule_from_row(row: sqlite3.Row) -> SyncRule:
             birthdays=BirthdayPolicy(str(row["birthday_policy"])),
         ),
         initial_lookback_days=int(row["initial_lookback_days"]),
-        state=SyncRuleState(str(row["state"])),
+        state=state,
         reprojection_required=bool(row["reprojection_required"]),
         awaiting_reauthorization=bool(row["awaiting_reauthorization"]),
+        # A mark left on a row in any other state reads as none.
+        keeps_place=bool(row["keeps_place"]) and state in KEEPS_PLACE,
     )
 
 

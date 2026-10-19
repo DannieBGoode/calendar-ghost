@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping
 from datetime import datetime, timedelta
 from types import TracebackType
 from typing import Self, cast
@@ -55,13 +56,27 @@ class Owners:
 
 
 class Cadences:
-    """Each User's Sync Cadence; Users named here have no Instant Sync in their Plan."""
+    """Each User's Sync Cadence; Users named here have no Instant Sync in their Plan. Once any
+    User is unreadable, the batch read fails, and so does reading that User alone, as a locked
+    database would."""
 
-    def __init__(self, *scheduled_only: UserId) -> None:
+    def __init__(
+        self, *scheduled_only: UserId, unreadable: frozenset[UserId] = frozenset()
+    ) -> None:
         self.scheduled_only = set(scheduled_only)
+        self.unreadable = unreadable
+        self.batches = 0
 
     def cadence(self, user: UserId) -> SyncCadence:
+        if user in self.unreadable:
+            raise RuntimeError("database is locked")
         return SyncCadence(instant=user not in self.scheduled_only, poll_every=SCHEDULED_EVERY)
+
+    def cadences(self, users: Collection[UserId]) -> Mapping[UserId, SyncCadence]:
+        self.batches += 1
+        if self.unreadable:
+            raise RuntimeError("database is locked")
+        return {user: self.cadence(user) for user in users}
 
 
 class Upkeep:
@@ -213,3 +228,44 @@ def test_users_no_provider_can_watch_for_are_skipped() -> None:
     _upkeep(Owners(_owner(USER), _owner(OTHER_USER)), visits, missing=frozenset({USER})).run()
 
     assert visits == [(OTHER_USER, True, ADDRESS)]
+
+
+def test_a_cycle_reads_every_users_cadence_at_once() -> None:
+    cadence = Cadences()
+    owners = Owners(_owner(USER), _owner(OTHER_USER), _owner(THIRD_USER))
+
+    _upkeep(owners, [], cadence=cadence).run()
+
+    assert cadence.batches == 1
+
+
+def test_a_user_whose_cadence_cannot_be_read_keeps_their_watches(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    visits: list[Visit] = []
+    # The batch read fails, so each User is read alone: USER's read fails too, and OTHER_USER's
+    # Plan has no Instant Sync.
+    cadence = Cadences(OTHER_USER, unreadable=frozenset({USER}))
+    owners = Owners(_owner(USER), _owner(OTHER_USER), _owner(THIRD_USER, wanted=False))
+
+    with caplog.at_level("WARNING"):
+        _upkeep(owners, visits, cadence=cadence).run()
+
+    # USER counts as instant, so upkeep keeps their watches instead of retiring them.
+    assert visits == [
+        (USER, True, ADDRESS),
+        (OTHER_USER, False, ADDRESS),
+        (THIRD_USER, False, ADDRESS),
+    ]
+    assert "RuntimeError" in caplog.text
+    assert "database is locked" not in caplog.text
+
+
+def test_an_unreadable_cadence_never_allows_watches_without_an_address_or_the_wish() -> None:
+    visits: list[Visit] = []
+    cadence = Cadences(unreadable=frozenset({USER, OTHER_USER}))
+    owners = Owners(_owner(USER), _owner(OTHER_USER, wanted=False))
+
+    _upkeep(owners, visits, cadence=cadence, address=None).run()
+
+    assert visits == [(USER, False, None), (OTHER_USER, False, None)]

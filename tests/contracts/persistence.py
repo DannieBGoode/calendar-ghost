@@ -74,8 +74,10 @@ from calendar_sync.domain.model import (
     SyncReason,
     SyncRule,
     SyncRuleId,
+    SyncRuleState,
     TimedInterval,
 )
+from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.watches import (
@@ -139,6 +141,9 @@ class PersistenceHarness:
     prefer: Callable[[UserId, bool], object]
     """Record whether a User wants Instant Sync, as their account settings would outside any unit
     of work."""
+    issue_token: Callable[[UserId, bool], object]
+    """Record an Integration Token of a User, revoked or not, as issuing one would outside any
+    unit of work."""
 
     @property
     def unit_of_work(self) -> UnitOfWorkFactory:
@@ -378,6 +383,31 @@ class PersistenceContract:
         with harness.unit_of_work() as uow:
             assert uow.rules.list() == (OTHER_RULE, stopped)
             assert uow.rules.get(RULE.id) == stopped
+
+    def test_a_draft_keeps_its_place_through_its_preview_until_it_starts(
+        self, harness: PersistenceHarness
+    ) -> None:
+        draft = replace(RULE, state=SyncRuleState.DRAFT, keeps_place=True)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(draft)
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            added = uow.rules.get(RULE.id)
+            uow.rules.save(draft.mark_previewed())
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            previewed = uow.rules.list()
+            uow.rules.save(draft.mark_previewed().enable())
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            started = uow.rules.get(RULE.id)
+
+        assert added == draft
+        assert previewed == (replace(draft, state=SyncRuleState.PREVIEWED),)
+        assert previewed[0].keeps_place
+        assert started is not None
+        assert not started.keeps_place
+        assert started == RULE
 
     def test_a_second_rule_for_one_direction_is_refused(self, harness: PersistenceHarness) -> None:
         with harness.unit_of_work() as uow:
@@ -1478,6 +1508,73 @@ class PersistenceContract:
         )
         assert records[OTHER_USER].rules == (RecordedRule(theirs, None, None),)
 
+    def test_a_replacement_ranks_where_the_rule_it_replaced_ranked(
+        self, harness: PersistenceHarness
+    ) -> None:
+        successor = replace(
+            RULE,
+            id=SyncRuleId("rule-9"),
+            destination=endpoint("work-account", "replacement-calendar"),
+            state=SyncRuleState.DRAFT,
+        )
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.rules.add(OTHER_RULE)
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            # As a Rule Replacement moves a place: in the step that begins the old rule's removal.
+            uow.rules.save(RULE.begin_removal())
+            uow.rules.add(successor.take_place_of(RULE))
+            uow.rules.inherit_place(successor.id, of=RULE.id)
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            uow.rules.remove(RULE.id)
+            uow.commit()
+
+        with harness.installation() as installation:
+            records = installation.status_records([USER])[USER]
+        with harness.unit_of_work() as uow:
+            listed = uow.rules.list()
+
+        # Created after OTHER_RULE and sorting after it by identifier, it ranks first all the same.
+        assert [recorded.rule.id for recorded in records.rules] == [successor.id, OTHER_RULE.id]
+        assert records.rules[0].rule.keeps_place
+        # Listing keeps its order by identifier, so the Rules page does not change.
+        assert [each.id for each in listed] == [OTHER_RULE.id, successor.id]
+
+    def test_a_place_passes_only_between_rules_of_one_user(
+        self, harness: PersistenceHarness
+    ) -> None:
+        for account in (THEIR_SOURCE, THEIR_DESTINATION):
+            harness.connect_account(account.connected_account_id, OTHER_USER)
+        their_first = replace(
+            RULE, id=SyncRuleId("their-b"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
+        )
+        their_second = replace(
+            their_first,
+            id=SyncRuleId("their-a"),
+            destination=endpoint(THEIR_DESTINATION.connected_account_id.value, "other-calendar"),
+        )
+        # Created in turns, so the two Users' rules interleave, and each User's identifiers sort
+        # against the order they were created in.
+        _commit_as(harness, OTHER_USER, lambda uow: uow.rules.add(their_first))
+        _commit_as(harness, USER, lambda uow: uow.rules.add(RULE))
+        _commit_as(harness, OTHER_USER, lambda uow: uow.rules.add(their_second))
+        _commit_as(harness, USER, lambda uow: uow.rules.add(OTHER_RULE))
+
+        with harness.unit_of_work() as uow:
+            uow.rules.inherit_place(OTHER_RULE.id, of=their_first.id)
+            uow.rules.inherit_place(their_first.id, of=OTHER_RULE.id)
+            uow.commit()
+        with harness.installation() as installation:
+            records = installation.status_records([USER, OTHER_USER])
+
+        assert [recorded.rule.id for recorded in records[USER].rules] == [RULE.id, OTHER_RULE.id]
+        assert [recorded.rule.id for recorded in records[OTHER_USER].rules] == [
+            their_first.id,
+            their_second.id,
+        ]
+
     def test_status_records_hold_each_users_accounts_and_last_sync(
         self, harness: PersistenceHarness
     ) -> None:
@@ -1759,6 +1856,55 @@ class PersistenceContract:
         assert use[USER].provider_calls == ()
         assert (use[OTHER_USER].rules, use[OTHER_USER].connected_accounts) == (0, 1)
         assert use[OTHER_USER].activity_entries == 0
+
+    def test_plan_use_counts_rules_that_count_every_account_and_unrevoked_tokens(
+        self, harness: PersistenceHarness
+    ) -> None:
+        def to(
+            calendar: str, state: SyncRuleState, *, lapsed: bool = False, keeps: bool = False
+        ) -> SyncRule:
+            return replace(
+                RULE,
+                id=SyncRuleId(f"rule-{calendar}"),
+                destination=endpoint("work-account", calendar),
+                state=state,
+                awaiting_reauthorization=lapsed,
+                keeps_place=keeps,
+            )
+
+        counting = [
+            to("enabled", SyncRuleState.ENABLED),
+            to("lapsed", SyncRuleState.DEGRADED, lapsed=True),
+            to("previewed-keeping", SyncRuleState.PREVIEWED, keeps=True),
+            to("draft-keeping", SyncRuleState.DRAFT, keeps=True),
+        ]
+        not_counting = [
+            to("stopped", SyncRuleState.DEGRADED),
+            to("paused", SyncRuleState.PAUSED),
+            to("draft", SyncRuleState.DRAFT),
+            to("previewed", SyncRuleState.PREVIEWED),
+            to("removing", SyncRuleState.REMOVING),
+        ]
+        with harness.unit_of_work() as uow:
+            for each in (*counting, *not_counting):
+                uow.rules.add(each)
+            uow.commit()
+        old_account = ConnectedAccountId("old-account")
+        harness.connect_account(old_account)
+        harness.disconnect_account(old_account)
+        for revoked in (False, False, True):
+            harness.issue_token(USER, revoked)
+        harness.connect_account(THEIR_SOURCE.connected_account_id, OTHER_USER)
+        harness.issue_token(OTHER_USER, False)
+        nobody = UserId("user-3")
+
+        with harness.installation() as installation:
+            use = installation.plan_use([USER, OTHER_USER, nobody])
+
+        # USER's two accounts the rules use and a disconnected one.
+        assert use[USER] == PlanUse(rules=4, connected_accounts=3, integration_tokens=2)
+        assert use[OTHER_USER] == PlanUse(rules=0, connected_accounts=1, integration_tokens=1)
+        assert use[nobody] == PlanUse(rules=0, connected_accounts=0, integration_tokens=0)
 
     # Calendar Watches and Instant Sync Requests
 

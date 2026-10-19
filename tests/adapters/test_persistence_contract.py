@@ -55,6 +55,10 @@ class TestInMemoryUnitOfWork(PersistenceContract):
             else:
                 off.add(user)
 
+        def issue_token(user: UserId, revoked: bool) -> None:
+            tokens = database.database.unrevoked_tokens
+            tokens[user] = tokens.get(user, 0) + (0 if revoked else 1)
+
         return PersistenceHarness(
             database.for_user,
             connect=connect,
@@ -64,6 +68,7 @@ class TestInMemoryUnitOfWork(PersistenceContract):
             incidents=lambda user: InMemoryIncidentRepository(database.database, user),
             request_run=request_run,
             prefer=prefer,
+            issue_token=issue_token,
         )
 
 
@@ -125,6 +130,24 @@ class TestSqliteUnitOfWork(PersistenceContract):
                     "UPDATE users SET instant_sync = ? WHERE id = ?", (int(wanted), user.value)
                 )
 
+        def issue_token(user: UserId, revoked: bool) -> None:
+            with transaction(database) as connection:
+                number = connection.execute("SELECT COUNT(*) FROM integration_tokens").fetchone()[0]
+                connection.execute(
+                    """
+                    INSERT INTO integration_tokens (
+                        id, user_id, name, token_hash, scopes, created_at, revoked_at
+                    ) VALUES (?, ?, 'Monitor', ?, 'status:read', ?, ?)
+                    """,
+                    (
+                        f"token-{number}",
+                        user.value,
+                        f"hash-{number}",
+                        NOW.isoformat(),
+                        NOW.isoformat() if revoked else None,
+                    ),
+                )
+
         return PersistenceHarness(
             # Source Observations are sealed, so the store needs a History Cipher to keep them.
             SqliteUnitOfWorkFactory(
@@ -137,4 +160,5 @@ class TestSqliteUnitOfWork(PersistenceContract):
             incidents=lambda user: SqliteIncidentRepository(database, user),
             request_run=request_run,
             prefer=prefer,
+            issue_token=issue_token,
         )

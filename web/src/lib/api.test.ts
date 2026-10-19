@@ -92,6 +92,36 @@ describe("api routes", () => {
     stubFetch(204)
     await expect(api.logOut()).resolves.toBeUndefined()
   })
+
+  it("sends each Plans change to its route, with null for no default and no Plan of one's own", async () => {
+    const limits = { rules: 5, connected_accounts: null, integration_tokens: 0, sync_interval: "instant" } as const
+    const cases: [() => Promise<unknown>, ReturnType<typeof requested>][] = [
+      [() => api.ownPlan(), { url: "/api/v1/account/plan", method: "GET", body: undefined }],
+      [() => api.plans(), { url: "/api/v1/plans", method: "GET", body: undefined }],
+      [
+        () => api.setPlansSetting(false, null),
+        { url: "/api/v1/plan-settings", method: "PUT", body: JSON.stringify({ enabled: false, default_plan: null }) },
+      ],
+      [
+        () => api.definePlan({ key: "family", name: "Family", limits }),
+        { url: "/api/v1/plans", method: "POST", body: JSON.stringify({ key: "family", name: "Family", limits }) },
+      ],
+      [
+        () => api.changePlan("family", { name: "Family", limits }),
+        { url: "/api/v1/plans/family", method: "PUT", body: JSON.stringify({ name: "Family", limits }) },
+      ],
+      [() => api.removePlan("a b"), { url: "/api/v1/plans/a%20b", method: "DELETE", body: undefined }],
+      [
+        () => api.assignPlans({ "user-1": null }, false),
+        { url: "/api/v1/plan-assignments", method: "POST", body: JSON.stringify({ plans: { "user-1": null }, dry_run: false }) },
+      ],
+    ]
+    for (const [send, expected] of cases) {
+      const fetch = stubFetch(expected.method === "DELETE" ? 204 : 200)
+      await send()
+      expect(requested(fetch)).toEqual(expected)
+    }
+  })
 })
 
 describe("errorDetail", () => {

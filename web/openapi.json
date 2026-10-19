@@ -89,6 +89,30 @@
         "title": "ActivityEventResponse",
         "type": "object"
       },
+      "AppliedPlanResponse": {
+        "description": "A Plan a User has, such as the one that limits them now.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "on_default": {
+            "title": "On Default",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "on_default"
+        ],
+        "title": "AppliedPlanResponse",
+        "type": "object"
+      },
       "AuditEntryResponse": {
         "properties": {
           "action": {
@@ -314,6 +338,24 @@
           "new_password"
         ],
         "title": "ChangePasswordRequest",
+        "type": "object"
+      },
+      "ChangePlanRequest": {
+        "properties": {
+          "limits": {
+            "$ref": "#/components/schemas/PlanLimitsRequest"
+          },
+          "name": {
+            "maxLength": 200,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "limits"
+        ],
+        "title": "ChangePlanRequest",
         "type": "object"
       },
       "ClearActivityRequest": {
@@ -654,6 +696,36 @@
           "oldest_activity_at"
         ],
         "title": "DatabaseUsageResponse",
+        "type": "object"
+      },
+      "DefinePlanRequest": {
+        "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/PlanLimitsRequest"
+          },
+          "name": {
+            "maxLength": 200,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "limits"
+        ],
+        "title": "DefinePlanRequest",
         "type": "object"
       },
       "DeleteOwnAccountRequest": {
@@ -1473,6 +1545,32 @@
         "title": "IssuedLinkResponse",
         "type": "object"
       },
+      "LimitUseResponse": {
+        "description": "How many of one resource a person has, beside what the Plan they have allows.",
+        "properties": {
+          "allowed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed"
+          },
+          "in_use": {
+            "title": "In Use",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "in_use",
+          "allowed"
+        ],
+        "title": "LimitUseResponse",
+        "type": "object"
+      },
       "LinkRequest": {
         "properties": {
           "token": {
@@ -1588,6 +1686,35 @@
         "title": "NotificationPreferenceRequest",
         "type": "object"
       },
+      "OverLimitResponse": {
+        "description": "One limit a person has more of than their Plan allows: they keep everything, but cannot\nadd another until they are within it.",
+        "properties": {
+          "allowed": {
+            "title": "Allowed",
+            "type": "integer"
+          },
+          "in_use": {
+            "title": "In Use",
+            "type": "integer"
+          },
+          "limit": {
+            "enum": [
+              "rules",
+              "connected_accounts",
+              "integration_tokens"
+            ],
+            "title": "Limit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "limit",
+          "in_use",
+          "allowed"
+        ],
+        "title": "OverLimitResponse",
+        "type": "object"
+      },
       "OwnAccountDeletionResponse": {
         "properties": {
           "last_user": {
@@ -1604,6 +1731,87 @@
           "last_user"
         ],
         "title": "OwnAccountDeletionResponse",
+        "type": "object"
+      },
+      "OwnPlanResponse": {
+        "description": "What the signed-in User's Plan allows and how much of it they have, for Your plan.",
+        "properties": {
+          "basis": {
+            "enum": [
+              "plans_off",
+              "administrator",
+              "plan"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "connected_accounts": {
+            "title": "Connected Accounts",
+            "type": "integer"
+          },
+          "instant": {
+            "title": "Instant",
+            "type": "boolean"
+          },
+          "integration_tokens": {
+            "title": "Integration Tokens",
+            "type": "integer"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanLimitsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "may_connect_account": {
+            "title": "May Connect Account",
+            "type": "boolean"
+          },
+          "may_issue_token": {
+            "title": "May Issue Token",
+            "type": "boolean"
+          },
+          "over_rule_limit": {
+            "title": "Over Rule Limit",
+            "type": "boolean"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPlanResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "poll_every_minutes": {
+            "title": "Poll Every Minutes",
+            "type": "integer"
+          },
+          "rules_counted": {
+            "title": "Rules Counted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "basis",
+          "plan",
+          "limits",
+          "rules_counted",
+          "connected_accounts",
+          "integration_tokens",
+          "instant",
+          "poll_every_minutes",
+          "may_connect_account",
+          "may_issue_token",
+          "over_rule_limit"
+        ],
+        "title": "OwnPlanResponse",
         "type": "object"
       },
       "PendingInvitationResponse": {
@@ -1627,6 +1835,135 @@
           "expires_at"
         ],
         "title": "PendingInvitationResponse",
+        "type": "object"
+      },
+      "PersonPlanOverviewResponse": {
+        "description": "A person's Plan, as the Operator Overview shows it on their page and their row of People\n(ADR 0038).",
+        "properties": {
+          "assigned": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanNameResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assigned_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned At"
+          },
+          "assigned_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned By"
+          },
+          "basis": {
+            "enum": [
+              "plans_off",
+              "administrator",
+              "plan"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "has": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPlanResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "over": {
+            "items": {
+              "$ref": "#/components/schemas/OverLimitResponse"
+            },
+            "title": "Over",
+            "type": "array"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPlanResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "use": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonPlanUseResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "basis",
+          "plan",
+          "assigned",
+          "has",
+          "over",
+          "assigned_by",
+          "assigned_at",
+          "use"
+        ],
+        "title": "PersonPlanOverviewResponse",
+        "type": "object"
+      },
+      "PersonPlanUseResponse": {
+        "description": "How much of the Plan they have a person uses, each count beside its limit, for the\nmeters on their page (ADR 0030, amended, for the token count). Counts only.",
+        "properties": {
+          "connected_accounts": {
+            "$ref": "#/components/schemas/LimitUseResponse"
+          },
+          "integration_tokens": {
+            "$ref": "#/components/schemas/LimitUseResponse"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/LimitUseResponse"
+          },
+          "sync_interval": {
+            "enum": [
+              "instant",
+              "5_minutes",
+              "10_minutes",
+              "15_minutes",
+              "30_minutes",
+              "60_minutes"
+            ],
+            "title": "Sync Interval",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rules",
+          "connected_accounts",
+          "integration_tokens",
+          "sync_interval"
+        ],
+        "title": "PersonPlanUseResponse",
         "type": "object"
       },
       "PersonResponse": {
@@ -1672,6 +2009,16 @@
               }
             ],
             "title": "Last Synced At"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonPlanOverviewResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "problems": {
             "title": "Problems",
@@ -1720,9 +2067,411 @@
           "verdict",
           "problems",
           "last_synced_at",
-          "resources"
+          "resources",
+          "plan"
         ],
         "title": "PersonResponse",
+        "type": "object"
+      },
+      "PlanAssignmentsRequest": {
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "plans": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Plans",
+            "type": "object"
+          }
+        },
+        "required": [
+          "plans"
+        ],
+        "title": "PlanAssignmentsRequest",
+        "type": "object"
+      },
+      "PlanAssignmentsResponse": {
+        "description": "Everyone a Plan was given to, in the order named, or would be in a dry run.",
+        "properties": {
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/PlanMoveResponse"
+            },
+            "title": "People",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dry_run",
+          "people"
+        ],
+        "title": "PlanAssignmentsResponse",
+        "type": "object"
+      },
+      "PlanLimitsRequest": {
+        "description": "Each limit is a whole number, or null for unlimited.",
+        "properties": {
+          "connected_accounts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected Accounts"
+          },
+          "integration_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Integration Tokens"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
+          },
+          "sync_interval": {
+            "enum": [
+              "instant",
+              "5_minutes",
+              "10_minutes",
+              "15_minutes",
+              "30_minutes",
+              "60_minutes"
+            ],
+            "title": "Sync Interval",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rules",
+          "connected_accounts",
+          "integration_tokens",
+          "sync_interval"
+        ],
+        "title": "PlanLimitsRequest",
+        "type": "object"
+      },
+      "PlanLimitsResponse": {
+        "description": "What a Plan allows; null is unlimited.",
+        "properties": {
+          "connected_accounts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected Accounts"
+          },
+          "integration_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Integration Tokens"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
+          },
+          "sync_interval": {
+            "enum": [
+              "instant",
+              "5_minutes",
+              "10_minutes",
+              "15_minutes",
+              "30_minutes",
+              "60_minutes"
+            ],
+            "title": "Sync Interval",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rules",
+          "connected_accounts",
+          "integration_tokens",
+          "sync_interval"
+        ],
+        "title": "PlanLimitsResponse",
+        "type": "object"
+      },
+      "PlanMoveResponse": {
+        "description": "One person given a Plan, or who would be in a dry run.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "had": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPlanResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "has": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppliedPlanResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "over": {
+            "items": {
+              "$ref": "#/components/schemas/OverLimitResponse"
+            },
+            "title": "Over",
+            "type": "array"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "had",
+          "has",
+          "over"
+        ],
+        "title": "PlanMoveResponse",
+        "type": "object"
+      },
+      "PlanNameResponse": {
+        "description": "A Plan as people know it: its key, which never changes, and its name.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "PlanNameResponse",
+        "type": "object"
+      },
+      "PlanResponse": {
+        "description": "One Plan, as Administration lists it.",
+        "properties": {
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "limited_people": {
+            "title": "Limited People",
+            "type": "integer"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/PlanLimitsResponse"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "over_people": {
+            "title": "Over People",
+            "type": "integer"
+          },
+          "people": {
+            "title": "People",
+            "type": "integer"
+          },
+          "use": {
+            "$ref": "#/components/schemas/PlanUseCountsResponse"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "limits",
+          "is_default",
+          "people",
+          "limited_people",
+          "over_people",
+          "use"
+        ],
+        "title": "PlanResponse",
+        "type": "object"
+      },
+      "PlanUseCountsResponse": {
+        "description": "How much the people a Plan limits have of each resource it limits: each count above 0,\nhighest first, with how many people have it, so a lower limit can say how many people it\nwould leave with more than it allows. Counts only; never who.",
+        "properties": {
+          "connected_accounts": {
+            "items": {
+              "$ref": "#/components/schemas/UseCountResponse"
+            },
+            "title": "Connected Accounts",
+            "type": "array"
+          },
+          "integration_tokens": {
+            "items": {
+              "$ref": "#/components/schemas/UseCountResponse"
+            },
+            "title": "Integration Tokens",
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/UseCountResponse"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules",
+          "connected_accounts",
+          "integration_tokens"
+        ],
+        "title": "PlanUseCountsResponse",
+        "type": "object"
+      },
+      "PlansResponse": {
+        "description": "The Plans setting, the sync intervals offered now, and every Plan by name.",
+        "properties": {
+          "default_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Plan"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "followers": {
+            "title": "Followers",
+            "type": "integer"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/PlanResponse"
+            },
+            "title": "Plans",
+            "type": "array"
+          },
+          "sync_intervals": {
+            "items": {
+              "enum": [
+                "instant",
+                "5_minutes",
+                "10_minutes",
+                "15_minutes",
+                "30_minutes",
+                "60_minutes"
+              ],
+              "type": "string"
+            },
+            "title": "Sync Intervals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "default_plan",
+          "sync_intervals",
+          "followers",
+          "plans"
+        ],
+        "title": "PlansResponse",
+        "type": "object"
+      },
+      "PlansSettingRequest": {
+        "properties": {
+          "default_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Plan"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "default_plan"
+        ],
+        "title": "PlansSettingRequest",
         "type": "object"
       },
       "PreviewItemResponse": {
@@ -2566,6 +3315,10 @@
       },
       "RuleDetailResponse": {
         "properties": {
+          "can_start": {
+            "title": "Can Start",
+            "type": "boolean"
+          },
           "destination": {
             "$ref": "#/components/schemas/NamedCalendarEndpointResponse"
           },
@@ -2589,6 +3342,10 @@
           "initial_lookback_days": {
             "title": "Initial Lookback Days",
             "type": "integer"
+          },
+          "keeps_place": {
+            "title": "Keeps Place",
+            "type": "boolean"
           },
           "last_reconciliation": {
             "anyOf": [
@@ -2639,6 +3396,17 @@
           "reprojection_required": {
             "title": "Reprojection Required",
             "type": "boolean"
+          },
+          "rule_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Limit"
           },
           "running": {
             "anyOf": [
@@ -2701,7 +3469,10 @@
           "last_sync",
           "last_reconciliation",
           "latest_preview",
-          "running"
+          "running",
+          "can_start",
+          "rule_limit",
+          "keeps_place"
         ],
         "title": "RuleDetailResponse",
         "type": "object"
@@ -2865,6 +3636,10 @@
             "title": "Id",
             "type": "string"
           },
+          "keeps_place": {
+            "title": "Keeps Place",
+            "type": "boolean"
+          },
           "last_sync": {
             "anyOf": [
               {
@@ -2959,7 +3734,8 @@
           "poll_every_minutes",
           "last_sync",
           "latest_preview",
-          "running"
+          "running",
+          "keeps_place"
         ],
         "title": "RuleSummaryResponse",
         "type": "object"
@@ -3839,6 +4615,25 @@
         "title": "UpdateRulePolicyRequest",
         "type": "object"
       },
+      "UseCountResponse": {
+        "description": "How many of the people a Plan limits have exactly `in_use` of one resource.",
+        "properties": {
+          "in_use": {
+            "title": "In Use",
+            "type": "integer"
+          },
+          "people": {
+            "title": "People",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "in_use",
+          "people"
+        ],
+        "title": "UseCountResponse",
+        "type": "object"
+      },
       "UserDeletionResponse": {
         "properties": {
           "deleted": {
@@ -3870,6 +4665,16 @@
       "UserOverviewResponse": {
         "description": "What the Operator Overview shows about one User, to an administrator and to that User:\ntheir Installation Status with calendars named \"Calendar 1\", \"Calendar 2\", and so on, and\ntheir resource use. Never a calendar's name or identifier, an account's email, or an event.",
         "properties": {
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonPlanOverviewResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "resources": {
             "$ref": "#/components/schemas/ResourceUseResponse"
           },
@@ -3883,7 +4688,8 @@
         "required": [
           "user",
           "status",
-          "resources"
+          "resources",
+          "plan"
         ],
         "title": "UserOverviewResponse",
         "type": "object"
@@ -4367,6 +5173,53 @@
           }
         },
         "summary": "Change Password"
+      }
+    },
+    "/api/v1/account/plan": {
+      "get": {
+        "description": "What the signed-in User's Plan allows and how much of it they have, for Your plan. A\nfault reading Plans fails this request; each limit is still checked where it applies.",
+        "operationId": "own_plan_api_v1_account_plan_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnPlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Own Plan"
       }
     },
     "/api/v1/accounts": {
@@ -5726,6 +6579,335 @@
         "summary": "Check Password Reset"
       }
     },
+    "/api/v1/plan-assignments": {
+      "post": {
+        "description": "Give each of up to 100 people their own Plan, or with null the Default Plan, at once,\nall or none, and answer each person's Plan before and after and what they are over. The\nDefault Plan's key is given as null is, so they follow it. With `dry_run`, give nothing and\nanswer the same, so who would be over is known before anyone confirms.",
+        "operationId": "assign_plans_api_v1_plan_assignments_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanAssignmentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanAssignmentsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Plans"
+      }
+    },
+    "/api/v1/plan-settings": {
+      "put": {
+        "description": "Turn Plans on or off, and choose the Default Plan. Turning Plans on with no default makes\na Plan named \"No limits\" the default; the default cannot be cleared while Plans are on.\nTurning them off is always allowed and keeps every Plan and assignment.",
+        "operationId": "set_plans_setting_api_v1_plan_settings_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlansSettingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlansResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Plans Setting"
+      }
+    },
+    "/api/v1/plans": {
+      "get": {
+        "description": "Every Plan with how many people have it and how many of them have more than it allows,\nthe Plans setting, and the offered intervals.",
+        "operationId": "list_plans_api_v1_plans_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlansResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Plans"
+      },
+      "post": {
+        "description": "Add a Plan. Its key is the one asked for, or one made from its name; it never changes,\nso billing can name it later.",
+        "operationId": "define_plan_api_v1_plans_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DefinePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Define Plan"
+      }
+    },
+    "/api/v1/plans/{plan_key}": {
+      "delete": {
+        "description": "Remove a Plan that is not the default and that nobody has.",
+        "operationId": "remove_plan_api_v1_plans__plan_key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_key",
+            "required": true,
+            "schema": {
+              "title": "Plan Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Plan"
+      },
+      "put": {
+        "description": "Rename a Plan or change its limits; its key stays. New limits apply at once to new\nrules, accounts, and tokens, and stop nothing that exists.",
+        "operationId": "change_plan_api_v1_plans__plan_key__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_key",
+            "required": true,
+            "schema": {
+              "title": "Plan Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Plan"
+      }
+    },
     "/api/v1/providers": {
       "get": {
         "description": "The calendar providers this installation configured, and how to connect each.",
@@ -7045,7 +8227,7 @@
     },
     "/api/v1/users": {
       "get": {
-        "description": "One page of the people here, by part of their email, role, state, and Installation\nStatus, each with what the Operator Overview shows about them; never their calendars.",
+        "description": "One page of the people here, by part of their email, role, state, Installation Status,\nPlan, and whether they are over a limit of it, each with what the Operator Overview shows\nabout them; never their calendars.",
         "operationId": "users_api_v1_users_get",
         "parameters": [
           {
@@ -7122,6 +8304,33 @@
                 }
               ],
               "title": "Verdict"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plan",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plan"
+            }
+          },
+          {
+            "in": "query",
+            "name": "over",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Over",
+              "type": "boolean"
             }
           },
           {

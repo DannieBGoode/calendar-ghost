@@ -30,11 +30,14 @@ Each phase can be released alone and keeps existing installations working.
 2. **Operator Overview.** The administrator's view, documentation of what it shows about each User
    (ADR 0030, amended 2026-10-10), and provider calls and storage counted per User. Storage is counted in records (rules,
    Connected Accounts, Activity entries), not bytes.
-3. **Plans.** Plan definitions and assignment, the four limits, a per-User sync interval in the
-   scheduler, and Plan Hold. Plans implement the `SyncCadencePolicy` port
-   (`application/sync/watch_ports.py`) from each Plan's shortest sync interval, whose shortest value
-   is "instant" ([ADR 0036](../../adr/0036-instant-sync-through-provider-notices.md)); until then,
-   `EveryUserInstant` gives every User Instant Sync and a five-minute Scheduled Sync.
+3. **Plans.** Four slices, each of which ships alone after the first
+   ([Plans design](2026-10-15-plans-design.md)): (1) Plans core: Plan definitions and assignment,
+   the Default Plan, the rule, Connected Account, and Integration Token limits, and Instant Sync or
+   a five-minute sync per Plan, through `PlanCadence`, which implements the `SyncCadencePolicy`
+   port (`application/sync/watch_ports.py`) from each User's Allowance
+   ([ADR 0036](../../adr/0036-instant-sync-through-provider-notices.md),
+   [ADR 0038](../../adr/0038-plans-allowances-and-limits.md)); (2) sync intervals of 10 to 60
+   minutes in the scheduler; (3) the manual-run limit; (4) Plan Hold.
 4. **Open registration.** The Open Registration Policy, the sign-up page, email verification,
    self-service password reset, sign-up rate limits, and continuous backup guidance for the Hosted
    Service.

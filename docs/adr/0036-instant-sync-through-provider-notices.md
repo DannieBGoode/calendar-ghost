@@ -4,7 +4,8 @@ Builds on [ADR 0022](0022-route-calendar-requests-by-provider.md) (amended with 
 descriptors), [ADR 0027](0027-lapsed-authorization-and-automatic-recovery.md),
 [ADR 0028](0028-plans-apart-from-commercial-mode.md), and
 [ADR 0033](0033-decide-an-incidents-next-step-in-the-domain.md). Amends
-[ADR 0029](0029-isolate-users-in-one-sqlite-database.md).
+[ADR 0029](0029-isolate-users-in-one-sqlite-database.md). Amended by
+[ADR 0038](0038-plans-allowances-and-limits.md): each User's Plan decides their Sync Cadence.
 
 ## Context
 
@@ -101,3 +102,23 @@ design implements `SyncCadencePolicy` from Plans.
   a whole mailbox, and a mailbox allows 1,000 subscriptions across every application.
 - **Running the rule inside the notice request.** Rejected: Graph needs an answer within 3 seconds,
   and a run takes longer; a durable request also survives a crash.
+
+## Amendment: the Plan decides the Sync Cadence (2026-10-15)
+
+`PlanCadence` (`application/sync/watch_ports.py`) replaces `EveryUserInstant` as the installation's
+`SyncCadencePolicy`. Each User's Sync Cadence follows their Allowance
+([ADR 0038](0038-plans-allowances-and-limits.md)), so their Plan decides whether Instant Sync is
+allowed. With Plans off, and for every Installation Administrator, it is allowed, with a
+five-minute Scheduled Sync, as before. `EveryUserInstant` remains the default of `Adapters`, which
+`build_adapters` replaces, and a policy for tests.
+
+- `SyncCadencePolicy` gains `cadences(users)`, one read for many Users. Instant Sync dispatch,
+  watch upkeep, and Installation Hints read it once and, when it fails, each User alone. A User
+  whose own read still fails counts as instant, so a transient fault never drops their Instant
+  Sync Requests or retires their watches. `InstantSyncStatus` falls back to the default cadence,
+  so a fault in Plans never breaks sign-in or the rules API.
+- A Plan without Instant Sync needs no other code: dispatch drops the User's pending requests,
+  upkeep retires their watches, and availability reads `not_in_plan`. The User's own choice is
+  kept, so Instant Sync returns by itself if their Plan allows it again.
+- Scheduled Sync still runs every rule every five minutes in this release, whatever the Plan's
+  interval.

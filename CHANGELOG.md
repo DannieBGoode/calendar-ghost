@@ -6,6 +6,38 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- Plans let an administrator limit how much each person uses
+  ([ADR 0038](docs/adr/0038-plans-allowances-and-limits.md)). Plans are off by default, and while
+  they are off nothing changes. Administrators are never limited, and under **Only me** Plans stay
+  hidden. Under **People → Plans**, one **Plans** switch turns them on, and a table compares the
+  Plans: the most active rules, calendar accounts, and Integration Tokens a person may have, each
+  No limit or Up to a number, the sync speed, Instant or every 5 minutes, and how many people have
+  each Plan and are over a limit. A Plan opens in a side panel at its own address
+  (`/people/plans/{key}`) to edit it, or to give it to people after a dry run says who would be
+  over. Everyone without a Plan of their own has the default; turning Plans on with no default adds
+  a Plan named No limits, which limits nobody, as the default. **Everyone** shows each person's
+  Plan, lists who has a Plan or is over a limit, and gives the people selected another Plan, with
+  **Undo**. A person's page and **Settings → Your account → Your plan** show a meter for each
+  limit. Once a Plan is the default, **Invitations** says which Plan someone invited will get.
+- With Plans on, starting a rule, connecting a new calendar account, and issuing a token respect
+  the person's Plan, and each control says so at the limit and links to Your plan. A Plan that
+  syncs every 5 minutes has no Instant Sync. Reauthorization is never refused. A lowered limit
+  refuses only what is new and stops nothing: rules beyond it keep syncing, and existing accounts
+  and tokens keep working. Returning to setup turns Plans off and keeps their definitions.
+- The Plans API: `GET` and `POST /api/v1/plans`, `PUT` and `DELETE /api/v1/plans/{plan_key}`,
+  `PUT /api/v1/plan-settings`, and `POST /api/v1/plan-assignments`, which gives each of up to 100
+  people the Plan it names for them, all or none, so Undo never gives back only some, and with
+  `dry_run` only says who would be over; giving the default's key means following the default.
+  `GET /api/v1/account/plan` answers Your plan. People rows and a person's overview gain `plan`,
+  `GET /api/v1/users` filters by `?plan=` and `?over=true`, rule details gain `can_start` and
+  `rule_limit`, and rules and rule details gain `keeps_place`. A Plan's key is made from its name
+  unless `POST` names one; no Plan has the key `new`. New problem codes: `plan_limit_reached`,
+  `plans_need_default`, `plan_not_found`, `plan_key_taken`,
+  `plan_name_taken`, `plan_in_use`, `plan_is_default`, `invalid_plan`, and `invalid_assignment`; a
+  new account past the limit returns to Connections with the OAuth outcome `account_limit_reached`.
+- Migration 33 adds the `plans` table and the Plan columns. Rolling back to an earlier release
+  works with the same database, which ignores them and limits nobody; after upgrading again,
+  Plans are as the administrator left them.
 - Instant Sync: with a public HTTPS address in `CALENDAR_SYNC_PUBLIC_URL` that Google and Microsoft
   reach at `/api/v1/watch-notices/`, a rule runs soon after its provider reports a change in its
   Source Calendar instead of waiting for the next five-minute sync. Scheduled syncs and the daily
@@ -28,6 +60,22 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Menus never leave the window: a **More actions** menu near the foot of the window, or above a
+  message at the bottom of it, opens above its button and scrolls inside itself when it must, so
+  the message never covers an item. A disabled item's reason stays readable. On a touch screen,
+  buttons, fields, and selects are 44 pixels tall. Links that fill a table cell, such as a Plan's
+  name or a person's email, are underlined only under the pointer or keyboard focus, and each
+  names its row for a screen reader. The footer keeps the space before **AGPLv3+ license**.
+- What opens in place scrolls fully into view as it opens: a confirmation under a row, such as
+  **Remove** on the last Plan or **Delete** on a person's page, and **Change plan** in a person's
+  **Plan** card, so its buttons are never below the window. It scrolls at once when the device
+  asks for reduced motion, and focus stays where it was put.
+- **Replace calendars…** creates the new draft rule in the same step that begins the previous
+  rule's removal, once that rule's run ends, instead of before it. A duplicate relationship found
+  meanwhile, or a calendar account that is gone, now leaves the previous rule as it was and
+  creates no draft, and a removal that fails after it began keeps the new draft. With Plans on,
+  the new draft keeps the previous rule's place when that rule counted, so it can start whatever
+  the limit.
 - Rule Details labels each of the rule's choices with the icon its preview shows for it, and both
   pages list the choices in the same order: how events look, then which events the rule includes.
   Unanswered invitations keep one icon on the preview whatever the rule decides. How many

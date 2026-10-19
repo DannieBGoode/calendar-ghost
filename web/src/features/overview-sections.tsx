@@ -27,6 +27,7 @@ import { overviewRules } from "@/lib/overview-health"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
 import { ruleWork } from "@/lib/rule-work"
+import { usePreviewedStartRefusal } from "@/lib/use-own-plan"
 import type { RuleEndpoints } from "@/lib/use-rule-endpoints"
 
 export const REFRESH_INTERVAL = 60_000
@@ -213,6 +214,7 @@ export function OverviewRules({ rules, endpoints, now, onViewChange, onOpenRule 
   const { t } = i18n
   const removingIds = useRemovingRuleIds(rules)
   const shown = overviewRules(rules, removingIds, OVERVIEW_RULE_LIMIT)
+  const startRefusal = usePreviewedStartRefusal()
   return (
     <section className="workflow dashboard-card" aria-labelledby="overview-rules-title">
       <div className="section-heading section-heading-inline">
@@ -262,7 +264,12 @@ export function OverviewRules({ rules, endpoints, now, onViewChange, onOpenRule 
               >
                 <span className="overview-rule-link">{content}</span>
               </a>
-              <RuleStatusBadge state={removing ? "removing" : rule.state} stopped={stopped} working={work?.kind} />
+              <RuleStatusBadge
+                state={removing ? "removing" : rule.state}
+                stopped={stopped}
+                working={work?.kind}
+                refused={startRefusal(rule) !== null}
+              />
             </li>
           )
         })}

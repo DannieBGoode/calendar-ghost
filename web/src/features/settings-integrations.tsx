@@ -2,6 +2,7 @@ import { Check, ChevronDown, Copy, Info, KeyRound } from "lucide-react"
 import { Fragment, useEffect, useRef, useState, type RefObject } from "react"
 
 import { DestructiveConfirmation } from "@/components/destructive-confirmation"
+import { YourPlanLink } from "@/components/your-plan-link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,6 +20,7 @@ import {
 } from "@/lib/integrations"
 import { useIntegrationTokens, type CopyState, type IntegrationTokens } from "@/lib/use-integration-tokens"
 import { useNow } from "@/lib/use-now"
+import { useTokenLimitReason } from "@/lib/use-own-plan"
 
 /**
  * Integration Tokens as one Settings group. It stays collapsed to a summary row, as Connected
@@ -136,12 +138,16 @@ function IssueTokenForm({
   const i18n = useI18n()
   const { t } = i18n
   const { name, setName, issue } = integrations
+  // When the plan includes no tokens, or all are in use, nothing can be issued; the server still
+  // checks. The form stays focusable, with why, so keyboard and screen reader users reach it.
+  const limit = useTokenLimitReason()
+  const unavailable = limit !== undefined
   return (
     <form
       className="setting-row integration-issue"
       onSubmit={(event) => {
         event.preventDefault()
-        issue.mutate()
+        if (!unavailable) issue.mutate()
       }}
     >
       <div className="integration-issue-field">
@@ -153,9 +159,16 @@ function IssueTokenForm({
           value={name}
           maxLength={80}
           placeholder={t("settings.integrations.issue.placeholder")}
-          aria-describedby="integration-name-hint"
+          readOnly={unavailable}
+          aria-disabled={unavailable || undefined}
+          aria-describedby={unavailable ? "integration-name-hint integration-limit" : "integration-name-hint"}
           onChange={(event) => setName(event.target.value)}
         />
+        {unavailable && (
+          <p id="integration-limit" className="field-hint">
+            {limit} <YourPlanLink />
+          </p>
+        )}
         {administrator && <InstallationScopeField integrations={integrations} />}
         {issue.error && (
           <p className="field-error" role="alert">
@@ -163,10 +176,26 @@ function IssueTokenForm({
           </p>
         )}
       </div>
-      <Button type="submit" disabled={!name.trim() || issue.isPending}>
-        {issue.isPending ? t("settings.integrations.issue.pending") : t("settings.integrations.issue.submit")}
-      </Button>
+      <IssueTokenButton ready={Boolean(name.trim())} pending={issue.isPending} unavailable={unavailable} />
     </form>
+  )
+}
+
+/**
+ * Issue token. While the plan allows no new token it stays focusable, described by why, and the
+ * form sends nothing; otherwise it waits for a name, and for a token on its way.
+ */
+function IssueTokenButton({ ready, pending, unavailable }: { ready: boolean; pending: boolean; unavailable: boolean }) {
+  const { t } = useI18n()
+  return (
+    <Button
+      type="submit"
+      disabled={!unavailable && (!ready || pending)}
+      aria-disabled={unavailable || undefined}
+      aria-describedby={unavailable ? "integration-limit" : undefined}
+    >
+      {pending ? t("settings.integrations.issue.pending") : t("settings.integrations.issue.submit")}
+    </Button>
   )
 }
 

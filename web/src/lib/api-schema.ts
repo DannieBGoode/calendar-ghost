@@ -125,6 +125,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Own Plan
+         * @description What the signed-in User's Plan allows and how much of it they have, for Your plan. A
+         *     fault reading Plans fails this request; each limit is still checked where it applies.
+         */
+        get: operations["own_plan_api_v1_account_plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/accounts": {
         parameters: {
             query?: never;
@@ -533,6 +554,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plan-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assign Plans
+         * @description Give each of up to 100 people their own Plan, or with null the Default Plan, at once,
+         *     all or none, and answer each person's Plan before and after and what they are over. The
+         *     Default Plan's key is given as null is, so they follow it. With `dry_run`, give nothing and
+         *     answer the same, so who would be over is known before anyone confirms.
+         */
+        post: operations["assign_plans_api_v1_plan_assignments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plan-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Plans Setting
+         * @description Turn Plans on or off, and choose the Default Plan. Turning Plans on with no default makes
+         *     a Plan named "No limits" the default; the default cannot be cleared while Plans are on.
+         *     Turning them off is always allowed and keeps every Plan and assignment.
+         */
+        put: operations["set_plans_setting_api_v1_plan_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Plans
+         * @description Every Plan with how many people have it and how many of them have more than it allows,
+         *     the Plans setting, and the offered intervals.
+         */
+        get: operations["list_plans_api_v1_plans_get"];
+        put?: never;
+        /**
+         * Define Plan
+         * @description Add a Plan. Its key is the one asked for, or one made from its name; it never changes,
+         *     so billing can name it later.
+         */
+        post: operations["define_plan_api_v1_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plans/{plan_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change Plan
+         * @description Rename a Plan or change its limits; its key stays. New limits apply at once to new
+         *     rules, accounts, and tokens, and stop nothing that exists.
+         */
+        put: operations["change_plan_api_v1_plans__plan_key__put"];
+        post?: never;
+        /**
+         * Remove Plan
+         * @description Remove a Plan that is not the default and that nobody has.
+         */
+        delete: operations["remove_plan_api_v1_plans__plan_key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/providers": {
         parameters: {
             query?: never;
@@ -878,8 +995,9 @@ export interface paths {
         };
         /**
          * Users
-         * @description One page of the people here, by part of their email, role, state, and Installation
-         *     Status, each with what the Operator Overview shows about them; never their calendars.
+         * @description One page of the people here, by part of their email, role, state, Installation Status,
+         *     Plan, and whether they are over a limit of it, each with what the Operator Overview shows
+         *     about them; never their calendars.
          */
         get: operations["users_api_v1_users_get"];
         put?: never;
@@ -1032,6 +1150,18 @@ export interface components {
             destination: components["schemas"]["EventSnapshotResponse"] | null;
             source: components["schemas"]["EventSnapshotResponse"];
         };
+        /**
+         * AppliedPlanResponse
+         * @description A Plan a User has, such as the one that limits them now.
+         */
+        AppliedPlanResponse: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** On Default */
+            on_default: boolean;
+        };
         /** AuditEntryResponse */
         AuditEntryResponse: {
             /** Action */
@@ -1087,6 +1217,12 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /** ChangePlanRequest */
+        ChangePlanRequest: {
+            limits: components["schemas"]["PlanLimitsRequest"];
+            /** Name */
+            name: string;
         };
         /** ClearActivityRequest */
         ClearActivityRequest: {
@@ -1211,6 +1347,14 @@ export interface components {
             oldest_activity_at: string | null;
             /** Reclaimable Bytes */
             reclaimable_bytes: number;
+        };
+        /** DefinePlanRequest */
+        DefinePlanRequest: {
+            /** Key */
+            key?: string | null;
+            limits: components["schemas"]["PlanLimitsRequest"];
+            /** Name */
+            name: string;
         };
         /** DeleteOwnAccountRequest */
         DeleteOwnAccountRequest: {
@@ -1460,6 +1604,16 @@ export interface components {
             /** Token */
             token: string;
         };
+        /**
+         * LimitUseResponse
+         * @description How many of one resource a person has, beside what the Plan they have allows.
+         */
+        LimitUseResponse: {
+            /** Allowed */
+            allowed: number | null;
+            /** In Use */
+            in_use: number;
+        };
         /** LinkRequest */
         LinkRequest: {
             /** Token */
@@ -1495,12 +1649,57 @@ export interface components {
             /** Notify By Email */
             notify_by_email: boolean;
         };
+        /**
+         * OverLimitResponse
+         * @description One limit a person has more of than their Plan allows: they keep everything, but cannot
+         *     add another until they are within it.
+         */
+        OverLimitResponse: {
+            /** Allowed */
+            allowed: number;
+            /** In Use */
+            in_use: number;
+            /**
+             * Limit
+             * @enum {string}
+             */
+            limit: "rules" | "connected_accounts" | "integration_tokens";
+        };
         /** OwnAccountDeletionResponse */
         OwnAccountDeletionResponse: {
             /** Last User */
             last_user: boolean;
             /** Needs Another Administrator */
             needs_another_administrator: boolean;
+        };
+        /**
+         * OwnPlanResponse
+         * @description What the signed-in User's Plan allows and how much of it they have, for Your plan.
+         */
+        OwnPlanResponse: {
+            /**
+             * Basis
+             * @enum {string}
+             */
+            basis: "plans_off" | "administrator" | "plan";
+            /** Connected Accounts */
+            connected_accounts: number;
+            /** Instant */
+            instant: boolean;
+            /** Integration Tokens */
+            integration_tokens: number;
+            limits: components["schemas"]["PlanLimitsResponse"] | null;
+            /** May Connect Account */
+            may_connect_account: boolean;
+            /** May Issue Token */
+            may_issue_token: boolean;
+            /** Over Rule Limit */
+            over_rule_limit: boolean;
+            plan: components["schemas"]["AppliedPlanResponse"] | null;
+            /** Poll Every Minutes */
+            poll_every_minutes: number;
+            /** Rules Counted */
+            rules_counted: number;
         };
         /** PendingInvitationResponse */
         PendingInvitationResponse: {
@@ -1510,6 +1709,43 @@ export interface components {
             expires_at: string;
             /** Id */
             id: string;
+        };
+        /**
+         * PersonPlanOverviewResponse
+         * @description A person's Plan, as the Operator Overview shows it on their page and their row of People
+         *     (ADR 0038).
+         */
+        PersonPlanOverviewResponse: {
+            assigned: components["schemas"]["PlanNameResponse"] | null;
+            /** Assigned At */
+            assigned_at: string | null;
+            /** Assigned By */
+            assigned_by: string | null;
+            /**
+             * Basis
+             * @enum {string}
+             */
+            basis: "plans_off" | "administrator" | "plan";
+            has: components["schemas"]["AppliedPlanResponse"] | null;
+            /** Over */
+            over: components["schemas"]["OverLimitResponse"][];
+            plan: components["schemas"]["AppliedPlanResponse"] | null;
+            use: components["schemas"]["PersonPlanUseResponse"] | null;
+        };
+        /**
+         * PersonPlanUseResponse
+         * @description How much of the Plan they have a person uses, each count beside its limit, for the
+         *     meters on their page (ADR 0030, amended, for the token count). Counts only.
+         */
+        PersonPlanUseResponse: {
+            connected_accounts: components["schemas"]["LimitUseResponse"];
+            integration_tokens: components["schemas"]["LimitUseResponse"];
+            rules: components["schemas"]["LimitUseResponse"];
+            /**
+             * Sync Interval
+             * @enum {string}
+             */
+            sync_interval: "instant" | "5_minutes" | "10_minutes" | "15_minutes" | "30_minutes" | "60_minutes";
         };
         /**
          * PersonResponse
@@ -1526,6 +1762,7 @@ export interface components {
             last_sign_in_at: string | null;
             /** Last Synced At */
             last_synced_at: string | null;
+            plan: components["schemas"]["PersonPlanOverviewResponse"] | null;
             /** Problems */
             problems: number;
             resources: components["schemas"]["ResourceUseResponse"];
@@ -1544,6 +1781,143 @@ export interface components {
              * @enum {string}
              */
             verdict: "stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy";
+        };
+        /** PlanAssignmentsRequest */
+        PlanAssignmentsRequest: {
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
+            /** Plans */
+            plans: {
+                [key: string]: string | null;
+            };
+        };
+        /**
+         * PlanAssignmentsResponse
+         * @description Everyone a Plan was given to, in the order named, or would be in a dry run.
+         */
+        PlanAssignmentsResponse: {
+            /** Dry Run */
+            dry_run: boolean;
+            /** People */
+            people: components["schemas"]["PlanMoveResponse"][];
+        };
+        /**
+         * PlanLimitsRequest
+         * @description Each limit is a whole number, or null for unlimited.
+         */
+        PlanLimitsRequest: {
+            /** Connected Accounts */
+            connected_accounts: number | null;
+            /** Integration Tokens */
+            integration_tokens: number | null;
+            /** Rules */
+            rules: number | null;
+            /**
+             * Sync Interval
+             * @enum {string}
+             */
+            sync_interval: "instant" | "5_minutes" | "10_minutes" | "15_minutes" | "30_minutes" | "60_minutes";
+        };
+        /**
+         * PlanLimitsResponse
+         * @description What a Plan allows; null is unlimited.
+         */
+        PlanLimitsResponse: {
+            /** Connected Accounts */
+            connected_accounts: number | null;
+            /** Integration Tokens */
+            integration_tokens: number | null;
+            /** Rules */
+            rules: number | null;
+            /**
+             * Sync Interval
+             * @enum {string}
+             */
+            sync_interval: "instant" | "5_minutes" | "10_minutes" | "15_minutes" | "30_minutes" | "60_minutes";
+        };
+        /**
+         * PlanMoveResponse
+         * @description One person given a Plan, or who would be in a dry run.
+         */
+        PlanMoveResponse: {
+            /** Email */
+            email: string | null;
+            had: components["schemas"]["AppliedPlanResponse"] | null;
+            has: components["schemas"]["AppliedPlanResponse"] | null;
+            /** Over */
+            over: components["schemas"]["OverLimitResponse"][];
+            /** User Id */
+            user_id: string;
+        };
+        /**
+         * PlanNameResponse
+         * @description A Plan as people know it: its key, which never changes, and its name.
+         */
+        PlanNameResponse: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * PlanResponse
+         * @description One Plan, as Administration lists it.
+         */
+        PlanResponse: {
+            /** Is Default */
+            is_default: boolean;
+            /** Key */
+            key: string;
+            /** Limited People */
+            limited_people: number;
+            limits: components["schemas"]["PlanLimitsResponse"];
+            /** Name */
+            name: string;
+            /** Over People */
+            over_people: number;
+            /** People */
+            people: number;
+            use: components["schemas"]["PlanUseCountsResponse"];
+        };
+        /**
+         * PlanUseCountsResponse
+         * @description How much the people a Plan limits have of each resource it limits: each count above 0,
+         *     highest first, with how many people have it, so a lower limit can say how many people it
+         *     would leave with more than it allows. Counts only; never who.
+         */
+        PlanUseCountsResponse: {
+            /** Connected Accounts */
+            connected_accounts: components["schemas"]["UseCountResponse"][];
+            /** Integration Tokens */
+            integration_tokens: components["schemas"]["UseCountResponse"][];
+            /** Rules */
+            rules: components["schemas"]["UseCountResponse"][];
+        };
+        /**
+         * PlansResponse
+         * @description The Plans setting, the sync intervals offered now, and every Plan by name.
+         */
+        PlansResponse: {
+            /** Default Plan */
+            default_plan: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Followers */
+            followers: number;
+            /** Plans */
+            plans: components["schemas"]["PlanResponse"][];
+            /** Sync Intervals */
+            sync_intervals: ("instant" | "5_minutes" | "10_minutes" | "15_minutes" | "30_minutes" | "60_minutes")[];
+        };
+        /** PlansSettingRequest */
+        PlansSettingRequest: {
+            /** Default Plan */
+            default_plan: string | null;
+            /** Enabled */
+            enabled: boolean;
         };
         /**
          * PreviewItemResponse
@@ -1828,6 +2202,8 @@ export interface components {
         };
         /** RuleDetailResponse */
         RuleDetailResponse: {
+            /** Can Start */
+            can_start: boolean;
             destination: components["schemas"]["NamedCalendarEndpointResponse"];
             /**
              * Effective Cadence
@@ -1838,6 +2214,8 @@ export interface components {
             id: string;
             /** Initial Lookback Days */
             initial_lookback_days: number;
+            /** Keeps Place */
+            keeps_place: boolean;
             last_reconciliation: components["schemas"]["RunOutcomeResponse"] | null;
             last_sync: components["schemas"]["RunOutcomeResponse"] | null;
             latest_preview: components["schemas"]["PreviewSummaryResponse"] | null;
@@ -1852,6 +2230,8 @@ export interface components {
             privacy_policy: "busy_only" | "copy_details";
             /** Reprojection Required */
             reprojection_required: boolean;
+            /** Rule Limit */
+            rule_limit: number | null;
             running: components["schemas"]["RuleWorkResponse"] | null;
             source: components["schemas"]["NamedCalendarEndpointResponse"];
             /** State */
@@ -1936,6 +2316,8 @@ export interface components {
             effective_cadence: "instant" | "not_watchable" | "waiting_for_provider" | "off_by_user" | "not_in_plan" | "no_public_address" | "not_reaching";
             /** Id */
             id: string;
+            /** Keeps Place */
+            keeps_place: boolean;
             last_sync: components["schemas"]["RunOutcomeResponse"] | null;
             latest_preview: components["schemas"]["PreviewSummaryResponse"] | null;
             /** Poll Every Minutes */
@@ -2232,6 +2614,16 @@ export interface components {
              */
             unanswered_invitations: "wait" | "as_tentative";
         };
+        /**
+         * UseCountResponse
+         * @description How many of the people a Plan limits have exactly `in_use` of one resource.
+         */
+        UseCountResponse: {
+            /** In Use */
+            in_use: number;
+            /** People */
+            people: number;
+        };
         /** UserDeletionResponse */
         UserDeletionResponse: {
             /** Deleted */
@@ -2250,6 +2642,7 @@ export interface components {
          *     their resource use. Never a calendar's name or identifier, an account's email, or an event.
          */
         UserOverviewResponse: {
+            plan: components["schemas"]["PersonPlanOverviewResponse"] | null;
             resources: components["schemas"]["ResourceUseResponse"];
             status: components["schemas"]["StatusResponse"];
             user: components["schemas"]["UserResponse"];
@@ -2508,6 +2901,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    own_plan_api_v1_account_plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnPlanResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -3321,6 +3745,210 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LinkStatusResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_plans_api_v1_plan_assignments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanAssignmentsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanAssignmentsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_plans_setting_api_v1_plan_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlansSettingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlansResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_plans_api_v1_plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlansResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    define_plan_api_v1_plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_plan_api_v1_plans__plan_key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_key: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_plan_api_v1_plans__plan_key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_key: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -4181,6 +4809,8 @@ export interface operations {
                 role?: ("installation_administrator" | "user") | null;
                 state?: ("active" | "disabled") | null;
                 verdict?: ("stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy") | null;
+                plan?: string | null;
+                over?: boolean;
                 sort?: "joined" | "email" | "last_sign_in" | "verdict";
                 order?: "asc" | "desc";
                 page?: number;

@@ -51,6 +51,7 @@ const NOTHING_SET_UP: UserOverview = {
     incidents: [],
   },
   resources: { rules: 0, connected_accounts: 0, activity_entries: 0, provider_calls: [], since: "2026-09-01" },
+  plan: null,
 }
 
 const RESPONSES: Record<string, unknown> = {
@@ -477,6 +478,7 @@ describe("People", () => {
             problems: 0,
             last_synced_at: null,
             resources: NOTHING_SET_UP.resources,
+            plan: null,
           },
         ],
         total: 1,
@@ -494,6 +496,14 @@ describe("People", () => {
       },
       [`/api/v1/users/${administrator.id}/overview`]: { ...NOTHING_SET_UP, user: { ...NOTHING_SET_UP.user, id: administrator.id } },
       "/api/v1/invitations": [],
+      // Plans off, and none yet, as a new installation has them.
+      "/api/v1/plans": {
+        enabled: false,
+        default_plan: null,
+        sync_intervals: ["instant", "5_minutes"],
+        followers: 1,
+        plans: [],
+      },
     }
     vi.stubGlobal(
       "fetch",
@@ -587,16 +597,166 @@ describe("People", () => {
     expect(document.activeElement?.getAttribute("href")).toBe(`/people/${administrator.id}`)
   })
 
+  it("opens Plans at its own address, as a tab of People", async () => {
+    page.happyDOM.setURL("http://localhost:8000/people/plans")
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+    expect(window.location.pathname).toBe("/people/plans")
+    expect(container.querySelector("main h1")?.textContent).toBe("People")
+    expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("People")
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Plans")
+    expect(container.querySelector("#plans-title")?.textContent).toBe("Plans")
+    expect(document.title).toBe("Plans – People – Calendar Ghost")
+    expect(requested).toContain("/api/v1/plans")
+    expect(requested).not.toContain("/api/v1/users/plans/overview")
+  })
+
+  it("opens New plan's panel at its own address, and Back closes it", async () => {
+    page.happyDOM.setURL("http://localhost:8000/people/plans/new")
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+    expect(window.location.pathname).toBe("/people/plans/new")
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Plans")
+    expect(container.querySelector("#plan-panel-title")?.textContent).toBe("New plan")
+
+    act(() => {
+      window.history.replaceState(null, "", "/people/plans")
+      window.dispatchEvent(new PopStateEvent("popstate"))
+    })
+    await settle()
+    expect(container.querySelector("#plan-panel")).toBeNull()
+    expect(container.querySelector("#plans-empty")).not.toBeNull()
+  })
+
+  it("opens a new plan's People tab from its toast after People's other tab replaced Plans, with focus on the panel's title", async () => {
+    page.happyDOM.setURL("http://localhost:8000/people/plans/new")
+    serveAs("installation_administrator", "invitation_only")
+    const team = {
+      key: "team",
+      name: "Team",
+      limits: { rules: null, connected_accounts: null, integration_tokens: null, sync_interval: "instant" },
+      is_default: false,
+      people: 0,
+      limited_people: 0,
+      over_people: 0,
+      use: { rules: [], connected_accounts: [], integration_tokens: [] },
+    }
+    const served = vi.mocked(fetch)
+    const answer = served.getMockImplementation()!
+    let added = false
+    served.mockImplementation((input, init) => {
+      // The app calls fetch with a path.
+      const path = typeof input === "string" ? input.split("?")[0] : ""
+      if (path === "/api/v1/plans" && init?.method === "POST") {
+        added = true
+        return Promise.resolve(jsonResponse(team))
+      }
+      if (path === "/api/v1/plans" && added) {
+        return Promise.resolve(
+          jsonResponse({ enabled: false, default_plan: null, sync_intervals: ["instant", "5_minutes"], followers: 1, plans: [team] }),
+        )
+      }
+      return answer(input, init)
+    })
+    const { container } = await renderApp(testI18n())
+    const name = container.querySelector<HTMLInputElement>("#plan-new-name")!
+    act(() => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(name, "Team")
+      name.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => {
+      name.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    await settle()
+    expect(window.location.pathname).toBe("/people/plans")
+    expect(container.querySelector("#plan-panel")).toBeNull()
+
+    const everyone = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")].find((tab) => tab.textContent === "Everyone")!
+    act(() => {
+      everyone.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
+    })
+    await settle()
+    expect(container.querySelector("#plans-title")).toBeNull()
+
+    const assign = [...container.querySelectorAll<HTMLButtonElement>(".toast-viewport button")].find(
+      (button) => button.textContent === "Assign people",
+    )!
+    act(() => assign.focus())
+    act(() => assign.click())
+    await settle()
+    expect(window.location.pathname).toBe("/people/plans/team/people")
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Plans")
+    expect(container.querySelector("#plan-panel-title")?.textContent).toBe("Team")
+    expect(document.activeElement).toBe(container.querySelector("#plan-panel-title"))
+  })
+
+  it("asks before Back or another page drops a new plan's changes, and goes there once they are discarded", async () => {
+    page.happyDOM.setURL("http://localhost:8000/people/plans/new")
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+    const name = container.querySelector<HTMLInputElement>("#plan-new-name")!
+    act(() => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(name, "Team")
+      name.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await settle()
+    const question = () => container.querySelector(".plan-panel-question")
+    const choice = (label: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>(".plan-panel-question button")].find((button) => button.textContent === label)!
+
+    // Back: the browser has left, so the page returns to the plan's address and asks.
+    act(() => {
+      window.history.replaceState(null, "", "/people/plans")
+      window.dispatchEvent(new PopStateEvent("popstate"))
+    })
+    await settle()
+    expect(window.location.pathname).toBe("/people/plans/new")
+    expect(container.querySelector<HTMLInputElement>("#plan-new-name")?.value).toBe("Team")
+    expect(question()?.querySelector("p")?.textContent).toBe("Discard 1 change?")
+    act(() => choice("Keep editing").click())
+
+    // A link to another page asks the same way.
+    const overview = [...container.querySelectorAll<HTMLAnchorElement>("#primary-nav a")].find((link) => link.textContent === "Overview")!
+    act(() => {
+      overview.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
+    })
+    await settle()
+    expect(window.location.pathname).toBe("/people/plans/new")
+    expect(question()).not.toBeNull()
+    act(() => choice("Keep editing").click())
+
+    // Discard goes where Back went.
+    act(() => {
+      window.history.replaceState(null, "", "/people/plans")
+      window.dispatchEvent(new PopStateEvent("popstate"))
+    })
+    await settle()
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {
+      window.history.replaceState(null, "", "/people/plans")
+      window.dispatchEvent(new PopStateEvent("popstate"))
+    })
+    act(() => choice("Discard").click())
+    await settle()
+    expect(back).toHaveBeenCalledTimes(1)
+    expect(window.location.pathname).toBe("/people/plans")
+    expect(container.querySelector("#plan-panel")).toBeNull()
+    expect(container.querySelector("#plans-empty")).not.toBeNull()
+  })
+
   it.each([
-    ["someone who is not an administrator", "user", "invitation_only"],
-    ["an administrator under Only me", "installation_administrator", "only_me"],
-  ] as const)("is hidden from %s, and its address falls back to Overview", async (_who, role, policy) => {
-    page.happyDOM.setURL("http://localhost:8000/people")
+    ["someone who is not an administrator", "/people", "user", "invitation_only"],
+    ["an administrator under Only me", "/people", "installation_administrator", "only_me"],
+    ["someone who is not an administrator", "/people/plans", "user", "invitation_only"],
+    ["an administrator under Only me", "/people/plans", "installation_administrator", "only_me"],
+  ] as const)("is hidden from %s, and %s falls back to Overview", async (_who, path, role, policy) => {
+    page.happyDOM.setURL(`http://localhost:8000${path}`)
     serveAs(role, policy)
     const { container } = await renderApp(testI18n())
     expect(navLabels()).toEqual(["Overview", "Rules", "Activity", "Settings"])
     expect(window.location.pathname).toBe("/overview")
     expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("Overview")
     expect(requested).not.toContain("/api/v1/users")
+    expect(requested).not.toContain("/api/v1/plans")
   })
 })

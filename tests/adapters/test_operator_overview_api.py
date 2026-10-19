@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from calendar_sync.application.identity.ports import AssignmentChange
 from calendar_sync.application.operations.installation_health import (
     InstallationIncident,
     InstallationNotifications,
@@ -28,16 +29,19 @@ from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
+from calendar_sync.domain.plans import AssignmentSource
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.infrastructure.scheduling import SchedulerWatch
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
 from tests.adapters.microsoft.test_calendar_provider_contract import outlook
 from tests.adapters.test_notifications import RecordingSmtp
 from tests.fake_microsoft_graph_api import Refusal
-from tests.helpers import endpoint, rule
+from tests.helpers import NOW, endpoint, rule
+from tests.plans import FAMILY, FREE, plans_on
 from tests.users import OTHER_USER, add_user, administrator, session_for, sqlite_units
 
 MEMBER_EMAIL = "member@example.test"
@@ -400,3 +404,111 @@ def test_each_problem_says_its_cause_and_when_it_was_last_tried(
     # Problems no provider failure explains name no Cause.
     assert {p["cause"] for p in status["problems"] if p["kind"] == "blocked"} == {None}
     assert "next_pass_at" in status["scheduler"]
+
+
+def test_the_person_page_shows_no_plan_until_one_exists(installation: Installation) -> None:
+    client = installation.client
+    seen = client.get(f"/api/v1/users/{installation.member.user.value}/overview").json()
+    people = client.get("/api/v1/users").json()["users"]
+
+    assert seen["plan"] is None
+    assert [row["plan"] for row in people] == [None, None, None]
+
+
+def test_the_person_page_shows_the_plan_that_limits_them_and_their_own(
+    installation: Installation,
+) -> None:
+    client = installation.client
+    plans = SqlitePlans(installation.database)
+    plans_on(plans, FREE, FAMILY)
+    admin = installation.admin.user
+    given = AssignmentChange(AssignmentSource.ADMINISTRATOR, admin, datetime.now(UTC))
+    assigned = plans.assign_all({admin: FAMILY.key}, given)
+
+    def plan_of(user: UserId) -> Any:
+        return client.get(f"/api/v1/users/{user.value}/overview").json()["plan"]
+
+    member_while_on = plan_of(installation.member.user)
+    admin_while_on = plan_of(admin)
+    people_while_on = client.get("/api/v1/users").json()["users"]
+    plans.change_settings(False, FREE.key, NOW)
+    member_while_off = plan_of(installation.member.user)
+
+    free = {"key": "free", "name": "Free", "on_default": True}
+    # The member's two calendar accounts, where Free allows one.
+    accounts_over = [{"limit": "connected_accounts", "in_use": 2, "allowed": 1}]
+    # The rule the refused authorization stopped keeps its place; the other one gave it up.
+    free_use = {
+        "rules": {"in_use": 1, "allowed": 1},
+        "connected_accounts": {"in_use": 2, "allowed": 1},
+        "integration_tokens": {"in_use": 0, "allowed": 0},
+        "sync_interval": "5_minutes",
+    }
+    assert assigned
+    assert member_while_on == {
+        "basis": "plan",
+        "plan": free,
+        "assigned": None,
+        "has": free,
+        "over": accounts_over,
+        "assigned_by": None,
+        "assigned_at": None,
+        "use": free_use,
+    }
+    # No Plan limits an administrator; the one they were given waits until they stop. Their
+    # page still says who gave it, and how much of it they use.
+    assert admin_while_on == {
+        "basis": "administrator",
+        "plan": None,
+        "assigned": {"key": "family", "name": "Family"},
+        "has": {"key": "family", "name": "Family", "on_default": False},
+        "over": [],
+        "assigned_by": "admin@example.test",
+        "assigned_at": given.at.isoformat(),
+        "use": {
+            "rules": {"in_use": 1, "allowed": 5},
+            "connected_accounts": {"in_use": 2, "allowed": 3},
+            "integration_tokens": {"in_use": 0, "allowed": 2},
+            "sync_interval": "instant",
+        },
+    }
+    # Once a Plan exists, the person page shows it even while Plans are off, with what the Plan
+    # they have would say once Plans are on.
+    assert member_while_off == {
+        "basis": "plans_off",
+        "plan": None,
+        "assigned": None,
+        "has": free,
+        "over": accounts_over,
+        "assigned_by": None,
+        "assigned_at": None,
+        "use": free_use,
+    }
+    # Each row of People shows the Plan as the person's page does.
+    assert _person_row({"users": people_while_on}, admin)["plan"] == admin_while_on
+    assert _person_row({"users": people_while_on}, installation.member.user)["plan"] == (
+        member_while_on
+    )
+
+
+def test_people_are_found_by_the_plan_they_have(installation: Installation) -> None:
+    client = installation.client
+    plans = SqlitePlans(installation.database)
+    plans_on(plans, FREE, FAMILY)
+    member = installation.member.user
+    given = AssignmentChange(AssignmentSource.ADMINISTRATOR, installation.admin.user, NOW)
+    plans.assign_all({member: FAMILY.key}, given)
+
+    def having(plan: str, **query: str) -> set[str]:
+        page = client.get("/api/v1/users", params={"plan": plan, **query}).json()
+        assert page["total"] == len(page["users"])
+        return {row["id"] for row in page["users"]}
+
+    malformed = client.get("/api/v1/users", params={"plan": "Not a key"})
+
+    assert having("family") == {member.value}
+    # The default is everyone's without a Plan of their own, an administrator's too.
+    assert having("free") == {installation.admin.user.value, OUTLOOK_USER.value}
+    assert having("free", role="user") == {OUTLOOK_USER.value}
+    assert having("gold") == set()
+    assert (malformed.status_code, malformed.json()["code"]) == (422, "invalid_request")

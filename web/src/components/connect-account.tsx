@@ -1,8 +1,10 @@
 import { Plus } from "lucide-react"
+import { useId } from "react"
 
 import { OverflowMenu } from "@/components/overflow-menu"
 import { ProviderMark } from "@/components/provider-mark"
 import { Button } from "@/components/ui/button"
+import { YourPlanLink } from "@/components/your-plan-link"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { CalendarProvider } from "@/lib/api"
@@ -12,18 +14,31 @@ import { accountNoun, providerDisplayName } from "@/lib/providers"
 /**
  * The one action that adds a calendar account: a button for the only configured provider, or a
  * menu of providers when there are several, so the page never shows one equal button per provider.
- * `primary` only where connecting is the next step (DESIGN.md, Buttons).
+ * `primary` only where connecting is the next step (DESIGN.md, Buttons). With `disabledReason`,
+ * such as the User's plan's account limit, it stays in place but starts nothing, and says why.
  */
-export function ConnectAccount({ providers, primary }: { providers: readonly CalendarProvider[]; primary: boolean }) {
+export function ConnectAccount({
+  providers,
+  primary,
+  disabledReason,
+}: {
+  providers: readonly CalendarProvider[]
+  primary: boolean
+  /** Why no account can be connected now; the server still checks after the provider's consent. */
+  disabledReason?: string | undefined
+}) {
   const i18n = useI18n()
   const variant = primary ? "default" : "outline"
   const [only] = providers
+  if (disabledReason !== undefined) {
+    return <UnavailableConnect label={connectLabel(i18n, providers)} variant={variant} reason={disabledReason} />
+  }
   if (providers.length === 1 && only) {
     return (
       <Button variant={variant} asChild>
         <a {...connectLink(only)}>
           <ProviderMark provider={only.kind} fallback={<Plus aria-hidden="true" />} />
-          {i18n.t("common.connectAccount.one", { account: accountNoun(i18n, only.kind, providers) })}
+          {connectLabel(i18n, providers)}
         </a>
       </Button>
     )
@@ -45,6 +60,42 @@ export function ConnectAccount({ providers, primary }: { providers: readonly Cal
         }
       })}
     />
+  )
+}
+
+/** Connect's label: the only provider's account, or the menu that chooses one. */
+function connectLabel(i18n: I18n, providers: readonly CalendarProvider[]): string {
+  const [only] = providers
+  return providers.length === 1 && only
+    ? i18n.t("common.connectAccount.one", { account: accountNoun(i18n, only.kind, providers) })
+    : i18n.t("common.connectAccount.menu")
+}
+
+/**
+ * Connect, unavailable: the same label on a button that leads nowhere, never a link to a
+ * provider's consent or a menu of them, described by why and a link to Your plan. It stays
+ * focusable, so keyboard and screen reader users reach the reason.
+ */
+function UnavailableConnect({
+  label,
+  variant,
+  reason,
+}: {
+  label: string
+  variant: "default" | "outline"
+  reason: string
+}) {
+  const hint = useId()
+  return (
+    <div className="heading-action">
+      <Button type="button" variant={variant} aria-disabled={true} aria-describedby={hint}>
+        <Plus aria-hidden="true" />
+        {label}
+      </Button>
+      <p id={hint} className="action-hint">
+        {reason} <YourPlanLink />
+      </p>
+    </div>
   )
 }
 

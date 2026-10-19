@@ -8,6 +8,7 @@ import { useI18n } from "@/i18n/provider"
 import { api, type RuleDetail, type RulePolicyPayload } from "@/lib/api"
 import { policyChanged, policyChangeConsequences } from "@/lib/rule-change"
 import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
+import { usePlanWarning } from "@/lib/use-own-plan"
 import type { RuleFeedback } from "@/lib/use-rule-commands"
 import { useRuleInvalidation } from "@/lib/use-rule-refresh"
 
@@ -99,6 +100,7 @@ export function PolicyEditor({
             />
           )}
           {update.error && <div className="inline-error" role="alert">{apiErrorMessage(i18n, update.error)}</div>}
+          <PlanRestartNote state={detail.state} />
           <div className="form-actions">
             <Button type="submit" disabled={!changed || update.isPending}>
               {update.isPending
@@ -114,6 +116,22 @@ export function PolicyEditor({
         </form>
       )}
     </section>
+  )
+}
+
+/**
+ * Beside Save, while more rules count than the User's plan allows: a policy change stops the
+ * rule until it is previewed again, and the plan may then not let it start (decision 4). Only an
+ * enabled or stopped rule can count, so a paused or new one gets no note.
+ */
+function PlanRestartNote({ state }: { state: RuleDetail["state"] }) {
+  const { t } = useI18n()
+  const warning = usePlanWarning()
+  if (!warning || (state !== "enabled" && state !== "degraded")) return null
+  return (
+    <p className="field-hint" data-tone="attention">
+      {t("common.plan.mayNotRestart")}
+    </p>
   )
 }
 

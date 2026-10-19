@@ -99,6 +99,8 @@ const SOURCES = Object.values(
  */
 // Every Provider Kind the server sends, as `ProviderKind` in domain/accounts.py names them.
 const PROVIDER_KINDS = ["google", "outlook"]
+// Every sync interval a Plan may have, as `SyncInterval` in domain/plans.py names them.
+const SYNC_INTERVALS = ["instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"]
 
 const TEMPLATE_VALUES: TemplateValues = {
   "activity.incidents.lasted.*": ["moment", "minute", "hour", "day"],
@@ -132,6 +134,12 @@ const TEMPLATE_VALUES: TemplateValues = {
     "not_reaching",
   ],
   "settings.ownAccount.instantSync.blocked.*": ["not_in_plan", "no_public_address", "not_reaching", "unknown"],
+  "people.plans.speed.*": SYNC_INTERVALS,
+  "people.plans.editor.speedTitle.*": SYNC_INTERVALS,
+  "people.plans.editor.speedDescription.*": SYNC_INTERVALS,
+  "people.plans.panel.speed.*": SYNC_INTERVALS,
+  "people.plans.change.limits.speed.*": SYNC_INTERVALS,
+  "people.usage.interval.*": SYNC_INTERVALS,
   "common.provider.*": PROVIDER_KINDS,
   "common.providerName.*": PROVIDER_KINDS,
   "common.providerAccount.*": PROVIDER_KINDS,

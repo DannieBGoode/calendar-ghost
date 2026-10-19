@@ -2,10 +2,12 @@ import { GhostMark } from "@/components/ghost-mark"
 import { LoadFailure } from "@/components/load-failure"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
+import { PeopleBulkBar } from "@/features/people-bulk-bar"
 import { PeopleFilters } from "@/features/people-filters"
 import { InstallationHealthSummary } from "@/features/people-health"
 import { PeoplePagination } from "@/features/people-pagination"
 import { PeopleTable } from "@/features/people-table"
+import { usePlanChanges, type PlanChanges } from "@/features/use-plan-changes"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { PeoplePage, PeopleQuery, PeopleSort } from "@/lib/api"
@@ -13,10 +15,14 @@ import type { OpenPerson } from "@/lib/navigation"
 import { DEFAULT_PEOPLE_QUERY, nextSort, pageRange } from "@/lib/people-query"
 import { usePeoplePage, usePersonCommands, type PeopleCommands } from "@/lib/use-people"
 import type { UpdatePeopleQuery } from "@/lib/use-people-location"
+import { useFilterPlans } from "@/lib/use-plans"
+import { useRowSelection } from "@/lib/use-row-selection"
 
 /**
  * People's first tab: Installation Health, then everyone here in one card with its search,
- * filters, table, and pages. Health and invitations load beside the list, not after it.
+ * filters, table, and pages. Health and invitations load beside the list, not after it. A change
+ * of people's plans, from the bar or a row, answers here, not where it was made, since it can
+ * leave nobody in the list.
  */
 export function PeopleRoster({
   query,
@@ -37,6 +43,8 @@ export function PeopleRoster({
   const { t } = i18n
   const people = usePeoplePage(query)
   const commands = usePersonCommands()
+  const plans = useFilterPlans(people.data, query)
+  const changes = usePlanChanges()
 
   return (
     <>
@@ -51,7 +59,11 @@ export function PeopleRoster({
             {t("people.page.listTitle")}
           </h2>
         </div>
-        <PeopleFilters query={query} onChange={(next) => update({ ...next, page: 1 }, "replace")} />
+        <PeopleFilters
+          query={query}
+          plans={plans}
+          onChange={(next) => update({ ...next, page: 1 }, "replace")}
+        />
         <p className="sr-only" role="status">
           {resultsStatus(i18n, people.data, people.isPlaceholderData)}
         </p>
@@ -69,6 +81,7 @@ export function PeopleRoster({
             commands={commands}
             update={update}
             onOpenPerson={onOpenPerson}
+            changes={changes}
           />
         )}
         {/* A deletion's result has no row left to sit on. */}
@@ -101,6 +114,7 @@ function PeopleResults({
   commands,
   update,
   onOpenPerson,
+  changes,
 }: {
   page: PeoplePage
   query: PeopleQuery
@@ -110,7 +124,11 @@ function PeopleResults({
   commands: PeopleCommands
   update: UpdatePeopleQuery
   onOpenPerson: OpenPerson
+  changes: PlanChanges
 }) {
+  // Who is selected belongs to what the list shows: another search, filter, sort, or page selects nobody.
+  const selection = useRowSelection(JSON.stringify(query))
+  const planned = page.users.some((person) => person.plan !== null)
   function openPage(next: number) {
     update({ page: next }, "push")
     // The new page starts at the list's heading, as a new page of the app starts at its own.
@@ -128,12 +146,22 @@ function PeopleResults({
   }
   return (
     <div className="people-table-wrap" aria-busy={updating} data-updating={updating}>
+      {planned && (
+        <PeopleBulkBar
+          selected={page.users.filter((person) => selection.ids.has(person.id))}
+          busy={commands.busy}
+          changes={changes}
+          onClear={selection.clear}
+        />
+      )}
       <PeopleTable
         people={page.users}
         query={query}
         currentUserId={currentUserId}
         now={now}
         commands={commands}
+        changes={changes}
+        selection={selection}
         onSort={(sort: PeopleSort) => update(nextSort(query, sort), "replace")}
         onOpenPerson={onOpenPerson}
       />

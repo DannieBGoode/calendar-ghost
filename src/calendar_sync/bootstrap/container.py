@@ -24,12 +24,22 @@ from calendar_sync.application.identity.administration import (
     ShowOwnAccountDeletion,
     ShowRegistration,
 )
+from calendar_sync.application.identity.integration_tokens import IssueIntegrationToken
+from calendar_sync.application.identity.plans import (
+    ChangePlan,
+    DefinePlan,
+    RemovePlan,
+    SetPlansSetting,
+    ShowPlans,
+)
 from calendar_sync.application.identity.ports import (
     IntegrationTokenAuthentication,
     IntegrationTokens,
     Invitations,
     PasswordHasher,
     PasswordResetLinks,
+    PlanAssignments,
+    PlanCatalog,
     RegistrationSettings,
     Sessions,
     SignInThrottle,
@@ -65,6 +75,8 @@ from calendar_sync.application.operations.instant_sync import (
     WatchUpkeep,
 )
 from calendar_sync.application.operations.operator_overview import OperatorOverview, UserStatuses
+from calendar_sync.application.operations.own_plan import ShowOwnPlan
+from calendar_sync.application.operations.plan_assignment import AssignPlans
 from calendar_sync.application.operations.ports import (
     CauseSighting,
     DatabaseStorage,
@@ -95,6 +107,7 @@ from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizat
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
     AccountCalendars,
+    Allowances,
     CalendarProvider,
     ConnectedAccountRepository,
     IncidentNotifications,
@@ -124,6 +137,7 @@ from calendar_sync.application.sync.watch_ports import (
     DeliveryEvidenceLog,
     EveryUserInstant,
     NoticeReader,
+    PlanCadence,
     SyncCadencePolicy,
 )
 from calendar_sync.bootstrap.config import Settings
@@ -167,6 +181,7 @@ from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
+from calendar_sync.infrastructure.persistence.plans import SqlitePlans
 from calendar_sync.infrastructure.persistence.registration import (
     SqliteInvitations,
     SqlitePasswordResetLinks,
@@ -204,6 +219,10 @@ class UserServices:
     operations: OperationsQueries
     get_installation_status: GetInstallationStatus
     integration_tokens: IntegrationTokens
+    issue_integration_token: IssueIntegrationToken
+    """Issues a token within the User's Plan; installation:read only for administrators."""
+    show_own_plan: ShowOwnPlan
+    """What the User's Plan allows them and how much of it they have, for Your plan."""
     inspect_activity_event: InspectActivityEvent
     list_sync_rules: ListSyncRules
     create_draft_rule: CreateDraftSyncRule
@@ -268,6 +287,19 @@ class AdministrationServices:
 
 
 @dataclass(frozen=True, slots=True)
+class PlanServices:
+    """What Installation Administrators do with Plans and the Plans setting (ADR 0038)."""
+
+    show_plans: ShowPlans
+    define_plan: DefinePlan
+    change_plan: ChangePlan
+    remove_plan: RemovePlan
+    set_plans_setting: SetPlansSetting
+    assign_plans: AssignPlans
+    """Gives one Plan to many people at once, after a dry run that says who would be over."""
+
+
+@dataclass(frozen=True, slots=True)
 class Container:
     """What the Web API reads: installation-wide services, and each User's through `for_user`."""
 
@@ -276,6 +308,7 @@ class Container:
     """Every calendar provider this release knows, and how Users connect the configured ones."""
     identity: IdentityServices
     administration: AdministrationServices
+    plans: PlanServices
     token_authentication: IntegrationTokenAuthentication
     storage: StorageAdministration
     account_calendars: AccountCalendars | None
@@ -340,6 +373,11 @@ class Adapters:
     delivery_evidence: DeliveryEvidenceLog
     """Whether each provider's Watch Notices reach the installation's address."""
     watch_inbox: WatchNoticeInbox
+    allowances: Allowances
+    """What each User may use now, as their Plan allows (ADR 0038)."""
+    plan_catalog: PlanCatalog
+    plan_assignments: PlanAssignments
+    """The one way a User's own Plan changes: administrators now, billing later."""
     notifications: Callable[[UserId], IncidentNotifications | None] = lambda _owner: None
     """Each User's own Incident Notifications, by email when the installation sends it."""
     installation_notifications: InstallationNotifications | None = None
@@ -354,7 +392,8 @@ class Adapters:
     watchers: RoutingCalendarWatcher | None = None
     """Each account's provider's Calendar Watcher, where accounts can be stored."""
     sync_cadence: SyncCadencePolicy = field(default_factory=EveryUserInstant)
-    """Each User's Sync Cadence; every User may sync instantly while Plans are off (ADR 0028)."""
+    """Each User's Sync Cadence. `build_adapters` reads it from each User's Plan (`PlanCadence`,
+    ADR 0038); this default gives every User Instant Sync, as Plans off does (ADR 0028)."""
     watch_backoff: AccountBackoff = field(default_factory=AccountBackoff)
     """One per process: how long each account waits before upkeep asks its provider again,
     shared by every User's upkeep."""
@@ -394,6 +433,7 @@ def build_adapters(settings: Settings) -> Adapters:
     history = HistoryCipher(settings.master_key) if settings.master_key else None
     tokens = SqliteIntegrationTokens(database, clock, ids)
     users = SqliteUserDirectory(database)
+    plans = SqlitePlans(database)
     mail = _mail_server(settings)
     adapters = Adapters(
         unit_of_work=SqliteUnitOfWorkFactory(database, clock, history).for_user,
@@ -419,14 +459,21 @@ def build_adapters(settings: Settings) -> Adapters:
         token_authentication=tokens,
         delivery_evidence=SqliteDeliveryEvidenceLog(database),
         watch_inbox=SqliteWatchNoticeInbox(database),
+        allowances=plans,
+        plan_catalog=plans,
+        plan_assignments=plans,
         notifications=lambda owner: (
             OwnerNotifier(users, owner, mail, public_address(settings)) if mail else None
         ),
         installation_notifications=_installation_notifier(settings, mail),
         sends_email=mail is not None,
+        sync_cadence=PlanCadence(plans),
     )
+    # Connecting a new account stays within its User's Plan (ADR 0038).
     accounts = (
-        SqliteConnectedAccountStore(database, CredentialCipher(settings.master_key), clock, ids)
+        SqliteConnectedAccountStore(
+            database, CredentialCipher(settings.master_key), clock, ids, allowances=plans
+        )
         if settings.master_key
         else None
     )
@@ -515,6 +562,15 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
     )
     # Installation Health counts the verdicts People shows, so the two never disagree.
     statuses = UserStatuses(adapters.installation_units, adapters.locks, adapters.clock, scheduler)
+    overview = OperatorOverview(
+        adapters.users,
+        statuses,
+        adapters.installation_units,
+        adapters.clock,
+        adapters.allowances,
+        adapters.plan_catalog,
+        adapters.plan_assignments,
+    )
     return Container(
         secure_cookies=settings.secure_cookies,
         providers=adapters.providers,
@@ -522,6 +578,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         administration=_administration(
             adapters, lambda owner: _owned_rules(owner, adapters, user_services(owner))
         ),
+        plans=_plan_services(adapters, overview),
         token_authentication=adapters.token_authentication,
         storage=StorageAdministration(
             adapters.database_storage, adapters.locks, adapters.clock, adapters.log_files
@@ -550,9 +607,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             ),
             adapters.providers.client_secrets,
         ),
-        operator_overview=OperatorOverview(
-            adapters.users, statuses, adapters.installation_units, adapters.clock
-        ),
+        operator_overview=overview,
         sends_email=adapters.sends_email,
         instant_dispatcher=instant.dispatcher,
         watch_keeper=instant.keeper,
@@ -738,6 +793,20 @@ def _administration(
     )
 
 
+def _plan_services(adapters: Adapters, overview: OperatorOverview) -> PlanServices:
+    """Every Plan use case reads and writes the installation's one Plans store; giving a Plan to
+    many people counts what they use through the Operator Overview."""
+    users, catalog, clock = adapters.users, adapters.plan_catalog, adapters.clock
+    return PlanServices(
+        show_plans=ShowPlans(users, catalog),
+        define_plan=DefinePlan(users, catalog, clock),
+        change_plan=ChangePlan(users, catalog, clock),
+        remove_plan=RemovePlan(users, catalog),
+        set_plans_setting=SetPlansSetting(users, catalog, clock),
+        assign_plans=AssignPlans(users, overview, adapters.plan_assignments, clock),
+    )
+
+
 def _scheduled_services(services: UserServices) -> ScheduledServices:
     assert services.execute_sync_rule is not None
     check = services.check_account_access
@@ -758,6 +827,7 @@ def _compose_user(
     provider = adapters.calendar_provider
     accounts = adapters.accounts(user_id) if adapters.accounts is not None else None
     operations = adapters.operations(user_id)
+    tokens = adapters.integration_tokens(user_id)
     create_sync_rule = CreateSyncRule(unit_of_work)
     list_sync_rules = ListSyncRules(unit_of_work, locks)
     rule_health = RuleHealth(
@@ -814,19 +884,23 @@ def _compose_user(
         get_installation_status=GetInstallationStatus(
             list_sync_rules, operations, clock, heartbeat
         ),
-        integration_tokens=adapters.integration_tokens(user_id),
+        integration_tokens=tokens,
+        issue_integration_token=IssueIntegrationToken(
+            user_id, adapters.users, tokens, adapters.allowances
+        ),
+        show_own_plan=ShowOwnPlan(adapters.allowances, unit_of_work, accounts, tokens, user_id),
         inspect_activity_event=InspectActivityEvent(
             adapters.activity(user_id), unit_of_work, provider
         ),
         list_sync_rules=list_sync_rules,
         create_draft_rule=CreateDraftSyncRule(create_sync_rule, adapters.ids),
-        enable_sync_rule=EnableSyncRule(unit_of_work, locks),
+        enable_sync_rule=EnableSyncRule(unit_of_work, locks, adapters.allowances, user_id),
         pause_sync_rule=PauseSyncRule(unit_of_work, locks),
         change_sync_rule_policy=ChangeSyncRulePolicy(unit_of_work, clock, locks),
-        get_sync_rule_details=GetSyncRuleDetails(unit_of_work, locks),
+        get_sync_rule_details=GetSyncRuleDetails(unit_of_work, locks, adapters.allowances, user_id),
         remove_sync_rule=remove_sync_rule,
         replace_sync_rule_calendars=ReplaceSyncRuleCalendars(
-            unit_of_work, remove_sync_rule, create_sync_rule, adapters.ids
+            unit_of_work, remove_sync_rule, adapters.ids
         ),
         rule_health=rule_health,
         lapsed_authorizations=rule_health.lapses,

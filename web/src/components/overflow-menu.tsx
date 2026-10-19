@@ -1,7 +1,8 @@
 import { ChevronDown, MoreHorizontal } from "lucide-react"
-import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react"
+import { Fragment, useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import { useKeptInWindow } from "@/components/ui/keep-in-window"
 
 export type OverflowMenuItem = {
   id: string
@@ -14,6 +15,8 @@ export type OverflowMenuItem = {
   /** Opens `href` in a new tab, so this page stays and the menu returns focus to its trigger. */
   newTab?: boolean
   disabled?: boolean
+  /** A divider before the item, setting it apart from the ones above, as Remove is. */
+  separated?: boolean
   onSelect: () => void
 }
 
@@ -25,27 +28,36 @@ export type OverflowMenuTrigger = {
 
 const MENU_WIDTH = 336
 const VIEWPORT_MARGIN = 16
+/** The menu opens under its trigger, or above it when there is more room there, this far from it (0.25rem). */
+const PLACEMENT = { gap: 4, sideways: false }
 
 /**
  * A menu button for secondary commands, or for choosing how to do one main action, following the WAI-ARIA menu button pattern: arrow
  * keys move between items, Escape and Tab close it, and focus returns to the trigger. Disabled
- * items stay focusable so a running command never strands keyboard focus.
+ * items stay focusable so a running command never strands keyboard focus. The menu never leaves
+ * the window: it opens under its trigger, or above it when there is more room there, below the
+ * top bar and above a toast, and its items scroll inside it when it is capped.
  */
 export function OverflowMenu({
   label,
   items,
   trigger: visibleTrigger,
+  onOpen,
 }: {
   label: string
   items: OverflowMenuItem[]
   trigger?: OverflowMenuTrigger
+  /** Called as the menu opens, so items can read what their descriptions need. */
+  onOpen?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [placement, setPlacement] = useState<{ left: number; width: number } | null>(null)
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const itemRefs = useRef<(HTMLElement | null)[]>([])
+  const list = useRef<HTMLDivElement>(null)
   const menuId = useId()
+  useKeptInWindow(list, open, PLACEMENT)
 
   useEffect(() => {
     if (!open) return
@@ -68,6 +80,7 @@ export function OverflowMenu({
       setPlacement({ left: left - box.left, width })
     }
     setOpen(true)
+    onOpen?.()
   }
 
   function close(returnFocus: boolean) {
@@ -132,6 +145,7 @@ export function OverflowMenu({
       </Button>
       {open && (
         <div
+          ref={list}
           className="overflow-menu-list"
           style={placement ? { left: placement.left, right: "auto", width: placement.width } : undefined}
           id={menuId}
@@ -139,15 +153,17 @@ export function OverflowMenu({
           aria-label={label}
         >
           {items.map((item, index) => (
-            <OverflowMenuEntry
-              key={item.id}
-              item={item}
-              descriptionId={`${menuId}-${item.id}`}
-              entryRef={(element) => {
-                itemRefs.current[index] = element
-              }}
-              onChosen={() => close(!item.href || Boolean(item.newTab))}
-            />
+            <Fragment key={item.id}>
+              {item.separated && <hr className="overflow-menu-separator" />}
+              <OverflowMenuEntry
+                item={item}
+                descriptionId={`${menuId}-${item.id}`}
+                entryRef={(element) => {
+                  itemRefs.current[index] = element
+                }}
+                onChosen={() => close(!item.href || Boolean(item.newTab))}
+              />
+            </Fragment>
           ))}
         </div>
       )}

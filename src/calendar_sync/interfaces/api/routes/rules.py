@@ -54,6 +54,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.plans import PlanLimitReached
 from calendar_sync.domain.runs import RuleRunOutcome
 from calendar_sync.domain.watches import CadenceReason
 from calendar_sync.interfaces.api.dependencies import available, current_user, user_services
@@ -131,6 +132,7 @@ def list_rules(services: Services) -> list[RuleSummaryResponse]:
             last_sync=_outcome_response(summary.last_sync),
             latest_preview=_preview_response(summary.latest_preview),
             running=_work_response(summary.running),
+            keeps_place=summary.rule.keeps_place,
         )
         for summary in services.list_sync_rules.execute()
     ]
@@ -329,6 +331,9 @@ def rule_details(rule_id: str, services: Services) -> RuleDetailResponse:
         last_reconciliation=_outcome_response(details.last_reconciliation),
         latest_preview=_preview_response(details.latest_preview),
         running=_work_response(details.running),
+        can_start=details.can_start,
+        rule_limit=details.rule_limit,
+        keeps_place=details.rule.keeps_place,
     )
 
 
@@ -416,6 +421,9 @@ def _lifecycle_change(change: Callable[[SyncRuleId], SyncRule], rule_id: str) ->
             status.HTTP_404_NOT_FOUND, "rule_not_found", "sync rule does not exist"
         ) from error
     except InvalidStateTransition as error:
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
+    except PlanLimitReached as error:
+        # A Start the User's Plan refuses; the code names the limit, so it is never a 500.
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
 
 

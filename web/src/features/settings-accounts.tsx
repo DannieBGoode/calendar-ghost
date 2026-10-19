@@ -14,6 +14,7 @@ import { accountSummary, addressesByProvider, needsReauthorization } from "@/lib
 import { type CalendarProvider, type ConnectedAccount, api } from "@/lib/api"
 import { providerOf } from "@/lib/providers"
 import { type AccountCommands, useAccountCommands } from "@/lib/use-account-commands"
+import { useAccountLimitReason } from "@/lib/use-own-plan"
 import type { OAuthReturn } from "@/lib/use-oauth-return"
 import { AccountRow } from "@/features/settings-account-row"
 import { OAuthReturnNote, OAuthReturnStep } from "@/features/settings-oauth-return"
@@ -112,6 +113,8 @@ export function AccountsSection({
 /** The section's heading, with Connect once accounts exist; before that, the empty state holds it. */
 function AccountsHeading({ providers, showConnect }: { providers: CalendarProvider[]; showConnect: boolean }) {
   const { t } = useI18n()
+  // Read here, outside the condition below, as the rules of hooks require.
+  const accountLimit = useAccountLimitReason()
   return (
     <div className="section-heading">
       <div>
@@ -121,7 +124,7 @@ function AccountsHeading({ providers, showConnect }: { providers: CalendarProvid
       {providers.length === 0 ? (
         <Badge variant="attention"><ShieldAlert aria-hidden="true" /> {t("settings.accounts.notConfigured")}</Badge>
       ) : (
-        showConnect && <ConnectAccount providers={providers} primary={false} />
+        showConnect && <ConnectAccount providers={providers} primary={false} disabledReason={accountLimit} />
       )}
     </div>
   )
@@ -148,6 +151,8 @@ function AccountGroup({
 }) {
   const i18n = useI18n()
   const { t } = i18n
+  // Read here, outside the condition below, as the rules of hooks require.
+  const accountLimit = useAccountLimitReason()
   const summary = accountSummary(i18n, accounts)
   // Collapsed while every account is healthy; open when one needs attention or just connected.
   const accountsOpen =
@@ -168,7 +173,7 @@ function AccountGroup({
             <h3>{t("settings.accounts.empty.title")}</h3>
             <p>{t("settings.accounts.empty.body")}</p>
           </div>
-          {providers.length > 0 && <ConnectAccount providers={providers} primary />}
+          {providers.length > 0 && <ConnectAccount providers={providers} primary disabledReason={accountLimit} />}
         </div>
       ) : (
         <>

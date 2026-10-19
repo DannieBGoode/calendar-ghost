@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
-from calendar_sync.application.identity.errors import EmailTaken
+from calendar_sync.application.identity.errors import EmailTaken, PlanKeyTaken, PlanNotFound
 from calendar_sync.application.identity.ports import (
+    AssignmentChange,
     IssuedLink,
     PendingInvitation,
+    PlanListing,
+    PlansSetting,
     Session,
     UserPage,
     UserQuery,
@@ -24,6 +27,18 @@ from calendar_sync.domain.access import (
     link_expiry,
     require_administrator_remains,
     require_registration_change,
+)
+from calendar_sync.domain.plans import (
+    NO_LIMITS_PLAN,
+    UNLIMITED,
+    Allowance,
+    NewPlan,
+    Plan,
+    PlanKey,
+    allowance_for,
+    needs_no_limits_plan,
+    require_removable,
+    require_unique_name,
 )
 
 
@@ -41,6 +56,9 @@ class MemoryUsers:
     hashes: dict[UserId, str] = field(default_factory=dict)
     meanwhile: Callable[[MemoryUsers], object] | None = None
     """Another request's change, landing once just before this directory's next guarded write."""
+    default_plan: PlanKey | None = None
+    """The Default Plan, which MemoryPlans keeps here, as SQLite keeps Users and Plans in one
+    database."""
 
     def count(self) -> int:
         return len(self.users)
@@ -55,6 +73,7 @@ class MemoryUsers:
             if query.search.casefold() in (user.email or "").casefold()
             and query.role in (None, user.role)
             and query.state in (None, user.state)
+            and query.plan in (None, user.plan or self.default_plan)
         ]
         known = [user for user in matching if _sort_value(user, query.sort) is not None]
         known.sort(key=lambda user: str(_sort_value(user, query.sort)), reverse=query.descending)
@@ -220,6 +239,8 @@ class MemoryRegistration:
     current: RegistrationPolicy = RegistrationPolicy.ONLY_ME
     links: list[_Link] = field(default_factory=list)
     """The Invitations' links, shared with MemoryInvitations as SQLite shares one database."""
+    plans: MemoryPlans | None = None
+    """The installation's Plans, which returning to setup turns off as SQLite's does."""
 
     def policy(self) -> RegistrationPolicy:
         return self.current
@@ -234,6 +255,8 @@ class MemoryRegistration:
         for link in self.links:
             if link.usable(at):
                 link.revoked_at = at
+        if self.plans is not None:
+            self.plans.enabled = False
 
 
 @dataclass
@@ -325,3 +348,121 @@ class MemoryResetLinks:
         link.used_at = at
         self.users.set_password_hash(owner, password_hash)
         return owner
+
+
+@dataclass
+class MemoryPlans:
+    """Plans as SqlitePlans keeps them; each User's role and own Plan come from `users`."""
+
+    users: MemoryUsers = field(default_factory=MemoryUsers)
+    enabled: bool = False
+    catalog: dict[PlanKey, Plan] = field(default_factory=dict)
+    changes: dict[UserId, AssignmentChange] = field(default_factory=dict)
+    """How each User's own Plan was last set, as SQLite's users table records it."""
+
+    @property
+    def default(self) -> PlanKey | None:
+        return self.users.default_plan
+
+    def of(self, user: UserId) -> Allowance:
+        found = self.users.get(user)
+        if found is None:
+            return UNLIMITED
+        return allowance_for(
+            plans_on=self.enabled,
+            administers=found.administers,
+            own=self.catalog.get(found.plan) if found.plan is not None else None,
+            default=self.catalog.get(self.default) if self.default is not None else None,
+        )
+
+    def of_users(self, users: Collection[UserId]) -> dict[UserId, Allowance]:
+        return {user: self.of(user) for user in users}
+
+    def settings(self) -> PlansSetting:
+        return PlansSetting(self.enabled, self.default)
+
+    def change_settings(self, enabled: bool, default: PlanKey | None, at: datetime) -> PlansSetting:
+        if default is not None:
+            self._require(default)
+        if needs_no_limits_plan(enabled, default, self.default):
+            names = [plan.name for plan in self.catalog.values()]
+            default = self.add(NO_LIMITS_PLAN.named_apart(names), at).key
+        self.enabled, self.users.default_plan = enabled, default
+        return self.settings()
+
+    def plans(self) -> tuple[PlanListing, ...]:
+        ordered = sorted(self.catalog.values(), key=lambda plan: (plan.name, plan.key.value))
+        return tuple(self._listing(plan) for plan in ordered)
+
+    def followers(self) -> int:
+        return sum(user.plan is None for user in self.users.users.values())
+
+    def any_plans(self) -> bool:
+        return bool(self.catalog)
+
+    def get(self, key: PlanKey) -> Plan | None:
+        return self.catalog.get(key)
+
+    def add(self, plan: NewPlan, at: datetime) -> Plan:
+        require_unique_name(plan.name, [other.name for other in self.catalog.values()])
+        taken = {key.value for key in self.catalog}
+        if plan.key is not None and plan.key.value in taken:
+            raise PlanKeyTaken(f"a plan with the key {plan.key.value} already exists")
+        stored = plan.keyed(taken)
+        self.catalog[stored.key] = stored
+        return stored
+
+    def change(self, plan: Plan, at: datetime) -> None:
+        self._require(plan.key)
+        others = [other.name for other in self.catalog.values() if other.key != plan.key]
+        require_unique_name(plan.name, others)
+        self.catalog[plan.key] = plan
+
+    def remove(self, key: PlanKey) -> None:
+        self._require(key)
+        people = sum(user.plan == key for user in self.users.users.values())
+        require_removable(key, self.default, people)
+        del self.catalog[key]
+
+    def assign_all(self, plans: Mapping[UserId, PlanKey | None], change: AssignmentChange) -> bool:
+        for plan in plans.values():
+            if plan is not None:
+                self._require(plan)
+        found = [self.users.get(user) for user in plans]
+        if any(user is None for user in found):
+            return False
+        for user in found:
+            assert user is not None
+            plan = plans[user.id]
+            self.users.users[user.id] = replace(user, plan=None if plan == self.default else plan)
+            self.changes[user.id] = change
+        return True
+
+    def last_changes(self, users: Collection[UserId]) -> dict[UserId, AssignmentChange]:
+        return {user: self.changes[user] for user in users if user in self.changes}
+
+    def _require(self, key: PlanKey) -> None:
+        if key not in self.catalog:
+            raise PlanNotFound(f"plan {key.value} does not exist")
+
+    def _listing(self, plan: Plan) -> PlanListing:
+        holders = [
+            user
+            for user in self.users.users.values()
+            if user.plan == plan.key or (user.plan is None and plan.key == self.default)
+        ]
+        limited = [
+            user for user in holders if not user.administers and user.state is UserState.ACTIVE
+        ]
+        return PlanListing(plan, plan.key == self.default, len(holders), len(limited))
+
+
+@dataclass
+class BrokenAllowances:
+    """An Allowances whose every read raises, as a locked or failing database would."""
+
+    def of(self, user: UserId) -> Allowance:
+        raise RuntimeError("database is locked")
+
+    def of_users(self, users: Collection[UserId]) -> Mapping[UserId, Allowance]:
+        raise RuntimeError("database is locked")

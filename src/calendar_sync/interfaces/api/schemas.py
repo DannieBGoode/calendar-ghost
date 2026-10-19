@@ -67,6 +67,15 @@ EffectiveCadenceValue = Literal[
     "not_reaching",
 ]
 """How a rule syncs: "instant", or why Scheduled Sync runs it instead."""
+SyncIntervalValue = Literal[
+    "instant", "5_minutes", "10_minutes", "15_minutes", "30_minutes", "60_minutes"
+]
+"""How soon a Plan's rules sync (ADR 0038); only the offered ones may be saved."""
+AllowanceBasisValue = Literal["plans_off", "administrator", "plan"]
+"""Why a User has the limits they have: Plans are off, they administer, or a Plan limits them."""
+LimitedResourceValue = Literal["rules", "connected_accounts", "integration_tokens"]
+"""What a Plan limits by count: rules that count toward it, calendar accounts, and Integration
+Tokens."""
 RunReasonValue = Literal[
     "changes", "first_run", "daily_pass", "reconcile_now", "reprojection", "relisted"
 ]
@@ -290,6 +299,9 @@ class RuleSummaryResponse(RuleResponse):
     last_sync: RunOutcomeResponse | None
     latest_preview: PreviewSummaryResponse | None
     running: RuleWorkResponse | None
+    keeps_place: bool
+    """A Rule Replacement draft that keeps the previous rule's place under its User's rule limit,
+    so starting it adds no rule to the count (ADR 0038)."""
 
 
 class RuleDetailResponse(RuleResponse):
@@ -304,6 +316,13 @@ class RuleDetailResponse(RuleResponse):
     last_reconciliation: RunOutcomeResponse | None
     latest_preview: PreviewSummaryResponse | None
     running: RuleWorkResponse | None
+    can_start: bool
+    """Whether the rule may start now under its User's rule limit; Start checks again."""
+    rule_limit: int | None
+    """The rule limit that applies to the User; null when none does."""
+    keeps_place: bool
+    """A Rule Replacement draft that keeps the previous rule's place under its User's rule limit,
+    so starting it adds no rule to the count (ADR 0038)."""
 
 
 class UpdateRulePolicyRequest(BaseModel):
@@ -741,6 +760,234 @@ class ResourceUseResponse(ApiResponse):
     """The first UTC day the provider calls count, as an ISO date."""
 
 
+class PlanNameResponse(ApiResponse):
+    """A Plan as people know it: its key, which never changes, and its name."""
+
+    key: str
+    name: str
+
+
+class AppliedPlanResponse(PlanNameResponse):
+    """A Plan a User has, such as the one that limits them now."""
+
+    on_default: bool
+    """It is the Default Plan, because they have no Plan of their own."""
+
+
+class PlanLimitsResponse(ApiResponse):
+    """What a Plan allows; null is unlimited."""
+
+    rules: int | None
+    """Rules that count: enabled, stopped only by Lapsed Authorization, or a Rule Replacement
+    draft that keeps its place."""
+    connected_accounts: int | None
+    """Calendar accounts, Disconnected Accounts included."""
+    integration_tokens: int | None
+    """Unrevoked Integration Tokens; 0 offers none."""
+    sync_interval: SyncIntervalValue
+
+
+class UseCountResponse(ApiResponse):
+    """How many of the people a Plan limits have exactly `in_use` of one resource."""
+
+    in_use: int
+    people: int
+
+
+class PlanUseCountsResponse(ApiResponse):
+    """How much the people a Plan limits have of each resource it limits: each count above 0,
+    highest first, with how many people have it, so a lower limit can say how many people it
+    would leave with more than it allows. Counts only; never who."""
+
+    rules: list[UseCountResponse]
+    """Rules that count toward the rule limit."""
+    connected_accounts: list[UseCountResponse]
+    """Calendar accounts, Disconnected Accounts included."""
+    integration_tokens: list[UseCountResponse]
+    """Unrevoked Integration Tokens."""
+
+
+class PlanResponse(ApiResponse):
+    """One Plan, as Administration lists it."""
+
+    key: str
+    name: str
+    limits: PlanLimitsResponse
+    is_default: bool
+    people: int
+    """Everyone who has it: their own Plan, plus, for the default, everyone with none. People
+    finds the same people by the Plan."""
+    limited_people: int
+    """Active Users who do not administer and have it, whom it limits while Plans are on."""
+    over_people: int
+    """Of `limited_people`, how many have more than it allows of rules, calendar accounts, or
+    Integration Tokens, as after a limit was lowered, whether or not Plans are on."""
+    use: PlanUseCountsResponse
+
+
+class PlansResponse(ApiResponse):
+    """The Plans setting, the sync intervals offered now, and every Plan by name."""
+
+    enabled: bool
+    """Whether Plans limit anyone; while they are off, nobody is limited."""
+    default_plan: str | None
+    """The Default Plan's key; null until an administrator chooses one."""
+    sync_intervals: list[SyncIntervalValue]
+    """The sync intervals a Plan may be given now, in order."""
+    followers: int
+    """Everyone with no Plan of their own, whatever their role or state: whom making another Plan
+    the default moves to it."""
+    plans: list[PlanResponse]
+
+
+class OverLimitResponse(ApiResponse):
+    """One limit a person has more of than their Plan allows: they keep everything, but cannot
+    add another until they are within it."""
+
+    limit: LimitedResourceValue
+    in_use: int
+    """Rules that count toward the rule limit, every calendar account, Disconnected Accounts
+    included, or unrevoked Integration Tokens."""
+    allowed: int
+
+
+class LimitUseResponse(ApiResponse):
+    """How many of one resource a person has, beside what the Plan they have allows."""
+
+    in_use: int
+    allowed: int | None
+    """What the Plan allows; null when it sets no limit, and 0 for Integration Tokens it does
+    not include."""
+
+
+class PersonPlanUseResponse(ApiResponse):
+    """How much of the Plan they have a person uses, each count beside its limit, for the
+    meters on their page (ADR 0030, amended, for the token count). Counts only."""
+
+    rules: LimitUseResponse
+    """Rules that count toward the rule limit: Active Rules."""
+    connected_accounts: LimitUseResponse
+    """Calendar accounts, Disconnected Accounts included."""
+    integration_tokens: LimitUseResponse
+    """Unrevoked Integration Tokens."""
+    sync_interval: SyncIntervalValue
+    """How soon the Plan they have syncs their rules, which counts nothing."""
+
+
+class PersonPlanOverviewResponse(ApiResponse):
+    """A person's Plan, as the Operator Overview shows it on their page and their row of People
+    (ADR 0038)."""
+
+    basis: AllowanceBasisValue
+    plan: AppliedPlanResponse | None
+    """The Plan that limits them; null unless the basis is "plan"."""
+    assigned: PlanNameResponse | None
+    """Their own Plan, whatever the basis; null when they have the Default Plan."""
+    has: AppliedPlanResponse | None
+    """The Plan they have, whether or not it limits them now: their own, or else the Default
+    Plan; null when they have neither. People finds them by it."""
+    over: list[OverLimitResponse]
+    """Each limit of the Plan they have that they have more of than it allows, rules first,
+    whether or not Plans are on; empty for an administrator or a disabled person, whom no Plan
+    limits."""
+    assigned_by: str | None
+    """The email of the administrator who gave them their own Plan; null while they have the
+    Default Plan, and when billing gave it or that administrator was deleted or has no email."""
+    assigned_at: str | None
+    """When their own Plan was last given, in ISO 8601; null while they have the Default Plan,
+    or when nothing recorded it."""
+    use: PersonPlanUseResponse | None
+    """How much of the Plan they have they use, whoever they are; null when they have no Plan."""
+
+
+class OwnPlanResponse(ApiResponse):
+    """What the signed-in User's Plan allows and how much of it they have, for Your plan."""
+
+    basis: AllowanceBasisValue
+    plan: AppliedPlanResponse | None
+    """The Plan that limits them; null unless the basis is "plan"."""
+    limits: PlanLimitsResponse | None
+    """What their Plan allows; null unless the basis is "plan", since then nothing limits them."""
+    rules_counted: int
+    connected_accounts: int
+    """Every calendar account, Disconnected Accounts included."""
+    integration_tokens: int
+    """Unrevoked Integration Tokens."""
+    instant: bool
+    """Whether their Plan includes Instant Sync."""
+    poll_every_minutes: int
+    """How often Scheduled Sync runs their rules, as their Plan says."""
+    may_connect_account: bool
+    may_issue_token: bool
+    over_rule_limit: bool
+    """More rules count than the rule limit: nothing stops, but no other rule can start."""
+
+
+class PlanLimitsRequest(BaseModel):
+    """Each limit is a whole number, or null for unlimited."""
+
+    rules: int | None
+    connected_accounts: int | None
+    integration_tokens: int | None
+    sync_interval: SyncIntervalValue
+
+
+class DefinePlanRequest(BaseModel):
+    key: str | None = Field(default=None, max_length=200)
+    """Optional: 1 to 32 lower-case letters, digits, and hyphens, which another Plan must not
+    have. Without one, the server makes the key from the name: lower-case letters, digits, and
+    hyphens, with "-2", "-3", and so on when another Plan has it. It never changes."""
+    name: str = Field(max_length=200)
+    limits: PlanLimitsRequest
+
+
+class ChangePlanRequest(BaseModel):
+    name: str = Field(max_length=200)
+    limits: PlanLimitsRequest
+
+
+class PlansSettingRequest(BaseModel):
+    enabled: bool
+    # No length bound here: a key of any length that names no Plan answers 404 plan_not_found,
+    # and the Plan key's own check refuses one over 32 characters before anything reads it.
+    default_plan: str | None
+    """Required. Null clears the default, which Plans allow only while they are off."""
+
+
+class PlanAssignmentsRequest(BaseModel):
+    # No length bound here: more than 100 people, or none, answers 422 invalid_assignment with
+    # its reason, and an identifier that names no User answers the same. Each Plan is bounded by
+    # the Plan key's own check, as `PlansSettingRequest.default_plan` is.
+    plans: dict[str, str | None]
+    """1 to 100 Users by identifier, each with the key of the Plan to give them, or null to
+    return them to the Default Plan; all of them move, or none does."""
+    dry_run: bool = False
+    """Give nothing, and answer what giving it would do."""
+
+
+class PlanMoveResponse(ApiResponse):
+    """One person given a Plan, or who would be in a dry run."""
+
+    user_id: str
+    email: str | None
+    had: AppliedPlanResponse | None
+    """The Plan they had: their own, or else the Default Plan; null when they had neither."""
+    has: AppliedPlanResponse | None
+    """The Plan they have now, or would have in a dry run; null when it is the Default Plan and
+    there is none."""
+    over: list[OverLimitResponse]
+    """Each limit of the Plan they have that they have more of than it allows, rules first,
+    whether or not Plans are on; empty for an administrator or a disabled person."""
+
+
+class PlanAssignmentsResponse(ApiResponse):
+    """Everyone a Plan was given to, in the order named, or would be in a dry run."""
+
+    dry_run: bool
+    """Whether nothing was given."""
+    people: list[PlanMoveResponse]
+
+
 class PersonResponse(UserResponse):
     """A row of People: who the User is, and the Operator Overview's summary of them."""
 
@@ -749,6 +996,8 @@ class PersonResponse(UserResponse):
     problems: int
     last_synced_at: str | None
     resources: ResourceUseResponse
+    plan: PersonPlanOverviewResponse | None
+    """Their Plan, as their page shows it; null while no Plan exists (ADR 0038)."""
 
 
 class UserOverviewResponse(ApiResponse):
@@ -759,6 +1008,8 @@ class UserOverviewResponse(ApiResponse):
     user: UserResponse
     status: StatusResponse
     resources: ResourceUseResponse
+    plan: PersonPlanOverviewResponse | None
+    """Their Plan, and their own if it differs; null while no Plan exists (ADR 0038)."""
 
 
 class UserPageResponse(ApiResponse):
@@ -777,6 +1028,12 @@ class PeopleQuery(BaseModel):
     state: Literal["active", "disabled"] | None = None
     verdict: StatusVerdictValue | None = None
     """Only people whose Installation Status has this verdict."""
+    plan: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,31}$")
+    """Only people who have the Plan with this key: as their own, or, for the Default Plan, by
+    having none of their own."""
+    over: bool = False
+    """Only people over a limit of the Plan they have, whether or not Plans are on; never an
+    administrator or a disabled person."""
     sort: Literal["joined", "email", "last_sign_in", "verdict"] = "joined"
     """By verdict, the most urgent comes first in ascending order."""
     order: Literal["asc", "desc"] = "asc"

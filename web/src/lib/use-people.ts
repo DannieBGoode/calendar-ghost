@@ -5,10 +5,20 @@ import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
 import { api, type IssuedLink, type PeopleQuery, type Person, type UserDeletion } from "@/lib/api"
 import { deletionMessage, personName } from "@/lib/people"
+import type { PlanMoves } from "@/lib/plan-assignment"
+import { OWN_PLAN_QUERY } from "@/lib/use-own-plan"
+import { PLANS_QUERY } from "@/lib/use-plans"
 
-/** What an Installation Administrator can do to another User. */
-type PersonAction = "promote" | "demote" | "disable" | "enable" | "reset" | "delete"
+/**
+ * What an Installation Administrator can do to another User. "plan" opens Change plan beside them,
+ * which then changes their Plan itself, as Plans change from Everyone.
+ */
+type PersonAction = "promote" | "demote" | "disable" | "enable" | "reset" | "delete" | "plan"
+/** A command that is sent as it is chosen, rather than opening a next step. */
+type SentAction = Exclude<PersonAction, "plan">
+/** A command on someone; "delete" opens its confirmation first, and "plan" opens Change plan. */
 export type PersonCommand = { person: Person; action: PersonAction }
+type SentCommand = { person: Person; action: SentAction }
 
 /** What a command returned that the administrator needs next: a link to pass on, or a deletion's counts. */
 type Outcome = { link?: IssuedLink; deletion?: UserDeletion }
@@ -24,7 +34,7 @@ const CHANGED: Partial<Record<PersonAction, MessageKey>> = {
 // knows one is running even after the page that sent it is gone.
 const PERSON_COMMAND = ["person-command"]
 
-async function run({ person, action }: PersonCommand): Promise<Outcome> {
+async function run({ person, action }: SentCommand): Promise<Outcome> {
   switch (action) {
     case "promote":
       await api.setPersonRole(person.id, "installation_administrator")
@@ -66,6 +76,8 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
   const queryClient = useQueryClient()
   const [message, setMessage] = useState("")
   const [deleting, setDeleting] = useState<string | null>(null)
+  // The person whose Plan is being chosen, inline beside them.
+  const [choosingPlan, setChoosingPlan] = useState<string | null>(null)
   const [resetLink, setResetLink] = useState<{ personId: string; link: IssuedLink } | null>(null)
   // What the last command on someone still listed did, shown beside them.
   const [result, setResult] = useState<{ personId: string; text: string } | null>(null)
@@ -76,15 +88,17 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     mutationFn: run,
     onSuccess: async (outcome, command) => {
       finish(outcome, command)
-      // Whether Only Me is available depends on who is left.
+      // Whether Only Me is available depends on who is left, and each Plan's people counts
+      // depend on who has it and whom it limits.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["people"] }),
         queryClient.invalidateQueries({ queryKey: ["registration"] }),
+        queryClient.invalidateQueries({ queryKey: PLANS_QUERY }),
       ])
     },
   })
 
-  function finish({ link, deletion }: Outcome, { person, action }: PersonCommand) {
+  function finish({ link, deletion }: Outcome, { person, action }: SentCommand) {
     const name = personName(i18n, person)
     const changed = CHANGED[action]
     if (link) setResetLink({ personId: person.id, link })
@@ -107,7 +121,7 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     return queryClient.isMutating({ mutationKey: PERSON_COMMAND }) > 0
   }
 
-  function send(next: PersonCommand) {
+  function send(next: SentCommand) {
     if (running()) return
     // A callback given to this one call runs only while the page that sent it is still shown,
     // so a deletion that finishes after leaving it never navigates from wherever the
@@ -125,8 +139,19 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     setMessage("")
     setResult(null)
     setDeletedMessage("")
+    // One next step at a time: a new command closes an open deletion or Plan choice. A shown
+    // Password Reset Link stays, since it cannot be shown again.
+    setDeleting(null)
+    setChoosingPlan(null)
     if (next.action === "delete") setDeleting(next.person.id)
-    else send(next)
+    else if (next.action === "plan") setChoosingPlan(next.person.id)
+    else send({ person: next.person, action: next.action })
+  }
+
+  /** Closes Change plan, unless a change is on its way. */
+  function closePlanChoice() {
+    if (running()) return
+    setChoosingPlan(null)
   }
 
   /** The error of the last command, when it was for this person. */
@@ -156,6 +181,8 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     deletedMessage,
     deleting,
     setDeleting,
+    choosingPlan,
+    closePlanChoice,
     resetLink,
     setResetLink,
     start,
@@ -167,6 +194,28 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
 }
 
 export type PeopleCommands = ReturnType<typeof usePersonCommands>
+
+/**
+ * Giving Plans to people from Change plan, for one person or several, or Undo's Plan back to each,
+ * in one call, all or none. It shares the person commands' key, so it and another command on
+ * someone never run together, and refreshes People, each person's page, the Plans, and the
+ * administrator's own Plan. A refused Plan may have been removed meanwhile, so a refusal reads the
+ * Plans again.
+ */
+export function useGivePlans() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: PERSON_COMMAND,
+    mutationFn: (moves: PlanMoves) => api.assignPlans(moves, false),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["people"] }),
+        queryClient.invalidateQueries({ queryKey: PLANS_QUERY }),
+        queryClient.invalidateQueries({ queryKey: OWN_PLAN_QUERY }),
+      ]),
+    onError: () => queryClient.invalidateQueries({ queryKey: PLANS_QUERY }),
+  })
+}
 
 // The person whose page was opened from People, and the list's address then, so coming back
 // restores the same search, filters, sort, and page. The address lasts until someone else is

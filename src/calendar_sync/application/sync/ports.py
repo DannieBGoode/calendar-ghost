@@ -35,6 +35,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TransformationPolicy,
 )
+from calendar_sync.domain.plans import Allowance
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 
@@ -217,6 +218,10 @@ class SyncRuleRepository(Protocol):
 
     def purge(self, rule_id: SyncRuleId) -> None:
         """Delete the rule like `remove`, and its audit entries and incidents with it."""
+
+    def inherit_place(self, rule: SyncRuleId, of: SyncRuleId) -> None:
+        """Give `rule` the creation order of `of`, so it ranks where `of` ranked; both are this
+        User's. Called only in the transaction that moves a Rule Replacement's place."""
 
 
 class EventMappingRepository(Protocol):
@@ -446,6 +451,21 @@ class UnitOfWorkFactory(Protocol):
     """
 
     def __call__(self) -> UnitOfWork: ...
+
+
+class Allowances(Protocol):
+    """What each User may use now, as their Plan allows (ADR 0038). Declared here so sync
+    enforces limits without importing identity; SqlitePlans implements it."""
+
+    def of(self, user: UserId) -> Allowance:
+        """The User's Allowance, read now. Raises when it cannot be read, so a limit check
+        fails closed; a User not found reads as UNLIMITED."""
+        ...
+
+    def of_users(self, users: Collection[UserId]) -> Mapping[UserId, Allowance]:
+        """Each User's Allowance, in one read per 500 Users. A User not found reads as
+        UNLIMITED."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
