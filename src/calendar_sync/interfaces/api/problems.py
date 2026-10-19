@@ -69,10 +69,12 @@ from calendar_sync.application.sync.errors import (
 from calendar_sync.domain.access import InvalidEmail, LastAdministrator, OnlyMeNeedsOneUser
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.plans import (
+    COUNT_LIMIT,
     PEOPLE_PER_ASSIGNMENT,
     InvalidAssignment,
     InvalidAssignmentReason,
     InvalidPlan,
+    InvalidPlanReason,
     PlanInUse,
     PlanIsDefault,
     PlanLimitReached,
@@ -213,12 +215,14 @@ def _params(error: Exception) -> dict[str, ParamValue]:
 
 
 def _plan_params(error: Exception) -> dict[str, ParamValue]:
-    """What a Plan's refusal names; `count` beside each number picks the message's plural form."""
+    """What a Plan's refusal names; `count` beside a number picks a plural message's form."""
     if isinstance(error, PlanLimitReached):
         return {"reason": error.resource.value, "limit": error.limit, "count": error.limit}
     if isinstance(error, PlanInUse):
         return {"people": error.people, "count": error.people}
     if isinstance(error, InvalidPlan):
+        if error.reason is InvalidPlanReason.LIMIT:
+            return {"reason": error.reason.value, "max": COUNT_LIMIT}
         return {"reason": error.reason.value}
     if isinstance(error, PlanNameTaken):
         return {"name": error.name}

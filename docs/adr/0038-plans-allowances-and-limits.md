@@ -51,7 +51,8 @@ Plan. Later slices add their own sections here.
   `new-2`), and `POST /api/v1/plans` refuses a request that names it with 422 `invalid_plan`. The
   name is 1 to 60 printable characters and can change. Rules and Connected Accounts allow 1 to
   10000, and Integration Tokens 0 to 10000, so a Plan may offer none; each count may instead be
-  unlimited.
+  unlimited. A count out of range answers 422 `invalid_plan` with `reason` `limit` and `max`, the
+  largest count, so the Web UI writes it in the reader's number format.
 - **Plan names are unique.** Two Plans may not read as one name: names compare after Unicode
   compatibility folding, without case, and without spaces around them (`require_unique_name`).
   `PlanCatalog.add` and `change` check it under the same write lock as the key, so two Plans added

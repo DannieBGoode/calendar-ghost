@@ -538,7 +538,7 @@ describe("PlanEditor", () => {
     [refusal("invalid_plan", { reason: "interval" }), () => speed("instant"), "Choose one of the offered sync intervals."],
     [refusal("plan_name_taken", { name: "Free" }), () => field("plan-edit-family-name"), "Another plan is named Free. Choose a different name."],
     [
-      refusal("invalid_plan", { reason: "limit" }),
+      refusal("invalid_plan", { reason: "limit", max: 10_000 }),
       () => field("plan-edit-family-rules"),
       "Enter each limit as a whole number up to 10,000, at least 1 for rules and calendar accounts, or choose No limit.",
     ],
@@ -595,6 +595,18 @@ describe("PlanEditor", () => {
     submit()
     expect(onSave.mock.calls[0]?.[0]).toMatchObject({ name: "FAMILY" })
     expect(form().querySelector("[role='alert']")).toBeNull()
+  })
+
+  it("writes the largest limit in a refusal as in the hint, in the reader's number format", () => {
+    i18n = testI18n({ formatLocale: "en-DE" })
+    edit()
+    type(field("plan-edit-family-rules"), "10001")
+    expect(description(button("Save plan"))).toEqual(["Enter how many active rules, from 1 to 10.000, or choose No limit."])
+    type(field("plan-edit-family-rules"), "6")
+    refuse(refusal("invalid_plan", { reason: "limit", max: 10_000 }))
+    expect([...form().querySelectorAll("[role='alert']")].map((alert) => alert.textContent)).toEqual([
+      "Enter each limit as a whole number up to 10.000, at least 1 for rules and calendar accounts, or choose No limit.",
+    ])
   })
 
   it("names the first limit with a number when a limit is refused", () => {

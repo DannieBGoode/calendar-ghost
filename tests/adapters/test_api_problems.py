@@ -202,6 +202,12 @@ FAMILY_KEY = PlanKey("family")
             "invalid_plan",
             {"reason": "key"},
         ),
+        # The largest limit, so the Web UI writes it in the reader's number format.
+        (
+            InvalidPlan(InvalidPlanReason.LIMIT, "a plan allows 1 to 10000 rules"),
+            "invalid_plan",
+            {"reason": "limit", "max": 10_000},
+        ),
         (
             InvalidPlan(InvalidPlanReason.INTERVAL, "choose one of the offered sync intervals"),
             "invalid_plan",

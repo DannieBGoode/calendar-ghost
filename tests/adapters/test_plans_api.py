@@ -139,6 +139,14 @@ def _problem(response: Any) -> tuple[int, str, dict[str, Any]]:
     return response.status_code, body["code"], body["params"]
 
 
+def _invalid(reason: str) -> tuple[int, str, dict[str, Any]]:
+    """The answer to a Plan that is not valid; a limit's also names the largest limit."""
+    params: dict[str, Any] = {"reason": reason}
+    if reason == "limit":
+        params["max"] = 10_000
+    return 422, "invalid_plan", params
+
+
 def _with_limits(body: dict[str, Any], **limits: Any) -> dict[str, Any]:
     return {**body, "limits": {**body["limits"], **limits}}
 
@@ -452,7 +460,7 @@ def test_a_new_plan_that_is_not_valid_is_refused_with_its_reason(
 ) -> None:
     response = installation.client.post("/api/v1/plans", json=body)
 
-    assert _problem(response) == (422, "invalid_plan", {"reason": reason})
+    assert _problem(response) == _invalid(reason)
     assert installation.client.get("/api/v1/plans").json()["plans"] == []
 
 
@@ -475,7 +483,7 @@ def test_a_plan_change_that_is_not_valid_is_refused_with_its_reason(
     response = installation.client.put("/api/v1/plans/free", json=change)
     listed = installation.client.get("/api/v1/plans").json()["plans"]
 
-    assert _problem(response) == (422, "invalid_plan", {"reason": reason})
+    assert _problem(response) == _invalid(reason)
     assert listed == [{**FREE_BODY, **NOBODY_ON_IT}]
 
 

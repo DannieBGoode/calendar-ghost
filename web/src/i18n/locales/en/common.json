@@ -73,7 +73,7 @@
     "invalid_plan": "This plan is not valid. Check its name and limits.",
     "invalid_plan_interval": "Choose one of the offered sync intervals.",
     "invalid_plan_key": "Use 1 to 32 lower-case letters, digits, and hyphens for the key, starting with a letter or digit.",
-    "invalid_plan_limit": "Enter each limit as a whole number up to 10,000, at least 1 for rules and calendar accounts, or choose No limit.",
+    "invalid_plan_limit": "Enter each limit as a whole number up to {max}, at least 1 for rules and calendar accounts, or choose No limit.",
     "invalid_plan_name": "Give the plan a name of 1 to 60 characters, without line breaks or other control characters.",
     "invalid_request": "Some of the information is not valid. Check it and try again.",
     "invalid_request_string_too_long": {
