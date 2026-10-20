@@ -605,3 +605,67 @@ def test_a_local_failure_opens_an_incident_with_no_cause() -> None:
 
     assert incident is not None
     assert incident.cause is None
+
+
+@pytest.mark.parametrize("kind", INTERVENTION)
+@pytest.mark.parametrize("snapshot_held", [False, True])
+def test_intervention_ends_a_hold(kind: ProviderFailureKind, snapshot_held: bool) -> None:
+    unit_of_work = memory_units()
+    held = rule().hold()
+    unit_of_work.state.rules[RULE] = held
+    for account in (held.source.connected_account_id, held.destination.connected_account_id):
+        unit_of_work.state.accounts[account] = ConnectedAccountState.CONNECTED
+    unit_of_work.state.lapsed[ACCOUNT] = NOW
+    records, incidents = Records(), Incidents()
+    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), RuleLocks())
+
+    health.record_failure(held if snapshot_held else rule(), _failure(kind))
+
+    stopped = unit_of_work.state.rules[RULE]
+    assert stopped == held.require_preview()
+    assert not stopped.held_by_plan
+    assert health.lapses.restored(ACCOUNT, accepted_at=NOW) == 0
+    assert unit_of_work.state.lapsed == {}
+    assert health.finish_interrupted_lapses() == 0
+    assert unit_of_work.state.rules[RULE] == stopped
+
+
+@pytest.mark.parametrize("kind", INTERVENTION)
+def test_intervention_after_hold_release_ends_lapse_recovery(kind: ProviderFailureKind) -> None:
+    unit_of_work = memory_units()
+    held = rule().hold()
+    released = held.release_hold(False)
+    unit_of_work.state.rules[RULE] = released
+    for account in (held.source.connected_account_id, held.destination.connected_account_id):
+        unit_of_work.state.accounts[account] = ConnectedAccountState.CONNECTED
+    unit_of_work.state.lapsed[ACCOUNT] = NOW
+    records, incidents = Records(), Incidents()
+    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), RuleLocks())
+
+    health.record_failure(held, _failure(kind))
+
+    stopped = unit_of_work.state.rules[RULE]
+    assert stopped == released.require_preview()
+    assert health.lapses.restored(ACCOUNT, accepted_at=NOW) == 0
+    assert unit_of_work.state.lapsed == {}
+    assert health.finish_interrupted_lapses() == 0
+    assert unit_of_work.state.rules[RULE] == stopped
+
+
+@pytest.mark.parametrize("kind", [*TRANSIENT, *AUTHORIZATION])
+def test_transient_and_account_failures_preserve_a_hold(kind: ProviderFailureKind) -> None:
+    unit_of_work = memory_units()
+    held = rule().hold()
+    unit_of_work.state.rules[RULE] = held
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    records, incidents = Records(), Incidents()
+    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), RuleLocks())
+    failure = replace(_failure(kind), account_id=ACCOUNT)
+
+    health.record_failure(rule(), failure)
+
+    assert unit_of_work.state.rules[RULE] == held
+    assert (ACCOUNT in unit_of_work.state.lapsed) is (kind in AUTHORIZATION)
+    if kind in AUTHORIZATION:
+        assert health.lapses.restored(ACCOUNT, accepted_at=NOW) == 0
+        assert unit_of_work.state.rules[RULE] == held

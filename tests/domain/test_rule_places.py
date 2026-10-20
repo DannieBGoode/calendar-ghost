@@ -9,6 +9,7 @@ import pytest
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
     ProjectionContent,
+    RuleStopCause,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
@@ -224,3 +225,90 @@ def test_a_start_fits_with_no_limit_with_a_kept_place_or_within_the_limit(
     before: SyncRule, counting_after: int, limit: int | None, allowed: bool
 ) -> None:
     assert may_start(before, counting_after, limit) is allowed
+
+
+@pytest.mark.parametrize("before", [_rule(ENABLED), _rule(DEGRADED, awaiting=True)])
+def test_holding_replaces_any_lapse_and_takes_no_place(before: SyncRule) -> None:
+    held = before.hold()
+    assert held.state is DEGRADED
+    assert held.held_by_plan
+    assert held.stopped_by_plan_hold
+    assert held.stop_cause is RuleStopCause.PLAN_HOLD
+    assert not held.awaiting_reauthorization
+    assert not held.holdable
+    assert not held.counts_toward_plan
+    assert not held.synchronizes
+    assert held.material_signature == before.material_signature
+    assert not _successor().take_place_of(held).keeps_place
+    with pytest.raises(InvalidStateTransition):
+        held.hold()
+    with pytest.raises(InvalidStateTransition):
+        held.enable()
+    with pytest.raises(InvalidStateTransition):
+        held.resume_after_reauthorization()
+
+
+@pytest.mark.parametrize("authorized", [True, False])
+def test_release_resumes_or_counts_until_authorized(authorized: bool) -> None:
+    released = _rule(ENABLED).hold().release_hold(authorized)
+    assert released.state is (ENABLED if authorized else DEGRADED)
+    assert not released.held_by_plan
+    assert released.awaiting_reauthorization is (not authorized)
+    assert released.counts_toward_plan
+    assert released.stop_cause is (None if authorized else RuleStopCause.LAPSED_AUTHORIZATION)
+
+
+@pytest.mark.parametrize(
+    ("change", "state", "held"),
+    [
+        (SyncRule.mark_previewed, DEGRADED, True),
+        (SyncRule.pause, PAUSED, False),
+        (SyncRule.require_preview, DEGRADED, False),
+        (SyncRule.begin_removal, REMOVING, False),
+        (SyncRule.on_account_disconnected, DEGRADED, False),
+        (lambda held: held.change_policy(DETAILS), DEGRADED, False),
+        (lambda held: held.change_policy(held.transformation), DEGRADED, True),
+    ],
+)
+def test_transitions_preserve_or_end_a_hold(
+    change: Callable[[SyncRule], SyncRule], state: SyncRuleState, held: bool
+) -> None:
+    result = change(_rule(ENABLED).hold())
+    assert (result.state, result.held_by_plan, result.awaiting_reauthorization) == (
+        state,
+        held,
+        False,
+    )
+    assert result.stop_cause is (RuleStopCause.PLAN_HOLD if held else None)
+    assert not result.counts_toward_plan
+
+
+@pytest.mark.parametrize("state", [state for state in SyncRuleState if state is not DEGRADED])
+def test_a_hold_requires_a_degraded_rule(state: SyncRuleState) -> None:
+    with pytest.raises(DomainValidationError):
+        replace(_rule(state), held_by_plan=True)
+
+
+def test_a_hold_excludes_lapsed_authorization() -> None:
+    with pytest.raises(DomainValidationError):
+        replace(_rule(DEGRADED, awaiting=True), held_by_plan=True)
+
+
+@pytest.mark.parametrize("state", [DRAFT, PREVIEWED, PAUSED, DEGRADED, REMOVING])
+def test_only_holdable_rules_can_be_held(state: SyncRuleState) -> None:
+    with pytest.raises(InvalidStateTransition):
+        _rule(state).hold()
+
+
+@pytest.mark.parametrize("state", list(SyncRuleState))
+def test_only_held_rules_can_be_released(state: SyncRuleState) -> None:
+    with pytest.raises(InvalidStateTransition):
+        _rule(state).release_hold(True)
+
+
+@pytest.mark.parametrize("state", PLACE_STATES)
+def test_a_reserved_rule_can_give_up_its_place(state: SyncRuleState) -> None:
+    reserved = _rule(state, keeps=True)
+    assert reserved.give_up_place() == _rule(state)
+    assert reserved.give_up_place().give_up_place() == _rule(state)
+    assert reserved.give_up_place().material_signature == reserved.material_signature
