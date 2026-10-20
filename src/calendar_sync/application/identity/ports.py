@@ -181,16 +181,21 @@ class PasswordResetLinks(Protocol):
     """Single-use, expiring links that let one User choose a new password."""
 
     def issue(self, user_id: UserId, created_by: UserId, at: datetime) -> IssuedLink:
-        """A new link for the User; their earlier links stop working."""
+        """A seven-day link replacing earlier resets, bound to the active User's credential.
+
+        Recheck the active administrator and target under the issuance lock. Raise
+        AdministratorRequired or UserDisabled without inserting or revoking anything on refusal.
+        """
         ...
 
     def owner(self, token: str, at: datetime) -> UserId | None:
-        """The User a link still usable at `at` resets."""
+        """The active User a current-revision link still usable at `at` resets. Read only."""
         ...
 
-    def reset(self, token: str, password_hash: str, at: datetime) -> UserId | None:
-        """Use the link and store the new password in one step; the User, or None when it is no
-        longer usable."""
+    def reset(self, token: str, password_hash: str) -> UserId | None:
+        """Check active state, revision and clock under the write lock, then store the password,
+        advance revision, invalidate every reset and delete every session. None changes nothing
+        when the proof is no longer usable."""
         ...
 
 

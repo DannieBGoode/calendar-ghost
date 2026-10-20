@@ -24,7 +24,9 @@ from calendar_sync.application.identity.administration import (
     ShowOwnAccountDeletion,
     ShowRegistration,
 )
+from calendar_sync.application.identity.credentials import CredentialChanges
 from calendar_sync.application.identity.integration_tokens import IssueIntegrationToken
+from calendar_sync.application.identity.password_reset import SelfServicePasswordResets
 from calendar_sync.application.identity.plans import (
     ChangePlan,
     DefinePlan,
@@ -188,6 +190,7 @@ from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteOperationsQueries,
 )
 from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
+from calendar_sync.infrastructure.persistence.credentials import SqliteCredentialChanges
 from calendar_sync.infrastructure.persistence.health import (
     SqliteIncidentRepository,
     SqliteRuleHealthRecords,
@@ -389,6 +392,8 @@ class Adapters:
     registration: RegistrationSettings
     invitations: Invitations
     password_resets: PasswordResetLinks
+    self_service_resets: SelfServicePasswordResets
+    credential_changes: CredentialChanges
     activity: Callable[[UserId], ActivityQueries]
     operations: Callable[[UserId], OperationsQueries]
     health_records: Callable[[UserId], RuleHealthRecords]
@@ -462,6 +467,7 @@ def build_adapters(settings: Settings) -> Adapters:
     users = SqliteUserDirectory(database)
     plans = SqlitePlans(database)
     mail = _mail_server(settings)
+    resets = SqlitePasswordResetLinks(database, ids, clock)
     adapters = Adapters(
         identity_email=build_identity_email(settings, ids),
         unit_of_work=SqliteUnitOfWorkFactory(database, clock, history).for_user,
@@ -478,7 +484,9 @@ def build_adapters(settings: Settings) -> Adapters:
         run_throttle=MemoryRunThrottle(clock),
         registration=SqliteRegistrationSettings(database),
         invitations=SqliteInvitations(database, ids),
-        password_resets=SqlitePasswordResetLinks(database, ids),
+        password_resets=resets,
+        self_service_resets=resets,
+        credential_changes=SqliteCredentialChanges(database, clock),
         activity=lambda user: SqliteActivityQueries(database, user, history),
         operations=lambda user: SqliteOperationsQueries(database, user),
         health_records=lambda user: SqliteRuleHealthRecords(database, user),
@@ -804,10 +812,10 @@ def _identity(adapters: Adapters) -> IdentityServices:
         sessions=sessions,
         set_up=SetUpInstallation(users, passwords, sessions, adapters.ids, adapters.clock),
         sign_in=SignIn(users, passwords, sessions, adapters.sign_in_throttle, adapters.clock),
-        set_own_email=SetOwnEmail(users, passwords),
+        set_own_email=SetOwnEmail(users, passwords, adapters.credential_changes),
         set_notification_email=SetNotificationEmail(users),
         set_instant_sync=SetInstantSync(users),
-        change_own_password=ChangeOwnPassword(users, passwords, sessions),
+        change_own_password=ChangeOwnPassword(adapters.credential_changes, passwords),
     )
 
 
@@ -834,7 +842,7 @@ def _administration(
         ),
         issue_password_reset=IssuePasswordReset(users, resets, clock),
         check_password_reset=CheckPasswordReset(resets, clock, attempts),
-        reset_password=ResetPassword(resets, passwords, sessions, clock, attempts),
+        reset_password=ResetPassword(resets, passwords, clock, attempts),
         change_role=ChangeRole(users),
         change_user_state=ChangeUserState(users, sessions),
         delete_user=DeleteUser(users, sessions, owned),

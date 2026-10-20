@@ -25,7 +25,14 @@ from calendar_sync.application.identity.sign_in import (
 from calendar_sync.domain.access import InvalidEmail, Role, User, UserId, UserState
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW
-from tests.identity_fakes import CountingThrottle, MemorySessions, MemoryUsers, PlainPasswords
+from tests.identity_fakes import (
+    CountingThrottle,
+    MemoryCredentialChanges,
+    MemoryResetLinks,
+    MemorySessions,
+    MemoryUsers,
+    PlainPasswords,
+)
 
 PASSWORD = "correct horse battery staple"
 UPGRADED = User(UserId("upgraded"), None, Role.INSTALLATION_ADMINISTRATOR, UserState.ACTIVE, NOW)
@@ -125,7 +132,11 @@ def test_the_upgraded_first_user_signs_in_by_password_alone_until_they_add_an_em
     users.add(UPGRADED, f"hashed:{PASSWORD}")
 
     session = _sign_in(users, sessions).execute(None, PASSWORD, "client")
-    SetOwnEmail(users, PlainPasswords()).execute(session.user_id, "admin@example.test", None)
+    SetOwnEmail(
+        users,
+        PlainPasswords(),
+        MemoryCredentialChanges(users, MemorySessions(NOW, users), FixedClock()),
+    ).execute(session.user_id, "admin@example.test", None)
 
     with pytest.raises(IncorrectCredentials):
         _sign_in(users, sessions).execute(None, PASSWORD, "client")
@@ -216,7 +227,11 @@ def test_a_successful_sign_in_clears_the_failures_of_its_email() -> None:
 def test_a_user_with_an_email_changes_it_only_with_their_password() -> None:
     users, _ = _installation()
     admin = users.list()[0]
-    set_email = SetOwnEmail(users, PlainPasswords())
+    set_email = SetOwnEmail(
+        users,
+        PlainPasswords(),
+        MemoryCredentialChanges(users, MemorySessions(NOW, users), FixedClock()),
+    )
 
     with pytest.raises(IncorrectPassword):
         set_email.execute(admin.id, "new@example.test", "wrong password!")
@@ -231,7 +246,11 @@ def test_an_email_another_user_signs_in_with_is_refused() -> None:
     users.add(replace(UPGRADED, role=Role.USER), f"hashed:{PASSWORD}")
 
     with pytest.raises(EmailTaken):
-        SetOwnEmail(users, PlainPasswords()).execute(UPGRADED.id, "admin@example.test", None)
+        SetOwnEmail(
+            users,
+            PlainPasswords(),
+            MemoryCredentialChanges(users, MemorySessions(NOW, users), FixedClock()),
+        ).execute(UPGRADED.id, "admin@example.test", None)
     assert users.get(UPGRADED.id) == replace(UPGRADED, role=Role.USER)
 
 
@@ -258,17 +277,19 @@ def test_setting_ones_email_never_restores_a_role_or_state_changed_meanwhile() -
         f"hashed:{PASSWORD}",
     )
 
-    changed = SetOwnEmail(users, PlainPasswords()).execute(
-        UserId("admin"), "new@example.test", PASSWORD
-    )
+    with pytest.raises(IncorrectCredentials):
+        SetOwnEmail(
+            users,
+            PlainPasswords(),
+            MemoryCredentialChanges(users, MemorySessions(NOW, users), FixedClock()),
+        ).execute(UserId("admin"), "new@example.test", PASSWORD)
 
     stored = users.users[UserId("admin")]
     assert (stored.email, stored.role, stored.state) == (
-        "new@example.test",
+        "admin@example.test",
         Role.USER,
         UserState.DISABLED,
     )
-    assert (changed.role, changed.state) == (Role.USER, UserState.DISABLED)
 
 
 def test_choosing_incident_emails_never_restores_a_role_or_state_changed_meanwhile() -> None:
@@ -329,7 +350,9 @@ def test_changing_a_password_needs_the_current_one_and_ends_every_other_session(
     admin = users.list()[0]
     other = sessions.signed_in(admin.id)
     current = sessions.signed_in(admin.id)
-    change = ChangeOwnPassword(users, PlainPasswords(), sessions)
+    change = ChangeOwnPassword(
+        MemoryCredentialChanges(users, sessions, FixedClock()), PlainPasswords()
+    )
 
     with pytest.raises(IncorrectPassword):
         change.execute(admin.id, "wrong password!", "a new long password", current.token)
@@ -340,3 +363,39 @@ def test_changing_a_password_needs_the_current_one_and_ends_every_other_session(
     assert users.password_hash(admin.id) == "hashed:a new long password"
     assert sessions.user_of(current.token) == admin.id
     assert sessions.user_of(other.token) is None
+
+
+@pytest.mark.parametrize("operation", ["email", "password", "password-hash"])
+def test_stale_own_password_and_email_changes_lose_to_reset(operation: str) -> None:
+    users, sessions = _installation()
+    owner = users.list()[0]
+    clock = FixedClock()
+    resets = MemoryResetLinks(users, sessions, clock)
+    link = resets.issue(owner.id, owner.id, NOW)
+    changes = MemoryCredentialChanges(users, sessions, clock)
+
+    def reset() -> None:
+        assert resets.reset(link.token, "hashed:reset password") == owner.id
+
+    class ResetWhileHashing(PlainPasswords):
+        def hash(self, password: str) -> str:
+            reset()
+            return super().hash(password)
+
+    passwords = (
+        ResetWhileHashing() if operation == "password-hash" else ChangedWhileVerifying(reset)
+    )
+
+    def action() -> object:
+        if operation == "email":
+            return SetOwnEmail(users, passwords, changes).execute(
+                owner.id, "stale@example.test", PASSWORD
+            )
+        ChangeOwnPassword(changes, passwords).execute(owner.id, PASSWORD, "stale password", None)
+        return None
+
+    with pytest.raises(IncorrectCredentials):
+        action()
+    assert users.password_hash(owner.id) == "hashed:reset password"
+    assert users.users[owner.id].email == owner.email
+    assert sessions.sessions == {}

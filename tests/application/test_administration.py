@@ -29,7 +29,7 @@ from calendar_sync.application.identity.administration import (
     YourOwnResetLink,
     YourOwnState,
 )
-from calendar_sync.application.identity.errors import EmailTaken, IncorrectCredentials
+from calendar_sync.application.identity.errors import EmailTaken, IncorrectCredentials, UserDisabled
 from calendar_sync.application.identity.ports import IssuedLink
 from calendar_sync.application.identity.sign_in import SignIn
 from calendar_sync.domain.access import (
@@ -103,9 +103,7 @@ class Installation:
         return CheckInvitation(self.registration, self.invitations, self.clock, self.attempts)
 
     def reset(self, passwords: PlainPasswords | None = None) -> ResetPassword:
-        return ResetPassword(
-            self.resets, passwords or PlainPasswords(), self.sessions, self.clock, self.attempts
-        )
+        return ResetPassword(self.resets, passwords or PlainPasswords(), self.clock, self.attempts)
 
     def invite(self) -> InviteUser:
         return InviteUser(self.users, self.registration, self.invitations, self.clock)
@@ -122,13 +120,15 @@ def _installation(*others: User) -> Installation:
     for user in (ADMIN, *others):
         users.add(user, f"hashed:{PASSWORD}")
     registration = MemoryRegistration(users)
+    clock = MovableClock()
+    sessions = MemorySessions(NOW, users)
     return Installation(
         users,
         registration,
         MemoryInvitations(users, registration),
-        MemoryResetLinks(users),
-        MemorySessions(NOW, users),
-        MovableClock(),
+        MemoryResetLinks(users, sessions, clock),
+        sessions,
+        clock,
     )
 
 
@@ -544,3 +544,46 @@ def test_a_client_trying_unusable_links_waits_whichever_link_route_it_uses() -> 
     # Another address is not held up, and a usable link counts no failure.
     assert installation.check_invitation().execute(link.token, "198.51.100.7")
     installation.accept().execute(link.token, "new@example.test", PASSWORD, "198.51.100.7")
+
+
+@pytest.mark.parametrize("actor_change", [False, True])
+def test_administrator_cannot_issue_for_disabled_user_after_an_issuance_race(
+    actor_change: bool,
+) -> None:
+    installation = _installation(MEMBER)
+    issue = IssuePasswordReset(installation.users, installation.resets, installation.clock)
+    refused: type[Exception]
+    if actor_change:
+        installation.users.meanwhile = lambda users: users.users.__setitem__(
+            ADMIN.id, replace(ADMIN, state=UserState.DISABLED)
+        )
+        refused = AdministratorRequired
+    else:
+        installation.users.meanwhile = lambda users: users.set_state(MEMBER.id, UserState.DISABLED)
+        refused = UserDisabled
+    with pytest.raises(refused):
+        issue.execute(ADMIN.id, MEMBER.id)
+    assert installation.resets.links == []
+
+
+def test_reset_checks_expiry_after_hash() -> None:
+    installation = _installation(MEMBER)
+    prepared = installation.resets.issue_for_email(MEMBER.email or "")
+    assert prepared is not None
+    session = installation.sessions.signed_in(MEMBER.id)
+
+    expires_at = prepared.link.expires_at
+
+    class ExpiringPasswords(PlainPasswords):
+        def hash(self, password: str) -> str:
+            installation.clock.moment = expires_at
+            return super().hash(password)
+
+    with pytest.raises(LinkUnusable):
+        installation.reset(ExpiringPasswords()).execute(
+            prepared.link.token, "a new long password", CLIENT
+        )
+    assert installation.users.password_hash(MEMBER.id) == f"hashed:{PASSWORD}"
+    assert installation.sessions.user_of(session.token) == MEMBER.id
+    assert installation.resets.links[0].used_at is None
+    assert installation.resets.links[0].revoked_at is None

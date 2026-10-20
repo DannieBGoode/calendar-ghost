@@ -9,6 +9,7 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass, field
 
+from calendar_sync.application.identity.credentials import CredentialChanges, CredentialSnapshot
 from calendar_sync.application.identity.errors import (
     AdminAlreadyConfigured,
     IncorrectCredentials,
@@ -133,15 +134,16 @@ class SetOwnEmail:
 
     users: UserDirectory
     passwords: PasswordHasher
+    credentials: CredentialChanges
 
     def execute(self, user_id: UserId, email: str, password: str | None) -> User:
+        expected = _current(self.credentials, user_id)
         user = _existing(self.users, user_id)
         # The add-email step follows a sign-in by password alone, so it asks for nothing more.
         if not user.needs_email:
-            _confirm(self.users, self.passwords, user_id, password)
-        # Only the email is written, so a role or state an administrator changed since the read
-        # above stands; the answer is the User as stored now.
-        self.users.set_email(user_id, email_address(email))
+            _confirm(expected, self.passwords, password)
+        if not self.credentials.change_email(expected, email_address(email)):
+            raise IncorrectCredentials("the credentials changed; sign in again")
         return _existing(self.users, user_id)
 
 
@@ -173,14 +175,15 @@ class SetInstantSync:
 class ChangeOwnPassword:
     """Replace the signed-in User's password and end their other sessions."""
 
-    users: UserDirectory
+    credentials: CredentialChanges
     passwords: PasswordHasher
-    sessions: Sessions
 
     def execute(self, user_id: UserId, current: str, new: str, session: str | None) -> None:
-        _confirm(self.users, self.passwords, user_id, current)
-        self.users.set_password_hash(user_id, self.passwords.hash(require_password(new)))
-        self.sessions.end_all(user_id, keep=session)
+        expected = _current(self.credentials, user_id)
+        _confirm(expected, self.passwords, current)
+        hashed = self.passwords.hash(require_password(new))
+        if not self.credentials.change_password(expected, hashed, session):
+            raise IncorrectCredentials("the credentials changed; sign in again")
 
 
 def _existing(users: UserDirectory, user_id: UserId) -> User:
@@ -190,9 +193,13 @@ def _existing(users: UserDirectory, user_id: UserId) -> User:
     return user
 
 
-def _confirm(
-    users: UserDirectory, passwords: PasswordHasher, user_id: UserId, password: str | None
-) -> None:
-    hashed = users.password_hash(user_id)
-    if password is None or hashed is None or not passwords.verify(password, hashed):
+def _current(credentials: CredentialChanges, user_id: UserId) -> CredentialSnapshot:
+    expected = credentials.current(user_id)
+    if expected is None:
+        raise IncorrectCredentials("the signed-in User is no longer active")
+    return expected
+
+
+def _confirm(expected: CredentialSnapshot, passwords: PasswordHasher, password: str | None) -> None:
+    if password is None or not passwords.verify(password, expected.password_hash):
         raise IncorrectPassword("that is not your current password")

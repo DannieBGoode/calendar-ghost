@@ -448,6 +448,24 @@ upgraded database with the previous image or manually remove migration records. 
 after the backup are lost on restore. A later upgrade from that pre-upgrade backup creates fresh
 readiness with no restored test verification.
 
+## Migration 36 reset proof binding
+
+Migration 36 adds a monotonic credential revision and binds Password Reset Links to it. It
+revokes outstanding reset links from earlier releases because they have no trustworthy binding.
+An administrator must issue a replacement link after upgrading. Existing passwords, sessions,
+owned calendar data, Plans, and installation settings are preserved. Issued administrator links
+still last seven days. Reset completion checks the active User, credential revision, and expiry
+under the final write lock, then changes the password and ends every browser session and other
+reset proof together. Password or email changes and disabling a User invalidate earlier proofs;
+changing the email back or enabling the User again never revives one.
+
+Stop the service and back up the complete database and matching Master Key before upgrading,
+keeping the previous image. Startup applies the migration once; a failure rolls it back. To roll
+back releases, stop the service and restore the pre-upgrade database and previous image together.
+Do not run the previous image against the upgraded database or remove migration records by hand.
+Restoring discards changes since the backup. An administrator-issued link remains the recovery
+fallback; an offline recovery command is not shipped.
+
 ## Incident notifications
 
 Incidents always appear in the Activity screen of the User they belong to
