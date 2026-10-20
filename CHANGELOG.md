@@ -68,6 +68,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- The landing page places its calendar-view switch below the hero diagram on desktop and mobile,
+  labels the Work view "What they see", and keeps vertical spacing consistent between sections.
+
 - Inspect Activity entries and incidents, or edit a Plan, in a full-height drawer without changing
   the table underneath. Drawers fill narrow screens, keep navigation and edit protections, and
   leave notifications and Undo reachable.

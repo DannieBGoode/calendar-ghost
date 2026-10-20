@@ -27,12 +27,12 @@ type Props = {
 }
 
 /**
- * The home hero diagram's controls. Over the whole diagram, centred, the switch: what work sees
+ * The home hero diagram's controls. Below the whole diagram, centred, the switch: what they see
  * (Sam's Work calendar) or what Sam sees (Sam's Personal calendar), through `data-view` on the
  * figure. In the diagram's bottom-right corner, a small labelled pair: Pause/Play for its loop
  * (WCAG 2.2.2), through `data-playing`, and Replay, which starts the cycle over. The loop itself
  * is CSS (hub.css); while the figure is off screen it carries `data-offscreen` and holds. Before
- * hydration none of this shows (the figure's own label, "What work sees", stands in for the
+ * hydration none of this shows (the figure's own label, "What they see", stands in for the
  * switch); under reduced motion only the switch does, since nothing moves.
  */
 export function HubControls({ m }: Props) {

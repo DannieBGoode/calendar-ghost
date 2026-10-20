@@ -53,7 +53,7 @@ const { m } = Astro.props
 <style>
   .footer {
     --shoulder: clamp(2rem, 6vw, 5rem);
-    position: relative; margin-top: clamp(2rem, 5vw, 4rem); padding-block: clamp(4rem, 9vw, 7.5rem) 2rem;
+    position: relative; padding-block: var(--section-space) 2rem;
     border-radius: var(--shoulder) var(--shoulder) 0 0;
     /* A few stars, no more. */
     background:
