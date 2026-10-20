@@ -127,7 +127,7 @@ the mark, the sign-in panel, loading, and empty states; everywhere else the inte
 household utility. It serves a nontechnical administrator first, with audit and provider evidence
 available through progressive disclosure.
 
-The layout uses a restrained top navigation and a readable central work area rather than a permanent dashboard sidebar. Stable information stays flat. Forms and workflows use familiar shadcn/ui affordances, while domain-specific health strips and directional rule rows carry the product language. Administration surfaces, such as People and its Plans, are denser in the same calm surfaces: a feature's state and its switch lead, a data table compares like things by column, and a side panel holds the form for the selected row.
+The layout uses a restrained top navigation and a readable central work area rather than a permanent dashboard sidebar. Stable information stays flat. Forms and workflows use familiar shadcn/ui affordances, while domain-specific health strips and directional rule rows carry the product language. Administration surfaces, such as People and its Plans, are denser in the same calm surfaces: a feature's state and its switch lead, a data table compares like things by column, and a full-height drawer holds the form for the selected row.
 
 **Key Characteristics:**
 
@@ -214,7 +214,7 @@ A lavender-tinted neutral canvas (the "Twilight" palette) supports a single indi
 Product text uses seven steps: 2rem Fraunces page titles, 1.25rem Figtree object titles (weight 650), 1rem Figtree section titles (weight 650), 1rem Figtree row titles (weight 550), 1rem Figtree body (weight 400), 0.875rem labels and controls (weight 600), and 0.8125rem supporting metadata. Settings and Rule Details section and row headings are aligned to these levels. Counts in tables, meters, and facts use tabular numerals, so columns of numbers line up.
 
 - **Headline**: Screen titles and the auth headline, in Fraunces at a strong but quiet scale.
-- **Object title**: The name of the one thing a panel or card is about, such as a Plan's name in its side panel, on a person's Plan card, and on Your plan, and the state a status card leads with ("Plans are on"). It sits between the page title and section titles, so a Plan's name never reads as a row label.
+- **Object title**: The name of the one thing a panel or card is about, such as a Plan's name in its drawer, on a person's Plan card, and on Your plan, and the state a status card leads with ("Plans are on"). It sits between the page title and section titles, so a Plan's name never reads as a row label.
 - **Title**: Section titles and row titles (rule names, grouped settings, and recovery headings) in Figtree, distinguished by weight rather than size.
 - **Body**: Instructions and explanations, capped near 70 characters per line.
 - **Label**: Field labels, navigation, compact state, and metadata in sentence case.
@@ -230,7 +230,7 @@ Product text uses seven steps: 2rem Fraunces page titles, 1.25rem Figtree object
 
 ## Elevation
 
-The system is flat by default. Tonal layering, dividers, and spacing establish structure. Only transient menus, popovers, dialogs, and toasts may lift above the page; stable panels never use decorative shadows. A side panel beside a table is stable: a border, no shadow.
+The system is flat by default. Tonal layering, dividers, and spacing establish structure. Only transient menus, popovers, dialogs, and toasts may lift above the page; stable panels never use decorative shadows. Detail drawers are transient overlays: a quiet backdrop and a single edge border.
 
 ### Named Rules
 
@@ -336,8 +336,9 @@ after six seconds, and waits while the pointer is on it or focus is in it. Undo 
 toast, even once the view that made the change is gone: what it gave back, or why it could not,
 with an alert icon in Destructive Red; a refusal stays until it is closed. While a toast shows,
 the page reserves its height, so the page can scroll its last line clear of it and keyboard focus
-stops above it; while a side panel is open, the toast sits at the bottom left, over the list, so it
-never covers the panel's footer. A result about one row still appears on that row, except a change
+stops above it. While a drawer is open, the toast shares its modal focus scope and sits above
+the action footer, so Undo remains reachable without covering Save. A result about one row still
+appears on that row, except a change
 of someone's Plan, which is a toast with Undo even from their row, since it can take them out of a
 narrowed list.
 
@@ -351,7 +352,7 @@ window: it opens under its control, or above it when there is more room there, b
 and above a toast, with its height capped at the room it has. Its list then scrolls inside it
 while its title and action stay in view, and fades out at its cut edge while more sits below,
 until it reaches its end. A control with little room on either side is first
-scrolled up. Anything longer is a side panel, and a choice about what a page already shows, such
+scrolled up. Anything longer is a drawer, and a choice about what a page already shows, such
 as one person's Plan on their page, opens in place in its card. A menu follows the same rule: it
 opens under its trigger, or above it when there is more room there, below the top bar and above a
 toast, and its items scroll inside it once its height is capped, so a toast never covers an item. A
@@ -378,15 +379,17 @@ itself is narrow each row becomes a card that labels its values, as People's Eve
 table states each fact once, in its cell, with no instruction above it. A data table is how an
 administration surface compares; it is not a chart wall.
 
-### Side Panels
+### Detail Drawers
 
-A side panel opens the selected row of a table beside it, at its own address, never as a modal:
-Activity's entry and incident panels, and a Plan's panel on People. It may hold the form that
-creates or edits the selected thing, with a footer holding its one primary action, Cancel, and how
-many changes are not saved, and tabs when the thing has more than one side. While it is open the
-table drops the columns it no longer has room for, and marks the open row as selected. It fits the
-window below where it starts, so its footer with the one primary action is in view as it opens,
-and only its body scrolls. Opening it moves focus to its title; Close returns to the table's
+A full-height drawer opens the selected row over its table, at its own address: Activity's entry
+and incident details, and a Plan's editor on People. It overlays the right edge at up to 40rem,
+and fills narrow screens. The table retains every column, its width, filters, pagination, and
+scroll position, with the open row selected. The backdrop makes the page inert, focus stays in
+the native modal dialog, and background scrolling is locked. Close, Escape, and the backdrop ask
+to close through the same unsaved-change protection. Activity keeps previous and next controls.
+The toolbar and record identity stay visible; Plan forms keep their tabs and action footer in view while
+only the body scrolls. Results and Undo remain reachable inside the drawer while it is open.
+Opening it moves focus to its title; Close returns to the table's
 address, the page to where it was before the panel opened, and focus to the row it came from.
 Saving closes it too, once the server answers and without asking: the table's address replaces
 the panel's, focus goes to the saved row, and a toast says what was saved. A refusal keeps it open,
@@ -394,7 +397,7 @@ under the field it names. While its form has changes not saved, leaving it in an
 Cancel, Escape, another row, a tab, another page, or Back) first asks in the footer, in place of
 its actions: "Discard 1 change?" with Keep editing, which takes focus and keeps the changes, and
 Discard; Escape keeps editing, and the browser asks before the tab closes or reloads. On a narrow
-screen it replaces the table.
+screen the drawer fills the viewport.
 
 ### Navigation
 
@@ -449,8 +452,8 @@ it sees at once which rows it meant, before selecting any. Rows take no colored 
 muddy on the dark palettes; the icons, the headings, and the words say the same without color. A row is one line and, as in History, starts with its time:
 when it opened, a warning icon (open) or a check (resolved) beside what happened, the rule's
 calendars or the account, and when it closed with how long it lasted ("after 2 hours"), or "Still
-open". Selecting a row opens the incident beside the table at its own address
-(`/activity/incidents/<id>`), in the same panel History uses for an entry, never a modal: an Open or
+open". Selecting a row opens the incident over the table at its own address
+(`/activity/incidents/<id>`), in the same modal drawer History uses for an entry: an Open or
 Resolved chip, what happened, what it means or how it closed, the likely Cause when it is known,
 one next step (the fix while open, with How to fix for an administrator's Cause, or the rule's
 history once resolved), then when it opened, was last seen or closed, and the rule with its
@@ -458,8 +461,8 @@ accounts. The server decides the next step; an administrator's Cause shows its l
 fix only to an administrator, and anyone else reads that Google Calendar is not available right
 now, with Check access. The table lists the server's most recent incidents and ends in "Load older
 incidents" while it holds more; until then the last group's count reads as a floor ("100+
-resolved"). While the panel is open the table drops its rule column, as History does. On a narrow
-screen each row becomes a card that labels its values, and the panel replaces the table.
+resolved"). Opening the drawer leaves the table unchanged. On a narrow
+screen each row becomes a card that labels its values, and the drawer fills the viewport.
 
 ### Rule Rows
 
@@ -495,7 +498,7 @@ of those waiting, hidden at zero, then Plans). The sentence follows the tab, as 
 does: Everyone and Invitations say what an administrator sees and offer "Invite someone" beside it,
 which says which Plan the person will get once a Plan is the default; Plans says what Plans do, and
 its header has no action: "New plan" sits on the list it adds to, at the right of the catalog's
-head ("5 plans"), or in the empty state, outline while a side panel is open so the panel's footer
+head ("5 plans"), or in the empty state, outline while a drawer is open so its footer
 holds the one primary action. Plans sit beside the people they limit, so Settings keeps only
 each person's own Your plan.
 
@@ -517,7 +520,7 @@ reason naming the first three who have it by email and then how many more. There
 plan select and no "No default": a Plan becomes the default only by Make default, and Plans are
 never on without one.
 
-A Plan's side panel has two tabs. Limits is the editor: a name, never a key, refused before it is
+A Plan's drawer has two tabs. Limits is the editor: a name, never a key, refused before it is
 sent when another Plan has it; a Limit field per count; Sync speed; and, under a limit typed lower
 than the people on the Plan use, how many people it would leave with more, in Attention Ochre with
 an icon. People is a searchable checklist of the people who do not have the Plan, each saying

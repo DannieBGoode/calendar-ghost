@@ -41,13 +41,6 @@ function defaultName({ plans, default_plan }: PlansOverview): string | null {
   return plans.find((plan) => plan.key === default_plan)?.name ?? null
 }
 
-/** What turning Plans on would do: whom it limits, and how many of them have more than their Plan allows. */
-function wouldLimit({ t }: I18n, limited: number, over: number): string {
-  if (limited === 0) return t("people.plans.status.wouldLimitNobody")
-  if (over === 0) return t("people.plans.status.wouldLimit", { count: limited })
-  return t("people.plans.status.wouldLimitOver", { count: over, people: t("people.plans.status.people", { count: limited }) })
-}
-
 /**
  * The status card's one sentence, which says what its facts cannot, never a count or a name they
  * show: while on, what a limit does and who gets the default; while off, what the switch does,
@@ -58,24 +51,6 @@ export function statusSentence({ t }: I18n, overview: PlansOverview): string {
   if (overview.enabled) return t("people.plans.status.on")
   if (overview.plans.length === 0) return t("people.plans.status.offNoPlans")
   return defaultName(overview) === null ? t("people.plans.status.offNoDefault") : t("people.plans.status.off")
-}
-
-/**
- * The status card's sentence while a Plan's panel is open beside it, shorter, as the card then
- * keeps only its title, this, and the switch: "They limit 2 people. People without a plan get No
- * limits.", and while off what turning Plans on would do.
- */
-export function compactStatusSentence(i18n: I18n, overview: PlansOverview): string {
-  const { t } = i18n
-  const limited = limitedPeople(overview.plans)
-  if (overview.enabled) {
-    const name = defaultName(overview) ?? ""
-    return limited > 0
-      ? t("people.plans.status.compactOn", { count: limited, name })
-      : t("people.plans.status.compactOnNobody", { name })
-  }
-  if (overview.plans.length === 0) return t("people.plans.status.compactOffNoPlans")
-  return t("people.plans.status.compactOff", { impact: wouldLimit(i18n, limited, overPeople(overview.plans)) })
 }
 
 /** One of the status card's facts; `over` counts who is over a limit, for the fact that shows them. */

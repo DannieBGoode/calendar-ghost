@@ -156,6 +156,7 @@
 }
 
 html {
+  scrollbar-gutter: stable;
   min-width: 320px;
   scroll-padding-top: 5rem;
   /* While a toast shows, focus moved by keyboard stops above it (see ToastProvider). */
@@ -461,14 +462,10 @@ p {
   padding-bottom: var(--toast-space, 0px);
 }
 
-/* While a side panel is open beside its list, a toast sits at the bottom left, over the list, so
-   it never covers the panel or the footer that holds its one primary action. */
-@media (min-width: 40rem) {
-  html:has(.plan-panel, .activity-detail) .toast-viewport {
-    right: auto;
-    left: 1.5rem;
-    justify-content: flex-start;
-  }
+.detail-drawer .toast-viewport {
+  position: absolute;
+  inset: auto 1rem calc(5.5rem + env(safe-area-inset-bottom));
+  justify-content: flex-end;
 }
 
 .topbar {
@@ -621,7 +618,6 @@ p {
 .page-heading-row {
   align-items: flex-end;
 }
-
 
 .page-section h1 {
   font-size: 2rem;
@@ -2454,10 +2450,6 @@ p {
   gap: 1.5rem;
 }
 
-.plans-layout[data-panel="true"] {
-  grid-template-columns: minmax(0, 1fr) 28rem;
-}
-
 .plans-main {
   display: flex;
   min-width: 0;
@@ -2465,20 +2457,48 @@ p {
   gap: 1.5rem;
 }
 
-/* Stable, beside the table: a border and no shadow. It stays in view below the top bar, its body
-   scrolls, and its footer with the one primary action stays at its foot. It fits the window below
-   where it starts now (--plan-panel-top, which the panel keeps), so that footer is in view from the
-   moment it opens, and no taller than the room under the top bar once it sticks. */
+/* Native modal drawers keep the table beneath them unchanged. */
+.detail-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(40rem, 100%);
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.detail-drawer[open] {
+  animation: drawer-enter var(--motion-fast) var(--ease-out);
+}
+
+.detail-drawer::backdrop {
+  background: oklch(0.15 0.02 280 / 0.35);
+}
+
+@keyframes drawer-enter {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-drawer[open] { animation: none; }
+}
+
 .plan-panel {
-  position: sticky;
-  top: calc(var(--topbar-height) + 1.5rem);
   display: flex;
-  max-height: calc(100vh - max(var(--plan-panel-top, 0px), var(--topbar-height) + 1.5rem) - 1.5rem);
+  height: 100%;
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--panel-radius);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
   background: var(--background);
 }
 
@@ -2786,29 +2806,6 @@ p {
   mask-image: linear-gradient(to bottom, black calc(100% - 2rem), transparent);
 }
 
-/* Beside an open panel the catalog keeps only what picks a Plan, and marks the open one. */
-.plans-table[data-compact="true"] .col-plan {
-  width: 44%;
-}
-
-.plans-table[data-compact="true"] .col-speed {
-  width: 24%;
-}
-
-.plans-table[data-compact="true"] .col-people {
-  width: 32%;
-}
-
-.plans-table[data-compact="true"] th:last-child,
-.plans-table[data-compact="true"] td:last-child {
-  text-align: left;
-}
-
-.plans-table[data-compact="true"] thead th.plans-speed,
-.plans-table[data-compact="true"] .plan-col-speed {
-  padding-left: 0.75rem;
-}
-
 /* Plans could not be read: one line saying nothing changed, and Try again. */
 .plans-load-error {
   display: flex;
@@ -2899,26 +2896,10 @@ p {
   }
 }
 
-/* On a tab too narrow for both, the panel takes the catalog's place, as Activity's does. */
-@container plans-tab (max-width: 58rem) {
-  .plans-layout[data-panel="true"] {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .plans-layout[data-panel="true"] > .plans-main {
-    display: none;
-  }
-
-  .plan-panel {
-    position: static;
-    max-height: none;
-  }
-}
-
 /* While the catalog is a table, a Plan's people keep their over-limit chip beside them, on the
    row's one line. */
 @container plans-catalog (min-width: 56rem) {
-  .plans-table:not([data-compact="true"]) .plan-people {
+  .plans-table .plan-people {
     flex-wrap: nowrap;
   }
 }
@@ -2936,23 +2917,22 @@ p {
 }
 
 /* When the catalog is narrow each Plan becomes a card that labels its values, as Everyone does.
-   The headings stay for screen readers, so each value keeps its column's name. Beside an open
-   panel the catalog has three columns, which stay a table. */
+   The headings stay for screen readers, so each value keeps its column's name. */
 @container plans-catalog (max-width: 56rem) {
-  .plans-table:not([data-compact="true"]),
-  .plans-table:not([data-compact="true"]) thead,
-  .plans-table:not([data-compact="true"]) tbody,
-  .plans-table:not([data-compact="true"]) tr,
-  .plans-table:not([data-compact="true"]) td,
-  .plans-table:not([data-compact="true"]) tbody th {
+  .plans-table,
+  .plans-table thead,
+  .plans-table tbody,
+  .plans-table tr,
+  .plans-table td,
+  .plans-table tbody th {
     display: block;
   }
 
-  .plans-table:not([data-compact="true"]) colgroup {
+  .plans-table colgroup {
     display: none;
   }
 
-  .plans-table:not([data-compact="true"]) thead th {
+  .plans-table thead th {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -2963,7 +2943,7 @@ p {
     white-space: nowrap;
   }
 
-  .plans-table:not([data-compact="true"]) tr.plan-row {
+  .plans-table tr.plan-row {
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -2972,22 +2952,22 @@ p {
     border-bottom: 1px solid var(--border);
   }
 
-  .plans-table:not([data-compact="true"]) tbody tr:last-child {
+  .plans-table tbody tr:last-child {
     border-bottom: 0;
   }
 
-  .plans-table:not([data-compact="true"]) td,
-  .plans-table:not([data-compact="true"]) tbody th,
-  .plans-table:not([data-compact="true"]) td:first-child,
-  .plans-table:not([data-compact="true"]) td:last-child,
-  .plans-table:not([data-compact="true"]) .plans-count {
+  .plans-table td,
+  .plans-table tbody th,
+  .plans-table td:first-child,
+  .plans-table td:last-child,
+  .plans-table .plans-count {
     height: auto;
     padding: 0;
     border: 0;
     text-align: left;
   }
 
-  .plans-table:not([data-compact="true"]) td[data-label]::before {
+  .plans-table td[data-label]::before {
     display: block;
     color: var(--muted-foreground);
     content: attr(data-label);
@@ -2995,16 +2975,16 @@ p {
     font-weight: 600;
   }
 
-  .plans-table:not([data-compact="true"]) .plan-col-plan {
+  .plans-table .plan-col-plan {
     grid-column: 1 / -1;
     padding-right: 3rem;
   }
 
-  .plans-table:not([data-compact="true"]) .plan-col-people {
+  .plans-table .plan-col-people {
     grid-column: 1 / -1;
   }
 
-  .plans-table:not([data-compact="true"]) .plan-col-actions {
+  .plans-table .plan-col-actions {
     position: absolute;
     top: 0.625rem;
     right: 0;
@@ -3017,11 +2997,11 @@ p {
     background: none;
   }
 
-  .plans-table:not([data-compact="true"]) .plan-details-row {
+  .plans-table .plan-details-row {
     border-bottom: 1px solid var(--border);
   }
 
-  .plans-table:not([data-compact="true"]) .plan-details-row > td {
+  .plans-table .plan-details-row > td {
     padding: 0 0 1rem;
   }
 }
@@ -4625,7 +4605,6 @@ p {
   font-weight: 600;
 }
 
-
 .rule-endpoint {
   display: flex;
   min-width: 0;
@@ -5866,10 +5845,6 @@ a.recent-change-rule:focus-visible {
   gap: 1.5rem;
 }
 
-.activity-layout[data-detail="true"] {
-  grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
-}
-
 .activity-table-wrap {
   display: flex;
   min-width: 0;
@@ -6678,28 +6653,43 @@ thead + .incident-group th {
 }
 
 .activity-detail {
-  position: sticky;
-  /* Below the sticky top bar, so its Close and step buttons stay visible. */
-  top: calc(var(--topbar-height) + 1.5rem);
   display: flex;
-  max-height: calc(100vh - var(--topbar-height) - 3rem);
+  height: 100%;
   min-width: 0;
   flex-direction: column;
   gap: 1.25rem;
-  overflow-y: auto;
-  padding: 0.75rem 1.25rem 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  background: var(--background);
+  overflow: hidden;
+  padding: 0 1.5rem;
   font-size: 0.875rem;
   line-height: 1.5;
 }
 
 .activity-detail-bar {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
-  margin: 0 -0.5rem;
+  margin: 0 -1.5rem;
+  padding: max(0.75rem, env(safe-area-inset-top)) 1rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+}
+
+.activity-detail > .activity-detail-heading {
+  flex: none;
+}
+
+.activity-detail-body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1.25rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 -1.5rem;
+  padding: 0.25rem 1.5rem max(1.5rem, env(safe-area-inset-bottom));
+  scroll-padding-block: 1rem;
 }
 
 .activity-detail-steps {
@@ -6882,22 +6872,6 @@ thead + .incident-group th {
 
 .activity-more {
   align-self: center;
-}
-
-/* Beside a narrower table the pane would crowd it, so details take the whole width instead. */
-@media (max-width: 1000px) {
-  .activity-layout[data-detail="true"] {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .activity-layout[data-detail="true"] .activity-table-wrap {
-    display: none;
-  }
-
-  .activity-detail {
-    position: static;
-    max-height: none;
-  }
 }
 
 @media (max-width: 800px) {

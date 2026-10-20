@@ -1,7 +1,8 @@
 import { ArrowRight, CircleCheck, TriangleAlert } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
-import { useEffect, useRef, type KeyboardEvent, type RefObject } from "react"
+import { useEffect, useRef, type RefObject } from "react"
 
+import { Drawer } from "@/components/ui/drawer"
 import { DetailToolbar } from "@/components/detail-toolbar"
 import { HowToFixLink } from "@/components/how-to-fix-link"
 import { Badge } from "@/components/ui/badge"
@@ -43,9 +44,6 @@ export function IncidentDetail({
   onNext?: (() => void) | undefined
 }) {
   const { t } = context.i18n
-  const close = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") onClose()
-  }
   const toolbar = (
     <DetailToolbar
       labels={{
@@ -60,20 +58,23 @@ export function IncidentDetail({
   )
   if (!incident) {
     return (
-      <aside className="activity-detail" aria-label={t("activity.incidents.detail.label")} onKeyDown={close}>
-        {toolbar}
-        <p className="activity-event-status" role="status">
-          {loading ? t("activity.incidents.detail.loading") : t("activity.incidents.detail.missing")}
-        </p>
-      </aside>
+      <Drawer onClose={onClose} aria-label={t("activity.incidents.detail.label")}>
+        <aside className="activity-detail" aria-label={t("activity.incidents.detail.label")}>
+          {toolbar}
+          <p className="activity-event-status" role="status">
+            {loading ? t("activity.incidents.detail.loading") : t("activity.incidents.detail.missing")}
+          </p>
+        </aside>
+      </Drawer>
     )
   }
   return (
-    <aside className="activity-detail" aria-labelledby="incident-detail-title" onKeyDown={close}>
-      {toolbar}
-      <IncidentSummary incident={incident} context={context} focusRef={focusRef} onStep={onStep} />
-      <IncidentFacts incident={incident} context={context} />
-    </aside>
+    <Drawer onClose={onClose} aria-labelledby="incident-detail-title">
+      <aside className="activity-detail" aria-labelledby="incident-detail-title">
+        {toolbar}
+        <IncidentSummary incident={incident} context={context} focusRef={focusRef} onStep={onStep} />
+      </aside>
+    </Drawer>
   )
 }
 
@@ -94,28 +95,33 @@ function IncidentSummary({
   const open = incident.state === "open"
   const { explanation, cause, step, fixUrl } = incidentDetail(i18n, incident, { administrator: useIsAdministrator(), providers: useProviders() })
   return (
-    <div className="activity-detail-heading">
-      <Badge variant={open ? "attention" : "neutral"}>
-        {open ? <TriangleAlert aria-hidden="true" /> : <CircleCheck aria-hidden="true" />}
-        {open ? t("activity.incidents.status.open") : t("activity.incidents.status.resolved")}
-      </Badge>
-      <h2 id="incident-detail-title" ref={headingRef} tabIndex={-1}>
-        {incidentText(i18n, incident)}
-      </h2>
-      {explanation && <p className="incident-explanation">{explanation}</p>}
-      {cause && <p className="activity-explanation">{causeText(i18n, cause, incident.provider)}</p>}
-      {(step ?? fixUrl) && (
-        <div className="incident-actions">
-          {step && (
-            <Button variant="outline" size="sm" onClick={() => onStep(step)}>
-              {step.label}
-              <ArrowRight aria-hidden="true" />
-            </Button>
-          )}
-          {fixUrl && <HowToFixLink href={fixUrl} />}
-        </div>
-      )}
-    </div>
+    <>
+      <div className="activity-detail-heading">
+        <Badge variant={open ? "attention" : "neutral"}>
+          {open ? <TriangleAlert aria-hidden="true" /> : <CircleCheck aria-hidden="true" />}
+          {open ? t("activity.incidents.status.open") : t("activity.incidents.status.resolved")}
+        </Badge>
+        <h2 id="incident-detail-title" ref={headingRef} tabIndex={-1}>
+          {incidentText(i18n, incident)}
+        </h2>
+      </div>
+      <div className="activity-detail-body" key={incident.id}>
+        {explanation && <p className="incident-explanation">{explanation}</p>}
+        {cause && <p className="activity-explanation">{causeText(i18n, cause, incident.provider)}</p>}
+        {(step ?? fixUrl) && (
+          <div className="incident-actions">
+            {step && (
+              <Button variant="outline" size="sm" onClick={() => onStep(step)}>
+                {step.label}
+                <ArrowRight aria-hidden="true" />
+              </Button>
+            )}
+            {fixUrl && <HowToFixLink href={fixUrl} />}
+          </div>
+        )}
+        <IncidentFacts incident={incident} context={context} />
+      </div>
+    </>
   )
 }
 

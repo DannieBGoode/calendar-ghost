@@ -2,7 +2,7 @@ import { ChevronDown, ChevronUp, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 
-/** Close, then steps to the item above and below, at the top of a details panel beside a table. */
+/** Close, then steps to the item above and below, in the fixed header of a detail drawer. */
 export function DetailToolbar({
   labels,
   onClose,
