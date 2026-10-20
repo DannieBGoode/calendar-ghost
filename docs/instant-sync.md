@@ -132,7 +132,7 @@ five minutes: Calendar Ghost asks for new registrations at the new address and s
 old one. A registration whose stop fails expires with its provider within about 7 days.
 
 Unsetting `CALENDAR_SYNC_PUBLIC_URL`, or changing it to plain `http`, turns Instant Sync off, and
-incident emails then come without a link (with plain `http`, they keep it). Calendar Ghost then
+email notifications then come without a link (with plain `http`, they keep it). Calendar Ghost then
 stops nothing: registrations already made expire with their providers within about 7 days, and
 the reports they bring until then are answered `404` and change nothing.
 
@@ -312,3 +312,10 @@ rules show [Not in your plan](#not-in-your-plan). A fault in reading Plans never
 away: the installation then treats the person as having it. There is no separate administrator
 switch: each person can turn Instant Sync off for themselves
 ([ADR 0036](adr/0036-instant-sync-through-provider-notices.md)).
+
+## Plan Hold engine boundary
+
+A held rule wants no Calendar Watch, Watch Notice dispatch, or Instant Sync run. Upkeep still lists
+a User whose only rules are held while their watches exist, so it can retire those watches.
+The Plan Hold engine is dormant in production in PR 2; PR 3 activates it with visible state,
+status, and the keep form. Until then a lowered rule limit stops no rule or watch.

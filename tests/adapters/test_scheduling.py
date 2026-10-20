@@ -1,9 +1,10 @@
 import asyncio
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 from threading import Barrier, Event, Lock, Thread
 from typing import Any, cast
@@ -20,12 +21,16 @@ from calendar_sync.application.operations.ports import (
     InstallationUnitOfWork,
     InstallationUnitOfWorkFactory,
     SchedulerProgress,
+    UserPlanStanding,
 )
 from calendar_sync.application.operations.scheduled_pass import (
+    PlanNoticeDelivery,
     ScheduledPass,
+    ScheduledRun,
     ScheduledServices,
     SyncRuns,
 )
+from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.health import RuleHealth, RunHealth
@@ -55,6 +60,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
 )
+from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.services import (
@@ -79,6 +85,7 @@ from calendar_sync.infrastructure.persistence.installation import (
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryUnitOfWorkFactory,
     InMemoryUserUnitOfWorkFactory,
+    MemoryDatabase,
 )
 from calendar_sync.infrastructure.persistence.memory_installation import (
     InMemoryInstallationUnitOfWork,
@@ -967,7 +974,8 @@ def test_a_failed_pass_is_logged_and_the_next_interval_runs_again(
     with caplog.at_level("ERROR", logger="calendar_sync.infrastructure.scheduling"):
         asyncio.run(asyncio.wait_for(two_passes(), timeout=5))
 
-    assert opened == 2
+    # Preparation and listing use separate scopes so per-User writes are visible.
+    assert opened >= 2
     assert [record.getMessage() for record in caplog.records] == [
         "Scheduled pass failed; trying again at the next interval"
     ]
@@ -1588,3 +1596,361 @@ def test_the_scheduler_says_when_its_next_pass_begins(monkeypatch: pytest.Monkey
     # Before its first pass it is about to run; between passes it rests for the interval.
     assert before.next_pass_at == clock.now()
     assert [progress.next_pass_at for progress in resting] == [clock.now() + timedelta(seconds=300)]
+
+
+class PlanMailPass(ScheduledPass):
+    """A pass with controllable notices and one rule, without a provider."""
+
+    def __init__(self) -> None:
+        from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
+
+        self.notice = PlanNotice(PlanNoticeKind.GRACE_STARTED, 2, 1, 1, FixedClock().now())
+        self.due = [(USER, self.notice), (OTHER_USER, self.notice)]
+        self.started = Event()
+        self.release = Event()
+        self.sent: list[tuple[UserId, PlanNotice]] = []
+        self.threads: list[str] = []
+        self.listings = 0
+        self.runs = 0
+
+    def begin(self, *, notices: dict[UserId, PlanNotice] | None = None) -> tuple[ScheduledRun, ...]:
+        if notices is not None:
+            notices.update(self.plan_notices_due())
+        self.listings += 1
+        return (ScheduledRun(ScheduledRule(USER, rule(), None), False),)
+
+    def run(self, item: ScheduledRun) -> bool:
+        self.runs += 1
+        return True
+
+    def checks_due(self) -> tuple[UserId, ...]:
+        return ()
+
+    def plan_notices_due(self) -> tuple[tuple[UserId, PlanNotice], ...]:
+        due, self.due = self.due, []
+        return tuple(due)
+
+    def send_plan_notice(self, owner: UserId, notice: PlanNotice) -> None:
+        from threading import current_thread
+
+        self.threads.append(current_thread().name)
+        self.sent.append((owner, notice))
+        if len(self.sent) == 1:
+            self.started.set()
+            assert self.release.wait(5)
+
+
+def _queued_notices(planned: PlanMailPass) -> tuple[PlanNoticeDelivery, ...]:
+    return tuple(
+        PlanNoticeDelivery(owner.value, partial(planned.send_plan_notice, owner, notice))
+        for owner, notice in planned.plan_notices_due()
+    )
+
+
+async def _until(predicate: Callable[[], bool]) -> None:
+    async with asyncio.timeout(5):
+        while not predicate():
+            await asyncio.sleep(0)
+
+
+def test_slow_plan_email_holds_up_no_rule() -> None:
+    planned = PlanMailPass()
+    scheduler = SyncScheduler(planned, concurrency=1)
+
+    async def scenario() -> None:
+        try:
+            await asyncio.wait_for(scheduler.run_once(), 2)
+            await _until(planned.started.is_set)
+            assert planned.runs == 1
+            assert scheduler.progress().last_completed_at is not None
+        finally:
+            planned.release.set()
+            scheduler._mail.close()
+
+    asyncio.run(scenario())
+    assert all(name.startswith("plan-mail") for name in planned.threads)
+
+
+def test_next_pass_lists_while_smtp_is_blocked() -> None:
+    planned = PlanMailPass()
+    scheduler = SyncScheduler(planned, concurrency=1)
+
+    async def scenario() -> None:
+        try:
+            await scheduler.run_once()
+            await _until(planned.started.is_set)
+            await asyncio.wait_for(scheduler.run_once(), 2)
+            assert planned.listings == 2
+            assert planned.runs == 2
+            assert len(planned.sent) == 1
+        finally:
+            planned.release.set()
+            scheduler._mail.close()
+
+    asyncio.run(scenario())
+
+
+def test_plan_mail_replaces_latest_pending_and_never_drains_twice() -> None:
+    planned = PlanMailPass()
+    scheduler = SyncScheduler(planned)
+    newer = replace(planned.notice, held=2)
+    latest = replace(planned.notice, held=3)
+
+    async def scenario() -> None:
+        try:
+            await scheduler.run_once()
+            await _until(planned.started.is_set)
+            planned.due = [(USER, newer)]
+            await scheduler.run_once()
+            planned.due = [(USER, latest)]
+            await scheduler.run_once()
+            await scheduler.run_once()
+            planned.release.set()
+            await _until(lambda: len(planned.sent) == 3)
+            await _until(lambda: scheduler._mail._task is None)
+            assert planned.sent == [
+                (USER, planned.notice),
+                (OTHER_USER, planned.notice),
+                (USER, latest),
+            ]
+        finally:
+            scheduler._mail.close()
+            planned.release.set()
+
+    asyncio.run(scenario())
+
+
+def test_cancelling_scheduler_starts_no_subsequent_plan_send() -> None:
+    planned = PlanMailPass()
+    scheduler = SyncScheduler(planned)
+
+    async def scenario() -> None:
+        task = asyncio.create_task(scheduler.run_forever())
+        try:
+            await _until(planned.started.is_set)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            planned.release.set()
+            await asyncio.sleep(0.02)
+            assert planned.sent == [(USER, planned.notice)]
+        finally:
+            planned.release.set()
+            task.cancel()
+
+    asyncio.run(scenario())
+
+
+def test_scheduler_restart_reopens_mail_after_cancellation() -> None:
+    planned = PlanMailPass()
+    scheduler = SyncScheduler(planned)
+
+    async def scenario() -> None:
+        first = asyncio.create_task(scheduler.run_forever())
+        try:
+            await _until(planned.started.is_set)
+            first.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await first
+            planned.due = [(OTHER_USER, replace(planned.notice, held=3))]
+            restarted = asyncio.create_task(scheduler.run_forever())
+            try:
+                await _until(lambda: planned.listings >= 2)
+                assert len(planned.sent) == 1
+                planned.release.set()
+                await _until(lambda: len(planned.sent) == 2)
+                assert len(set(planned.threads)) == 1
+                assert planned.sent[1] == (OTHER_USER, replace(planned.notice, held=3))
+            finally:
+                restarted.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await restarted
+        finally:
+            planned.release.set()
+            first.cancel()
+
+    asyncio.run(scenario())
+
+
+def test_cancel_before_mail_task_starts_can_restart() -> None:
+    planned = PlanMailPass()
+    planned.release.set()
+    scheduler = SyncScheduler(planned)
+
+    async def scenario() -> None:
+        scheduler._mail.queue(_queued_notices(planned))
+        await scheduler._mail.stop()
+        assert planned.sent == []
+        assert scheduler._mail._task is None
+        planned.due = [(USER, planned.notice)]
+        await scheduler.run_once()
+        await _until(lambda: len(planned.sent) == 1)
+        await scheduler._mail.stop()
+
+    asyncio.run(scenario())
+
+
+def test_plan_mail_has_only_one_sending_batch_of_at_most_one_hundred() -> None:
+    planned = PlanMailPass()
+    planned.due = [(UserId(f"user-{index:03}"), planned.notice) for index in range(205)]
+    scheduler = SyncScheduler(planned)
+
+    async def scenario() -> None:
+        try:
+            await scheduler.run_once()
+            await _until(planned.started.is_set)
+            # Only the first hundred left pending state; its one active send holds the batch.
+            assert len(scheduler._mail._pending) == 105
+            assert len(planned.sent) == 1
+            await scheduler.run_once()
+            assert len(scheduler._mail._pending) == 105
+            await scheduler._mail.stop()
+            planned.release.set()
+            assert scheduler._mail._pending == {}
+        finally:
+            planned.release.set()
+            await scheduler._mail.stop()
+
+    asyncio.run(scenario())
+
+
+def test_failed_plan_delivery_does_not_stop_next_notice_or_rules(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned = PlanMailPass()
+    planned.release.set()
+
+    def send(owner: UserId, notice: PlanNotice) -> None:
+        planned.sent.append((owner, notice))
+        if owner == USER:
+            raise OSError("private credentials")
+
+    monkeypatch.setattr(planned, "send_plan_notice", send)
+    scheduler = SyncScheduler(planned)
+
+    async def scenario() -> None:
+        await scheduler.run_once()
+        await _until(lambda: len(planned.sent) == 2)
+        assert planned.runs == 1
+        await scheduler._mail.stop()
+
+    asyncio.run(scenario())
+    assert "OSError" in caplog.text
+    assert "private credentials" not in caplog.text
+
+
+class _NoticeSettlement(ScheduledPlanHolds):
+    def __init__(self, old: PlanNotice, blocked: bool) -> None:
+        self.pending: tuple[tuple[UserId, PlanNotice], ...] = ((USER, old),)
+        self.started, self.release = Event(), Event()
+        self.blocked = blocked
+
+    def settle(
+        self, standings: Sequence[UserPlanStanding]
+    ) -> tuple[tuple[UserId, PlanNotice], ...]:
+        pending, self.pending = self.pending, ()
+        if self.blocked and pending:
+            self.started.set()
+            assert self.release.wait(5)
+        return pending
+
+
+class _NoticeListing(InMemoryInstallationUnitOfWork):
+    def __init__(self, database: MemoryDatabase, fail_listing: bool) -> None:
+        super().__init__(database)
+        self.count = 0
+        self.fail_listing = fail_listing
+
+    def scheduled_rules(self) -> tuple[ScheduledRule, ...]:
+        self.count += 1
+        if self.fail_listing and self.count == 1:
+            raise RuntimeError("listing unavailable")
+        return super().scheduled_rules()
+
+
+def _notice_publication_world(
+    *, fail_listing: bool = False, block_settlement: bool = False
+) -> tuple[SyncScheduler, _NoticeSettlement, _NoticeListing, list[PlanNotice], PlanNotice]:
+    units = memory_units()
+    old = PlanNotice(PlanNoticeKind.GRACE_STARTED, 2, 1, 1, FixedClock().now())
+    sent: list[PlanNotice] = []
+
+    class Notices:
+        def plan_changed(self, notice: PlanNotice) -> None:
+            sent.append(notice)
+
+    settlement = _NoticeSettlement(old, block_settlement)
+    listing = _NoticeListing(units.database, fail_listing)
+    services = ScheduledServices(
+        cast(SyncRuns, RecordingExecuteRule([])),
+        cast(RunHealth, RecordingHealth()),
+        plan_notices=Notices(),
+    )
+    scheduled = ScheduledPass(
+        lambda: listing, lambda owner: services, FixedClock(), plan_holds=settlement
+    )
+    scheduler = SyncScheduler(scheduled, concurrency=1)
+    return scheduler, settlement, listing, sent, old
+
+
+def test_cancelled_lifecycle_discards_notice_retained_after_listing_failure() -> None:
+    scheduler, settlement, listing, sent, old = _notice_publication_world(fail_listing=True)
+    new = replace(old, held=2)
+
+    async def scenario() -> None:
+        first = asyncio.create_task(scheduler.run_forever())
+        await _until(lambda: listing.count == 1 and scheduler.progress().next_pass_at is not None)
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        restarted = asyncio.create_task(scheduler.run_forever())
+        try:
+            await _until(lambda: listing.count == 2)
+            await _until(lambda: scheduler.progress().last_completed_at is not None)
+            await _until(lambda: scheduler._mail._task is None)
+            assert sent == []
+            settlement.pending = ((USER, new),)
+            await scheduler.run_once()
+            await _until(lambda: len(sent) == 1)
+            assert sent == [new]
+        finally:
+            restarted.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await restarted
+
+    asyncio.run(scenario())
+
+
+def test_cancelled_lifecycle_discards_late_notice_from_blocked_begin() -> None:
+    scheduler, settlement, listing, sent, old = _notice_publication_world(block_settlement=True)
+    new = replace(old, held=2)
+
+    async def scenario() -> None:
+        first = asyncio.create_task(scheduler.run_forever())
+        try:
+            await _until(settlement.started.is_set)
+            first.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(first, 2)
+            assert not settlement.release.is_set()
+            settlement.release.set()
+            await _until(lambda: listing.count == 1)
+            restarted = asyncio.create_task(scheduler.run_forever())
+            try:
+                await _until(lambda: listing.count == 2)
+                await _until(lambda: scheduler.progress().last_completed_at is not None)
+                await _until(lambda: scheduler._mail._task is None)
+                assert sent == []
+                settlement.pending = ((USER, new),)
+                await scheduler.run_once()
+                await _until(lambda: len(sent) == 1)
+                assert sent == [new]
+            finally:
+                restarted.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await restarted
+        finally:
+            settlement.release.set()
+            first.cancel()
+
+    asyncio.run(scenario())

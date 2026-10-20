@@ -273,7 +273,7 @@ tokens, and Activity, and the events their rules wrote wherever Calendar Ghost c
 them; their own events and their Google and Microsoft accounts stay as they are. While anyone else remains, the
 installation keeps one administrator who can sign in, so the last administrator must make someone
 else an administrator before deleting their own account. You may return to **Only me** once you are
-the only person again. Anyone can change their own email and password, turn their incident emails
+the only person again. Anyone can change their own email and password, turn their email notifications
 off, or delete their own account under **Settings → Your account**, choosing whether the events
 their rules wrote are deleted too. When the last person deletes
 their own account, Calendar Ghost returns to setup: the next person to open it creates the
@@ -603,3 +603,13 @@ curl --fail http://localhost:8000/health
 If a synchronization decision is blocked, use the authenticated **Activity** view and the rule
 details page before changing calendars or deleting data. Ownership checks are intentionally
 conservative.
+
+## Plan Hold delivery boundary
+
+The Plan Hold engine is present but disabled in this PR 2 build. Lowering a limit still refuses
+new Starts and stops nothing. Production activation, visible grace and hold state, status,
+Dashboard, MCP, and the form for choosing which rules keep syncing arrive together in PR 3.
+Until then no production grace or Plan notice is generated. **Email notifications** under
+Settings, Your account continues to control optional incident email. See the
+[migration 34 rollback notes](deployment.md#migration-34-plan-hold-engine) before opening a database
+written by a future activated release with older code.

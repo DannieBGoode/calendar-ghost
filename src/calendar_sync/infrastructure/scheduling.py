@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from datetime import datetime, timedelta
 from functools import partial
+from itertools import islice
 from typing import Protocol
 
 from calendar_sync.application.operations.installation_health import (
@@ -20,7 +21,11 @@ from calendar_sync.application.operations.installation_health import (
 )
 from calendar_sync.application.operations.instant_sync import InstantRun
 from calendar_sync.application.operations.ports import SchedulerHeartbeat, SchedulerProgress
-from calendar_sync.application.operations.scheduled_pass import ScheduledPass, ScheduledRun
+from calendar_sync.application.operations.scheduled_pass import (
+    PlanNoticeDelivery,
+    ScheduledPass,
+    ScheduledRun,
+)
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.infrastructure.clock import SystemClock
 
@@ -47,6 +52,61 @@ class _Threads:
         )
 
 
+class _PlanMail:
+    """One sending batch and the latest pending notice per User, outside pass capacity.
+
+    Submit each bounded SMTP call separately so cancellation cannot begin another send.
+    """
+
+    def __init__(self) -> None:
+        self._pending: dict[str, PlanNoticeDelivery] = {}
+        self._threads = _Threads(1, "plan-mail")
+        self._task: asyncio.Task[None] | None = None
+        self._closed = False
+
+    def open(self) -> None:
+        self._closed = False
+
+    def queue(self, notices: Collection[PlanNoticeDelivery]) -> None:
+        if self._closed:
+            return
+        self._pending.update((notice.owner_key, notice) for notice in notices)
+        if self._pending and self._task is None:
+            self._task = asyncio.create_task(self._send())
+
+    async def _send(self) -> None:
+        try:
+            while self._pending:
+                batch = tuple(islice(self._pending.items(), 100))
+                for owner, _ in batch:
+                    del self._pending[owner]
+                for _, notice in batch:
+                    try:
+                        await self._threads.run(notice.deliver)
+                    except Exception as error:
+                        logger.error("Plan notice delivery failed (%s)", type(error).__name__)
+        finally:
+            self._task = None
+
+    def close(self) -> None:
+        self._closed = True
+        self._pending.clear()
+        if self._task is not None:
+            self._task.cancel()
+        # The executor belongs to the scheduler, like its run threads. Reuse the same sole
+        # worker on restart so any bounded SMTP call still finishing precedes the new mail.
+
+    async def stop(self) -> None:
+        task = self._task
+        self.close()
+        if task is not None:
+            with suppress(asyncio.CancelledError):
+                await task
+            # A task cancelled before its first instruction never reaches _send's finally.
+            if self._task is task:
+                self._task = None
+
+
 class SyncScheduler:
     """Runs a scheduled pass each interval, several of the rules it lists at once (ADR 0029); the
     pass decides which rules are due."""
@@ -59,6 +119,7 @@ class SyncScheduler:
         concurrency: int = 4,
     ) -> None:
         self._pass = scheduled_pass
+        self._mail = _PlanMail()
         self._interval_seconds = interval_seconds
         self._clock = clock or SystemClock()
         self._concurrency = concurrency
@@ -73,23 +134,27 @@ class SyncScheduler:
         self._next_pass_at: datetime | None = self._running_since
 
     async def run_forever(self) -> None:
-        while True:
-            # A pass that fails, such as on a database another operation holds locked, must not
-            # end the loop: every rule would stop synchronizing until the service restarts.
-            # Cancellation is a BaseException, so stopping the service still ends the loop.
-            try:
-                await self.run_once()
-            except Exception:
-                logger.exception("Scheduled pass failed; trying again at the next interval")
-            self._next_pass_at = self._clock.now() + timedelta(seconds=self._interval_seconds)
-            await asyncio.sleep(self._interval_seconds)
+        try:
+            while True:
+                # A failed pass waits for the next interval; cancellation still ends the loop.
+                try:
+                    await self.run_once()
+                except Exception:
+                    logger.exception("Scheduled pass failed; trying again at the next interval")
+                self._next_pass_at = self._clock.now() + timedelta(seconds=self._interval_seconds)
+                await asyncio.sleep(self._interval_seconds)
+        finally:
+            await self._mail.stop()
 
     async def run_once(self) -> None:
+        self._mail.open()
         self._next_pass_at = None
         self._pass_started_at = self._clock.now()
         try:
             listed = await self._run_pass()
-        except BaseException:
+        except BaseException as error:
+            if isinstance(error, asyncio.CancelledError):
+                await self._mail.stop()
             self._pass_started_at = None
             raise
         # Publish the completion before clearing the running pass, so a request thread never
@@ -110,7 +175,10 @@ class SyncScheduler:
     async def _run_pass(self) -> frozenset[str]:
         """Runs each rule the pass lists once; returns the ids of the rules it listed."""
         # In a worker thread: finishing a lapse may wait for a rule's lock.
-        runs = await self._threads.run(self._pass.begin)
+        preparation = self._pass.prepare()
+        runs = await self._threads.run(preparation.begin)
+        # Only a successful, uncancelled listing hands its notices to this lifecycle's worker.
+        self._mail.queue(preparation.notices_due())
         # Different rules run side by side, so one waiting on a slow provider does not hold up the
         # rest; the same rule never does, because each run holds that rule's lock.
         slots = asyncio.Semaphore(self._concurrency)

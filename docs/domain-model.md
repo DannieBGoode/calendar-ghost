@@ -87,13 +87,14 @@ preview. Rule Removal first moves the rule to Removing, which cannot synchronize
 policy, or enable; the rule is deleted once every mapping is deleted, detached, or left in place
 because its ownership could not be verified, and a failed removal can be retried in either mode. Disconnecting an account moves affected Enabled and Previewed rules to Degraded,
 preventing a previously validated rule from being enabled without authorization. A Degraded Rule
-performs no writes until the account is reauthorized and the rule passes a new recovery preview;
+performs no writes until recovery or Plan Hold release; ordinary recovery needs a new preview;
 re-enabling starts with both preserved incremental positions. A rule degraded only by Lapsed
 Authorization, when its provider refuses a connected account's credentials, records that cause. Once
 every account it uses is authorized again, by Reauthorization or a passing access check, it returns
 to Enabled without a preview and continues from the same preserved positions (ADR 0027). A Material
 Rule Change, a pause, a removal, disconnecting one of its accounts, or a later failure requiring
 intervention while it is stopped clears that cause, so its recovery needs a preview again.
+Plan Hold is the other self-resuming cause, described below; Reauthorization never releases it.
 
 A rule counts toward its User's Plan (`counts_toward_plan`) when it is Enabled, when it is Degraded
 only by Lapsed Authorization (`holdable`), or when it keeps a place (`keeps_place`, ADR 0038).
@@ -119,3 +120,28 @@ Deletion first waits for any run, provider write, or lifecycle change of each af
 finish, as Rule Removal does, so no in-flight work outlives the records it depends on. The account
 and its rules are then deleted in one transaction that also rechecks the account is disconnected,
 so a reauthorization or a new rule for the account cannot interleave with it.
+
+## Plan Hold stop cause
+
+A Degraded Rule may instead have `held_by_plan`, exclusive with `awaiting_reauthorization`.
+`stop_cause` distinguishes them; persistence writes code 2 for a hold and code 1 for a lapse in
+`awaiting_reauthorization`. A held rule neither synchronizes nor counts toward its Plan. `hold()`
+accepts Enabled or lapse-stopped rules and preserves mappings, projections, and cursors.
+`release_hold(authorized)` returns Enabled when both accounts are authorized, otherwise
+lapse-stopped. Previewing a held rule leaves it held; pause, required preview, disconnection,
+Material Rule Change, removal, or a failure requiring intervention clears the hold. These are
+additional self-resume transitions, not a new rule state (ADR 0039).
+
+```text
+Enabled or lapse-stopped -> Degraded (Plan Hold)
+Degraded (Plan Hold) -- preview --> Degraded (Plan Hold)
+Degraded (Plan Hold) -- release, authorized --> Enabled
+Degraded (Plan Hold) -- release, unauthorized --> Degraded (Lapsed Authorization)
+```
+
+`PlanGrace` records a User's seven-day deadline, last settled limit, and admission counter.
+`RuleStanding` ranks kept rules first, then creation order and identifier. Counted rules and
+replacement drafts with a reserved place determine excess; held rules do not. Expiry holds only
+counted excess rules and clears reserved excess places. `plan_kept` is saved independently of a
+rule's other fields. A replacement that inherits a place inherits order and keep mark too.
+Production composition disables settlement in PR 2; PR 3 owns activation and visible recovery.

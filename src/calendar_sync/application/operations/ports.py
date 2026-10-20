@@ -23,6 +23,7 @@ from calendar_sync.domain.incidents import (
     next_step,
 )
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule
+from calendar_sync.domain.plan_hold import PlanGrace, RuleStanding
 from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.runs import RuleRunOutcome
 
@@ -112,6 +113,17 @@ class CauseSighting:
     """The provider that answered, as recorded with the failure; None when it is not known."""
 
 
+@dataclass(frozen=True, slots=True)
+class UserPlanStanding:
+    """One User's rule places and grace, including Disabled Users and grace-only Users."""
+
+    owner: UserId
+    active: bool
+    standings: tuple[RuleStanding, ...]
+    grace: PlanGrace | None
+    admissions: int
+
+
 class InstallationUnitOfWork(Protocol):
     """What reaches across Users. Only the scheduler, migrations, and the Operator Overview
     receive it, so crossing Users is visible in a type (ADR 0029)."""
@@ -126,6 +138,10 @@ class InstallationUnitOfWork(Protocol):
     ) -> bool | None: ...
 
     def commit(self) -> None: ...
+
+    def plan_standings(self) -> Sequence[UserPlanStanding]:
+        """Users with rule places or a grace, read together before per-User settlement."""
+        ...
 
     def scheduled_rules(self) -> Sequence[ScheduledRule]:
         """Every enabled rule of a User who is not disabled, by User and then by rule, with when

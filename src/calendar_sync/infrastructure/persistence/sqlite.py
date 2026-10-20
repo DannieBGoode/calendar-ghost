@@ -23,6 +23,7 @@ from calendar_sync.application.sync.ports import (
     EventMappingRepository,
     ExceptionReplayRepository,
     OccurrenceMappingRepository,
+    PlanGraceRecord,
     ProviderCallCounts,
     ProviderCallRepository,
     RulePreviewRepository,
@@ -71,10 +72,12 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.plan_hold import RulePlace, RuleStanding
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.persistence.connections import open_connection
+from calendar_sync.infrastructure.persistence.plan_grace import SqlitePlanGraceRecord
 from calendar_sync.infrastructure.persistence.refusals import refusals
 from calendar_sync.infrastructure.persistence.source_changes import (
     SqliteSourceObservationRepository,
@@ -188,6 +191,37 @@ class SqliteSyncRuleRepository:
         ).fetchall()
         return tuple(rule_from_row(row) for row in rows)
 
+    def standings(self) -> Sequence[RuleStanding]:
+        rows = self._connection.execute(
+            "SELECT * FROM sync_rules WHERE user_id = ? "
+            "ORDER BY (plan_kept != 0) DESC, creation_order, id",
+            (self._user,),
+        ).fetchall()
+        standings = []
+        for row in rows:
+            rule = rule_from_row(row)
+            if not rule.counts_toward_plan and not rule.stopped_by_plan_hold:
+                continue
+            place = (
+                RulePlace.HELD
+                if rule.stopped_by_plan_hold
+                else RulePlace.RESERVED
+                if rule.keeps_place
+                else RulePlace.COUNTED
+            )
+            standings.append(
+                RuleStanding(rule.id, place, int(row["creation_order"]), bool(row["plan_kept"]))
+            )
+        return tuple(standings)
+
+    def keep(self, chosen: Collection[SyncRuleId]) -> None:
+        placeholders = ", ".join("?" for _ in chosen)
+        # Interpolates only `?` placeholders; every identifier stays bound.
+        self._connection.execute(
+            f"UPDATE sync_rules SET plan_kept = (id IN ({placeholders})) WHERE user_id = ?",  # noqa: S608
+            (*(rule.value for rule in chosen), self._user),
+        )
+
     def add(self, rule: SyncRule) -> None:
         with refusals(), _rule_refusals():
             self._connection.execute(
@@ -254,8 +288,8 @@ class SqliteSyncRuleRepository:
         # creation_order is not unique: until `of` is removed, the two rank together, by id.
         self._connection.execute(
             """
-            UPDATE sync_rules SET creation_order = (
-                SELECT creation_order FROM sync_rules WHERE id = :of AND user_id = :user
+            UPDATE sync_rules SET (creation_order, plan_kept) = (
+                SELECT creation_order, plan_kept FROM sync_rules WHERE id = :of AND user_id = :user
             )
             WHERE id = :rule AND user_id = :user
                 AND EXISTS (SELECT 1 FROM sync_rules WHERE id = :of AND user_id = :user)
@@ -959,6 +993,7 @@ class SqliteUnitOfWork:
 
     accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
+    plan_grace: PlanGraceRecord
     mappings: EventMappingRepository
     occurrences: OccurrenceMappingRepository
     replays: ExceptionReplayRepository
@@ -992,6 +1027,7 @@ class SqliteUnitOfWork:
         user = self._user
         self.accounts = SqliteConnectedAccountRecords(connection, user)
         self.rules = SqliteSyncRuleRepository(connection, user, self._clock)
+        self.plan_grace = SqlitePlanGraceRecord(connection, user)
         self.mappings = SqliteEventMappingRepository(connection, user)
         self.occurrences = SqliteOccurrenceMappingRepository(connection, user)
         self.replays = SqliteExceptionReplayRepository(connection, user)
@@ -1080,13 +1116,16 @@ def _rule_values(rule: SyncRule) -> tuple[object, ...]:
         rule.initial_lookback_days,
         rule.state.value,
         int(rule.reprojection_required),
-        int(rule.awaiting_reauthorization),
+        2 if rule.held_by_plan else int(rule.awaiting_reauthorization),
         int(rule.keeps_place),
     )
 
 
 def rule_from_row(row: sqlite3.Row) -> SyncRule:
     state = SyncRuleState(str(row["state"]))
+    # An unknown stop code must never authorize execution or automatic recovery.
+    if row["awaiting_reauthorization"] not in (0, 1, 2):
+        state = SyncRuleState.DEGRADED
     return SyncRule(
         id=SyncRuleId(str(row["id"])),
         source=CalendarEndpoint(
@@ -1108,7 +1147,8 @@ def rule_from_row(row: sqlite3.Row) -> SyncRule:
         initial_lookback_days=int(row["initial_lookback_days"]),
         state=state,
         reprojection_required=bool(row["reprojection_required"]),
-        awaiting_reauthorization=bool(row["awaiting_reauthorization"]),
+        awaiting_reauthorization=row["awaiting_reauthorization"] == 1,
+        held_by_plan=row["awaiting_reauthorization"] == 2 and state is SyncRuleState.DEGRADED,
         # A mark left on a row in any other state reads as none.
         keeps_place=bool(row["keeps_place"]) and state in KEEPS_PLACE,
     )

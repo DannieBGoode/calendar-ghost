@@ -680,9 +680,11 @@ The Google adapter must discard the expired cursor, perform a safe initial-windo
 - **The only administrator forgot their password.** Nobody can create a reset link for them. Make a
   second person an administrator while you can, so each can help the other.
 
-## Incident emails are unavailable or never arrive
+<div id="incident-emails-are-unavailable-or-never-arrive"></div>
 
-**Email me about incidents** under **Settings → Your account** appears only when the installation
+## Email notifications are unavailable or never arrive
+
+**Email notifications** under **Settings → Your account** appears only when the installation
 sends email. Until then that page says who can set email up, and every incident still appears in
 **Activity**.
 
@@ -690,7 +692,7 @@ sends email. Until then that page says who can set email up, and every incident 
   `CALENDAR_SYNC_SMTP_SENDER`, plus credentials if the server needs them, in `.env` and restarts.
   See [Incident notifications](deployment.md#incident-notifications).
 - **You have no email yet.** After an upgrade, the first User adds one when they next sign in.
-- **You turned them off.** Turn **Email me about incidents** on again.
+- **You turned them off.** Turn **Email notifications** on again.
 - **The SMTP recipient and webhook stopped receiving rule incidents.** Since Users, they receive only
   incidents about the installation itself, such as a stalled scheduler. Each person receives their
   own rule incidents at their email.
@@ -789,6 +791,15 @@ To fix it, do one of these:
   its case or the spaces around it. Choose another name, or rename the other Plan first.
 
 An API client receives `409` with the code `plan_in_use`, `plan_is_default`, or `plan_name_taken`.
+
+## A rule held by a future Plan Hold release stays stopped after rollback
+
+This PR 2 build recognizes Plan Hold but its production scheduler does not release it. Restoring
+account access never releases a hold here. If a future activated release wrote code 2, upgrade to
+an active release, or pause the rule to clear its hold, then preview and Start within your Plan's
+limit. Preview alone keeps a hold. See [migration 34](deployment.md#migration-34-plan-hold-engine)
+for the different behavior of releases from before this migration. Normal production operation
+of PR 2 creates no holds or Plan notices.
 
 ## Getting more help
 

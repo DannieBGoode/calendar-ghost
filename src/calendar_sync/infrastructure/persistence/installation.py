@@ -19,12 +19,14 @@ from calendar_sync.application.operations.ports import (
     RecordedRule,
     ResourceUse,
     StatusRecords,
+    UserPlanStanding,
 )
 from calendar_sync.application.sync.ports import ScheduledRule
 from calendar_sync.domain.access import UserId, UserState
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.model import SyncRuleState
+from calendar_sync.domain.model import SyncRuleId, SyncRuleState
+from calendar_sync.domain.plan_hold import PlanGrace, RulePlace, RuleStanding
 from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.watches import CalendarWatch, WatchRegistration
 from calendar_sync.infrastructure.persistence.activity_queries import operations_of
@@ -114,6 +116,27 @@ class SqliteInstallationUnitOfWork:
     def commit(self) -> None:
         assert self._connection is not None
         self._connection.commit()
+
+    def plan_standings(self) -> Sequence[UserPlanStanding]:
+        assert self._connection is not None
+        rows = self._connection.execute(
+            """
+            SELECT users.id AS owner, users.state AS user_state, users.plan_holds_at,
+                users.plan_grace_limit, users.plan_grace_admissions, users.plan_admissions,
+                rule.id AS rule_id, rule.state AS rule_state, rule.awaiting_reauthorization,
+                rule.keeps_place, rule.plan_kept, rule.creation_order
+            FROM users LEFT JOIN sync_rules rule ON rule.user_id = users.id
+            AND rule.awaiting_reauthorization IN (0, 1, 2) AND (
+                rule.state = 'enabled'
+                OR (rule.keeps_place = 1 AND rule.state IN (?, ?))
+                OR (rule.state = 'degraded' AND rule.awaiting_reauthorization IN (1, 2))
+            )
+            WHERE users.plan_holds_at IS NOT NULL OR rule.id IS NOT NULL
+            ORDER BY users.id, (rule.plan_kept != 0) DESC, rule.creation_order, rule.id
+            """,
+            (SyncRuleState.DRAFT.value, SyncRuleState.PREVIEWED.value),
+        ).fetchall()
+        return _plan_standings(rows)
 
     def scheduled_rules(self) -> Sequence[ScheduledRule]:
         assert self._connection is not None
@@ -443,3 +466,42 @@ class SqliteInstallationUnitOfWorkFactory:
 
     def __call__(self) -> InstallationUnitOfWork:
         return SqliteInstallationUnitOfWork(self.database_path)
+
+
+def _plan_standings(rows: Sequence[sqlite3.Row]) -> tuple[UserPlanStanding, ...]:
+    grouped: dict[UserId, list[RuleStanding]] = {}
+    users: dict[UserId, sqlite3.Row] = {}
+    for row in rows:
+        owner = UserId(row["owner"])
+        users[owner] = row
+        rules = grouped.setdefault(owner, [])
+        if row["rule_id"] is not None:
+            place = (
+                RulePlace.HELD
+                if row["rule_state"] == "degraded" and row["awaiting_reauthorization"] == 2
+                else RulePlace.RESERVED
+                if row["keeps_place"]
+                and row["rule_state"] in (SyncRuleState.DRAFT.value, SyncRuleState.PREVIEWED.value)
+                else RulePlace.COUNTED
+            )
+            rules.append(
+                RuleStanding(
+                    SyncRuleId(row["rule_id"]), place, row["creation_order"], bool(row["plan_kept"])
+                )
+            )
+    return tuple(
+        UserPlanStanding(
+            owner,
+            row["user_state"] == "active",
+            tuple(grouped[owner]),
+            PlanGrace(
+                datetime.fromisoformat(row["plan_holds_at"]),
+                row["plan_grace_limit"],
+                row["plan_grace_admissions"],
+            )
+            if row["plan_holds_at"] is not None
+            else None,
+            row["plan_admissions"],
+        )
+        for owner, row in users.items()
+    )

@@ -77,6 +77,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TimedInterval,
 )
+from calendar_sync.domain.plan_hold import PlanGrace, RulePlace
 from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
@@ -316,6 +317,153 @@ class PersistenceContract:
     @pytest.fixture
     def harness(self) -> PersistenceHarness:
         raise NotImplementedError
+
+    def test_standings_rank_and_keep_survives_late_rule_save(
+        self, harness: PersistenceHarness
+    ) -> None:
+        reserved = replace(OTHER_RULE, state=SyncRuleState.DRAFT, keeps_place=True)
+        held = replace(
+            RULE.hold(),
+            id=SyncRuleId("held"),
+            destination=endpoint("work-account", "held-calendar"),
+        )
+        excluded = replace(
+            RULE.pause(),
+            id=SyncRuleId("paused"),
+            destination=endpoint("work-account", "paused-calendar"),
+        )
+        with harness.unit_of_work() as uow:
+            for each in (RULE, reserved, held, excluded):
+                uow.rules.add(each)
+            uow.rules.keep([held.id, reserved.id])
+            uow.rules.save(held)
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            standings = uow.rules.standings()
+            assert [(item.rule_id, item.place, item.kept) for item in standings] == [
+                (reserved.id, RulePlace.RESERVED, True),
+                (held.id, RulePlace.HELD, True),
+                (RULE.id, RulePlace.COUNTED, False),
+            ]
+            assert [each.id for each in uow.rules.list()] == sorted(
+                (RULE.id, reserved.id, held.id, excluded.id), key=lambda each: each.value
+            )
+            uow.rules.keep([])
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            assert [item.rule_id for item in uow.rules.standings()] == [
+                RULE.id,
+                reserved.id,
+                held.id,
+            ]
+            assert not any(item.kept for item in uow.rules.standings())
+            # Equal creation order and keep rank use the identifier as the final tie-breaker.
+            uow.rules.inherit_place(reserved.id, of=RULE.id)
+            assert [item.rule_id for item in uow.rules.standings()] == [
+                reserved.id,
+                RULE.id,
+                held.id,
+            ]
+            uow.rules.keep([RULE.id])
+        with harness.unit_of_work() as uow:
+            assert not any(item.kept for item in uow.rules.standings())
+
+    @pytest.mark.parametrize("previous", [RULE, RULE.hold(), RULE.pause(), RULE.degrade()])
+    def test_replacement_inherits_order_and_keep_only_with_a_place(
+        self, harness: PersistenceHarness, previous: SyncRule
+    ) -> None:
+        successor = replace(OTHER_RULE, state=SyncRuleState.DRAFT).take_place_of(previous)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(previous)
+            uow.rules.keep([previous.id])
+            before = uow.rules.standings()
+            uow.rules.add(successor)
+            if successor.keeps_place:
+                uow.rules.inherit_place(successor.id, of=previous.id)
+            uow.rules.remove(previous.id)
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            stored = uow.rules.get(successor.id)
+            assert stored == successor
+            assert uow.plan_grace.admissions() == 0
+            if previous.counts_toward_plan:
+                standing = uow.rules.standings()[0]
+                assert standing.order == before[0].order
+                assert standing.kept
+            else:
+                # Starting the new draft reveals its own new order and no inherited mark.
+                uow.rules.save(successor.mark_previewed().enable())
+                standing = uow.rules.standings()[0]
+                assert standing.order > (before[0].order if before else 0)
+                assert not standing.kept
+
+    def test_plan_grace_and_admissions_commit_or_discard(self, harness: PersistenceHarness) -> None:
+        grace = PlanGrace(NOW + 7 * DAY, 2, 4)
+        with harness.unit_of_work() as uow:
+            uow.plan_grace.acquire()
+            assert uow.plan_grace.get() is None
+            assert uow.plan_grace.admissions() == 0
+            uow.plan_grace.save(grace)
+            uow.plan_grace.admit()
+            uow.plan_grace.admit(3)
+            uow.commit()
+            uow.plan_grace.save(None)
+            uow.plan_grace.admit(8)
+        with harness.unit_of_work() as uow:
+            assert uow.plan_grace.get() == grace
+            assert uow.plan_grace.admissions() == 4
+
+        def fail() -> None:
+            with harness.unit_of_work() as uow:
+                uow.plan_grace.acquire()
+                uow.plan_grace.save(None)
+                uow.plan_grace.admit()
+                raise RuntimeError("discard")
+
+        with pytest.raises(RuntimeError):
+            fail()
+        with harness.unit_of_work() as uow:
+            assert uow.plan_grace.get() == grace
+            assert uow.plan_grace.admissions() == 4
+            uow.plan_grace.save(None)
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            assert uow.plan_grace.get() is None
+            assert uow.plan_grace.admissions() == 4
+
+    def test_plan_records_are_user_scoped(self, harness: PersistenceHarness) -> None:
+        for endpoint_ in (THEIR_SOURCE, THEIR_DESTINATION):
+            harness.connect_account(endpoint_.connected_account_id, OTHER_USER)
+        theirs = replace(
+            RULE, id=SyncRuleId("their-rule"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
+        )
+        grace = PlanGrace(NOW + DAY, 1, 9)
+        with harness.units(OTHER_USER)() as uow:
+            uow.rules.add(theirs)
+            uow.rules.keep([theirs.id])
+            uow.plan_grace.acquire()
+            uow.plan_grace.save(grace)
+            uow.plan_grace.admit(9)
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.rules.keep([theirs.id])
+            uow.rules.inherit_place(RULE.id, of=theirs.id)
+            uow.rules.inherit_place(theirs.id, of=RULE.id)
+            uow.plan_grace.acquire()
+            assert uow.plan_grace.get() is None
+            assert uow.plan_grace.admissions() == 0
+            uow.plan_grace.admit()
+            uow.commit()
+        with harness.units(OTHER_USER)() as uow:
+            assert [item.rule_id for item in uow.rules.standings()] == [theirs.id]
+            assert uow.rules.standings()[0].kept
+            assert uow.plan_grace.get() == grace
+            assert uow.plan_grace.admissions() == 9
+        with harness.unit_of_work() as uow:
+            assert [item.rule_id for item in uow.rules.standings()] == [RULE.id]
+            assert not uow.rules.standings()[0].kept
+            assert uow.plan_grace.admissions() == 1
 
     # Units of work
 
@@ -2351,3 +2499,60 @@ class PersistenceContract:
         # Only a rule that ran without failing since its preview waits for its interval, and a
         # run that completed at the instant of its preview counts as since.
         assert [each.always_due for each in scheduled] == [True, False, True, True, True, False]
+
+    def test_plan_standings_include_grace_only_and_disabled_held_owners(
+        self, harness: PersistenceHarness
+    ) -> None:
+        grace = PlanGrace(NOW + DAY, 1, 0)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE.hold())
+            uow.rules.add(replace(OTHER_RULE, state=SyncRuleState.PREVIEWED, keeps_place=True))
+            uow.rules.keep({RULE.id})
+            uow.plan_grace.admit(2)
+            uow.commit()
+        with harness.units(OTHER_USER)() as uow:
+            uow.plan_grace.save(grace)
+            uow.commit()
+        harness.disable(USER)
+        with harness.installation() as installation:
+            standings = {each.owner: each for each in installation.plan_standings()}
+        assert set(standings) == {USER, OTHER_USER}
+        assert not standings[USER].active
+        assert standings[USER].admissions == 2
+        assert [(each.rule_id, each.place, each.kept) for each in standings[USER].standings] == [
+            (RULE.id, RulePlace.HELD, True),
+            (OTHER_RULE.id, RulePlace.RESERVED, False),
+        ]
+        assert standings[OTHER_USER].standings == ()
+        assert standings[OTHER_USER].grace == grace
+
+    def test_held_rules_have_no_scheduled_instant_or_wanted_watch_work(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE.hold())
+            uow.commit()
+        harness.request_run(USER, RULE.id, NOW)
+        with harness.installation() as installation:
+            assert installation.scheduled_rules() == ()
+            assert installation.pending_instant_runs() == ()
+            assert installation.users_with_unfinished_lapses() == ()
+            assert installation.instant_sync_owners() == ()
+        _watching(harness, replace(_live(), confirmed_at=NOW))
+        with harness.installation() as installation:
+            assert [each.user for each in installation.instant_sync_owners()] == [USER]
+
+    def test_only_exact_lapse_stop_code_wants_lapse_recovery(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE.hold())
+            uow.rules.add(OTHER_RULE.degrade(awaiting_reauthorization=True))
+            uow.commit()
+        with harness.installation() as installation:
+            assert list(installation.users_with_unfinished_lapses()) == [USER]
+        with harness.unit_of_work() as uow:
+            uow.rules.save(OTHER_RULE.degrade())
+            uow.commit()
+        with harness.installation() as installation:
+            assert installation.users_with_unfinished_lapses() == ()

@@ -254,6 +254,29 @@ lowered rule limit refuses new Starts and stops nothing. Rolling back works with
 database: earlier releases ignore the table and the columns, and limit nobody. After upgrading
 again, Plans are as the administrator left them.
 
+## Migration 34: Plan Hold engine
+
+Migration 34 is additive: `sync_rules.plan_kept` defaults to 0; `users.plan_holds_at`,
+`plan_grace_limit`, and `plan_grace_admissions` are nullable; and `users.plan_admissions` defaults
+to 0. There is no new table and no existing rule becomes held on upgrade (ADR 0039). This PR 2
+build explicitly disables settlement in production composition. Lowering a rule limit continues
+to refuse new Starts and stops nothing; no grace or Plan notice starts. PR 3 will activate the
+engine together with visible grace/hold state, status, Dashboard, MCP, and the keep form.
+
+A database from a future activated release may contain hold code 2 in
+`sync_rules.awaiting_reauthorization`. Code from before migration 34 ignores the new columns,
+reads 2 as Lapsed Authorization, and still counts it at Start. Older raw `plan_use` display counts
+may omit it because they select exact code 1. Every old save replaces 2 with 0 or 1.
+Unfinished-lapse discovery also selects exact code 1, so a User with only code-2 rules can remain
+stopped. Restoring an account or a passing access check can recover them under that older code;
+otherwise preview and Start within the limit. On re-upgrade, code 1 may automatically resume
+without a new limit check; if that creates excess, an activated engine starts a new seven-day grace.
+
+Rolling back to this PR 2 build behaves differently: it recognizes code 2 as Plan Hold and
+Reauthorization never releases it, but its production scheduler does not run releases. Upgrade to
+an active release, or pause the rule to clear its hold, then preview and Start within the limit.
+Preview alone preserves a hold. Back up the data directory before changing releases.
+
 Sign-in failures are counted per email and per client address for 15 minutes: after five failures
 for one email, or twenty from one address, sign-in answers `429` with a `Retry-After` header until
 the oldest failure leaves the window. Behind a reverse proxy every request comes from the proxy's
@@ -383,7 +406,7 @@ Incidents always appear in the Activity screen of the User they belong to
 
 Set `CALENDAR_SYNC_SMTP_HOST` and `CALENDAR_SYNC_SMTP_SENDER` (credentials are optional) and the
 installation sends email: each User then also receives their own rules' and accounts' Incident
-Notifications at their email, unless they turn them off in **Settings → Your account**. No User
+Notifications at their email, unless they turn off **Email notifications** in **Settings → Your account**. No User
 receives another User's incidents.
 
 Set `CALENDAR_SYNC_PUBLIC_URL` to the address people open Calendar Ghost at, such as
@@ -405,3 +428,19 @@ every User; the first is a scheduler that stopped completing passes. Set
 after upgrading, rule incidents reach the first User by email once they add an email and SMTP is
 configured. Delivery is deduplicated while an incident remains open and failures never stop
 synchronization or local incident recording.
+
+## Plan notice delivery when activated
+
+The engine's Plan notices reuse each User's **Email notifications** preference, email address,
+active state, and SMTP configuration. PR 2 production composition sends none; PR 3 must add the
+visible Plan fallback before activation. Notices disclose counts and UTC deadlines only, with an
+optional link to Your plan at the configured public address. They never reach the operator's
+SMTP recipient or webhook, and create neither an Incident nor an Audit Entry.
+
+Delivery uses one scheduler-owned mail worker, separate from rule slots and pass completion.
+Notices leave a pass-local collector only after successful rule listing. A sending batch has at
+most 100 notices; a newer pending notice replaces an older one for the same User. Pending notices
+live only in memory. Failed or cancelled preparation, shutdown, restart, or SMTP failure can lose
+them; there is no delivery retry or outbox. Stopping the scheduler cancels and awaits its sender,
+without waiting for a bounded SMTP call already running or blocking the event loop on executor
+shutdown. The same sole executor lasts for the Scheduler object's lifetime.

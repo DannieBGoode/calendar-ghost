@@ -372,3 +372,132 @@ def test_the_public_address_is_read_from_the_environment(monkeypatch: pytest.Mon
     monkeypatch.setenv("CALENDAR_SYNC_PUBLIC_URL", "https://ghost.example.test")
 
     assert Settings.from_environment().public_url == "https://ghost.example.test"
+
+
+@pytest.mark.parametrize(("held", "reserved"), [(2, 0), (0, 2), (1, 1)])
+def test_plan_email_counts_places_privately_and_names_utc(
+    monkeypatch: pytest.MonkeyPatch, held: int, reserved: int
+) -> None:
+    from datetime import timedelta, timezone
+
+    from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
+
+    RecordingSmtp.sent = []
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
+    notice = PlanNotice(
+        PlanNoticeKind.GRACE_STARTED,
+        4,
+        2,
+        held,
+        NOW.astimezone(timezone(timedelta(hours=3))),
+        reserved,
+    )
+    OwnerNotifier(_owner(), UserId("owner"), _server(), "https://ghost.example").plan_changed(
+        notice
+    )
+    (message,) = RecordingSmtp.sent
+    body = message.get_content()
+    assert message["Subject"] == "Calendar Ghost: your plan"
+    assert "4 of your rules count toward your plan, which allows 2." in body
+    assert NOW.strftime("%Y-%m-%d at %H:%M UTC") in body
+    assert (
+        "You can choose which rules keep syncing under Settings, Your account, Your plan." in body
+    )
+    assert "https://ghost.example/settings/account#your-plan" in body
+    assert ("of them will be held" in body) is bool(held)
+    assert ("replacement drafts will also give up their reserved places" in body) is bool(reserved)
+    for sentinel in (
+        "owner@example.test",
+        "owner",
+        "rule-1",
+        "calendar-secret",
+        "event-secret",
+        "account-secret",
+        "recipient@example.test",
+    ):
+        assert sentinel not in body
+
+
+@pytest.mark.parametrize(
+    "changes", [{"notify_by_email": False}, {"email": None}, {"state": UserState.DISABLED}]
+)
+def test_plan_email_uses_existing_owner_gates(
+    monkeypatch: pytest.MonkeyPatch, changes: dict[str, object]
+) -> None:
+    from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
+
+    RecordingSmtp.sent = []
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
+    OwnerNotifier(_owner(**changes), UserId("owner"), _server()).plan_changed(
+        PlanNotice(PlanNoticeKind.RULES_HELD, 3, 1, 2, NOW)
+    )
+    assert RecordingSmtp.sent == []
+
+
+def test_plan_email_failure_logs_only_error_class(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
+
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise OSError("SMTP private password recipient@example.test")
+
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", refuse)
+    OwnerNotifier(_owner(), UserId("owner"), _server()).plan_changed(
+        PlanNotice(PlanNoticeKind.RULES_HELD, 3, 1, 2, NOW)
+    )
+    assert "OSError" in caplog.text
+    assert "SMTP private password" not in caplog.text
+    assert "recipient@example.test" not in caplog.text
+
+
+def test_plan_held_notice_has_exact_body_and_no_link_without_public_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
+
+    RecordingSmtp.sent = []
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
+    OwnerNotifier(_owner(), UserId("owner"), _server()).plan_changed(
+        PlanNotice(PlanNoticeKind.RULES_HELD, 3, 1, 2, NOW)
+    )
+    (message,) = RecordingSmtp.sent
+    assert message.get_content().strip() == (
+        "2 of your rules are now held by your plan. They keep their events "
+        "and resume by themselves when your plan has room."
+    )
+    assert "http" not in message.get_content()
+
+
+def test_composed_plan_notices_email_only_the_owner_not_installation_channels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
+
+    RecordingSmtp.sent = []
+    posted = []
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
+    monkeypatch.setattr(
+        "calendar_sync.infrastructure.notifications.urlopen",
+        lambda *args, **kwargs: posted.append(args),
+    )
+    settings = Settings(
+        tmp_path / "test.db",
+        smtp_host="smtp.example",
+        smtp_sender="ghost@example.test",
+        smtp_recipient="operator@example.test",
+        incident_webhook_url="https://hooks.example.test/incident",
+    )
+    adapters = build_adapters(settings)
+    owner = administrator(adapters)
+    notifications = compose(settings, adapters).for_user(owner).plan_notices
+    assert notifications is not None
+    notifications.plan_changed(PlanNotice(PlanNoticeKind.GRACE_STARTED, 2, 1, 1, NOW))
+    (message,) = RecordingSmtp.sent
+    assert message["To"] == ADMIN_EMAIL
+    assert posted == []
+
+
+def test_no_configured_smtp_has_no_plan_notice_adapter(tmp_path: Path) -> None:
+    adapters = build_adapters(Settings(tmp_path / "test.db"))
+    assert adapters.plan_notices(UserId("owner")) is None

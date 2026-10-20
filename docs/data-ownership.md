@@ -171,3 +171,20 @@ The local operator controls the host, the database, the master key, and the rete
 Microsoft continue to control the source and destination data stored in Google Calendar and Outlook;
 Calendar Ghost only
 manages the projections authorized by the operator's rules.
+
+## Email notifications and Plan Hold data
+
+The **Email notifications** preference in Settings, Your account stores `notify_by_email` and
+controls optional Incident Notifications. The Plan Hold engine reuses that same per-User
+preference, active-User, email-address, and SMTP gates for Plan notices when PR 3 activates it.
+In PR 2 production composition cannot start a grace, hold a rule, or send a Plan notice.
+A Plan notice carries counts, limit, and a UTC deadline, with an optional link to
+`/settings/account#your-plan` at the configured public address. It names no rule, calendar,
+Connected Account, or event. It creates neither an Incident nor an Audit Entry and never goes to
+the installation SMTP recipient or webhook. Incident Notifications retain their existing content
+and Activity fallback. PR 3 will supply the visible fallback for Plan notices.
+
+Migration 34 stores keep marks on each User's rules and grace/admission fields on their User row.
+Only the User-scoped unit of work writes them. Plan mail is held in memory only; a newer pending
+notice replaces an older one for the same User, and failed preparation, cancellation, shutdown,
+restart, or SMTP failure can lose it. There is no delivery outbox.

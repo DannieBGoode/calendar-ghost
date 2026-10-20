@@ -345,3 +345,25 @@ conflicts in `conflicts` ([ADR 0015](adr/0015-reconciliation-reports-conflicts-a
 For recurring projections, Full Reconciliation verifies each series and every Occurrence Mapping
 without expanding the series, and reports a managed exception of a mapped series that has no
 Occurrence Mapping as an incorrect projection rather than a `projection_unmapped` Conflict.
+
+## Plan settlement before a pass
+
+The Plan Hold engine runs after interrupted-lapse recovery and before rule listing when explicitly
+composed. Production passes leave it disabled (`plan_holds=None`) until PR 3 includes visible
+grace and held-rule state, the keep form, and status support. Today lowering a limit still refuses
+new Starts and stops nothing; no production grace or Plan notice starts.
+
+Settlement counts Enabled, lapse-stopped, and reserved replacement rules. A seven-day grace starts
+when they exceed the Allowance; a further lowering or an admission since the last settlement
+restarts it. At expiry the worst ranks are held or give up their reserved place. Kept rules rank
+first, then oldest. When room returns, the best held ranks release without preview, from preserved
+positions; unauthorized accounts instead leave them lapse-stopped. The pass never swaps rules.
+Saving the User's keep choice can swap a kept held rule with a not-kept counted rule immediately,
+with no email. Previewing a held rule keeps its hold (ADR 0039).
+
+Each User's settlement is atomic, has no provider call, and changes only rules whose write locks
+it acquired nonblocking in identifier order before SQLite's writer lock. Fresh unlocked rules
+still count and remain unchanged; unresolved excess keeps the expired grace for the next pass.
+A busy rule skips that User so the bounded rotating pass can progress. Failed Allowance reads
+change nobody, never release holds by assuming unlimited. Mail shares no rule slot and is not
+awaited for pass completion; its bounded memory queue may lose or replace notices.

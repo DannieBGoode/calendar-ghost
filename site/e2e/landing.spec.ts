@@ -1630,3 +1630,10 @@ test("the homelab's night watch: one ghost by a rack, its checklist ticked when 
     await context.close()
   }
 })
+
+test("the legacy incident email link still reaches the email notifications guide", async ({ page }) => {
+  await page.goto("/docs/troubleshooting#incident-emails-are-unavailable-or-never-arrive")
+  const anchor = page.locator("#incident-emails-are-unavailable-or-never-arrive")
+  await expect(anchor).toBeAttached()
+  await expect(page.getByRole("heading", { name: "Email notifications are unavailable or never arrive", exact: true })).toBeInViewport()
+})

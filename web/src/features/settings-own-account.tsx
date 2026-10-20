@@ -11,7 +11,7 @@ import { SelfDeletionItem } from "@/features/settings-self-deletion"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { api, type SignedInUser } from "@/lib/api"
-import { INCIDENT_EMAIL_HELP_URL } from "@/lib/brand"
+import { EMAIL_NOTIFICATIONS_HELP_URL } from "@/lib/brand"
 import { newPasswordReady } from "@/lib/passwords"
 import { isAdministrator } from "@/lib/people"
 import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
@@ -19,7 +19,7 @@ import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
 type Announce = (message: string) => void
 
 /**
- * The signed-in User's own sign-in, incident emails, Instant Sync, and deletion; every User has it.
+ * The signed-in User's own sign-in, email notifications, Instant Sync, and deletion; every User has it.
  * `onOpenPeople` opens the People page, where an administrator names another one.
  */
 export function OwnAccountSection({
@@ -44,7 +44,7 @@ export function OwnAccountSection({
       <div className="settings-list">
         <EmailItem email={user.email} onDone={setMessage} />
         <PasswordItem onDone={setMessage} />
-        <IncidentEmailsItem user={user} sendsEmail={sendsEmail} onDone={setMessage} />
+        <EmailNotificationsItem user={user} sendsEmail={sendsEmail} onDone={setMessage} />
         <InstantSyncItem user={user} onDone={setMessage} />
         <SelfDeletionItem onOpenPeople={onOpenPeople} />
       </div>
@@ -212,10 +212,11 @@ function PasswordItem({ onDone }: { onDone: Announce }) {
 }
 
 /**
- * Whether Incident Notifications also come by email; the Web UI keeps every incident in Activity.
+ * The shared preference for Incident Notifications and Plan notices, once Plan Hold is active.
+ * The Web UI keeps every incident in Activity; PR 3 adds the visible Plan notice fallback.
  * Where the installation sends no email there is nothing to choose, so it says who can set it up.
  */
-function IncidentEmailsItem({
+function EmailNotificationsItem({
   user,
   sendsEmail,
   onDone,
@@ -224,10 +225,10 @@ function IncidentEmailsItem({
   sendsEmail: boolean
   onDone: Announce
 }) {
-  return sendsEmail ? <IncidentEmailsChoice user={user} onDone={onDone} /> : <IncidentEmailsUnavailable user={user} />
+  return sendsEmail ? <EmailNotificationsChoice user={user} onDone={onDone} /> : <EmailNotificationsUnavailable user={user} />
 }
 
-function IncidentEmailsUnavailable({ user }: { user: SignedInUser }) {
+function EmailNotificationsUnavailable({ user }: { user: SignedInUser }) {
   const { t } = useI18n()
   const administrator = isAdministrator(user)
   return (
@@ -242,7 +243,7 @@ function IncidentEmailsUnavailable({ user }: { user: SignedInUser }) {
           </p>
         </div>
         {administrator && (
-          <a className="text-link" href={INCIDENT_EMAIL_HELP_URL} target="_blank" rel="noreferrer">
+          <a className="text-link" href={EMAIL_NOTIFICATIONS_HELP_URL} target="_blank" rel="noreferrer">
             {t("settings.ownAccount.notifications.setUpEmail")}
             <span className="sr-only">{t("common.opensInNewTab")}</span>
           </a>
@@ -252,7 +253,7 @@ function IncidentEmailsUnavailable({ user }: { user: SignedInUser }) {
   )
 }
 
-function IncidentEmailsChoice({ user, onDone }: { user: SignedInUser; onDone: Announce }) {
+function EmailNotificationsChoice({ user, onDone }: { user: SignedInUser; onDone: Announce }) {
   const i18n = useI18n()
   const { t } = i18n
   const queryClient = useQueryClient()
@@ -272,9 +273,9 @@ function IncidentEmailsChoice({ user, onDone }: { user: SignedInUser; onDone: An
           <h3>{t("settings.ownAccount.notifications.title")}</h3>
           <p>{t("settings.ownAccount.notifications.body")}</p>
         </div>
-        <label className="checkbox-row" htmlFor="own-incident-emails">
+        <label className="checkbox-row" htmlFor="own-email-notifications">
           <input
-            id="own-incident-emails"
+            id="own-email-notifications"
             type="checkbox"
             checked={checked}
             disabled={change.isPending}

@@ -17,7 +17,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from calendar_sync.application.operations.instant_sync import InstantRun
-from calendar_sync.application.operations.scheduled_pass import ScheduledPass, ScheduledRun
+from calendar_sync.application.operations.scheduled_pass import (
+    ScheduledPass,
+    ScheduledPreparation,
+    ScheduledRun,
+)
 from calendar_sync.application.sync.ports import ScheduledRule
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_container, instant_sync_address
@@ -244,17 +248,21 @@ def test_stopping_the_dispatcher_lets_a_running_run_finish_its_acknowledgement()
     assert finished.wait(5)
 
 
-class OnePass:
+class OnePass(ScheduledPass):
     """A scheduled pass of one rule, with no account to check; it counts its runs."""
 
     def __init__(self) -> None:
         self.runs = 0
 
-    def begin(self) -> tuple[ScheduledRun, ...]:
+    def prepare(self) -> ScheduledPreparation:
+        return ScheduledPreparation(self._begin, lambda: ())
+
+    def _begin(self) -> tuple[ScheduledRun, ...]:
         return (_instant("rule-1").scheduled,)
 
-    def run(self, scheduled: ScheduledRun) -> None:
+    def run(self, scheduled: ScheduledRun) -> bool:
         self.runs += 1
+        return True
 
     def checks_due(self) -> tuple[UserId, ...]:
         return ()
@@ -279,9 +287,7 @@ def test_the_loops_never_wait_for_the_threads_web_requests_use() -> None:
         loop.set_default_executor(ThreadPoolExecutor(1))
         holding = loop.run_in_executor(None, release.wait, 30)
         try:
-            await asyncio.wait_for(
-                SyncScheduler(cast(ScheduledPass, scheduled)).run_once(), timeout=5
-            )
+            await asyncio.wait_for(SyncScheduler(scheduled).run_once(), timeout=5)
             await _running(InstantSyncDispatcher(dispatch), lambda: dispatch.runs >= 1)
             keeper = asyncio.create_task(WatchKeeper(upkeep).run_forever())
             await _until(lambda: upkeep.cycles >= 1)

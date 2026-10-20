@@ -433,6 +433,11 @@ class EventProjection:
     recurrence: Recurrence | None = None
 
 
+class RuleStopCause(StrEnum):
+    LAPSED_AUTHORIZATION = "lapsed_authorization"
+    PLAN_HOLD = "plan_hold"
+
+
 @dataclass(frozen=True, slots=True)
 class SyncRule:
     id: SyncRuleId
@@ -448,6 +453,8 @@ class SyncRule:
     keeps_place: bool = False
     """A Rule Replacement draft that holds the place of the rule it replaced under its User's rule
     limit, until it starts or is removed (ADR 0038). Not part of material_signature."""
+    held_by_plan: bool = False
+    """A Plan Hold resumes when a place is free; it replaces any lapse-only stop cause."""
 
     def __post_init__(self) -> None:
         if self.source == self.destination:
@@ -456,6 +463,10 @@ class SyncRule:
             raise DomainValidationError("initial lookback days cannot be negative")
         if self.keeps_place and self.state not in KEEPS_PLACE:
             raise DomainValidationError("only a draft or previewed rule keeps a place")
+        if self.held_by_plan and self.state is not SyncRuleState.DEGRADED:
+            raise DomainValidationError("only a degraded rule can be held by its plan")
+        if self.held_by_plan and self.awaiting_reauthorization:
+            raise DomainValidationError("a plan hold and lapsed authorization cannot coexist")
 
     def uses_account(self, account_id: ConnectedAccountId) -> bool:
         """Whether either calendar of this rule belongs to the Connected Account."""
@@ -484,6 +495,18 @@ class SyncRule:
         return self.state is SyncRuleState.DEGRADED and self.awaiting_reauthorization
 
     @property
+    def stopped_by_plan_hold(self) -> bool:
+        return self.state is SyncRuleState.DEGRADED and self.held_by_plan
+
+    @property
+    def stop_cause(self) -> RuleStopCause | None:
+        if self.stopped_by_lapsed_authorization:
+            return RuleStopCause.LAPSED_AUTHORIZATION
+        if self.stopped_by_plan_hold:
+            return RuleStopCause.PLAN_HOLD
+        return None
+
+    @property
     def holdable(self) -> bool:
         """Enabled, or stopped only by Lapsed Authorization: a rule that runs, or resumes on its
         own, and so takes a place under its User's rule limit (ADR 0038)."""
@@ -506,6 +529,8 @@ class SyncRule:
     def mark_previewed(self) -> Self:
         if not self.can_preview:
             raise InvalidStateTransition(f"cannot validate a rule in state {self.state}")
+        if self.stopped_by_plan_hold:
+            return self
         return replace(self, state=SyncRuleState.PREVIEWED, awaiting_reauthorization=False)
 
     def enable(self) -> Self:
@@ -517,7 +542,9 @@ class SyncRule:
     def pause(self) -> Self:
         if self.state not in {SyncRuleState.ENABLED, SyncRuleState.DEGRADED}:
             raise InvalidStateTransition(f"cannot pause a rule in state {self.state}")
-        return replace(self, state=SyncRuleState.PAUSED, awaiting_reauthorization=False)
+        return replace(
+            self, state=SyncRuleState.PAUSED, awaiting_reauthorization=False, held_by_plan=False
+        )
 
     def degrade(self, *, awaiting_reauthorization: bool = False) -> Self:
         """Stop the rule; one stopped only by Lapsed Authorization awaits reauthorization."""
@@ -528,6 +555,7 @@ class SyncRule:
             state=SyncRuleState.DEGRADED,
             awaiting_reauthorization=awaiting_reauthorization,
             keeps_place=False,
+            held_by_plan=False,
         )
 
     def resume_after_reauthorization(self) -> Self:
@@ -541,7 +569,7 @@ class SyncRule:
     def require_preview(self) -> Self:
         """A stopped rule whose recovery now needs a preview, whatever stopped it first; it keeps
         no place under its User's rule limit."""
-        return replace(self, awaiting_reauthorization=False, keeps_place=False)
+        return replace(self, awaiting_reauthorization=False, keeps_place=False, held_by_plan=False)
 
     def on_account_disconnected(self) -> Self:
         """The rule once one of its Connected Accounts is disconnected; itself if unchanged.
@@ -552,7 +580,7 @@ class SyncRule:
         """
         if self.state in _DEGRADED_ON_DISCONNECT:
             return self.degrade()
-        if self.awaiting_reauthorization:
+        if self.awaiting_reauthorization or self.held_by_plan:
             return self.require_preview()
         if self.keeps_place:
             return replace(self, keeps_place=False)
@@ -576,6 +604,7 @@ class SyncRule:
             state=state,
             reprojection_required=True,
             awaiting_reauthorization=False,
+            held_by_plan=False,
         )
 
     def complete_reprojection(self) -> Self:
@@ -584,7 +613,11 @@ class SyncRule:
     def begin_removal(self) -> Self:
         """Removing marks a Rule Removal that started and has not finished."""
         return replace(
-            self, state=SyncRuleState.REMOVING, awaiting_reauthorization=False, keeps_place=False
+            self,
+            state=SyncRuleState.REMOVING,
+            awaiting_reauthorization=False,
+            keeps_place=False,
+            held_by_plan=False,
         )
 
     def take_place_of(self, old: SyncRule) -> Self:
@@ -593,6 +626,32 @@ class SyncRule:
         if self.state not in KEEPS_PLACE:
             raise InvalidStateTransition("only a new draft takes the place of the rule it replaces")
         return replace(self, keeps_place=old.counts_toward_plan)
+
+    def give_up_place(self) -> Self:
+        """A Rule Replacement draft loses its reserved place without changing its content."""
+        return replace(self, keeps_place=False)
+
+    def hold(self) -> Self:
+        """Stop a counted rule until its User's Plan has room for it again."""
+        if not self.holdable:
+            raise InvalidStateTransition("only a holdable rule can be held by its plan")
+        return replace(
+            self,
+            state=SyncRuleState.DEGRADED,
+            held_by_plan=True,
+            awaiting_reauthorization=False,
+        )
+
+    def release_hold(self, authorized: bool) -> Self:
+        """Take a free place, resuming now or after both accounts are authorized again."""
+        if not self.stopped_by_plan_hold:
+            raise InvalidStateTransition("only a held rule can be released")
+        return replace(
+            self,
+            state=SyncRuleState.ENABLED if authorized else SyncRuleState.DEGRADED,
+            held_by_plan=False,
+            awaiting_reauthorization=not authorized,
+        )
 
 
 @dataclass(frozen=True, slots=True)

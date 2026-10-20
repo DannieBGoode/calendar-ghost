@@ -96,6 +96,8 @@ class EnableSyncRule:
             limit = self.allowances.of(self.owner).limits.rules
             if limit is not None and not may_start(rule, _counted(uow.rules.list()), limit):
                 raise PlanLimitReached(LimitedResource.RULES, limit)
+            if not rule.counts_toward_plan:
+                uow.plan_grace.admit()
             uow.commit()
         return enabled
 

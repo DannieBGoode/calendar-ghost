@@ -14,13 +14,16 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from itertools import zip_longest
 from typing import Protocol
 
 from calendar_sync.application.operations.ports import CauseSighting, InstallationUnitOfWorkFactory
+from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.health import RunHealth
+from calendar_sync.application.sync.plan_holds import PlanNotices
 from calendar_sync.application.sync.ports import ScheduledRule
 from calendar_sync.application.sync.resource_use import first_counted_day
 from calendar_sync.application.sync.retry import with_retries
@@ -35,6 +38,7 @@ from calendar_sync.domain.access import UserId
 from calendar_sync.domain.cadence import scheduled_run_due
 from calendar_sync.domain.causes import ADMINISTRATOR_CAUSES
 from calendar_sync.domain.model import SyncRule, SyncRuleId
+from calendar_sync.domain.plan_hold import PlanNotice
 from calendar_sync.domain.providers import ProviderFailureKind
 
 logger = logging.getLogger(__name__)
@@ -63,6 +67,7 @@ class ScheduledServices:
 
     execute_rule: SyncRuns
     health: RunHealth
+    plan_notices: PlanNotices | None = field(default=None, kw_only=True)
     administrator_fixes: AdministratorFixes | None = None
     """None where no access check can run, as without the installation master key."""
 
@@ -75,6 +80,22 @@ class ScheduledRun:
     full: bool
 
 
+@dataclass(frozen=True, slots=True)
+class PlanNoticeDelivery:
+    """One private delivery job; the scheduler only coalesces its opaque owner key."""
+
+    owner_key: str
+    deliver: Callable[[], None]
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduledPreparation:
+    """One invocation's work and its notices, published only after its begin succeeds."""
+
+    begin: Callable[[], tuple[ScheduledRun, ...]]
+    notices_due: Callable[[], tuple[PlanNoticeDelivery, ...]]
+
+
 @dataclass(slots=True)
 class ScheduledPass:
     installation: InstallationUnitOfWorkFactory
@@ -83,18 +104,34 @@ class ScheduledPass:
     cadence: SyncCadencePolicy = field(default_factory=EveryUserInstant)
     """Each User's Sync Cadence, read once per pass: a Plan's interval longer than a pass makes
     its rules due once per window of it (ADR 0038)."""
-    _checked: dict[UserId, datetime] = field(default_factory=dict)
+    plan_holds: ScheduledPlanHolds | None = None
+    _notices: dict[UserId, PlanNotice] = field(default_factory=dict, init=False)
+    _checked: dict[UserId, datetime] = field(default_factory=dict, init=False)
     """When each User's accounts an administrator's Cause stopped were last checked again."""
-    _due: tuple[UserId, ...] = ()
+    _due: tuple[UserId, ...] = field(default=(), init=False)
     _listed: dict[SyncRuleId, datetime] = field(default_factory=dict, init=False)
     """When the pass that last listed each enabled rule began. A rule not listed since the start
     counts from its last run, read once, so Sync Now and instant runs never move it."""
 
-    def begin(self) -> tuple[ScheduledRun, ...]:
+    def prepare(self) -> ScheduledPreparation:
+        """Give the scheduler invocation-scoped work without exposing Plan policy or content."""
+        notices: dict[UserId, PlanNotice] = {}
+        return ScheduledPreparation(
+            partial(self.begin, notices=notices),
+            lambda: tuple(
+                PlanNoticeDelivery(owner.value, partial(self.send_plan_notice, owner, notice))
+                for owner, notice in notices.items()
+            ),
+        )
+
+    def begin(self, *, notices: dict[UserId, PlanNotice] | None = None) -> tuple[ScheduledRun, ...]:
         """Prepare a pass, then list its runs: the enabled rules due at it of every User who is
         not disabled, taking turns between Users. A rule is due once per window of its Plan's
         interval, and at every pass while it never ran, is failing, was previewed since its last
         run, or awaits reprojection (`scheduled_run_due`)."""
+        # The scheduler supplies a collector owned by this invocation. A cancelled worker may
+        # finish later, but its notices cannot enter a subsequent pass or lifecycle.
+        notices = self._notices if notices is None else notices
         now = self.clock.now()
         today = now.astimezone(UTC).date()
         with self.installation() as installation:
@@ -103,8 +140,11 @@ class ScheduledPass:
             installation.forget_provider_calls(first_counted_day(today))
             installation.commit()
             # Before listing the pass's rules, so a rule resumed here can run in this same pass.
-            for owner in installation.users_with_unfinished_lapses():
-                self._finish_lapses(owner)
+            lapses = tuple(installation.users_with_unfinished_lapses())
+        for owner in lapses:
+            self._finish_lapses(owner)
+        self._settle_plan_holds(notices)
+        with self.installation() as installation:
             self._due = self._choose_checks(installation.failure_causes(now - RECHECK_INTERVAL))
             rules = installation.scheduled_rules()
         # A failed read falls back to the default cadence, which is due at every pass.
@@ -161,6 +201,34 @@ class ScheduledPass:
         listed = full or result.listed_in_full
         _record_success(services.health, rule, floor if listed else None, result.run_id)
         return True
+
+    def _settle_plan_holds(self, notices: dict[UserId, PlanNotice]) -> None:
+        if self.plan_holds is None:
+            return
+        try:
+            with self.installation() as installation:
+                standings = installation.plan_standings()
+            notices.update(self.plan_holds.settle(standings))
+        except Exception as error:
+            # Optional Plan reads never stop synchronization, and stored content stays private.
+            logger.error(
+                "Reading Plan standings or settling failed; skipping holds (%s)",
+                type(error).__name__,
+            )
+
+    def plan_notices_due(self) -> tuple[tuple[UserId, PlanNotice], ...]:
+        """Drain newly decided notices once; delivery is independent of rule execution."""
+        notices = tuple(self._notices.items())
+        self._notices.clear()
+        return notices
+
+    def send_plan_notice(self, owner: UserId, notice: PlanNotice) -> None:
+        try:
+            notifier = self.services_for(owner).plan_notices
+            if notifier is not None:
+                notifier.plan_changed(notice)
+        except Exception as error:
+            logger.error("Plan notice delivery failed (%s)", type(error).__name__)
 
     def checks_due(self) -> tuple[UserId, ...]:
         """The Users whose accounts an administrator's Cause stopped this pass checks again, once;

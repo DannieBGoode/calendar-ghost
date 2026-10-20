@@ -220,7 +220,8 @@ and `H` is the held rules. `settle` decides in five steps:
    - Store `rule_limit = L` and `admissions` in every case.
    - Before `holds_at`: nothing else.
    - From `holds_at`: take the `over` worst-ranked rules of `C`. Hold each counted one, and make
-     each reserved one give up its place. Send the "rules held" email. Keep the grace while the
+     each reserved one give up its place. Send the "rules held" email only when at least one
+     counted rule was actually held, counting actual holds rather than reserved-place give-ups. Keep the grace while the
      User is still over the limit, so the next pass finishes an interrupted settle with no new
      grace.
 5. **Within the limit.** Release held rules into the free places, `L - |C|` of them, best rank
@@ -336,7 +337,7 @@ them.
 - **Limit checks fail closed.** Start, account save, and token issue read the allowance inside
   their own transaction (section 3.6). A read that raises fails the request, as any database error
   does. So a fault never admits a resource past the limit.
-- **Everything else fails open.** A read that raises makes the scheduler list every rule, makes
+- **Ordinary reads fail open.** A read that raises makes the scheduler list every rule, makes
   each Instant Sync and upkeep reader treat the User as instant, makes every display of a cadence
   fall back to `DEFAULT_CADENCE`, and lets manual runs through. `can_start` answers true, and the
   Start itself still checks. So a Plans fault never stops syncing, sign-in, or the rules API.
@@ -373,8 +374,8 @@ reads the allowance at that point, so its decision and the limit it used cannot 
 |---|---|
 | Start | Save `enable()`, then read the allowance, count, and raise `PlanLimitReached` before the commit when `may_start` fails. Two Starts cannot both take the last place, and a lowering cannot slip in between. From slice 4, a Start of a rule that did not count also adds one to `users.plan_admissions` in the same transaction. |
 | Place move | Section 4: the replacement draft is inserted, and the old rule's removal begins, in one transaction |
-| Settle | **One transaction per User.** Take the User's `SettleLocks` lock, then the write locks of the User's counted, reserved, and held rules in id order, then open a unit of work that takes the writer lock first. Inside it, read the allowance, the grace, the standings, and the authorization of every account the rules use; decide with `settle`; write every hold, give-up, release, and the grace; commit. A settle changes only rules whose write locks it holds. A rule that appears or starts meanwhile (a new Rule Replacement draft, or a Start) is outside the locked set: the decision counts it, but it stays as it is until the next pass, so no rule is ever changed without its lock. A release derives ENABLED or lapse-stopped from the account records read in that transaction, so a lapse that commits first is seen, and one that commits after sees the released rule as enabled and stops it. |
-| Keep choice | `ChooseKeptRules` uses the same single transaction, under the same locks. Each release it makes into a free place adds one to `users.plan_admissions`. |
+| Settle | **One transaction per User.** Take the User's `SettleLocks` lock, then try the write locks of the User's counted, reserved, and held rules nonblocking in id order. On contention, release all acquired locks and raise `PlanSettlementBusy`, so the pass rotates to another User without waiting for provider work. Then open a fresh unit of work whose first statement is `PlanGraceRecord.acquire()`, a no-op UPDATE of its own User row taking SQLite's writer lock. Inside it, read the allowance, the grace, the standings, and the authorization of every account the rules use; decide with `settle`; write every hold, give-up, release, and the grace; commit. A settle changes only rules whose write locks it holds. A rule that appears or starts meanwhile (a new Rule Replacement draft, or a Start) is outside the locked set: the decision counts it, but it stays as it is until the next pass, so no rule is ever changed without its lock. A release derives ENABLED or lapse-stopped from the account records read in that transaction, so a lapse that commits first is seen, and one that commits after sees the released rule as enabled and stops it. |
+| Keep choice | `ChooseKeptRules` uses the same single transaction, under the same locks. Fresh standings validate all chosen IDs and the finite limit. If a fresh unlocked eligible rule would have its keep mark changed, raise `PlanSettlementBusy` and roll back the entire choice. Each release it makes into a free place adds one to `users.plan_admissions`. |
 | Connected Account | Inside the existing `BEGIN IMMEDIATE` of `SqliteUserConnectedAccounts.save`, and only when no row has the same provider and email. Reauthorization never reaches the count. |
 | Integration Token | `issue(..., within=limit)` runs under `BEGIN IMMEDIATE`, reads the limit, counts unrevoked tokens, then inserts |
 
@@ -397,11 +398,15 @@ This text goes into the SQL headers, `docs/deployment.md`, and the CHANGELOG.
 - **Migration 33.** Rolling back works with the same database. Earlier releases ignore the table
   and the columns, and limit nobody. After upgrading again, Plans are as the administrator left
   them.
-- **Migration 34.** Rolling back works with the same database. An earlier release reads a held
-  rule as stopped by Lapsed Authorization, so its monitor reads `stopped`. It resumes that rule
-  when an account is reauthorized or its access check passes, and it can preview and start it.
-  Each save it makes writes 0 or 1, so no hold outlives a change it made. On a release with Plans
-  but without Plan Hold (slices 1 to 3), a held rule also reads as lapse-stopped and counts.
+- **Migration 34.** Additive columns only, with no hold backfill. Before this migration, older
+  readers interpret code 2 as lapse-stopped and Start counts it, but raw `plan_use` counts and
+  unfinished-lapse discovery select exact code 1. A code-2-only User can remain stopped; account
+  restoration or a passing access check can recover under that code, or preview and Start within
+  the limit. Every old save replaces 2 with 0 or 1. Re-upgrade may auto-resume code 1 without a new
+  limit check, then an activated engine gives a new grace if over the limit. The inert PR 2 build
+  recognizes code 2 as a hold but runs no production releases: future code-2 data needs an active
+  release, or pause to clear the hold, then preview and Start within the limit. Reauthorization
+  does not release a hold in PR 2. Production enforcement remains off until PR 3.
 - **Slices 2 and 3** add no migration. Rolling them back restores polling every five minutes and
   unlimited manual runs.
 
@@ -463,8 +468,9 @@ recorded stop cause".
 - Every reader of enabled rules already skips it: the scheduler, Instant Sync dispatch and
   watches, the watch inbox, Sync now, and Reconcile now.
 - `users_with_unfinished_lapses` selects code 1 only, so a held rule is never taken for a lapse.
-- Release 31 reads 2 as true and writes 0 or 1 on every save, and the column has no CHECK. So no
-  stale hold survives a rollback, and no rule ever skips a recovery preview it needs.
+- Release 31 reads 2 as true and writes 0 or 1 on every save, and the column has no CHECK. Old
+  saves erase the hold, but exact-code-1 discovery can leave a code-2-only User stopped
+  until account restoration or preview and Start. Section 3.7 distinguishes the inert PR 2 build.
 
 ### 5.2 Settling
 
@@ -480,9 +486,15 @@ so a released rule can run in the same pass.
   with `settle`, and writes everything at once. A failure rolls the whole settle back, and the
   next pass tries again.
 - A failed allowance read settles nobody that pass. A Plans fault never holds a rule.
-- `settle` hands each email to the pass instead of sending it. The scheduler sends them on a
-  thread of its own after the pass lists its rules, as it does for `checks_due()`. A slow SMTP
-  server never delays syncing.
+- `settle` hands notices to each pass's local collector instead of sending them. Only after
+  successful rule listing does the scheduler hand them to its background sender. Access checks
+  from `checks_due()` share rule slots; Plan mail shares neither those slots nor pass completion.
+  One worker lasts for the Scheduler object's lifetime. A sending batch has at most 100 notices,
+  with one latest pending notice per User; newer pending notices replace stale ones and no second
+  batch is drained while sending. Shutdown cancels and awaits the sender without awaiting an
+  already-running bounded SMTP call or blocking the event loop on executor shutdown. Failed or
+  cancelled preparation, cancellation, shutdown, restart, or SMTP errors may lose notices. There
+  is no outbox or delivery retry. A slow SMTP server never delays syncing.
 
 ### 5.3 Keep choice
 
@@ -550,10 +562,15 @@ resume write none either).
   incident email.
 - **Grace started:** "{count} of your rules count toward your plan, which allows {limit}. After
   {date} at {time} UTC, {held} of them will be held until your plan has room. You can choose which
-  rules keep syncing under Settings, Your account, Your plan." Users have no stored time zone, so
-  the email names UTC. The Web UI shows the same time in local time.
+  rules keep syncing under Settings, Your account, Your plan." `count` includes reserved drafts;
+  `held` counts only counted rules predicted to be held, never reserved-place give-ups. When
+  `held` is zero, replace the held sentence with "Your grace ends after {date} at {time} UTC."
+  When `reserved` is positive, append "{reserved} replacement drafts will also give up their
+  reserved places and will need a Start within your plan's limit." Users have no stored time zone,
+  so email names UTC. The Web UI shows the same time in local time.
 - **Rules held:** "{held} of your rules are now held by your plan. They keep their events and
-  resume by themselves when your plan has room."
+  resume by themselves when your plan has room." Count only actual holds. Give-ups alone send
+  no held notice. A reserved draft that gave up its place needs a Start within the limit.
 - Each email links to `/settings/account#your-plan` only when the installation has a public
   address, as incident email does.
 - The emails count rules and never name them. A dedicated test checks that no calendar, account,
@@ -829,6 +846,17 @@ swaps; rollback readings of codes 0, 1, and 2; status with a held rule that has 
 blocks; a User whose only rules are held keeps their watches listed until upkeep retires them; the
 email privacy test; and the Web UI never offering "Preview to restart" for a held rule.
 
+### Slice 4 delivery boundary
+
+PR 1 supplies the intervention and cursor-lock fixes. PR 2 supplies the engine, migration 34,
+settlement, application keep choice, scheduler/mail support, preference rename, and engine docs.
+Its production `ScheduledPass` explicitly receives `plan_holds=None`; no production grace, hold,
+or Plan notice can start. The preference title/label becomes Email notifications now, but its
+explanation remains incident-only and unavailable hints promise only that incidents stay in
+Activity. PR 3 supplies the HTTP keep route/form, visible grace/hold state and recovery actions,
+status, Dashboard, MCP, and the Plan notice explanation/fallback, and only then wires production
+activation. This is a composition gate, with no new feature flag.
+
 ## 13. Accepted limits and risks
 
 These are known and accepted, to keep the design simple:
@@ -848,8 +876,10 @@ These are known and accepted, to keep the design simple:
 6. **The account refusal comes after OAuth consent,** and leaves an unused grant at the provider.
    The disabled Connect button makes this rare. A renamed account at the limit, with every place in
    use, needs an administrator to make room for the recovery.
-7. **Lost emails.** A restart between a settle and its send drops the email. Your plan and the
-   held-rule views still show the grace and the holds.
+7. **Lost emails.** Failed or cancelled pass preparation, shutdown, restart, or SMTP failure can
+   lose notices; a newer pending notice replaces stale pending mail for the same User. There is
+   no outbox or delivery retry. PR 3's Your plan and held-rule views supply the visible fallback;
+   the production gate prevents notices before that UI exists.
 8. **Mass changes.** A default change can start many graces at once: up to 100 settles and emails
    per pass, and watch retirements that share the 200-call upkeep budget.
 9. **No global caps** on drafts or on manual runs running at the same time.

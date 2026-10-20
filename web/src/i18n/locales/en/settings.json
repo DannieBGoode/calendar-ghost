@@ -35,14 +35,14 @@
       "saved": "Your password was changed. Your other devices were signed out."
     },
     "notifications": {
-      "title": "Incident emails",
+      "title": "Email notifications",
       "body": "When one of your rules needs attention, Calendar Ghost can also email you. Activity always lists every incident.",
-      "label": "Email me about incidents",
+      "label": "Email notifications",
       "unavailable": "Your administrator can set up email for this Calendar Ghost. Until then, incidents appear in Activity.",
-      "unavailableAdministrator": "To send incident emails, add SMTP settings to .env and restart Calendar Ghost. Until then, incidents appear in Activity.",
+      "unavailableAdministrator": "To send email notifications, add SMTP settings to .env and restart Calendar Ghost. Until then, incidents appear in Activity.",
       "setUpEmail": "How to set up email",
-      "on": "Calendar Ghost now emails you about incidents.",
-      "off": "Calendar Ghost no longer emails you about incidents. They still appear in Activity."
+      "on": "Email notifications are on.",
+      "off": "Email notifications are off. Incidents still appear in Activity."
     },
     "instantSync": {
       "title": "Instant sync",
