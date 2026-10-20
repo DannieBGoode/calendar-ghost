@@ -145,7 +145,11 @@
     "identity_email_not_configured": "Identity email is unavailable. Check the configuration shown above.",
     "identity_email_queue_busy": "The test email queue is full. Wait a moment and try again.",
     "identity_email_storage_unavailable": "Identity email status could not be stored. Check the service and try again.",
-    "identity_email_test_throttled": "Three test emails have already been requested in the last hour. Wait before trying again."
+    "identity_email_test_throttled": "Three test emails have already been requested in the last hour. Wait before trying again.",
+    "reset_network_throttled": "Too many reset attempts from this network. Wait a while, then try again.",
+    "reset_global_throttled": "Password reset is busy. Wait a while, then try again.",
+    "reset_storage_unavailable": "Password reset is temporarily unavailable. Try again shortly.",
+    "request_too_large": "This request is too large. Shorten the values and try again."
   },
   "provider": {
     "google": "Google Calendar",

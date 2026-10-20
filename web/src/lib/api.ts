@@ -359,6 +359,7 @@ export const api = {
   /** Creates the invited User and signs them in. */
   acceptInvitation: (token: string, email: string, password: string) =>
     call("/api/v1/invitations/accept", "post", { body: { token, email, password } }),
+  requestPasswordReset: (email: string) => call("/api/v1/password-resets/request", "post", { body: { email } }),
   checkPasswordReset: (token: string) => call("/api/v1/password-resets/check", "post", { body: { token } }),
   resetPassword: (token: string, password: string) =>
     call("/api/v1/password-resets", "post", { body: { token, password } }),

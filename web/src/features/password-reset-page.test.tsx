@@ -123,22 +123,24 @@ describe("PasswordResetPage", () => {
     expect(untranslatedText(container)).toEqual([])
   })
 
-  it("sets the new password with the token from the address, then offers to sign in", async () => {
+  it.each(["administrator_synthetic", "self_service_synthetic"])("completes %s with neutral copy and offers sign-in", async (token) => {
     const calls = serve({
       "/api/v1/password-resets/check": jsonResponse({ usable: true }),
       "/api/v1/password-resets": { ok: true, status: 204, json: () => Promise.resolve(null) } as Response,
     })
-    await renderPage(testI18n())
-    expect(calls[0]).toEqual({ url: "/api/v1/password-resets/check", method: "POST", body: { token: TOKEN } })
+    await renderPage(testI18n(), `#${token}`)
+    expect(calls[0]).toEqual({ url: "/api/v1/password-resets/check", method: "POST", body: { token } })
 
     await resetTo("a very long password")
 
     expect(calls.find((call) => call.url === "/api/v1/password-resets")).toEqual({
       url: "/api/v1/password-resets",
       method: "POST",
-      body: { token: TOKEN, password: "a very long password" },
+      body: { token, password: "a very long password" },
     })
     expect(container.querySelector("h2")?.textContent).toBe("Your password was changed")
+    expect(container.textContent).not.toContain("administrator")
+    expect(calls.some((call) => call.url === "/api/v1/session")).toBe(false)
     expect(container.querySelector<HTMLAnchorElement>("a[href='/']")?.textContent).toBe("Sign in")
     // The used link leaves the address bar.
     expect(window.location.hash).toBe("")
@@ -200,6 +202,36 @@ describe("PasswordResetPage", () => {
     expect(container.querySelector("form")).not.toBeNull()
   })
 
+  it("offers email recovery from an expired link when configured", async () => {
+    serve({
+      "/api/v1/password-resets/check": jsonResponse({ usable: false }),
+      "/api/v1/setup": jsonResponse({ password_reset_available: true }),
+    })
+    await renderPage(testI18n())
+    expect(container.querySelector("a[href='/forgot-password']")?.textContent).toBe("Request a new link")
+    expect(container.querySelector("a[href='/']")).not.toBeNull()
+  })
+
+  it("accepts 1,024 characters, rejects 1,025, and never persists the proof or signs in", async () => {
+    const calls = serve({
+      "/api/v1/password-resets/check": jsonResponse({ usable: true }),
+      "/api/v1/password-resets": { ok: true, status: 204, json: () => Promise.resolve(null) } as Response,
+    })
+    const local = vi.spyOn(Storage.prototype, "setItem")
+    await renderPage(testI18n())
+    const fields = container.querySelectorAll<HTMLInputElement>("input[type=password]")
+    expect(fields[0]?.maxLength).toBe(1024)
+    expect(fields[1]?.maxLength).toBe(1024)
+    await resetTo("a".repeat(1025))
+    expect(calls.some((call) => call.url === "/api/v1/password-resets")).toBe(false)
+    await resetTo("a".repeat(1024))
+    expect(container.querySelector("h2")?.textContent).toBe("Your password was changed")
+    expect(container.textContent).not.toContain("administrator created")
+    expect(calls.some((call) => call.url === "/api/v1/session")).toBe(false)
+    expect(local.mock.calls.some((call) => call.some((value) => value.includes(TOKEN)))).toBe(false)
+    expect(window.location.hash).toBe("")
+  })
+
   it("refuses a link that was used or expired", async () => {
     serve({ "/api/v1/password-resets/check": jsonResponse({ usable: false }) })
     await renderPage(testI18n())
@@ -207,15 +239,15 @@ describe("PasswordResetPage", () => {
     expect(container.querySelector("h2")?.textContent).toBe("This link cannot be used")
   })
 
-  it("explains the server's refusal", async () => {
+  it("offers recovery when the proof expires before completion", async () => {
     serve({
       "/api/v1/password-resets/check": jsonResponse({ usable: true }),
       "/api/v1/password-resets": jsonResponse({ detail: "gone", code: "link_unusable", params: {} }, 410),
+      "/api/v1/setup": jsonResponse({ password_reset_available: true }),
     })
     await renderPage(testI18n())
     await resetTo("a very long password")
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "This link was already used, replaced, or has expired. Ask your administrator for a new one.",
-    )
+    expect(container.querySelector("h2")?.textContent).toBe("This link cannot be used")
+    expect(container.querySelector("a[href='/forgot-password']")).not.toBeNull()
   })
 })

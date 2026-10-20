@@ -16,11 +16,12 @@ import { LICENSE_URL, PRODUCT_NAME, SOURCE_URL } from "@/lib/brand"
 
 type AuthScreenProps = {
   mode: "setup" | "login"
+  passwordResetAvailable?: boolean
   /** The upgraded first User has no email yet, so sign-in may leave it empty. */
   passwordOnly?: boolean
 }
 
-export function AuthScreen({ mode, passwordOnly = false }: AuthScreenProps) {
+export function AuthScreen({ mode, passwordOnly = false, passwordResetAvailable = false }: AuthScreenProps) {
   const i18n = useI18n()
   const { t } = i18n
   const passwordId = useId()
@@ -72,6 +73,7 @@ export function AuthScreen({ mode, passwordOnly = false }: AuthScreenProps) {
           <Button type="submit" size="lg" disabled={!canSubmit || mutation.isPending}>
             {submitLabel(i18n, isSetup, mutation.isPending)}
           </Button>
+          {!isSetup && passwordResetAvailable && <Button variant="ghost" size="lg" asChild><a href="/forgot-password">{t("auth.forgotPassword.heading")}</a></Button>}
         </form>
       </AuthFormPanel>
     </main>
