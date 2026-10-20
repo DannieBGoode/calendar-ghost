@@ -12,7 +12,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   hidden. Under **People → Plans**, one **Plans** switch turns them on, and a table compares the
   Plans: the most active rules, calendar accounts, and Integration Tokens a person may have, each
   No limit or Up to a number, the sync speed, from Instant to every hour, and how many people have
-  each Plan and are over a limit. A Plan opens in a side panel at its own address
+  each Plan and are over a limit. A Plan opens in a full-height drawer at its own address
   (`/people/plans/{key}`) to edit it, or to give it to people after a dry run says who would be
   over. Everyone without a Plan of their own has the default; turning Plans on with no default adds
   a Plan named No limits, which limits nobody, as the default. **Everyone** shows each person's
@@ -63,6 +63,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   choose **Check access**. A check that still fails changes nothing and notifies nobody again.
 
 ### Changed
+
+- Inspect Activity entries and incidents, or edit a Plan, in a full-height drawer without changing
+  the table underneath. Drawers fill narrow screens, keep navigation and edit protections, and
+  leave notifications and Undo reachable.
 
 - Menus never leave the window: a **More actions** menu near the foot of the window, or above a
   message at the bottom of it, opens above its button and scrolls inside itself when it must, so
