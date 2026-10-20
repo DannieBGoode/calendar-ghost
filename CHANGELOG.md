@@ -88,6 +88,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- People section tabs keep the same vertical position when the active tab's description is shorter.
+
 - The landing page places its calendar-view switch below the hero diagram on desktop and mobile,
   labels the Work view "What they see", and keeps vertical spacing consistent between sections.
 
