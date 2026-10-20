@@ -35,6 +35,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TransformationPolicy,
 )
+from calendar_sync.domain.plan_hold import PlanGrace, RuleStanding
 from calendar_sync.domain.plans import Allowance
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
@@ -205,6 +206,14 @@ class SyncRuleRepository(Protocol):
 
     def list(self) -> Sequence[SyncRule]: ...
 
+    def standings(self) -> Sequence[RuleStanding]:
+        """Counted, reserved, and held rules, ranked by keep choice, creation order, and ID."""
+        ...
+
+    def keep(self, chosen: Collection[SyncRuleId]) -> None:
+        """Replace this User's whole kept set; foreign IDs never change their owner's rules."""
+        ...
+
     def add(self, rule: SyncRule) -> None: ...
 
     def save(self, rule: SyncRule) -> None: ...
@@ -220,8 +229,8 @@ class SyncRuleRepository(Protocol):
         """Delete the rule like `remove`, and its audit entries and incidents with it."""
 
     def inherit_place(self, rule: SyncRuleId, of: SyncRuleId) -> None:
-        """Give `rule` the creation order of `of`, so it ranks where `of` ranked; both are this
-        User's. Called only in the transaction that moves a Rule Replacement's place."""
+        """Give `rule` the creation order and keep mark of `of`; both are this User's.
+        Called only in the transaction that moves a Rule Replacement's place."""
 
 
 class EventMappingRepository(Protocol):
@@ -398,6 +407,22 @@ class ProviderCallRepository(Protocol):
         ...
 
 
+class PlanGraceRecord(Protocol):
+    def acquire(self) -> None:
+        """Take this User's writer lock before settlement reads; require an existing User."""
+        ...
+
+    def get(self) -> PlanGrace | None: ...
+
+    def save(self, grace: PlanGrace | None) -> None: ...
+
+    def admissions(self) -> int: ...
+
+    def admit(self, count: int = 1) -> None:
+        """Record new admissions in this transaction, without resetting past admissions."""
+        ...
+
+
 class UnitOfWork(Protocol):
     """One User's records in one transaction.
 
@@ -410,6 +435,7 @@ class UnitOfWork(Protocol):
 
     accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
+    plan_grace: PlanGraceRecord
     mappings: EventMappingRepository
     occurrences: OccurrenceMappingRepository
     replays: ExceptionReplayRepository

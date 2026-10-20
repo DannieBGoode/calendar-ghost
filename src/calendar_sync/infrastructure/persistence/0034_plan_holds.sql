@@ -1,0 +1,5 @@
+ALTER TABLE sync_rules ADD COLUMN plan_kept INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN plan_holds_at TEXT;
+ALTER TABLE users ADD COLUMN plan_grace_limit INTEGER;
+ALTER TABLE users ADD COLUMN plan_grace_admissions INTEGER;
+ALTER TABLE users ADD COLUMN plan_admissions INTEGER NOT NULL DEFAULT 0;

@@ -279,6 +279,8 @@ def test_a_lapse_resume_while_over_the_limit_needs_no_plan() -> None:
 
     resumed = lapses.finish_interrupted()
 
+    with units() as uow:
+        assert uow.plan_grace.admissions() == 0
     assert resumed == 1
     assert _state(units, rule().id) is SyncRuleState.ENABLED
     assert _counted(units) == 2
@@ -315,3 +317,31 @@ def test_an_administrator_demoted_over_the_limit_keeps_every_rule_but_starts_no_
     # Promoting them again lifts the limit at the next request.
     plans.users.set_role(USER, Role.INSTALLATION_ADMINISTRATOR)
     assert _start(units, plans, LATER).state is SyncRuleState.ENABLED
+
+
+@pytest.mark.parametrize("plans", [_plans, _plans_off])
+def test_fresh_start_records_one_admission(plans: Callable[[], Allowances]) -> None:
+    units = _units(_rule(NEXT))
+    _start(units, plans(), NEXT)
+    with units() as uow:
+        assert uow.plan_grace.admissions() == 1
+
+
+def test_reserved_start_records_no_admission() -> None:
+    units = _units(rule(), replace(_rule(NEXT), keeps_place=True))
+    _start(units, _plans(), NEXT)
+    with units() as uow:
+        assert uow.plan_grace.admissions() == 0
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_refused_start_rolls_back_admissions(broken: bool) -> None:
+    units = _units(rule(), _rule(NEXT))
+    with units() as uow:
+        uow.plan_grace.admit(3)
+        uow.commit()
+    with pytest.raises(RuntimeError if broken else PlanLimitReached):
+        _start(units, BrokenAllowances() if broken else _plans(), NEXT)
+    with units() as uow:
+        assert uow.plan_grace.admissions() == 3
+        assert uow.rules.get(NEXT) == _rule(NEXT)

@@ -43,6 +43,7 @@ _FORWARD_MIGRATIONS = (
     (31, "0031_instant_sync.sql"),
     (32, "0032_audit_entry_provenance.sql"),
     (33, "0033_plans.sql"),
+    (34, "0034_plan_holds.sql"),
 )
 
 

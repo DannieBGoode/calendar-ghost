@@ -498,6 +498,7 @@ def test_the_draft_keeps_the_place_from_the_commit_that_begins_the_removal() -> 
     [
         (rule(state=SyncRuleState.ENABLED), True),
         (rule().degrade(awaiting_reauthorization=True), True),
+        (rule().hold(), False),
         (replace(rule(state=SyncRuleState.DRAFT), keeps_place=True), True),
         (rule(state=SyncRuleState.PAUSED), False),
         (rule(state=SyncRuleState.DEGRADED), False),
@@ -510,12 +511,17 @@ def test_the_draft_keeps_a_place_only_when_the_old_rule_counted(
 ) -> None:
     unit_of_work = _ordered(old)
     order = unit_of_work.state.rule_order[rule().id]
+    with unit_of_work() as uow:
+        uow.rules.keep([rule().id])
+        uow.commit()
 
     replacement = _replacer(unit_of_work).execute(
         rule().id, rule().source, NEW_DESTINATION, ProjectionHandling.DETACH
     )
 
     assert replacement.rule.keeps_place is keeps_place
+    assert unit_of_work.state.rule_kept == ({REPLACEMENT} if keeps_place else set())
+    assert unit_of_work.state.plan_admissions == 0
     ranks = unit_of_work.state.rule_order
     if keeps_place:
         assert ranks[REPLACEMENT] == order

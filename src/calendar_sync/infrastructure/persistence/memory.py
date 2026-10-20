@@ -21,6 +21,7 @@ from calendar_sync.application.sync.ports import (
     EventMappingRepository,
     ExceptionReplayRepository,
     OccurrenceMappingRepository,
+    PlanGraceRecord,
     ProviderCallCounts,
     ProviderCallRepository,
     RulePreviewRepository,
@@ -57,6 +58,7 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleId,
 )
+from calendar_sync.domain.plan_hold import PlanGrace, RulePlace, RuleStanding
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.watches import (
     CalendarWatch,
@@ -86,6 +88,9 @@ class MemoryState:
     rule_order: dict[SyncRuleId, int] = field(default_factory=dict)
     """Each rule's creation order, as SQLite's `creation_order` keeps it. A rule a test seeded
     into `rules` directly has none and ranks as 0."""
+    rule_kept: set[SyncRuleId] = field(default_factory=set)
+    plan_grace: PlanGrace | None = None
+    plan_admissions: int = 0
     mappings: dict[tuple[SyncRuleId, EventRef], EventMapping] = field(default_factory=dict)
     occurrences: dict[tuple[EventMappingId, OccurrenceStart], OccurrenceMapping] = field(
         default_factory=dict
@@ -233,6 +238,31 @@ class InMemorySyncRuleRepository:
     def list(self) -> tuple[SyncRule, ...]:
         return tuple(sorted(self._state.rules.values(), key=lambda rule: rule.id.value))
 
+    def standings(self) -> tuple[RuleStanding, ...]:
+        standings = []
+        for rule in self._state.rules.values():
+            if not rule.counts_toward_plan and not rule.stopped_by_plan_hold:
+                continue
+            place = (
+                RulePlace.HELD
+                if rule.stopped_by_plan_hold
+                else RulePlace.RESERVED
+                if rule.keeps_place
+                else RulePlace.COUNTED
+            )
+            standings.append(
+                RuleStanding(
+                    rule.id,
+                    place,
+                    self._state.rule_order.get(rule.id, 0),
+                    rule.id in self._state.rule_kept,
+                )
+            )
+        return tuple(sorted(standings, key=lambda rule: rule.rank))
+
+    def keep(self, chosen: Collection[SyncRuleId]) -> None:
+        self._state.rule_kept = set(chosen).intersection(self._state.rules)
+
     def add(self, rule: SyncRule) -> None:
         # Mirror SQLite's primary key and its unique source-and-destination constraint.
         if rule.id in self._state.rules or self._others.hold_rule(rule.id):
@@ -258,6 +288,7 @@ class InMemorySyncRuleRepository:
         self._incidents.resolve_rule(rule_id, self._clock.now())
         self._state.rules.pop(rule_id, None)
         self._state.rule_order.pop(rule_id, None)
+        self._state.rule_kept.discard(rule_id)
         removed = {m.id for key, m in self._state.mappings.items() if key[0] == rule_id}
         self._state.occurrences = {
             key: occurrence
@@ -288,6 +319,9 @@ class InMemorySyncRuleRepository:
         # Both must be this User's, as SQLite's update requires.
         if rule in self._state.rules and of in self._state.rules:
             self._state.rule_order[rule] = self._state.rule_order.get(of, 0)
+            self._state.rule_kept.discard(rule)
+            if of in self._state.rule_kept:
+                self._state.rule_kept.add(rule)
 
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
         return any(
@@ -743,11 +777,35 @@ class InMemoryInstantSyncRequestRepository:
             )
 
 
+class InMemoryPlanGraceRecord:
+    def __init__(self, state: MemoryState, database: MemoryDatabase, user: UserId) -> None:
+        self._state = state
+        self._database = database
+        self._user = user
+
+    def acquire(self) -> None:
+        if self._user not in self._database.partitions:
+            raise MissingReference("the Plan grace's User does not exist")
+
+    def get(self) -> PlanGrace | None:
+        return self._state.plan_grace
+
+    def save(self, grace: PlanGrace | None) -> None:
+        self._state.plan_grace = grace
+
+    def admissions(self) -> int:
+        return self._state.plan_admissions
+
+    def admit(self, count: int = 1) -> None:
+        self._state.plan_admissions += count
+
+
 class InMemoryUnitOfWork:
     """One User's records, like SQLite's unit of work: they live in that User's partition."""
 
     accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
+    plan_grace: PlanGraceRecord
     mappings: EventMappingRepository
     occurrences: OccurrenceMappingRepository
     replays: ExceptionReplayRepository
@@ -779,6 +837,7 @@ class InMemoryUnitOfWork:
         incidents = self._incidents = IncidentWrites()
         self.accounts = InMemoryConnectedAccountRecords(working, incidents)
         self.rules = InMemorySyncRuleRepository(working, others, incidents, self._clock)
+        self.plan_grace = InMemoryPlanGraceRecord(working, self._database, self._user)
         self.mappings = InMemoryEventMappingRepository(working, others)
         self.occurrences = InMemoryOccurrenceMappingRepository(working, others)
         self.replays = InMemoryExceptionReplayRepository(working)
