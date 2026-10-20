@@ -363,6 +363,16 @@ async function click(element: Element | null) {
 }
 
 describe("ActivityView", () => {
+  it("keeps History's comparison columns while inspecting an entry", async () => {
+    await renderActivity(testI18n())
+    const headings = () => [...container.querySelectorAll(".activity-table thead th")].map((cell) => cell.textContent)
+    const before = headings()
+    await click(container.querySelector("[data-row-link]"))
+    expect(container.querySelector<HTMLDialogElement>(".detail-drawer")?.open).toBe(true)
+    expect(headings()).toEqual(before)
+    expect(container.querySelector(".activity-col-rule")).not.toBeNull()
+  })
+
   it("sends an authorization incident to the failed account under Settings → Connections", async () => {
     await renderActivity(testI18n(), {}, "", { incidentId: "open-auth" })
     const reauthorize = [...container.querySelectorAll("button")].find((item) => item.textContent === "Reauthorize in Settings")
@@ -431,13 +441,14 @@ describe("ActivityView", () => {
     expect(container.textContent).toContain("No incidents")
   })
 
-  it("opens an Incident beside the table from anywhere on its row, and closes it", async () => {
+  it("opens an Incident in a modal drawer without changing the table, and closes it", async () => {
     await renderActivity(testI18n(), {}, "", "incidents")
     await click(container.querySelector(".incident-row .incident-col-rule"))
     expect(window.location.pathname).toBe("/activity/incidents/open-auth")
     expect(container.querySelector(".activity-detail h2")?.textContent).toBe("Access to Google Calendar was denied")
-    // The details name the rule, so the table makes room for them.
-    expect(container.querySelector(".incident-col-rule")).toBeNull()
+    // The table retains its context while details overlay it.
+    expect(container.querySelector(".incident-col-rule")).not.toBeNull()
+    expect(container.querySelector<HTMLDialogElement>(".detail-drawer")?.open).toBe(true)
     await click(container.querySelector('.activity-detail [aria-label="Next incident"]'))
     expect(window.location.pathname).toBe("/activity/incidents/open-conflict")
     await click([...container.querySelectorAll(".activity-detail button")].find((item) => item.textContent.includes("Close")) ?? null)

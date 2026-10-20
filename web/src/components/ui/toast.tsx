@@ -10,11 +10,12 @@ import {
   type ReactNode,
   type RefObject,
 } from "react"
+import { createPortal } from "react-dom"
 
 import { cn } from "@/lib/utils"
 
 import { Button } from "./button"
-import { ToastContext, type Toast, type Toasts } from "./toast-context"
+import { ToastContext, ToastLayerContext, type Toast, type Toasts } from "./toast-context"
 
 /** The toast on screen, and the control that had focus when it appeared, for focus to return to. */
 type Shown = { id: number; toast: Toast; returnTo: HTMLElement | null }
@@ -31,10 +32,10 @@ const CLEARANCE = 8
 /**
  * Keeps `--toast-space` on the page while a toast shows: from the foot of the window to the
  * toast's top, plus a little clearance. The page reserves it at its end and in its scroll padding,
- * so the page can scroll clear of the toast and keyboard focus stops above it; while a side panel
- * is open, the page's CSS moves the toast to the bottom left, over the list beside it.
+ * so the page can scroll clear of the toast and keyboard focus stops above it. An open drawer
+ * hosts the toast inside its modal focus scope, above its action footer.
  */
-function useReservedSpace(card: RefObject<HTMLElement | null>, showing: boolean) {
+function useReservedSpace(card: RefObject<HTMLElement | null>, showing: boolean, layer: HTMLElement | null) {
   useLayoutEffect(() => {
     const element = card.current
     if (!showing || !element) return
@@ -52,7 +53,7 @@ function useReservedSpace(card: RefObject<HTMLElement | null>, showing: boolean)
       window.removeEventListener("resize", reserve)
       root.style.removeProperty("--toast-space")
     }
-  }, [card, showing])
+  }, [card, showing, layer])
 }
 
 /**
@@ -92,12 +93,13 @@ function useHold() {
  * and stays until it is closed, so it is not missed.
  */
 function ToastProvider({ closeLabel, children }: { closeLabel: string; children: ReactNode }) {
+  const [layer, setLayer] = useState<HTMLElement | null>(null)
   const [shown, setShown] = useState<Shown | null>(null)
   const viewport = useRef<HTMLDivElement>(null)
   const card = useRef<HTMLDivElement>(null)
   const count = useRef(0)
   const hold = useHold()
-  useReservedSpace(card, shown !== null)
+  useReservedSpace(card, shown !== null, layer)
   const shownId = shown?.id
   const lasting = shown === null || lasts(shown.toast) || hold.held
   useEffect(() => {
@@ -134,48 +136,51 @@ function ToastProvider({ closeLabel, children }: { closeLabel: string; children:
     finish(current)
   }
 
+  const toastViewport = (
+    <div
+      ref={viewport}
+      className="toast-viewport pointer-events-none fixed inset-x-4 bottom-4 z-50 flex justify-end sm:inset-x-auto sm:right-6 sm:bottom-6"
+    >
+      <div
+        ref={card}
+        className={cn(
+          shown
+            ? "pointer-events-auto flex w-full max-w-[26rem] items-center gap-3 rounded-xl border border-border bg-background py-3 pr-3 pl-4 text-sm text-foreground shadow-(--menu-shadow)"
+            : "sr-only",
+        )}
+        {...hold.handlers}
+      >
+        {shown && <ToastIcon refused={shown.toast.refused} />}
+        <div role="status" aria-live="polite" aria-atomic className="min-w-0 flex-1">
+          {shown && <p key={shown.id}>{shown.toast.message}</p>}
+        </div>
+        {shown?.toast.action && (
+          <ToastAction
+            action={shown.toast.action}
+            onClick={() => finish(shown, shown.toast.action?.onSelect)}
+            onKeyDown={(event) => closeOnEscape(event, shown)}
+          />
+        )}
+        {shown && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0 pointer-coarse:size-11"
+            aria-label={closeLabel}
+            title={closeLabel}
+            onClick={() => finish(shown)}
+            onKeyDown={(event) => closeOnEscape(event, shown)}
+          >
+            <X aria-hidden="true" />
+          </Button>
+        )}
+      </div>
+    </div>
+  )
   return (
     <ToastContext.Provider value={toasts}>
-      {children}
-      <div
-        ref={viewport}
-        className="toast-viewport pointer-events-none fixed inset-x-4 bottom-4 z-50 flex justify-end sm:inset-x-auto sm:right-6 sm:bottom-6"
-      >
-        <div
-          ref={card}
-          className={cn(
-            shown
-              ? "pointer-events-auto flex w-full max-w-[26rem] items-center gap-3 rounded-xl border border-border bg-background py-3 pr-3 pl-4 text-sm text-foreground shadow-(--menu-shadow)"
-              : "sr-only",
-          )}
-          {...hold.handlers}
-        >
-          {shown && <ToastIcon refused={shown.toast.refused} />}
-          <div role="status" aria-live="polite" aria-atomic className="min-w-0 flex-1">
-            {shown && <p key={shown.id}>{shown.toast.message}</p>}
-          </div>
-          {shown?.toast.action && (
-            <ToastAction
-              action={shown.toast.action}
-              onClick={() => finish(shown, shown.toast.action?.onSelect)}
-              onKeyDown={(event) => closeOnEscape(event, shown)}
-            />
-          )}
-          {shown && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 shrink-0 pointer-coarse:size-11"
-              aria-label={closeLabel}
-              title={closeLabel}
-              onClick={() => finish(shown)}
-              onKeyDown={(event) => closeOnEscape(event, shown)}
-            >
-              <X aria-hidden="true" />
-            </Button>
-          )}
-        </div>
-      </div>
+      <ToastLayerContext.Provider value={setLayer}>{children}</ToastLayerContext.Provider>
+      <ToastPlacement layer={layer}>{toastViewport}</ToastPlacement>
     </ToastContext.Provider>
   )
 }
@@ -208,3 +213,8 @@ function ToastAction({
 }
 
 export { ToastProvider }
+
+/** Results must share a modal's focus scope while it is open. */
+function ToastPlacement({ layer, children }: { layer: HTMLElement | null; children: ReactNode }) {
+  return layer ? createPortal(children, layer) : children
+}

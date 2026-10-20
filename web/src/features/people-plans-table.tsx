@@ -15,8 +15,6 @@ import type { PlanCommands } from "@/lib/use-plans"
 
 /** Fixed widths, so columns stay put whatever the Plans say. */
 const COLUMN_CLASSES = ["col-plan", "col-count", "col-count", "col-count", "col-speed", "col-people", "col-actions"]
-/** Beside an open panel, only what picks a Plan. */
-const COMPACT_COLUMN_CLASSES = ["col-plan", "col-speed", "col-people"]
 /** The counts each Plan has a column for, by where its limits keep them. */
 const COUNTS = [
   { column: "rules", label: "people.plans.catalog.rules", limit: "rules" },
@@ -37,16 +35,13 @@ type RowContext = {
  * The catalog of Plans: how many there are, with `action`, New plan, beside them, then a table
  * with a column for each limit, the default first, so Plans compare by column. Each Plan's name
  * heads its row and opens its panel, as a press anywhere else on the row does; People opens
- * Everyone filtered by it, and More actions holds the rest. While a panel is open beside it, the
- * catalog keeps only the Plan, its sync speed, and who has it, and marks the open Plan. When the
- * catalog itself is narrow, each row becomes a card that labels its values.
+ * Everyone filtered by it, and More actions holds the rest. Opening a drawer marks its Plan
+ * without changing the table. When the catalog itself is narrow, rows become labelled cards.
  */
 export function PlansCatalog({ action, ...context }: RowContext & { action: ReactNode }) {
   const { t } = useI18n()
   const plans = catalogOrder(context.overview.plans)
-  const { panel } = context.work
-  const compact = panel !== null
-  const columns = compact ? COMPACT_COLUMN_CLASSES : COLUMN_CLASSES
+  const columns = COLUMN_CLASSES
   return (
     <section
       id="plans-catalog"
@@ -59,30 +54,30 @@ export function PlansCatalog({ action, ...context }: RowContext & { action: Reac
         {action}
       </div>
       <div className="plans-table-wrap">
-        <table className="plans-table" role="table" aria-labelledby="plans-catalog-title" data-compact={compact || undefined}>
+        <table className="plans-table" role="table" aria-labelledby="plans-catalog-title">
           <colgroup>
             {columns.map((name, index) => (
               <col key={index} className={name} />
             ))}
           </colgroup>
-          <CatalogHead compact={compact} />
+          <CatalogHead />
           <tbody role="rowgroup">
             {plans.map((plan) => (
-              <PlanRows key={plan.key} plan={plan} compact={compact} columns={columns.length} {...context} />
+              <PlanRows key={plan.key} plan={plan} columns={columns.length} {...context} />
             ))}
           </tbody>
         </table>
       </div>
       <p className="plans-catalog-note">
         <Info aria-hidden="true" />
-        {t(compact ? "people.plans.catalog.noteOpen" : "people.plans.catalog.note")}
+        {t("people.plans.catalog.note")}
       </p>
     </section>
   )
 }
 
-/** The column headings; beside an open panel, only Plan, Sync speed, and People. */
-function CatalogHead({ compact }: { compact: boolean }) {
+/** The comparison columns remain present while a drawer is open. */
+function CatalogHead() {
   const { t } = useI18n()
   return (
     <thead role="rowgroup">
@@ -90,23 +85,20 @@ function CatalogHead({ compact }: { compact: boolean }) {
         <th scope="col" role="columnheader">
           {t("people.plans.catalog.plan")}
         </th>
-        {!compact &&
-          COUNTS.map(({ column, label }) => (
-            <th key={column} scope="col" role="columnheader" className="plans-count">
-              {t(label)}
-            </th>
-          ))}
+        {COUNTS.map(({ column, label }) => (
+          <th key={column} scope="col" role="columnheader" className="plans-count">
+            {t(label)}
+          </th>
+        ))}
         <th scope="col" role="columnheader" className="plans-speed">
           {t("people.plans.catalog.speed")}
         </th>
         <th scope="col" role="columnheader">
           {t("people.plans.catalog.people")}
         </th>
-        {!compact && (
-          <th scope="col" role="columnheader">
-            <span className="sr-only">{t("people.plans.catalog.actions")}</span>
-          </th>
-        )}
+        <th scope="col" role="columnheader">
+          <span className="sr-only">{t("people.plans.catalog.actions")}</span>
+        </th>
       </tr>
     </thead>
   )
@@ -122,7 +114,7 @@ function pressesRow(event: MouseEvent<HTMLTableRowElement>): boolean {
  * menu was refused. The name is the row's keyboard target; the rest of the row is a larger
  * pointer target that opens the same panel, as Activity's rows do.
  */
-function PlanRows({ plan, compact, columns, ...context }: RowContext & { plan: PlanSummary; compact: boolean; columns: number }) {
+function PlanRows({ plan, columns, ...context }: RowContext & { plan: PlanSummary; columns: number }) {
   const { work } = context
   const row = useRef<HTMLTableRowElement>(null)
   const removing = work.removing === plan.key
@@ -142,19 +134,17 @@ function PlanRows({ plan, compact, columns, ...context }: RowContext & { plan: P
         }}
       >
         <NameCell plan={plan} selected={selected} work={work} />
-        {!compact && <CountCells plan={plan} />}
+        <CountCells plan={plan} />
         <SpeedCell interval={plan.limits.sync_interval} />
         <PeopleCell plan={plan} enabled={context.overview.enabled} onShowPeople={context.onShowPeople} />
-        {!compact && (
-          <td role="cell" className="plan-col-actions">
-            <PlanRowMenu
-              plan={plan}
-              overview={context.overview}
-              work={work}
-              onMakeDefault={() => context.onChange({ enabled: context.overview.enabled, defaultPlan: plan.key }, context.overview)}
-            />
-          </td>
-        )}
+        <td role="cell" className="plan-col-actions">
+          <PlanRowMenu
+            plan={plan}
+            overview={context.overview}
+            work={work}
+            onMakeDefault={() => context.onChange({ enabled: context.overview.enabled, defaultPlan: plan.key }, context.overview)}
+          />
+        </td>
       </tr>
       <PlanDetails
         plan={plan}

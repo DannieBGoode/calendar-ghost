@@ -20,7 +20,7 @@ export type ActivityFeed = UseInfiniteQueryResult<InfiniteData<AuditEntry[]>>
 
 /**
  * History, Activity's first tab: what each run did, filtered by rule, outcome, and title, with one
- * entry open beside the table.
+ * entry open in a drawer over the unchanged table.
  */
 export function HistorySection({
   state,
@@ -79,8 +79,8 @@ export function HistorySection({
     if (detailOpen) select(visibleEntries.find((item) => String(item.id) === rowLink), "replace")
   }
 
-  // A selected rule is named above the table, and the detail pane names the rule of its entry.
-  const showRuleColumn = !ruleId && !detailOpen
+  // Selecting an entry never changes the table behind its drawer.
+  const showRuleColumn = !ruleId
 
   return (
     <section className="workflow activity-section page-card" aria-labelledby="activity-feed-title">

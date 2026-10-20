@@ -457,15 +457,6 @@
       "stateOn": "On",
       "stateOff": "Off",
       "offNoPlans": "Everyone can use everything, with no limits. Turning plans on adds a plan named <strong>No limits</strong> as the default, so nobody is limited until you give someone a smaller plan.",
-      "wouldLimit": {
-        "one": "Turning plans on limits <strong>{count} person</strong> right away.",
-        "other": "Turning plans on limits <strong>{count} people</strong> right away."
-      },
-      "wouldLimitOver": {
-        "one": "Turning plans on limits <strong>{people}</strong> right away, and {count} of them has more than their plan allows.",
-        "other": "Turning plans on limits <strong>{people}</strong> right away, and {count} of them have more than their plan allows."
-      },
-      "wouldLimitNobody": "Turning plans on limits nobody yet.",
       "people": {
         "one": "{count} person",
         "other": "{count} people"
@@ -484,14 +475,7 @@
       "showWouldBeOver": {
         "one": "Show the {count} person who would be over a limit",
         "other": "Show the {count} people who would be over a limit"
-      },
-      "compactOn": {
-        "one": "They limit <strong>{count} person</strong>. People without a plan get <strong>{name}</strong>.",
-        "other": "They limit <strong>{count} people</strong>. People without a plan get <strong>{name}</strong>."
-      },
-      "compactOnNobody": "They limit nobody. People without a plan get <strong>{name}</strong>.",
-      "compactOff": "Everyone can use everything. {impact}",
-      "compactOffNoPlans": "Everyone can use everything, with no limits."
+      }
     },
     "catalog": {
       "title": {
@@ -532,8 +516,7 @@
         "one": "{count} would be over on {name}",
         "other": "{count} would be over on {name}"
       },
-      "note": "People counts include administrators, who are never limited. Paused rules and drafts are not active.",
-      "noteOpen": "Changes apply as soon as you save. Nobody loses anything they already have."
+      "note": "People counts include administrators, who are never limited. Paused rules and drafts are not active."
     },
     "speed": {
       "instant": "Instant",

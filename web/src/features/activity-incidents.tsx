@@ -88,7 +88,7 @@ export function IncidentsSection({
             resolved={resolved}
             more={more}
             selectedId={selectedId}
-            showRuleColumn={!detailOpen}
+            showRuleColumn={true}
             context={context}
             onSelect={select}
           />

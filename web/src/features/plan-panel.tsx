@@ -1,6 +1,7 @@
 import { UserPlus, X } from "lucide-react"
-import { useEffect, useLayoutEffect, useRef, type KeyboardEvent, type RefObject } from "react"
+import { useEffect, useRef } from "react"
 
+import { Drawer } from "@/components/ui/drawer"
 import { PageTabs } from "@/components/page-tabs"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/toast-context"
@@ -30,73 +31,37 @@ type PanelProps = {
 }
 
 /**
- * Keeps `--plan-panel-top` on the panel: how far below the window's top it starts now, which the
- * stylesheet caps its height by, so its footer with the one primary action is in the window from
- * where it opens until it sticks under the top bar, and only its body scrolls.
- */
-function usePanelTop(aside: RefObject<HTMLElement | null>) {
-  useLayoutEffect(() => {
-    const element = aside.current
-    if (!element) return
-    const measure = () => {
-      element.style.setProperty("--plan-panel-top", `${Math.max(0, Math.round(element.getBoundingClientRect().top))}px`)
-    }
-    measure()
-    let frame = 0
-    const later = () => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(measure)
-    }
-    window.addEventListener("scroll", later, { passive: true })
-    window.addEventListener("resize", later)
-    return () => {
-      cancelAnimationFrame(frame)
-      window.removeEventListener("scroll", later)
-      window.removeEventListener("resize", later)
-    }
-  }, [aside])
-}
-
-/**
- * The side panel beside the Plans catalog, at its own address and never a modal, as Activity's
+ * The drawer over the Plans catalog, at its own address, as Activity's
  * entry panel is: "Plan", Close, the Plan's name as its title with who has it and what it allows,
  * then its Limits and People tabs. New plan has the editor alone. Opening it from the page moves
- * focus to its title; Escape anywhere in it, Close, and each tab's Cancel close it. It fits the
- * window below where it starts, so its footer is always in view.
+ * focus to its title; Escape, Close, and Cancel use the same guard for unsaved changes.
+ * Its header and footer stay visible while the body scrolls.
  */
 export function PlanPanel({ panel, ...props }: PanelProps & { panel: Panel }) {
   const { t } = useI18n()
   const { overview, work } = props
   const plan = panel.plan === null ? null : overview.plans.find((item) => item.key === panel.plan)
-  const aside = useRef<HTMLElement>(null)
-  usePanelTop(aside)
-
-  function escape(event: KeyboardEvent<HTMLElement>) {
-    // A control inside that closes something of its own on Escape, such as a search, comes first.
-    if (event.key !== "Escape" || event.nativeEvent.defaultPrevented) return
-    event.preventDefault()
-    work.closePanel()
-  }
-
   return (
-    <aside ref={aside} id="plan-panel" className="plan-panel" aria-labelledby="plan-panel-title" onKeyDown={escape}>
-      <div className="plan-panel-bar">
-        <span className="plan-panel-label">{t("people.plans.panel.label")}</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={t("people.plans.panel.close")}
-          aria-disabled={work.busy || undefined}
-          onClick={work.closePanel}
-        >
-          <X aria-hidden="true" />
-        </Button>
-      </div>
-      {plan === null && <NewPlanPanel {...props} />}
-      {plan === undefined && <MissingPlan work={work} />}
-      {plan && <PlanTabsPanel plan={plan} tab={panel.tab} {...props} />}
-    </aside>
+    <Drawer onClose={work.closePanel} aria-labelledby="plan-panel-title">
+      <aside id="plan-panel" className="plan-panel" aria-labelledby="plan-panel-title">
+        <div className="plan-panel-bar">
+          <span className="plan-panel-label">{t("people.plans.panel.label")}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={t("people.plans.panel.close")}
+            aria-disabled={work.busy || undefined}
+            onClick={work.closePanel}
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </div>
+        {plan === null && <NewPlanPanel {...props} />}
+        {plan === undefined && <MissingPlan work={work} />}
+        {plan && <PlanTabsPanel plan={plan} tab={panel.tab} {...props} />}
+      </aside>
+    </Drawer>
   )
 }
 

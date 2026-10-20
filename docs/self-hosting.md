@@ -283,11 +283,11 @@ stay as they were. Plans, if you turned them on, turn off and keep their definit
 To keep one person from using up what everyone shares, open **People → Plans**
 ([ADR 0038](adr/0038-plans-allowances-and-limits.md)):
 
-1. Choose **New plan**. A panel opens beside the table, at its own address: give the Plan a name,
-   which no other Plan has, and set the most active rules, calendar accounts, and Integration
+1. Choose **New plan**. A full-height drawer opens over the unchanged table, at its own address:
+   give the Plan a name, which no other Plan has, and set the most active rules, calendar accounts, and Integration
    Tokens a person may have, each **No limit** or **Up to** a number (Integration Tokens may also
    be **None**), and its **Sync speed**, from **Instant** to **Every hour**. **Save plan** closes
-   the panel.
+   the drawer.
 2. Give it to people: **Assign people** in the Plan's **More actions** menu, or tick people under
    **Everyone** and choose **Change plan**. Before you save, it says who would be over a limit.
    Everyone without a Plan of their own has the default, marked **Default**; **Make default** in
