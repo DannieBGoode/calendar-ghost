@@ -130,6 +130,9 @@ def test_an_allowance_follows_the_setting_then_the_role_then_their_own_plan(
 
     assert allowance == expected
     assert allowance.assigned == own
+    # These Plans limit something, so manual runs are counted, whether the Plan is their own or the
+    # default.
+    assert allowance.limits_manual_runs is (expected.plan is not None)
 
 
 @pytest.mark.parametrize(
@@ -144,6 +147,28 @@ def test_an_allowance_follows_the_setting_then_the_role_then_their_own_plan(
 def test_only_a_plan_that_applies_limits_anything(allowance: Allowance) -> None:
     assert allowance.limits == NO_LIMITS
     assert allowance.cadence == DEFAULT_CADENCE
+    assert not allowance.limits_manual_runs
+
+
+@pytest.mark.parametrize(
+    ("limits", "counted"),
+    [
+        pytest.param(NO_LIMITS_PLAN.limits, False, id="no limits"),
+        pytest.param(PlanLimits(1, None, None, SyncInterval.INSTANT), True, id="rules"),
+        pytest.param(PlanLimits(None, None, 0, SyncInterval.INSTANT), True, id="no tokens"),
+        pytest.param(PlanLimits(None, None, None, SyncInterval.EVERY_60_MINUTES), True, id="slow"),
+    ],
+)
+def test_manual_runs_are_counted_only_under_a_plan_that_limits_something(
+    limits: PlanLimits, counted: bool
+) -> None:
+    # Turning Plans on with no default gives everyone the No limits Plan, which changes nothing.
+    default = Plan(PlanKey("default"), "Default", limits)
+
+    allowance = allowance_for(plans_on=True, administers=False, own=None, default=default)
+
+    assert allowance.basis is AllowanceBasis.PLAN
+    assert allowance.limits_manual_runs is counted
 
 
 @pytest.mark.parametrize(

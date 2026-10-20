@@ -87,6 +87,10 @@
     "invalid_state_transition": "This rule cannot change to that state right now. Reload and try again.",
     "last_administrator": "Someone else must be an administrator first. Calendar Ghost always keeps one who can sign in.",
     "link_unusable": "This link was already used, replaced, or has expired. Ask your administrator for a new one.",
+    "manual_runs_throttled": {
+      "one": "You started many runs in a short time. Try again in {count} minute.",
+      "other": "You started many runs in a short time. Try again in {count} minutes."
+    },
     "mcp_not_running": "The MCP server is starting or stopping. Try again in a moment.",
     "method_not_allowed": "This page is out of date. Reload it and try again.",
     "not_a_calendar_change": "The calendars are unchanged. To change what the rule does, edit its settings instead.",
