@@ -179,9 +179,9 @@ function deletionItem(): HTMLElement {
   return heading.closest<HTMLElement>(".setting-item")!
 }
 
-function incidentEmails(): HTMLElement {
-  const heading = [...container.querySelectorAll("h3")].find((item) => item.textContent === "Incident emails")
-  if (!heading) throw new Error("No incident emails item")
+function emailNotifications(): HTMLElement {
+  const heading = [...container.querySelectorAll("h3")].find((item) => item.textContent === "Email notifications")
+  if (!heading) throw new Error("No email notifications item")
   return heading.closest<HTMLElement>(".setting-item")!
 }
 
@@ -271,31 +271,41 @@ describe("OwnAccountSection", () => {
     expect(container.querySelector("[role='alert']")?.textContent).toBe("That password is incorrect.")
   })
 
-  it("turns incident emails off", async () => {
-    await renderSection(testI18n())
-    const toggle = field("own-incident-emails")
-    expect(toggle.checked).toBe(true)
+  it.each([false, true])("saves notify_by_email=%s, shared by Incident Notifications and Plan notices", async (notify) => {
+    await renderSection(testI18n(), {
+      signedIn: { ...user, notify_by_email: !notify },
+      answers: { "PUT /api/v1/account/notifications": jsonResponse({ ...user, notify_by_email: notify }) },
+    })
+    const toggle = field("own-email-notifications")
+    expect(toggle.checked).toBe(!notify)
+    expect(emailNotifications().querySelector("label")?.textContent).toBe("Email notifications")
+    expect(emailNotifications().textContent).toContain(
+      "When one of your rules needs attention, Calendar Ghost can also email you. Activity always lists every incident.",
+    )
     await click(toggle)
-    expect(sent("PUT", "/api/v1/account/notifications")).toEqual({ notify_by_email: false })
-    expect(status()).toBe("Calendar Ghost no longer emails you about incidents. They still appear in Activity.")
+    expect(sent("PUT", "/api/v1/account/notifications")).toEqual({ notify_by_email: notify })
+    expect(toggle.checked).toBe(notify)
+    expect(status()).toBe(
+      notify ? "Email notifications are on." : "Email notifications are off. Incidents still appear in Activity.",
+    )
   })
 
-  it("tells a User their administrator can set up incident emails where the installation sends none", async () => {
+  it("tells a User their administrator can set up email notifications where the installation sends none", async () => {
     await renderSection(testI18n(), { sendsEmail: false })
-    expect(container.querySelector("#own-incident-emails")).toBeNull()
-    expect(incidentEmails().textContent).toContain(
+    expect(container.querySelector("#own-email-notifications")).toBeNull()
+    expect(emailNotifications().textContent).toContain(
       "Your administrator can set up email for this Calendar Ghost. Until then, incidents appear in Activity.",
     )
-    expect(incidentEmails().querySelector("a")).toBeNull()
+    expect(emailNotifications().querySelector("a")).toBeNull()
   })
 
-  it("tells an administrator how to set up incident emails where the installation sends none", async () => {
+  it("tells an administrator how to set up email notifications where the installation sends none", async () => {
     await renderSection(testI18n(), { sendsEmail: false, signedIn: administrator })
-    expect(container.querySelector("#own-incident-emails")).toBeNull()
-    expect(incidentEmails().textContent).toContain(
-      "To send incident emails, add SMTP settings to .env and restart Calendar Ghost. Until then, incidents appear in Activity.",
+    expect(container.querySelector("#own-email-notifications")).toBeNull()
+    expect(emailNotifications().textContent).toContain(
+      "To send email notifications, add SMTP settings to .env and restart Calendar Ghost. Until then, incidents appear in Activity.",
     )
-    const help = incidentEmails().querySelector("a")
+    const help = emailNotifications().querySelector("a")
     expect(help?.textContent).toBe("How to set up email (opens in a new tab)")
     expect(help?.getAttribute("href")).toBe(
       "https://calendarghost.com/docs/troubleshooting#incident-emails-are-unavailable-or-never-arrive",

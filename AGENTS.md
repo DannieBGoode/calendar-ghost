@@ -37,7 +37,9 @@ behavior, fix the mismatch in the same change, and add an ADR when the decision 
 - Preview is side-effect-free and required before enabling a new or materially changed rule.
 - Pausing preserves mappings and projections. Resuming a paused or degraded rule begins with
   validation and reconciliation, except that a rule stopped only by Lapsed Authorization resumes on
-  its own once its accounts are authorized again (ADR 0027).
+  its own once its accounts are authorized again (ADR 0027), and a Plan Hold releases without a
+  preview when its Allowance permits (ADR 0039). The Plan Hold engine is dormant in production
+  until PR 3 wires it with visible status and recovery controls.
 - Event content never reaches logs, incidents, or notifications. SQLite keeps only what Activity
   needs: each Audit Entry's source event title, time, recurrence, and cancellation (ADR 0014), and
   Source Observations and Source Change values (ADR 0017). Titles are plain text; descriptions,
@@ -62,8 +64,9 @@ is also on; both are off by default, and with Plans off every user has every fea
 Installation Administrators are never limited. A limit check reads the User's Allowance inside the
 transaction it guards and fails closed. Your plan (`GET /api/v1/account/plan`, `ShowOwnPlan`) and
 the administrator's Plans routes also fail the request when Plans cannot be read, rather than show
-limits nobody read; every other read of Plans fails open, so a fault in Plans never stops
-synchronization, sign-in, or the rules API (ADR 0038).
+limits nobody read. Plan settlement changes nobody when its Allowance read fails; other reads of
+Plans fail open, so a fault in Plans never stops synchronization, sign-in, or the rules API
+(ADR 0038, ADR 0039).
 Preserve the self-hosting promise that there is no mandatory Calendar Ghost account, telemetry, or
 hosted coordinator.
 

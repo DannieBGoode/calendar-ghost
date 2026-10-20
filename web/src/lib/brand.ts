@@ -12,8 +12,8 @@ const DOCS_URL = "https://calendarghost.com/docs"
 export const HELP_URL = `${DOCS_URL}/troubleshooting`
 /** The Instant Sync guide; its sections' anchors follow the headings in docs/instant-sync.md. */
 export const INSTANT_SYNC_HELP_URL = `${DOCS_URL}/instant-sync`
-/** The guide's section on incident emails; its anchor follows the heading in docs/troubleshooting.md. */
-export const INCIDENT_EMAIL_HELP_URL = `${HELP_URL}#incident-emails-are-unavailable-or-never-arrive`
+/** The email notifications guide keeps this explicit legacy anchor in docs/troubleshooting.md. */
+export const EMAIL_NOTIFICATIONS_HELP_URL = `${HELP_URL}#incident-emails-are-unavailable-or-never-arrive`
 
 export function documentTitle(i18n: I18n, page: string): string {
   return i18n.t("app.documentTitle", { page })

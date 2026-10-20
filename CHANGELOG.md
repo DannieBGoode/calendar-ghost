@@ -6,6 +6,26 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- The Plan Hold engine and private Plan notice delivery are implemented, with production
+  activation explicitly disabled until PR 3 supplies visible grace and hold state, status,
+  Dashboard, MCP, and the keep form together (ADR 0039). Lowering a limit still stops nothing;
+  no production grace or Plan notice starts in this build.
+- Migration 34 adds rule keep marks and User grace/admission columns with nullable or zero
+  defaults. Older code ignores those columns, reads a future hold's stop code 2 as an
+  authorization lapse, and still counts it at Start; older raw display counts may omit it.
+  Every old save replaces 2 with 0 or 1. Exact-code-1 unfinished-lapse discovery can leave a
+  code-2-only User stopped: restore account access, or preview and Start within the limit.
+  Re-upgrade may automatically resume code 1 and, on an activated engine, give a new grace
+  if over the limit. This inert build recognizes 2 as a hold but never releases it in production:
+  for a future activated database, upgrade to an active release or pause, preview, and Start
+  within the limit. Reauthorization does not release a hold here. See the
+  [migration notes](docs/deployment.md#migration-34-plan-hold-engine).
+- **Email notifications** is the new name of the existing email preference in Settings, Your
+  account. It still controls optional incident email in this build; the stored preference and
+  API route are unchanged. Plan notices will share it when activated. Plan mail is best-effort:
+  failed or cancelled preparation, shutdown, restart, or SMTP failure can lose notices, and a
+  newer pending notice replaces a stale one for the same User.
+
 - Plans let an administrator limit how much each person uses
   ([ADR 0038](docs/adr/0038-plans-allowances-and-limits.md)). Plans are off by default, and while
   they are off nothing changes. Administrators are never limited, and under **Only me** Plans stay

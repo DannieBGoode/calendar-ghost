@@ -42,8 +42,8 @@ _Avoid_: Tier, subscription, quota
 **Active Rule**:
 A Directional Sync Rule that counts toward its User's Plan: an enabled rule, a rule stopped only by
 Lapsed Authorization, or a Rule Replacement's new draft that keeps its previous rule's place.
-Drafts, previewed rules, paused rules, and rules stopped for any other reason are not active; nor,
-once Plan Hold ships, are the rules it holds. A Plan's rule limit is a maximum of Active Rules,
+Drafts, previewed rules, paused rules, and rules stopped for any other reason are not active;
+nor are rules held by Plan Hold. A Plan's rule limit is a maximum of Active Rules,
 checked at Start, so pausing a rule frees its place (ADR 0038). The code calls it
 `SyncRule.counts_toward_plan`.
 _Avoid_: Counted rule, rule that can sync
@@ -69,17 +69,23 @@ decides every limit check and the User's Sync Cadence, and whether their manual 
 Reconcile Now, and Rule Preview) are limited: to 12 in any hour on every Plan that limits
 anything, and not at all on the No limits Plan. A limit check that cannot read it refuses, as for
 any database error, and Your plan says it could not load rather than show limits nobody read;
-every other reader, manual runs included, falls back to no limits, so a fault in Plans never
-stops synchronization or sign-in (ADR 0038).
+Plan settlement changes nobody when its read fails, because assuming no limit would release
+holds. Other readers, manual runs included, fall back to no limits, so a fault in Plans never
+stops synchronization or sign-in (ADR 0038, ADR 0039).
 _Avoid_: Entitlement
 
 **Plan Hold**:
-The pause of a User's Directional Sync Rules beyond their Plan's rule limit, applied after a 7-day
-grace period. Plan Hold is planned for a later release: until then a lowered rule limit only
-refuses new Starts and stops nothing, so rules beyond it keep syncing (ADR 0038). Once it ships,
-the User chooses which rules stay enabled; otherwise the most recently created are held. A held
-rule keeps its mappings and projections, and resumes by itself without a new preview once the
-User's limit allows it again.
+The stop of a User's Directional Sync Rules beyond their Plan's rule limit, applied after a 7-day
+grace period. A held rule is a Degraded Rule with a Plan Hold stop cause, keeps its mappings,
+projections, and incremental positions, and does not count as an Active Rule. Kept rules rank
+first, then the oldest, with the rule identifier breaking ties. A replacement draft that keeps a
+place inherits its predecessor's order and keep mark; giving up that place is not holding a rule.
+The scheduler releases holds without a new preview when the Allowance permits, to Enabled when
+both accounts are authorized and otherwise to Lapsed Authorization. Previewing a held rule keeps
+the hold. The User's keep choice may release or swap held rules immediately (ADR 0039).
+The engine and private Plan notices exist in PR 2, but production passes explicitly disable it.
+Until PR 3 supplies activation, status, held-rule visuals, and the keep form, a lowered limit
+refuses new Starts and stops nothing; no production grace or Plan notice starts.
 _Avoid_: Suspension, plan pause, downgrade deletion
 
 **Commercial Mode**:
@@ -116,8 +122,9 @@ authentication or authorization marks it, whether a sync run, a preview, a calen
 it stops every enabled rule of the account. Reauthorization clears it, and so does an access check the provider accepts. Once it clears and
 every account a Degraded Rule uses is authorized, a rule stopped only by Lapsed Authorization
 returns to scheduled synchronization on its own, continuing from its preserved incremental positions
-so changes made in either calendar while it was stopped are synchronized or repaired; a rule
-stopped for any other reason still needs a recovery preview (ADR 0027).
+so changes made in either calendar while it was stopped are synchronized or repaired; a Plan Hold
+stays held until its Allowance permits release, and a rule
+stopped for any other reason still needs a recovery preview (ADR 0027, ADR 0039).
 _Avoid_: Expired account, broken connection, disconnected
 
 ## Synchronization
@@ -327,7 +334,7 @@ _Avoid_: Reachability check, health probe
 ## Health
 
 **Degraded Rule**:
-A rule whose synchronization is safely suspended because it currently requires recovery, such as reauthorizing a connected account. Its mappings and last successful incremental position remain intact, and no destination writes occur until recovery.
+A rule whose synchronization is safely stopped because it requires recovery, such as reauthorizing a Connected Account, or because Plan Hold keeps it beyond its Allowance. Its mappings and last successful incremental positions remain intact, and no destination writes occur until recovery or release. Lapsed Authorization and Plan Hold have distinct, exclusive self-resuming stop causes; other degraded rules require a recovery preview. Production Plan Hold activation awaits PR 3 (ADR 0039).
 _Avoid_: Failed rule, disabled rule
 
 **Reauthorization**:
@@ -339,7 +346,7 @@ A persistent operational condition requiring attention, such as expired authoriz
 _Avoid_: Error message, failure log
 
 **Incident Notification**:
-A deduplicated notice sent when an incident opens or resolves. It goes to the User who owns the incident's rule or Connected Account, never to another User; the Web UI always retains the incident, and the User receives email too when the installation can send it, unless they turn it off. When the installation has a public address, the email links to the Web UI page holding the incident's one next step; the link names no calendar, account, or event. Incidents about the installation itself, such as a stalled scheduler, go to the Installation Administrators' SMTP recipient or generic JSON webhook.
+A deduplicated notice sent when an incident opens or resolves. It goes to the User who owns the incident's rule or Connected Account, never to another User; the Web UI always retains the incident, and the User receives email too when the installation can send it, unless they turn off **Email notifications** under Settings, Your account. The same stored preference governs Plan notices, whose production activation awaits PR 3; a Plan notice is not an Incident and creates no Audit Entry. When the installation has a public address, the email links to the Web UI page holding the incident's one next step; the link names no calendar, account, or event. Incidents about the installation itself, such as a stalled scheduler, go to the Installation Administrators' SMTP recipient or generic JSON webhook.
 _Avoid_: Error alert, retry notification
 
 **Installation Status**:

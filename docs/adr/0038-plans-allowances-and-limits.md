@@ -123,23 +123,25 @@ second slice runs each rule once per window of its Plan's interval
   inside the existing `BEGIN IMMEDIATE` of the account store's save, and only when no row has the
   same provider and address, so Reauthorization never reads Plans. A token is counted under
   `BEGIN IMMEDIATE` right before its insert.
-- **Limit checks fail closed; every other read of Plans fails open.** A check that cannot read the
+- **Limit checks fail closed; ordinary reads fail open.** A check that cannot read the
   Allowance fails its request, as any database error does, so a fault never admits a resource past
   a limit; at the OAuth callback that is a server error after the provider's consent, with nothing
-  saved. Every other reader falls back to no limits: Instant Sync dispatch, watch upkeep, and
-  Installation Hints treat the User as instant, so no Instant Sync Request is dropped and no watch
-  retired; `InstantSyncStatus` answers the default cadence; the rule page answers `can_start` true,
+  saved. Plan settlement changes nobody when an Allowance read fails (ADR 0039);
+  treating that failure as unlimited would release holds. Other readers fall back to no limits:
+  Instant Sync dispatch, watch upkeep, and Installation Hints treat the User as instant, so no
+  Instant Sync Request is dropped and no watch retired; `InstantSyncStatus` answers the default cadence; the rule page answers `can_start` true,
   and the Start still checks; manual runs go ahead and are not counted
   ([Slice 3](#slice-3-the-manual-run-limit)); the Operator Overview leaves the Plan out. A fault
   in Plans never stops synchronization, sign-in, or the rules API. Your plan (`ShowOwnPlan`) fails
   its own request instead of showing a basis it could not read; the Web UI then shows no limit
   hints, and the server still checks.
-- **Lowering a limit stops nothing.** Rules beyond a lower rule limit keep syncing, but no rule can
-  start until fewer count. Existing Connected Accounts keep their Reauthorization, and existing
-  Integration Tokens keep working, because a token that stops on its own breaks a monitor
+- **Lowering a limit stops nothing until Plan Hold activation.** Rules beyond a lower rule limit
+  keep syncing, but no rule can start until fewer count. Existing Connected Accounts keep their
+  Reauthorization, and existing Integration Tokens keep working, because a token that stops on its own breaks a monitor
   ([ADR 0024](0024-integration-tokens-installation-status-and-mcp.md)). Only new ones are refused.
-  Plan Hold, which holds rules beyond a lower limit after a grace period, arrives in a later slice
-  with its own record.
+  The Plan Hold engine now exists (ADR 0039), but production composition keeps it disabled
+  until PR 3 ships visible grace and hold state, status, and the keep form together. Until then no
+  production grace starts and no Plan notice is sent.
 - **A changed account address at the limit.** When a provider reports another address for an
   account, such as a renamed Microsoft or Google Workspace account, the new address is a new
   Connected Account. At the limit, the documented recovery keeps every rule: get one free account

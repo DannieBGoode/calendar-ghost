@@ -40,7 +40,7 @@ write consequences of a configuration. An expired grant changes neither.
 - **Installation Status keeps its privacy contract.** A rule stopped by Lapsed Authorization is a
   stopped problem with that cause. The status names no account (ADR 0024); the Web UI resolves the
   account from its own records to name it and link to its Settings row.
-- **Every other stop still needs a recovery preview.** A disconnected account, a provider
+- **Stops requiring intervention still need a recovery preview.** A disconnected account, a provider
   rejection other than authorization, an incomplete removal, or a Material Rule Change made while
   the rule was stopped keeps today's preview and "Start syncing" path.
 
@@ -80,3 +80,12 @@ A disconnection interrupted partway is not repaired by the pass and is not made 
 deleting a Disconnected Account is. The rules it stopped write nothing and need a preview, as they
 would after the disconnection, and the account still shows as connected, so the User retries, and
 retrying stops the remaining rules and disconnects the account.
+
+## Amendment: Plan Hold (2026-10-20)
+
+Plan Hold is the second exclusive self-resuming stop cause (ADR 0039). It releases without a
+recovery preview when the Allowance permits, not on Reauthorization. A release reads both accounts
+inside its transaction: it becomes Enabled only when both are authorized, otherwise lapse-stopped.
+A preview keeps a hold; pause, disconnection, Material Rule Change, removal, or an intervention
+failure clears it. Interrupted-lapse discovery selects stop code 1 only, never code 2. The engine
+exists in PR 2 but production activation and the recovery controls await PR 3.

@@ -224,8 +224,9 @@ uses. Each limit check reads the Allowance after its own transaction holds SQLit
 and `SqlitePlans` writes under `BEGIN IMMEDIATE`, so a check and the limit it read cannot drift
 apart; a read that fails refuses the request. `ShowOwnPlan` (`application/operations/own_plan.py`)
 reads the Allowance and the User's counts for Your plan, and a read that fails there fails
-`GET /api/v1/account/plan` too, rather than show limits nobody read. Every other reader falls
-back to no limits, so a fault in Plans never stops synchronization, sign-in, or the rules API.
+`GET /api/v1/account/plan` too, rather than show limits nobody read. Plan settlement changes
+nobody when an Allowance read fails, because assuming no limit would release holds. Other readers
+fall back to no limits, so a fault in Plans never stops synchronization, sign-in, or the rules API.
 
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
 `application/operations/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral
@@ -420,3 +421,33 @@ use case starts relying on another storage behavior, add it to the contract.
 ## Public compatibility surfaces
 
 Database migrations, environment configuration, HTTP API payloads, provider ownership metadata, and persisted domain states are compatibility surfaces. The `GET /api/v1/status` and `GET /api/v1/installation/health` payloads, the Integration Token format and scopes, and the MCP tool names and results are read by monitors, dashboards, and agents outside this repository, so a change to them must stay backward compatible or be announced as a breaking change. Releases must migrate them rather than asking operators to delete SQLite state.
+
+## Plan Hold engine and activation boundary
+
+`domain/plan_hold.py` decides grace, rank, holds, reserved-place give-ups, and releases without
+provider or framework dependencies. `PlanHolds` and `ChooseKeptRules` in `application/sync/plan_holds.py`
+write only through their User's unit of work. Operations' `ScheduledPlanHolds` reads installation
+standings, reads Allowances in chunks of 500 Users, and rotates through at most 100 changed Users
+per pass, including failed or busy attempts. A failed bulk Allowance read changes nobody. The scheduled
+step follows interrupted-lapse recovery and precedes listing due rules, so released rules can run
+in the same pass. Production composition passes `plan_holds=None` in PR 2: activation, status,
+Dashboard, MCP, held-rule visuals, and the keep form belong to PR 3 (ADR 0039).
+
+Settlement and keep choice share a per-User `SettleLocks` lock, discover eligible rule identifiers,
+and try their write locks without waiting, in identifier order. Contention releases acquired
+locks and raises `PlanSettlementBusy`; the pass rotates to another User. A fresh unit of work then
+calls `PlanGraceRecord.acquire()`, a no-op UPDATE of its own User row, as its first statement to
+take SQLite's writer lock before reading fresh Allowance, grace, standings, and account authorization.
+Fresh rules count but are changed only when their write locks were acquired. An expired grace
+survives until remaining excess is settled. A keep choice that would change a fresh unlocked
+eligible rule's mark raises `PlanSettlementBusy`, rolling back the whole choice. No provider call
+runs in this transaction. SQLite retains its five-second writer timeout.
+
+The scheduler's Plan mail sender owns one worker for the Scheduler object's lifetime and never
+uses rule slots or pass completion. Each pass collects notices locally and hands them off only
+after successful rule listing. One sending batch holds at most 100 notices; while it sends, one
+latest pending notice per User replaces stale pending notices, with no second batch drained until
+the first finishes. Sender cancellation is awaited without waiting for an already-running bounded
+SMTP call or blocking the event loop on executor shutdown. Failed or cancelled preparation,
+shutdown, restart, and SMTP failure can lose notices; delivery has no durable outbox or retry.
+Production composition currently cannot generate Plan notices.

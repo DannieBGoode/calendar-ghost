@@ -9,9 +9,9 @@ import { instantSyncBlock, instantSyncHelpUrl } from "@/lib/instant-sync"
 
 /**
  * Whether the User's rules run soon after their provider reports a change (Instant Sync), beside
- * incident emails: a choice between syncing instantly and on schedule, sized like the Appearance
+ * email notifications: a choice between syncing instantly and on schedule, sized like the Appearance
  * choices. Where it cannot run for them, the row says why and links to the section of the Instant
- * Sync guide that explains the fix, like incident emails without email. It keeps the choice only
+ * Sync guide that explains the fix, like email notifications without email. It keeps the choice only
  * while providers cannot reach the installation: watches remain and are retried then, and choosing
  * "On schedule" stops them. Elsewhere nothing runs that the choice could stop, so it offers none.
  */

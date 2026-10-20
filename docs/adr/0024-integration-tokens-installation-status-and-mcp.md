@@ -139,3 +139,12 @@ Homepage that show one tile per service.
   ([ADR 0023](0023-hosted-service-runs-the-open-codebase.md)), a token will need an owner, and status
   read through it will need to cover only that user's rules. Adding that is a new scope decision,
   not a change to existing tokens.
+
+## Amendment: Plan Hold requires a scheduler (2026-10-20)
+
+A held rule needs a working scheduler to release when its Allowance permits (ADR 0039). PR 3 will
+therefore include held rules when deciding whether a scheduler is required and can be stalled,
+exclude holds from Stopped problems, and expose the hold cause and held count in status, Dashboard,
+and MCP. A grace itself is no status problem. This is the decision for PR 3, not runtime status
+support in PR 2: the engine remains disabled in production composition until the visible status,
+held-rule views, keep form, and correct recovery actions ship together.
