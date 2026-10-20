@@ -6,9 +6,10 @@ This is not a description of shipped behavior. The owner approved the revised de
 implementation still requires each PR's approved plan. The second Claude design/PR 2 plan review
 completed on 2026-10-20; the owner delegated PR 2 plan review and authorized continued execution.
 
-Delivery status on 2026-10-20: PR 1 identity email readiness is implemented. PR 2 self-service
+Delivery status on 2026-10-21: PR 1 identity email readiness is implemented. PR 2 self-service
 password recovery is implemented on its unmerged branch, including migration 36, deliberate
-proxy trust, and operational guidance; final gates, reviews, and PR delivery remain pending.
+proxy trust, and operational guidance. Local gates, secret scans, security review, and independent
+and Claude reviews pass; supported image builds and PR/CI delivery remain pending.
 Only Me and Invitation Only remain the supported policies. Verified email changes (PR 3), offline
 recovery (PR 4), backup tooling/runbook, and Open activation are later, unshipped slices. The
 decisions below describe the complete intended phase, not features all present in this build.
