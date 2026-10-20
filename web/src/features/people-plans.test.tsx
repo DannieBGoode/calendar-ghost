@@ -561,14 +561,14 @@ describe("People's Plans tab", () => {
   it("is the Plans tab of People, whose sentence follows the tab, with New plan in the catalog's head", async () => {
     await renderPlans(testI18n())
     expect(container.querySelector("h1")?.textContent).toBe("People")
-    expect(container.querySelector(".page-intro")?.textContent).toBe(
+    expect(container.querySelector(".page-intro-current")?.textContent).toBe(
       "Plans set how much each person can use and how soon their calendars sync.",
     )
     expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Plans")
     expect(element("plans-title").textContent).toBe("Plans")
     expect(element("plans-title").classList.contains("sr-only")).toBe(true)
     // The page header has no action on Plans: New plan sits on the list it adds to.
-    expect(container.querySelector(".heading-action")).toBeNull()
+    expect(container.querySelector(".heading-action button")).toBeNull()
     expect(catalogHead().querySelector("h3")?.textContent).toBe("2 plans")
     expect([...catalogHead().querySelectorAll("button")].map((item) => item.textContent.trim())).toEqual(["New plan"])
     expect(buttonOrNull("Invite someone", container)).toBeNull()
@@ -586,7 +586,7 @@ describe("People's Plans tab", () => {
       "A plan sets how many rules, calendar accounts, and integration tokens a person can have, and how soon their calendars sync. Make one, then give it to people or make it the default.",
     )
     expect([...empty.querySelectorAll("button")].map((item) => item.textContent.trim())).toEqual(["New plan"])
-    expect(container.querySelector(".heading-action")).toBeNull()
+    expect(container.querySelector(".heading-action button")).toBeNull()
     expect(container.querySelector("#plans-catalog")).toBeNull()
   })
 

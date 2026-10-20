@@ -1041,7 +1041,7 @@ describe("People page", () => {
 
   it("says what each tab is for, and offers Invite someone beside the page title, but not on Plans", async () => {
     await renderPeople(testI18n(), { answers: { "GET /api/v1/plans": jsonResponse(PLANS) } })
-    const intro = () => container.querySelector(".page-intro")?.textContent
+    const intro = () => container.querySelector(".page-intro-current")?.textContent
     const actions = () => [...container.querySelectorAll(".heading-action button")].map((item) => item.textContent.trim())
     expect(intro()).toBe(
       "The people who sign in here and whether their synchronization works. You see their email, role, sign-ins, plan, and sync status, never their calendars, connected account emails, or events.",
@@ -1054,8 +1054,14 @@ describe("People page", () => {
     )
     // New plan sits in the catalog's head, on the list it adds to.
     expect(actions()).toEqual([])
+    expect(container.querySelector(".page-intro-reserve")?.textContent).toBe(
+      "The people who sign in here and whether their synchronization works. You see their email, role, sign-ins, plan, and sync status, never their calendars, connected account emails, or events.",
+    )
+    expect(container.querySelector(".heading-action-placeholder")).not.toBeNull()
     await click(tabs[1]!)
     expect(actions()).toEqual(["Invite someone"])
+    expect(container.querySelector(".page-intro-reserve")).toBeNull()
+    expect(container.querySelector(".heading-action-placeholder")).toBeNull()
   })
 
   it("opens Plans in place, and asks for plans only there", async () => {

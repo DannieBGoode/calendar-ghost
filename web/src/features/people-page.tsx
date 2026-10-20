@@ -132,7 +132,14 @@ function PeopleContent({
       <div className="page-heading-row">
         <div>
           <h1>{t("people.page.title")}</h1>
-          <p className="page-intro">{t(plans ? "people.plans.pageIntro" : "people.page.intro")}</p>
+          <p className="page-intro">
+            {plans && (
+              <span className="page-intro-reserve" aria-hidden="true">
+                {t("people.page.intro")}
+              </span>
+            )}
+            <span className="page-intro-current">{t(plans ? "people.plans.pageIntro" : "people.page.intro")}</span>
+          </p>
         </div>
         {!plans && (
           <div className="heading-action">
@@ -142,6 +149,7 @@ function PeopleContent({
             </Button>
           </div>
         )}
+        {plans && <div className="heading-action heading-action-placeholder" aria-hidden="true" />}
       </div>
       <PeopleTabs current={tab} invitations={invitations} onOpen={openTab} />
       {tab === "everyone" && (
