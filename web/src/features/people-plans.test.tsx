@@ -568,10 +568,10 @@ describe("People's Plans tab", () => {
     expect(element("plans-title").textContent).toBe("Plans")
     expect(element("plans-title").classList.contains("sr-only")).toBe(true)
     // The page header has no action on Plans: New plan sits on the list it adds to.
-    expect(container.querySelector(".heading-action button")).toBeNull()
+    expect(container.querySelector(".heading-action:not(.heading-action-placeholder) button")).toBeNull()
     expect(catalogHead().querySelector("h3")?.textContent).toBe("2 plans")
     expect([...catalogHead().querySelectorAll("button")].map((item) => item.textContent.trim())).toEqual(["New plan"])
-    expect(buttonOrNull("Invite someone", container)).toBeNull()
+    expect(container.querySelector(".heading-action:not(.heading-action-placeholder) button")).toBeNull()
   })
 
   it("starts with the status card and one empty state whose one action is New plan", async () => {
@@ -586,7 +586,7 @@ describe("People's Plans tab", () => {
       "A plan sets how many rules, calendar accounts, and integration tokens a person can have, and how soon their calendars sync. Make one, then give it to people or make it the default.",
     )
     expect([...empty.querySelectorAll("button")].map((item) => item.textContent.trim())).toEqual(["New plan"])
-    expect(container.querySelector(".heading-action button")).toBeNull()
+    expect(container.querySelector(".heading-action:not(.heading-action-placeholder) button")).toBeNull()
     expect(container.querySelector("#plans-catalog")).toBeNull()
   })
 

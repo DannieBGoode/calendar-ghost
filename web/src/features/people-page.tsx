@@ -149,7 +149,14 @@ function PeopleContent({
             </Button>
           </div>
         )}
-        {plans && <div className="heading-action heading-action-placeholder" aria-hidden="true" />}
+        {plans && (
+          <div className="heading-action heading-action-placeholder" aria-hidden="true">
+            <Button type="button" tabIndex={-1} disabled>
+              <UserPlus aria-hidden="true" />
+              {t("people.invitations.invite")}
+            </Button>
+          </div>
+        )}
       </div>
       <PeopleTabs current={tab} invitations={invitations} onOpen={openTab} />
       {tab === "everyone" && (
