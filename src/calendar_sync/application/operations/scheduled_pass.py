@@ -96,11 +96,14 @@ class ScheduledPass:
     """When the pass that last listed each enabled rule began. A rule not listed since the start
     counts from its last run, read once, so Sync Now and instant runs never move it."""
 
-    def begin(self) -> tuple[ScheduledRun, ...]:
+    def begin(self, *, notices: dict[UserId, PlanNotice] | None = None) -> tuple[ScheduledRun, ...]:
         """Prepare a pass, then list its runs: the enabled rules due at it of every User who is
         not disabled, taking turns between Users. A rule is due once per window of its Plan's
         interval, and at every pass while it never ran, is failing, was previewed since its last
         run, or awaits reprojection (`scheduled_run_due`)."""
+        # The scheduler supplies a collector owned by this invocation. A cancelled worker may
+        # finish later, but its notices cannot enter a subsequent pass or lifecycle.
+        notices = self._notices if notices is None else notices
         now = self.clock.now()
         today = now.astimezone(UTC).date()
         with self.installation() as installation:
@@ -112,7 +115,7 @@ class ScheduledPass:
             lapses = tuple(installation.users_with_unfinished_lapses())
         for owner in lapses:
             self._finish_lapses(owner)
-        self._settle_plan_holds()
+        self._settle_plan_holds(notices)
         with self.installation() as installation:
             self._due = self._choose_checks(installation.failure_causes(now - RECHECK_INTERVAL))
             rules = installation.scheduled_rules()
@@ -171,13 +174,13 @@ class ScheduledPass:
         _record_success(services.health, rule, floor if listed else None, result.run_id)
         return True
 
-    def _settle_plan_holds(self) -> None:
+    def _settle_plan_holds(self, notices: dict[UserId, PlanNotice]) -> None:
         if self.plan_holds is None:
             return
         try:
             with self.installation() as installation:
                 standings = installation.plan_standings()
-            self._notices.update(self.plan_holds.settle(standings))
+            notices.update(self.plan_holds.settle(standings))
         except Exception as error:
             # Optional Plan reads never stop synchronization, and stored content stays private.
             logger.error(

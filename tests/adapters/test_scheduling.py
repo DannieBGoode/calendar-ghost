@@ -1607,7 +1607,9 @@ class PlanMailPass:
         self.listings = 0
         self.runs = 0
 
-    def begin(self):
+    def begin(self, *, notices=None):
+        if notices is not None:
+            notices.update(self.plan_notices_due())
         self.listings += 1
         return (ScheduledRun(ScheduledRule(USER, rule(), None), False),)
 
@@ -1762,7 +1764,7 @@ def test_cancel_before_mail_task_starts_can_restart():
     scheduler = SyncScheduler(planned)
 
     async def scenario():
-        scheduler._mail.queue()
+        scheduler._mail.queue(planned.plan_notices_due())
         await scheduler._mail.stop()
         assert planned.sent == []
         assert scheduler._mail._task is None
@@ -1819,3 +1821,111 @@ def test_failed_plan_delivery_does_not_stop_next_notice_or_rules(caplog):
     asyncio.run(scenario())
     assert "OSError" in caplog.text
     assert "private credentials" not in caplog.text
+
+
+def _notice_publication_world(*, fail_listing=False, block_settlement=False):
+    from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
+
+    units = memory_units()
+    old = PlanNotice(PlanNoticeKind.GRACE_STARTED, 2, 1, 1, FixedClock().now())
+    sent = []
+
+    class Settlement:
+        pending = ((USER, old),)
+        started = Event()
+        release = Event()
+
+        def settle(self, standings):
+            pending, self.pending = self.pending, ()
+            if block_settlement and pending:
+                self.started.set()
+                assert self.release.wait(5)
+            return pending
+
+    class Listing(InMemoryInstallationUnitOfWork):
+        count = 0
+
+        def scheduled_rules(self):
+            type(self).count += 1
+            if fail_listing and type(self).count == 1:
+                raise RuntimeError("listing unavailable")
+            return super().scheduled_rules()
+
+    class Notices:
+        def plan_changed(self, notice):
+            sent.append(notice)
+
+    settlement = Settlement()
+    services = ScheduledServices(
+        cast(SyncRuns, RecordingExecuteRule([])),
+        cast(RunHealth, RecordingHealth()),
+        plan_notices=Notices(),
+    )
+    scheduled = ScheduledPass(
+        lambda: Listing(units.database), lambda owner: services, FixedClock(), plan_holds=settlement
+    )
+    scheduler = SyncScheduler(scheduled, concurrency=1)
+    return scheduler, settlement, Listing, sent, old
+
+
+def test_cancelled_lifecycle_discards_notice_retained_after_listing_failure():
+    scheduler, settlement, listing, sent, old = _notice_publication_world(fail_listing=True)
+    new = replace(old, held=2)
+
+    async def scenario():
+        first = asyncio.create_task(scheduler.run_forever())
+        await _until(lambda: listing.count == 1 and scheduler.progress().next_pass_at is not None)
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        restarted = asyncio.create_task(scheduler.run_forever())
+        try:
+            await _until(lambda: listing.count == 2)
+            await _until(lambda: scheduler.progress().last_completed_at is not None)
+            await _until(lambda: scheduler._mail._task is None)
+            assert sent == []
+            settlement.pending = ((USER, new),)
+            await scheduler.run_once()
+            await _until(lambda: len(sent) == 1)
+            assert sent == [new]
+        finally:
+            restarted.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await restarted
+
+    asyncio.run(scenario())
+
+
+def test_cancelled_lifecycle_discards_late_notice_from_blocked_begin():
+    scheduler, settlement, listing, sent, old = _notice_publication_world(block_settlement=True)
+    new = replace(old, held=2)
+
+    async def scenario():
+        first = asyncio.create_task(scheduler.run_forever())
+        try:
+            await _until(settlement.started.is_set)
+            first.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(first, 2)
+            assert not settlement.release.is_set()
+            settlement.release.set()
+            await _until(lambda: listing.count == 1)
+            restarted = asyncio.create_task(scheduler.run_forever())
+            try:
+                await _until(lambda: listing.count == 2)
+                await _until(lambda: scheduler.progress().last_completed_at is not None)
+                await _until(lambda: scheduler._mail._task is None)
+                assert sent == []
+                settlement.pending = ((USER, new),)
+                await scheduler.run_once()
+                await _until(lambda: len(sent) == 1)
+                assert sent == [new]
+            finally:
+                restarted.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await restarted
+        finally:
+            settlement.release.set()
+            first.cancel()
+
+    asyncio.run(scenario())

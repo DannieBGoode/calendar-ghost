@@ -66,10 +66,10 @@ class _PlanMail:
     def open(self) -> None:
         self._closed = False
 
-    def queue(self) -> None:
+    def queue(self, notices: Collection[tuple[UserId, PlanNotice]]) -> None:
         if self._closed:
             return
-        self._pending.update(self._pass.plan_notices_due())
+        self._pending.update(notices)
         if self._pending and self._task is None:
             self._task = asyncio.create_task(self._send())
 
@@ -174,8 +174,10 @@ class SyncScheduler:
     async def _run_pass(self) -> frozenset[str]:
         """Runs each rule the pass lists once; returns the ids of the rules it listed."""
         # In a worker thread: finishing a lapse may wait for a rule's lock.
-        runs = await self._threads.run(self._pass.begin)
-        self._mail.queue()
+        notices: dict[UserId, PlanNotice] = {}
+        runs = await self._threads.run(partial(self._pass.begin, notices=notices))
+        # Only a successful, uncancelled listing hands its notices to this lifecycle's worker.
+        self._mail.queue(tuple(notices.items()))
         # Different rules run side by side, so one waiting on a slow provider does not hold up the
         # rest; the same rule never does, because each run holds that rule's lock.
         slots = asyncio.Semaphore(self._concurrency)
