@@ -87,11 +87,11 @@
 
 ### Final review and delivery
 
-- [ ] Review the whole branch with a fresh reviewer; run one fix wave with regression tests for findings. Record decisions and evidence in the ledger.
-- [ ] Run each backend gate separately and record its real exit code: `.venv/bin/ruff format --check .`, `.venv/bin/ruff check .`, `.venv/bin/mypy`, `.venv/bin/lint-imports`, `.venv/bin/pytest --cov --cov-report=term-missing --cov-fail-under=80`.
-- [ ] In `web/`, run each separately: `pnpm audit --audit-level=high`, `pnpm run api:check`, `pnpm run typecheck`, `pnpm run lint`, `pnpm run knip`, `pnpm run doctor`, `pnpm run test`, `pnpm run build`. Do not stage a SHA-only bundle rebuild.
+- [x] Review the whole branch with a fresh reviewer; run one fix wave with regression tests for findings. Record decisions and evidence in the ledger.
+- [x] Run each backend gate separately and record its real exit code: `.venv/bin/ruff format --check .`, `.venv/bin/ruff check .`, `.venv/bin/mypy`, `.venv/bin/lint-imports`, `.venv/bin/pytest --cov --cov-report=term-missing --cov-fail-under=80`.
+- [x] In `web/`, run each separately: `pnpm audit --audit-level=high`, `pnpm run api:check`, `pnpm run typecheck`, `pnpm run lint`, `pnpm run knip`, `pnpm run doctor`, `pnpm run test`, `pnpm run build`. Do not stage a SHA-only bundle rebuild.
 - [ ] Run `gitleaks git .` with CI's 8.30.1 version. Run `docker compose build` or verify the supported-architecture image CI job. Report any gate that cannot run.
-- [ ] Obtain the requested outside gstack `/codex` review via `codex exec`, using `git diff origin/main...HEAD` excluding compiled static assets, `web/openapi.json`, and `web/src/lib/api-schema.ts`. Discover/read that skill before use; if missing, report the missing workflow. Fix each P1 and P2 test-first and rerun affected gates.
+- [x] Obtain the requested outside gstack `/codex` review via `codex exec`, using `git diff origin/main...HEAD` excluding compiled static assets, `web/openapi.json`, and `web/src/lib/api-schema.ts`. Discover/read that skill before use; if missing, report the missing workflow. Fix each P1 and P2 test-first and rerun affected gates.
 - [ ] Check diff scope, use `.github/PULL_REQUEST_TEMPLATE.md`, push this branch, and open PR 1 against `main`. Watch CI to completion. Verify review comments, fix valid findings test-first, push, and reply on each thread with its fixing commit.
 - [ ] Do not start PR 2 until PR 1 has landed; fetch `origin/main` again before planning its hold engine and recheck migration/ADR numbers.
 
@@ -103,3 +103,20 @@ Claude reviewed the plan against the spec and repository through the local CLI w
 - Accepted: account-scoped authorization coverage to protect the separate lapse path.
 - Deferred optional simplification: removing the early snapshot guard. Preserve the narrow two-guard correction for this PR and keep its regression; no extra refactor is needed.
 - The owner approved implementation after the Claude corrections on 2026-10-20.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+| --- | --- | --- | --- | --- | --- |
+| Task reviews | Approved subagent workflow | Spec and task quality | 2 | CLEAR | No findings |
+| Whole-branch review | Approved subagent workflow | Cross-task correctness and tests | 1 | CLEAR | No findings |
+| Claude review | Ship adversarial pass | Recovery and lock-order failures | 1 | CLEAR | No actionable findings; tests reviewed in summary mode |
+| Codex review | `codex exec` | Independent filtered branch review | 1 | PASS | Zero P1 and P2 findings |
+
+**CODEX:** Current-state recovery and cursor lock order are correct; regression assertions inspected.
+
+**CROSS-MODEL:** Claude, the task reviewers, the whole-branch reviewer, and Codex found no actionable defect.
+
+**VERDICT:** Code reviews and local backend/frontend gates cleared. Backend: 3,735 tests, 97.10% coverage. Frontend: 1,469 tests. Secret scan and supported image CI results are recorded in the execution ledger and PR.
+
+NO UNRESOLVED DECISIONS

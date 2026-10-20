@@ -425,7 +425,7 @@ no longer accepts this Google account's permission". You removed Calendar Ghost'
 Google account, changed something Google treats as ending the grant, or the grant expired.
 
 **What to do.** Choose **Reauthorize account** in **Settings → Connections**, for the account it
-names. Every rule the lapse stopped restarts on its own, with no preview. If it happens again about
+names. Every rule the lapse alone stopped restarts on its own, with no preview. If it happens again about
 a week after each reauthorization, tell your administrator: the installation's Google app is
 probably in Testing mode ([Google accounts stop working 7 days after
 connecting](#google-accounts-stop-working-7-days-after-connecting)).
@@ -473,7 +473,7 @@ password was reset, your sign-in now needs another step such as multifactor auth
 grant went unused for 90 days.
 
 **What to do.** Choose **Reauthorize account** in **Settings → Connections**, for the account it
-names. Every rule the lapse stopped restarts on its own, with no preview. With a work or school
+names. Every rule the lapse alone stopped restarts on its own, with no preview. With a work or school
 account, your organization may require its administrator to approve applications: if Microsoft
 says the application needs approval, ask your organization's IT administrator to grant consent to
 it, then reauthorize.
