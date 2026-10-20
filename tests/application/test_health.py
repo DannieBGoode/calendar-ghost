@@ -23,7 +23,7 @@ from calendar_sync.domain.incidents import (
     IncidentReport,
     IncidentResolution,
 )
-from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 from calendar_sync.domain.providers import ProviderFailureKind
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, rule
@@ -405,6 +405,138 @@ def test_a_permanent_failure_stops_its_rule_for_a_preview() -> None:
 
     assert not unit_of_work.state.rules[RULE].awaiting_reauthorization
     assert unit_of_work.state.lapsed == {}
+
+
+@pytest.mark.parametrize("kind", INTERVENTION)
+@pytest.mark.parametrize("snapshot_stopped", [False, True], ids=["enabled", "lapse-stopped"])
+def test_intervention_clears_a_lapse_stop_before_reauthorization(
+    kind: ProviderFailureKind, snapshot_stopped: bool
+) -> None:
+    unit_of_work = memory_units()
+    stopped = rule().degrade(awaiting_reauthorization=True)
+    unit_of_work.state.rules[RULE] = stopped
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    unit_of_work.state.lapsed[ACCOUNT] = NOW - timedelta(minutes=1)
+    records, incidents, notifications = Records(), Incidents(), Notifications()
+    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), RuleLocks(), notifications)
+    failure = replace(_failure(kind), account_id=None if kind in AUTHORIZATION else ACCOUNT)
+
+    health.record_failure(stopped if snapshot_stopped else rule(), failure)
+
+    current = unit_of_work.state.rules[RULE]
+    assert current.state is SyncRuleState.DEGRADED
+    assert current.awaiting_reauthorization is False
+    assert current.counts_toward_plan is False
+    assert len(incidents.reports) == 1
+    assert (incidents.reports[0].key, incidents.reports[0].category) == (
+        "provider:rule-1",
+        kind.incident_category,
+    )
+    assert notifications.opened == [(incidents.reports[0], NOW)]
+
+    assert health.lapses.restored(ACCOUNT, accepted_at=NOW) == 0
+
+    assert unit_of_work.state.lapsed == {}
+    with unit_of_work() as uow:
+        assert uow.accounts.authorized(current.source.connected_account_id)
+        assert uow.accounts.authorized(current.destination.connected_account_id)
+    assert unit_of_work.state.rules[RULE] == current
+
+
+@pytest.mark.parametrize("kind", TRANSIENT)
+def test_transient_failure_preserves_a_lapse_stop(kind: ProviderFailureKind) -> None:
+    unit_of_work = memory_units()
+    stopped = rule().degrade(awaiting_reauthorization=True)
+    unit_of_work.state.rules[RULE] = stopped
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    unit_of_work.state.lapsed[ACCOUNT] = NOW - timedelta(minutes=1)
+    records, incidents, notifications = Records(), Incidents(), Notifications()
+    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), RuleLocks(), notifications)
+
+    for _ in range(PROVIDER_INCIDENT_THRESHOLD - 1):
+        health.record_failure(stopped, _failure(kind))
+        assert unit_of_work.state.rules[RULE] == stopped
+        assert incidents.reports == []
+        assert notifications.opened == []
+
+    health.record_failure(stopped, _failure(kind))
+
+    assert unit_of_work.state.rules[RULE] == stopped
+    assert len(incidents.reports) == 1
+    assert (incidents.reports[0].key, incidents.reports[0].category) == (
+        "provider:rule-1",
+        kind.incident_category,
+    )
+    assert notifications.opened == [(incidents.reports[0], NOW)]
+    assert health.lapses.restored(ACCOUNT, accepted_at=NOW) == 1
+    assert unit_of_work.state.lapsed == {}
+    with unit_of_work() as uow:
+        assert uow.accounts.authorized(stopped.source.connected_account_id)
+        assert uow.accounts.authorized(stopped.destination.connected_account_id)
+    assert unit_of_work.state.rules[RULE] == rule()
+
+
+@pytest.mark.parametrize("kind", AUTHORIZATION)
+def test_account_scoped_authorization_failure_preserves_a_lapse_stop(
+    kind: ProviderFailureKind,
+) -> None:
+    unit_of_work = memory_units()
+    stopped = rule().degrade(awaiting_reauthorization=True)
+    unit_of_work.state.rules[RULE] = stopped
+    unit_of_work.state.lapsed[ACCOUNT] = NOW - timedelta(minutes=1)
+    incidents, notifications = Incidents(), Notifications()
+    health = RuleHealth(
+        unit_of_work, Records(), incidents, FixedClock(), RuleLocks(), notifications
+    )
+
+    health.record_failure(stopped, replace(_failure(kind), account_id=ACCOUNT))
+
+    assert unit_of_work.state.rules[RULE] == stopped
+    assert unit_of_work.state.lapsed == {ACCOUNT: NOW}
+    assert len(incidents.reports) == 1
+    assert (incidents.reports[0].key, incidents.reports[0].rule_id) == (
+        "authorization:work-account",
+        None,
+    )
+    assert incidents.reports[0].category is kind.incident_category
+    assert notifications.opened == [(incidents.reports[0], NOW)]
+
+
+@pytest.mark.parametrize("kind", INTERVENTION)
+@pytest.mark.parametrize(
+    "current",
+    [
+        rule(state=state)
+        for state in (
+            SyncRuleState.DRAFT,
+            SyncRuleState.PREVIEWED,
+            SyncRuleState.PAUSED,
+            SyncRuleState.DEGRADED,
+            SyncRuleState.REMOVING,
+        )
+    ]
+    + [None],
+    ids=["draft", "previewed", "paused", "degraded", "removing", "missing"],
+)
+def test_late_intervention_preserves_a_rule_that_no_longer_self_resumes(
+    kind: ProviderFailureKind, current: SyncRule | None
+) -> None:
+    unit_of_work = memory_units()
+    if current is not None:
+        unit_of_work.state.rules[RULE] = current
+    records, incidents, notifications = Records(), Incidents(), Notifications()
+    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), RuleLocks(), notifications)
+
+    health.record_failure(rule(), _failure(kind))
+
+    assert unit_of_work.state.rules.get(RULE) == current
+    assert records.failures == {RULE: 1}
+    assert len(incidents.reports) == 1
+    assert (incidents.reports[0].key, incidents.reports[0].category) == (
+        "provider:rule-1",
+        kind.incident_category,
+    )
+    assert notifications.opened == [(incidents.reports[0], NOW)]
 
 
 def test_every_incident_report_carries_a_message() -> None:
