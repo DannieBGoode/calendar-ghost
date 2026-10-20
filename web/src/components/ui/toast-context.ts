@@ -19,6 +19,9 @@ export type Toasts = {
   show: (toast: Toast) => void
 }
 
+/** Keeps results and Undo reachable inside an open modal drawer. */
+export const ToastLayerContext = createContext<((layer: HTMLElement | null) => void) | null>(null)
+
 export const ToastContext = createContext<Toasts | null>(null)
 
 /** Shows page-level results; needs a `ToastProvider` above it. */

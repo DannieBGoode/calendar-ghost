@@ -1103,8 +1103,12 @@ describe("A refused removal", () => {
 })
 
 describe("A plan's panel", () => {
-  it("opens beside a narrower catalog at the plan's address from its name, with focus on its title", async () => {
+  it("opens over an unchanged catalog at the plan's address with focus on its title", async () => {
     await renderPlans(testI18n(), { plans: overview({ enabled: true, defaultPlan: "free" }) })
+    const originalHeadings = headings()
+    const originalFacts = facts()
+    const originalSentence = element("plans-status-sentence").textContent
+    const originalNote = element("plans-catalog").querySelector(".plans-catalog-note")?.textContent
     const name = nameLink("family")
     expect(name.getAttribute("href")).toBe("/people/plans/family")
     expect(name.textContent).toBe("Family")
@@ -1127,19 +1131,19 @@ describe("A plan's panel", () => {
     ])
     expect(panel().querySelector("nav.page-tabs")?.getAttribute("aria-label")).toBe("Family")
 
-    // The status card keeps its title, a shorter sentence, and the switch.
+    // Opening a drawer preserves the summary and every table column.
     expect(statusCard().querySelector("h3")?.textContent).toBe("Plans are on")
-    expect(element("plans-status-sentence").textContent).toBe("They limit 5 people. People without a plan get Free.")
-    expect(facts()).toEqual([])
-    // The catalog keeps what picks a plan, and marks the open one.
-    expect(headings()).toEqual(["Plan", "Sync speed", "People"])
+    expect(element("plans-status-sentence").textContent).toBe(originalSentence)
+    expect(facts()).toEqual(originalFacts)
+    // The catalog marks the open Plan without removing comparison data.
+    expect(headings()).toEqual(originalHeadings)
     expect(element("plans-catalog").querySelector(".plans-catalog-note")?.textContent).toBe(
-      "Changes apply as soon as you save. Nobody loses anything they already have.",
+      originalNote,
     )
     expect(planRow("family").getAttribute("data-selected")).toBe("true")
     expect(nameLink("family").getAttribute("aria-current")).toBe("page")
     expect(planRow("free").hasAttribute("data-selected")).toBe(false)
-    expect(container.querySelector("[aria-haspopup='menu']")).toBeNull()
+    expect(container.querySelector("[aria-haspopup='menu']")).not.toBeNull()
     // The panel's footer holds the one primary action, so New plan turns outline.
     expect(button("New plan", catalogHead()).className).not.toContain("bg-primary")
   })
@@ -1183,22 +1187,15 @@ describe("A plan's panel", () => {
     expect(window.scrollY).toBe(0)
   })
 
-  it("fits itself below where it opens, so its footer with Save is in the window, until it sticks under the top bar", async () => {
-    let top = 320
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      const y = this.id === "plan-panel" ? top : 0
-      return { top: y, bottom: y, height: 0, left: 0, right: 0, width: 0, x: 0, y, toJSON: () => ({}) }
-    })
+  it("opens as a modal drawer and locks background scrolling until it closes", async () => {
     await renderPlans(testI18n())
     await click(nameLink("family"))
-    // The stylesheet caps its height at the window below this, and no higher than under the top bar.
-    expect(panel().style.getPropertyValue("--plan-panel-top")).toBe("320px")
-    top = 40
-    await act(async () => {
-      window.dispatchEvent(new Event("scroll"))
-      await new Promise((resolve) => setTimeout(resolve, 40))
-    })
-    expect(panel().style.getPropertyValue("--plan-panel-top")).toBe("40px")
+    const drawer = panel().closest("dialog")!
+    expect(drawer.open).toBe(true)
+    expect(drawer.getAttribute("aria-labelledby")).toBe("plan-panel-title")
+    expect(document.body.style.overflow).toBe("hidden")
+    await click(closeButton())
+    expect(document.body.style.overflow).not.toBe("hidden")
   })
 
   it("closes with Escape from anywhere in it", async () => {
@@ -1221,7 +1218,7 @@ describe("A plan's panel", () => {
   })
 
   it.each([
-    ["on arrival, without moving focus", false],
+    ["on arrival, with focus inside the modal", false],
     ["with focus on its title when the app opens it from elsewhere, as a toast's next step does", true],
   ])("opens at its own address, at the tab it names, %s", async (_how, panelFocus) => {
     page().happyDOM.setURL(`${ORIGIN}/people/plans/free/people`)
@@ -1237,7 +1234,7 @@ describe("A plan's panel", () => {
       ["People22 have it", "page"],
     ])
     expect(panel().contains(assignOf("free"))).toBe(true)
-    expect(document.activeElement === panelTitle()).toBe(panelFocus)
+    expect(document.activeElement).toBe(panelTitle())
     expect(scrolled.mock.contexts).toEqual(panelFocus ? [panelTitle()] : [])
   })
 
@@ -1643,7 +1640,7 @@ describe("A new plan", () => {
     await click(button("New plan", element("plans-empty")))
     expect(here()).toBe("/people/plans/new")
     expect(element("plans-empty")).not.toBeNull()
-    expect(element("plans-status-sentence").textContent).toBe("Everyone can use everything, with no limits.")
+    expect(element("plans-status-sentence").textContent).toContain("Everyone can use everything, with no limits.")
     expect(document.activeElement).toBe(panelTitle())
     type(field("plan-new-name"), "Free")
     reply("GET /api/v1/plans", jsonResponse(overview({ plans: [first] })))

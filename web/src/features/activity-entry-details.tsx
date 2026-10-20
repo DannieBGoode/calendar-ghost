@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query"
 import { ExternalLink, Repeat } from "lucide-react"
-import { useEffect, useRef, type KeyboardEvent, type RefObject } from "react"
+import { useEffect, useRef, type RefObject } from "react"
 
 import { EventWhen } from "@/components/activity-event"
+import { Drawer } from "@/components/ui/drawer"
 import { DetailToolbar } from "@/components/detail-toolbar"
 import { Button } from "@/components/ui/button"
 import { HappenedLabel, RuleDirection } from "@/features/activity-labels"
@@ -45,9 +46,6 @@ export function ActivityDetail({
   onOlder?: (() => void) | undefined
 }) {
   const { t } = useI18n()
-  const close = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") onClose()
-  }
   const toolbar = (
     <DetailToolbar
       labels={{ close: t("activity.detail.close"), previous: t("activity.detail.newer"), next: t("activity.detail.older") }}
@@ -59,19 +57,23 @@ export function ActivityDetail({
 
   if (!entry) {
     return (
-      <aside className="activity-detail" aria-label={t("activity.detail.label")} onKeyDown={close}>
-        {toolbar}
-        <p className="activity-event-status" role="status">
-          {loading ? t("activity.detail.loading") : t("activity.detail.missing")}
-        </p>
-      </aside>
+      <Drawer onClose={onClose} aria-label={t("activity.detail.label")}>
+        <aside className="activity-detail" aria-label={t("activity.detail.label")}>
+          {toolbar}
+          <p className="activity-event-status" role="status">
+            {loading ? t("activity.detail.loading") : t("activity.detail.missing")}
+          </p>
+        </aside>
+      </Drawer>
     )
   }
   return (
-    <aside className="activity-detail" aria-labelledby="activity-detail-title" onKeyDown={close}>
-      {toolbar}
-      <EntryDetails entry={entry} context={context} focusRef={focusRef} onOpenRule={onOpenRule} />
-    </aside>
+    <Drawer onClose={onClose} aria-labelledby="activity-detail-title">
+      <aside className="activity-detail" aria-labelledby="activity-detail-title">
+        {toolbar}
+        <EntryDetails entry={entry} context={context} focusRef={focusRef} onOpenRule={onOpenRule} />
+      </aside>
+    </Drawer>
   )
 }
 
@@ -102,31 +104,34 @@ function EntryDetails({
   const comparison = comparisonKey(entry)
   return (
     <>
-      <EntryHeading entry={entry} names={names} copy={copy} headingRef={headingRef} onOpenRule={onOpenRule} />
-      <dl className="activity-detail-facts">
-        <div>
-          <dt>{t("activity.detail.recorded")}</dt>
-          <dd>{formatRunTime(i18n, entry.occurred_at)}</dd>
-        </div>
-        <div>
-          <dt>{t("activity.detail.rule")}</dt>
-          <dd><RuleDirection ruleId={entry.rule_id} context={context} /></dd>
-        </div>
-        {why && (
+      <EntryHeading entry={entry} names={names} headingRef={headingRef} />
+      <div className="activity-detail-body" key={entry.id}>
+        <EntryGuidance entry={entry} names={names} copy={copy} onOpenRule={onOpenRule} />
+        <dl className="activity-detail-facts">
           <div>
-            <dt>{t("activity.detail.checkedBecause")}</dt>
-            <dd>{named(i18n, why, names)}</dd>
+            <dt>{t("activity.detail.recorded")}</dt>
+            <dd>{formatRunTime(i18n, entry.occurred_at)}</dd>
           </div>
+          <div>
+            <dt>{t("activity.detail.rule")}</dt>
+            <dd><RuleDirection ruleId={entry.rule_id} context={context} /></dd>
+          </div>
+          {why && (
+            <div>
+              <dt>{t("activity.detail.checkedBecause")}</dt>
+              <dd>{named(i18n, why, names)}</dd>
+            </div>
+          )}
+        </dl>
+        {comparison && <p className="activity-comparison">{named(i18n, comparison, names)}</p>}
+        {entry.changed_fields?.length ? <SourceChangeDetails entry={entry} names={names} /> : null}
+        {inspection === "event" ? (
+          <ActivityEventDetails entry={entry} />
+        ) : (
+          entry.source_event_id && <p className="activity-event-status">{t(REMOVED_RULE_LOOKUP)}</p>
         )}
-      </dl>
-      {comparison && <p className="activity-comparison">{named(i18n, comparison, names)}</p>}
-      {entry.changed_fields?.length ? <SourceChangeDetails entry={entry} names={names} /> : null}
-      {inspection === "event" ? (
-        <ActivityEventDetails entry={entry} />
-      ) : (
-        entry.source_event_id && <p className="activity-event-status">{t(REMOVED_RULE_LOOKUP)}</p>
-      )}
-      <EntryDiagnostics entry={entry} />
+        <EntryDiagnostics entry={entry} />
+      </div>
     </>
   )
 }
@@ -134,20 +139,14 @@ function EntryDetails({
 function EntryHeading({
   entry,
   names,
-  copy,
   headingRef,
-  onOpenRule,
 }: {
   entry: AuditEntry
   names: RuleNames | null
-  copy: ReturnType<typeof describeEntry>
   headingRef: RefObject<HTMLHeadingElement | null>
-  onOpenRule: OpenRule
 }) {
   const i18n = useI18n()
-  const { t } = i18n
   const cell = eventCell(i18n, entry, names)
-  const exists = names !== null
   return (
     <div className="activity-detail-heading">
       {/* The event is what people recognise, so it leads; what happened follows. */}
@@ -156,6 +155,21 @@ function EntryHeading({
       </h2>
       {cell.state === "event" && <EventWhen cell={cell} />}
       <HappenedLabel entry={entry} names={names} />
+    </div>
+  )
+}
+
+/** Explanation and next steps scroll below the record's fixed identity. */
+function EntryGuidance({ entry, names, copy, onOpenRule }: {
+  entry: AuditEntry
+  names: RuleNames | null
+  copy: ReturnType<typeof describeEntry>
+  onOpenRule: OpenRule
+}) {
+  const { t } = useI18n()
+  const exists = names !== null
+  return (
+    <>
       {copy.explanation && <p className="activity-explanation">{copy.explanation}</p>}
       {copy.next && exists && (
         <p className="activity-next">
@@ -167,7 +181,7 @@ function EntryHeading({
           {t("activity.detail.openRule")}
         </Button>
       )}
-    </div>
+    </>
   )
 }
 

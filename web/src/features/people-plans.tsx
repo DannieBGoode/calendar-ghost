@@ -31,7 +31,7 @@ type PlansContext = {
 /**
  * People's Plans tab: the status card with the one switch first, then the catalog of Plans, with
  * New plan in its head, or, with no Plan yet, one empty state whose one action is New plan; and
- * beside them, at its own address, a Plan's side panel. It shows only while People does, so never
+ * over them, at its own address, a Plan's drawer. It shows only while People does, so never
  * under Only me, where the only person administers and no Plan limits an administrator. Plans are
  * read only once it opens.
  */
@@ -107,8 +107,8 @@ function useFocusReturn({ focusReturn, focusReturned }: PlanWorkControls) {
 
 /**
  * The tab once Plans are read: the status card, then the catalog or the empty state, and, while
- * open, a Plan's side panel beside them, which then holds the one primary action, so New plan
- * turns outline. On a narrow tab the panel takes their place.
+ * open, a Plan's drawer over them, which holds the one primary action, so New plan
+ * turns outline. On a narrow screen the drawer fills the viewport.
  */
 function PlansContent({ overview, commands, ...context }: PlansContext & { overview: PlansOverview; commands: PlanCommands }) {
   const work = usePlanWork(commands, context.onOpenPlan, context.panelFocus)
@@ -123,7 +123,6 @@ function PlansContent({ overview, commands, ...context }: PlansContext & { overv
         <PlansStatus
           overview={overview}
           commands={commands}
-          compact={panel !== null}
           onChange={onChange}
           onShowPeople={context.onShowPeople}
         />

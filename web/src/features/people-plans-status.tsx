@@ -9,7 +9,7 @@ import { rich } from "@/i18n/rich"
 import type { PlansOverview } from "@/lib/api"
 import { isPlainLeftClick } from "@/lib/navigation"
 import { peoplePath, type PeopleFilter } from "@/lib/people-query"
-import { compactStatusSentence, statusFacts, statusSentence, switchedBy, type PlansFact } from "@/lib/plans-catalog"
+import { statusFacts, statusSentence, switchedBy, type PlansFact } from "@/lib/plans-catalog"
 import type { PlanCommands } from "@/lib/use-plans"
 
 /** Opens Everyone showing only the people a filter names, such as who is over a limit. */
@@ -19,32 +19,28 @@ export type ShowPeople = (filter: PeopleFilter) => void
  * The Plans tab's status card, first: whether Plans are on, one sentence on what they do now or,
  * while off, would do, and the switch, which applies at once and keeps the default. While its change
  * is on its way, the switch keeps focus and shows the state asked for; a refusal shows under it and
- * takes focus. Then, once a Plan exists, the facts. While a Plan's panel is open beside it, the
- * card is `compact`: its title, a shorter sentence, and the switch.
+ * takes focus. Then, once a Plan exists, the facts. Opening a drawer leaves this card unchanged.
  */
 export function PlansStatus({
   overview,
   commands,
-  compact,
   onChange,
   onShowPeople,
 }: {
   overview: PlansOverview
   commands: PlanCommands
-  compact: boolean
   onChange: ChangeSetting
   onShowPeople: ShowPeople
 }) {
   const i18n = useI18n()
   const { t } = i18n
-  const sentence = compact ? compactStatusSentence(i18n, overview) : statusSentence(i18n, overview)
+  const sentence = statusSentence(i18n, overview)
   return (
     <section
       id="plans-status"
       className="page-card plans-status"
       aria-labelledby="plans-status-title"
       data-state={overview.enabled ? "on" : "off"}
-      data-compact={compact || undefined}
     >
       <div className="plans-status-main">
         <div className="plans-status-text">
@@ -53,7 +49,7 @@ export function PlansStatus({
         </div>
         <PlansSwitch overview={overview} commands={commands} onChange={onChange} />
       </div>
-      {!compact && <PlansFacts facts={statusFacts(i18n, overview)} onShowPeople={onShowPeople} />}
+      <PlansFacts facts={statusFacts(i18n, overview)} onShowPeople={onShowPeople} />
     </section>
   )
 }

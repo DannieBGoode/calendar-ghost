@@ -91,7 +91,7 @@ describe("Data tables", () => {
 
   it("keeps a Plan's people and its over-limit chip on one line while the catalog is a table", () => {
     expect(
-      declarations('.plans-table:not([data-compact="true"]) .plan-people', "@container plans-catalog (min-width: 56rem)").get("flex-wrap"),
+      declarations('.plans-table .plan-people', "@container plans-catalog (min-width: 56rem)").get("flex-wrap"),
     ).toBe("nowrap")
     expect(stylesheet).toContain("@container plans-catalog (max-width: 56rem)")
   })
@@ -142,9 +142,13 @@ describe("Popovers", () => {
   })
 })
 
-describe("Side panels", () => {
-  it("cap a Plan's panel at the window below where it starts, so its footer with Save is in view", () => {
-    expect(declarations(".plan-panel").get("max-height")).toContain("var(--plan-panel-top")
+describe("Detail drawers", () => {
+  it("fills the viewport and overlays the page without resizing its tables", () => {
+    expect(declarations(".detail-drawer").get("position")).toBe("fixed")
+    expect(declarations(".detail-drawer").get("height")).toBe("100dvh")
+    expect(declarations(".detail-drawer").get("width")).toBe("min(40rem, 100%)")
+    expect(stylesheet).not.toContain('.plans-layout[data-panel="true"]')
+    expect(stylesheet).not.toContain('.activity-layout[data-detail="true"]')
   })
 })
 

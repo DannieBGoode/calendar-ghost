@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import { testI18n } from "@/i18n/testing"
 import type { PeoplePage, PersonRow, PlanSummary, PlansOverview } from "@/lib/api"
 import {
-  compactStatusSentence,
   countCell,
   makeDefaultHint,
   overPeople,
@@ -132,23 +131,6 @@ describe("statusSentence", () => {
     )
     expect(statusSentence(i18n, overview({ enabled: false, defaultPlan: null, plans: [] }))).toBe(
       "Everyone can use everything, with no limits. Turning plans on adds a plan named <strong>No limits</strong> as the default, so nobody is limited until you give someone a smaller plan.",
-    )
-  })
-})
-
-describe("compactStatusSentence", () => {
-  it("says in fewer words whom Plans limit, and what everyone else gets, beside an open panel", () => {
-    expect(compactStatusSentence(i18n, overview())).toBe(
-      "They limit <strong>2 people</strong>. People without a plan get <strong>No limits</strong>.",
-    )
-    expect(compactStatusSentence(i18n, overview({ plans: [noLimits] }))).toBe(
-      "They limit nobody. People without a plan get <strong>No limits</strong>.",
-    )
-    expect(compactStatusSentence(i18n, overview({ enabled: false }))).toBe(
-      "Everyone can use everything. Turning plans on limits <strong>2 people</strong> right away, and 1 of them has more than their plan allows.",
-    )
-    expect(compactStatusSentence(i18n, overview({ enabled: false, defaultPlan: null, plans: [] }))).toBe(
-      "Everyone can use everything, with no limits.",
     )
   })
 })
