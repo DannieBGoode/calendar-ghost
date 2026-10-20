@@ -117,6 +117,6 @@ Claude reviewed the plan against the spec and repository through the local CLI w
 
 **CROSS-MODEL:** Claude, the task reviewers, the whole-branch reviewer, and Codex found no actionable defect.
 
-**VERDICT:** Code reviews and local backend/frontend gates cleared. Backend: 3,735 tests, 97.10% coverage. Frontend: 1,469 tests. Secret scan and supported image CI results are recorded in the execution ledger and PR.
+**VERDICT:** Code reviews and local backend/frontend gates cleared. Backend: 3,735 tests, 97.10% coverage. Frontend: 1,469 tests. Delivery checks are tracked in the execution ledger and PR.
 
 NO UNRESOLVED DECISIONS
