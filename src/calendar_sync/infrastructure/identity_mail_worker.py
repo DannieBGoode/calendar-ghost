@@ -1,6 +1,7 @@
 """One bounded, volatile identity email sender, independent of synchronization."""
 
 import asyncio
+import logging
 import threading
 from collections import OrderedDict, deque
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -15,6 +16,8 @@ from calendar_sync.application.identity.identity_email import (
 )
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import UserId
+
+logger = logging.getLogger(__name__)
 
 
 class IdentityMailWorker:
@@ -119,7 +122,8 @@ class IdentityMailWorker:
                     if self._running:
                         accepted = self._delivery.complete(prepared)
         except Exception:
-            # No recipient, credentials, or SMTP exception escapes into diagnostics.
+            # Keep diagnostics independent of recipients, credentials, and exception text.
+            logger.warning("Identity email test failed")
             accepted = False
         with self._lock:
             if self._running:

@@ -1,6 +1,7 @@
 """A bounded identity sender survives cancellation without late readiness commits."""
 
 import asyncio
+import logging
 import threading
 from collections.abc import Callable
 from contextlib import suppress
@@ -101,7 +102,9 @@ def test_test_queue_capacity_and_duplicate_actor(tmp_path: Path) -> None:
     asyncio.run(run())
 
 
-def test_slow_mail_does_not_block_api_or_other_tasks(tmp_path: Path) -> None:
+def test_slow_mail_does_not_block_api_or_other_tasks(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     async def run() -> None:
         worker, tests, sender = worker_services(tmp_path)
         task = asyncio.create_task(worker.run_forever())
@@ -119,9 +122,12 @@ def test_slow_mail_does_not_block_api_or_other_tasks(tmp_path: Path) -> None:
         await stop(worker, task)
 
     asyncio.run(run())
+    assert not caplog.records
 
 
-def test_shutdown_during_send_never_records_late_success(tmp_path: Path) -> None:
+def test_shutdown_during_send_never_records_late_success(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     async def run() -> None:
         worker, tests, sender = worker_services(tmp_path)
         task = asyncio.create_task(worker.run_forever())
@@ -134,6 +140,7 @@ def test_shutdown_during_send_never_records_late_success(tmp_path: Path) -> None
         assert tests.tested_at("current") is None
 
     asyncio.run(run())
+    assert not caplog.records
 
 
 def test_restart_drops_pending_without_refunding_allowance(tmp_path: Path) -> None:
@@ -186,7 +193,9 @@ def test_restart_drops_pending_without_refunding_allowance(tmp_path: Path) -> No
     asyncio.run(second_lifespan())
 
 
-def test_setup_reset_during_send_stays_unready(tmp_path: Path) -> None:
+def test_setup_reset_during_send_stays_unready(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     async def run() -> None:
         worker, tests, sender = worker_services(tmp_path)
         task = asyncio.create_task(worker.run_forever())
@@ -200,6 +209,7 @@ def test_setup_reset_during_send_stays_unready(tmp_path: Path) -> None:
         await stop(worker, task)
 
     asyncio.run(run())
+    assert not caplog.records
 
 
 def test_transient_failure_preserves_previous_success(tmp_path: Path) -> None:
@@ -243,7 +253,9 @@ def test_send_success_with_failed_storage_stays_unready(tmp_path: Path) -> None:
     asyncio.run(run())
 
 
-def test_status_capacity_expiry_and_hourly_purge(tmp_path: Path) -> None:
+def test_status_capacity_expiry_and_hourly_purge(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     class AdvancingClock:
         at = NOW
 
@@ -293,6 +305,7 @@ def test_status_capacity_expiry_and_hourly_purge(tmp_path: Path) -> None:
         await stop(worker, task)
 
     asyncio.run(run())
+    assert not caplog.records
 
 
 def test_stopping_worker_rejects_overlapping_loop_ownership(tmp_path: Path) -> None:
@@ -314,5 +327,49 @@ def test_stopping_worker_rejects_overlapping_loop_ownership(tmp_path: Path) -> N
                 await stop(worker, second)
             await stop(worker, first)
             sender.release.set()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("phase", ["prepare", "send", "complete"])
+def test_delivery_failures_log_only_a_safe_category(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch, phase: str
+) -> None:
+    secret = "synthetic-password-token smtp.private.example body recipient@example.test"
+
+    def fail(*args: object) -> None:
+        raise RuntimeError(secret)
+
+    async def run() -> None:
+        worker, tests, sender = worker_services(tmp_path)
+        if phase == "prepare":
+            monkeypatch.setattr(DeliverIdentityEmailTest, "prepare", fail)
+        elif phase == "send":
+            monkeypatch.setattr(sender, "send_test", fail)
+        else:
+            monkeypatch.setattr(tests, "record_success", fail)
+        sender.release.set()
+        task = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: worker.running)
+        attempt = tests.admit(FIRST.id, "current", NOW)
+        assert worker.submit(attempt)
+        await checkpoint(lambda: worker.state(FIRST.id) is EmailTestState.FAILED)
+        assert tests.tested_at("current") is None
+        assert sender.recipients == ([FIRST.email] if phase == "complete" else [])
+        await stop(worker, task)
+        assert len(caplog.records) == 1
+        record = caplog.records[0]
+        assert record.name == "calendar_sync.infrastructure.identity_mail_worker"
+        assert record.levelno == logging.WARNING
+        assert record.getMessage() == "Identity email test failed"
+        assert record.args == ()
+        assert record.exc_info is None
+        assert record.exc_text is None
+        assert record.stack_info is None
+        # Inspect every field, including logging arguments and traceback attachments.
+        fields = repr(vars(record))
+        for value in (*secret.split(), str(FIRST.id), FIRST.email, attempt.id, attempt.fingerprint):
+            assert value is not None
+            assert value not in fields
 
     asyncio.run(run())

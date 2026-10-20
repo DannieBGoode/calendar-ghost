@@ -430,6 +430,9 @@ Each administrator may request three tests per rolling hour. One worker and one 
 serve at most ten waiting requests, without retries or a persistent mail outbox. Shutdown,
 restart, queue saturation, or a delivery/storage failure can lose a test; request another after
 checking the settings and respecting the hourly cap. No passwords enter queued work.
+Preparation, SMTP, or readiness-storage exceptions emit the generic warning
+`Identity email test failed`, without identifiers, addresses, settings, exception text, or
+tracebacks. Normal stale eligibility and cancellation emit no failure warning.
 
 ### Migration 35 identity email readiness
 
