@@ -3,7 +3,8 @@
 Status: accepted for planned phase 4 on 2026-10-20 with
 [the design](../superpowers/specs/2026-10-20-open-registration-design.md).
 This is not a description of shipped behavior. The owner approved the revised design for planning;
-implementation still requires each PR's approved plan. The second Claude design review is pending.
+implementation still requires each PR's approved plan. The second Claude design/PR 2 plan review
+completed on 2026-10-20; the owner delegated PR 2 plan review and authorized continued execution.
 
 Amends [ADR 0030](0030-users-administrators-and-registration.md), within the isolation boundary of
 [ADR 0029](0029-isolate-users-in-one-sqlite-database.md) and the optional switches of
@@ -12,8 +13,11 @@ Amends [ADR 0030](0030-users-administrators-and-registration.md), within the iso
 ## Context
 
 The Hosted Service needs people to join without an Invitation and recover their own passwords.
-An unverified address must not grant access, reserve another person's identity, or become a
-password recovery address without proof. Self-hosted installations keep their current default
+For new joins under Open, an unverified address must not grant access, reserve another person's
+identity, or become a recovery address without proof. Existing and Invitation Only emails remain
+trusted recovery addresses under the approved compatibility policy. Until PR 3, direct email
+changes retain that behavior: a wrong address can let its mailbox owner reset the account, so
+recovery docs must make that trust explicit. Self-hosted installations keep their current default
 and operate without email unless their administrator chooses otherwise.
 
 ## Policy approved by the owner
@@ -36,7 +40,7 @@ and operate without email unless their administrator chooses otherwise.
   SMTP with an HTTP LAN origin leaves email recovery and verified email changes unavailable;
   existing email and sign-in access remain. The upgraded first User's initial add-email step
   keeps its direct restricted-session behavior without verification, preventing upgrade lockout.
-- Limit sign-up and email requests per address and per email, without a challenge provider.
+- Limit sign-up and email requests per client network and per email, without a challenge provider.
 - Provide a concrete continuous-backup runbook for the Hosted Service. Keep tools optional on
   self-hosted installations. No billing or mandatory hosted coordinator belongs to this phase.
 
@@ -70,6 +74,11 @@ They were accepted with the revised design; their complete behavior and delivery
 - Use bounded in-memory mail lanes and no persistent plaintext-token outbox. Never expose queue
   fullness or account-dependent worker outcomes in HTTP responses. Document the remaining aggregate
   delivery-latency risk instead of claiming constant-time SMTP privacy.
+- The HTTPS origin rule governs emailed links; administrator hand-delivered resets still complete
+  on HTTP LAN installations. Without a Master Key, administrator reset token/completion limits
+  remain bounded in memory; self-service email recovery is unavailable. The approved global reset
+  allowance can be exhausted by two networks; document this availability risk and the
+  administrator-issued fallback without silently changing the limits.
 - New public writers receive narrow identity ports, never InstallationUnitOfWork. Commit proof,
   policy, credential, state, Invitation, and uniqueness checks with their mutation. Keep mail and
   password hashing outside SQLite locks. Add storage only with the slice that uses it.

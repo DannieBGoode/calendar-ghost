@@ -2,7 +2,8 @@
 
 Status: design approved for planning on 2026-10-20 after the HTTPS decision and the owner's
 "continue" instruction. Each implementation PR still requires its own approved plan. No product
-code is authorized until that plan is reviewed. The second Claude design review is still pending.
+code is authorized until that plan is reviewed. The second Claude review completed on 2026-10-20,
+with clarifications below. The owner delegated PR 2 plan review to Claude and authorized execution.
 
 Builds on [the multi-user delivery order](2026-10-09-multi-user-design.md),
 [ADR 0029](../../adr/0029-isolate-users-in-one-sqlite-database.md),
@@ -157,8 +158,10 @@ verification routes are needed for this exception.
 
 An already active User is never locked out while a change is pending. Removing SMTP does not
 convert a pending change into a direct change; cancel it and explicitly start the applicable
-flow. Previously issued valid reset/email-change proofs may finish without a new SMTP send, over
-HTTPS or the loopback development exception. Public joining also needs Open to be operational.
+flow. Previously issued valid reset/email-change proofs may finish without a new SMTP send.
+The HTTPS or loopback rule governs emailed link issuance, not administrator hand-delivered reset
+completion; administrator recovery remains available on HTTP LAN installations. Public joining
+also needs Open to be operational.
 
 ## Transactional email and readiness
 
@@ -228,6 +231,9 @@ still consume a person's per-email send cap. A delivered proof stays valid on re
 and recovery guide explain the administrator-issued reset fallback. Under Only Me, the operator
 can use the offline recovery command if the sole administrator cannot recover by email. These
 fallbacks are required, not a claim that a per-email limit can distinguish the mailbox owner.
+The installation-wide reset cap can also be exhausted by two networks requesting distinct unknown
+emails. Keep the approved limits and document administrator-issued recovery as the fallback.
+Per-email and global suppression remain residual availability risks.
 
 Apply a bounded in-memory per-client gate before any SQLite write, for both issuance and token
 completion. Cap this gate at 10,000 live network keys with expiration; at capacity refuse new
@@ -508,8 +514,21 @@ TLS issue, proxy ambiguity, direct-Invitation guard, shared recovery budgets, an
 write contention, early unused persistence/screens, oversized activation slice, and missing restore
 support. Only Me explicitly cancels proofs. The proposed ADR separates owner-approved policy from
 builder recommendations. The owner chose HTTPS identity links, the loopback development exception,
-and direct initial add-email for the upgraded first User. A second Claude review was attempted
-but blocked by its session limit; the revision has not received that outside review.
+and direct initial add-email for the upgraded first User. An earlier second review attempt was
+blocked by its session limit.
+
+The second read-only design and PR 2 plan review completed on 2026-10-20. Earlier retries used
+`--bare`, which skips saved OAuth credentials; this was a command-mode error, not missing
+authentication. The corrected review used `--safe-mode`.
+
+Accepted findings: preserve HTTP LAN administrator reset completion; refuse disabled-target
+administrator issuance with 409; keep reset prepare/purge off the event loop with 100 ms storage
+waits; move reset use cases off the shared sign-in throttle; preserve keyless administrator
+recovery with bounded memory limits. Keep the approved global/network limits and document their
+aggregate exhaustion risk instead of adding a /48 policy. Existing email addresses, including
+Invitation Only and pre-PR 3 direct changes, remain trusted recovery addresses as approved;
+document the wrong-address mailbox takeover risk without retroactive verification. These clarify
+approved behavior and delivery order rather than add policy.
 
 Do not adopt the review's suggestion that Open require Plans: it contradicts ADR 0028 and the
 approved independent switches. Do not claim Litestream makes every compaction fail: compatibility
