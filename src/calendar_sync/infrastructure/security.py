@@ -134,3 +134,21 @@ def identity_email_fingerprint(
     ).derive(_master_key_bytes(master_key))
     framed = json.dumps([1, values], ensure_ascii=True, separators=(",", ":")).encode()
     return hmac.new(key, framed, hashlib.sha256).hexdigest()
+
+
+class ResetAdmissionDigests:
+    """Stable reset-only HMAC keys, independent of SMTP settings and other identity purposes."""
+
+    def __init__(self, master_key: str) -> None:
+        self._key = HKDF(
+            algorithm=SHA256(),
+            length=32,
+            salt=None,
+            info=b"calendar-sync password reset admission v1",
+        ).derive(_master_key_bytes(master_key))
+
+    def digest(self, category: str, *values: str) -> str:
+        framed = json.dumps(
+            [1, category, values], ensure_ascii=True, separators=(",", ":")
+        ).encode()
+        return hmac.new(self._key, framed, hashlib.sha256).hexdigest()

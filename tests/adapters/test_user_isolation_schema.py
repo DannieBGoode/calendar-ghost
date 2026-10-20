@@ -13,6 +13,8 @@ from calendar_sync.infrastructure.persistence.migrations import initialize_datab
 INSTALLATION_TABLES = {
     # Identity email readiness proves installation SMTP, independent of any User.
     "identity_email_readiness",
+    # Reset admission is anonymous, with no User or eligibility outcome.
+    "reset_request_attempts",
     "schema_migrations",
     "users",
     "installation_settings",
