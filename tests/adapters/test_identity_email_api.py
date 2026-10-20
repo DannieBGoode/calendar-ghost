@@ -171,11 +171,21 @@ def test_busy_throttle_and_storage_failures_are_safe(tmp_path: Path) -> None:
         first = client.post("/api/v1/identity-email/test")
         assert first.status_code == 202
         assert sender.started.wait(5)
-        for _ in range(2):
+        for _ in range(4):
             busy = client.post("/api/v1/identity-email/test")
             assert busy.status_code == 503
             assert busy.json()["code"] == "identity_email_queue_busy"
             assert "retry-after" not in busy.headers
+        with transaction(tmp_path / "identity.db") as connection:
+            count = connection.execute(
+                "SELECT count(*) FROM identity_email_test_attempts"
+            ).fetchone()
+            assert count[0] == 1
+        sender.release.set()
+        wait_for_state(client, "accepted")
+        for _ in range(2):
+            assert client.post("/api/v1/identity-email/test").status_code == 202
+            wait_for_state(client, "accepted")
         limited = client.post("/api/v1/identity-email/test")
         assert limited.status_code == 429
         assert limited.json()["code"] == "identity_email_test_throttled"

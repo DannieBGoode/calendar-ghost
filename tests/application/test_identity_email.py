@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -15,6 +16,7 @@ from calendar_sync.application.identity.identity_email import (
     IdentityEmailQueueBusy,
     IdentityEmailReason,
     IdentityEmailSetup,
+    IdentityEmailTestThrottled,
     RequestIdentityEmailTest,
     ShowIdentityEmail,
 )
@@ -135,3 +137,37 @@ def test_test_mail_ignores_notification_preference(tmp_path: Path) -> None:
     assert sender.recipients == [FIRST.email]
     assert delivery.complete(prepared)
     assert tests.tested_at("current") == NOW
+
+
+@pytest.mark.parametrize("state", [EmailTestState.QUEUED, EmailTestState.SENDING])
+def test_known_pending_requests_preserve_allowance(tmp_path: Path, state: EmailTestState) -> None:
+    users, tests, queue, clock = services(tmp_path)
+    request = RequestIdentityEmailTest(
+        users, tests, IdentityEmailSetup("current", None), queue, clock
+    )
+    with patch.object(queue, "state", return_value=state):
+        for _ in range(4):
+            with pytest.raises(IdentityEmailQueueBusy):
+                request.execute(FIRST.id)
+    assert not tests.attempts
+    request.execute(FIRST.id)
+    assert len(tests.attempts) == 1
+
+
+@pytest.mark.parametrize("observed", [EmailTestState.IDLE, EmailTestState.ACCEPTED])
+def test_submission_refusal_keeps_admission_charged(
+    tmp_path: Path, observed: EmailTestState
+) -> None:
+    users, tests, queue, clock = services(tmp_path)
+    request = RequestIdentityEmailTest(
+        users, tests, IdentityEmailSetup("current", None), queue, clock
+    )
+    # The queue may fill, or another request may win, after the nonpending precheck.
+    queue.accept = False
+    with patch.object(queue, "state", return_value=observed):
+        for _ in range(3):
+            with pytest.raises(IdentityEmailQueueBusy):
+                request.execute(FIRST.id)
+        with pytest.raises(IdentityEmailTestThrottled):
+            request.execute(FIRST.id)
+    assert len(tests.attempts) == len(queue.tests) == 3

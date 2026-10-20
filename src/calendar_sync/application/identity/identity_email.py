@@ -144,6 +144,8 @@ class RequestIdentityEmailTest:
         require_administrator(self.users, actor)
         if self.setup.fingerprint is None:
             raise IdentityEmailNotConfigured
+        if self.queue.state(actor) in {EmailTestState.QUEUED, EmailTestState.SENDING}:
+            raise IdentityEmailQueueBusy
         test = self.tests.admit(actor, self.setup.fingerprint, self.clock.now())
         if not self.queue.submit(test):
             raise IdentityEmailQueueBusy

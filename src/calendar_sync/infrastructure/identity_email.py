@@ -5,6 +5,7 @@ import re
 import smtplib
 import ssl
 from dataclasses import dataclass, field
+from email.headerregistry import Address
 from email.message import EmailMessage
 from urllib.parse import urlsplit
 
@@ -75,6 +76,8 @@ class IdentitySmtp:
         origin = identity_origin(self.origin)
         if origin is None:
             raise IdentityEmailDeliveryFailed()
+        _single_mailbox(self.sender)
+        _single_mailbox(recipient)
         message = EmailMessage()
         message["Subject"] = "Calendar Ghost: test email"
         message["From"] = self.sender
@@ -89,7 +92,7 @@ class IdentitySmtp:
                 smtp.starttls(context=ssl.create_default_context())
             if self.username:
                 smtp.login(self.username, self.password)
-            smtp.send_message(message)
+            smtp.send_message(message, from_addr=self.sender, to_addrs=[recipient])
 
 
 def _safe_authority(authority: str, host: str) -> bool:
@@ -102,3 +105,12 @@ def _safe_authority(authority: str, host: str) -> bool:
     ):
         return False
     return re.fullmatch(r"[a-zA-Z0-9.-]+(?::[0-9]+)?", authority) is not None
+
+
+def _single_mailbox(value: str) -> None:
+    """Accept a bare mailbox only; headers must never expand the envelope."""
+    if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value):
+        raise IdentityEmailDeliveryFailed()
+    address = Address(addr_spec=value)
+    if not address.username or not address.domain or address.addr_spec != value:
+        raise IdentityEmailDeliveryFailed()

@@ -225,3 +225,65 @@ def test_delivery_failure_exposes_no_provider_detail(
     assert caplog.text == ""
     assert "synthetic-password" not in repr(sender)
     assert "synthetic-user" not in repr(sender)
+
+
+@pytest.mark.parametrize("field", ["sender", "recipient"])
+@pytest.mark.parametrize(
+    "address",
+    [
+        "victim,admin@example.test",
+        "Group:admin@example.test;",
+        "Admin <admin@example.test>",
+        "admin@example.test,other@example.test",
+        "admin..test@example.test",
+        "admin@example.test\r\nBcc:other@example.test",
+    ],
+)
+def test_invalid_identity_mailbox_never_connects(
+    monkeypatch: pytest.MonkeyPatch, field: str, address: str
+) -> None:
+    from unittest.mock import Mock
+
+    from calendar_sync.application.identity.identity_email import IdentityEmailDeliveryFailed
+
+    connection = Mock()
+    monkeypatch.setattr("calendar_sync.infrastructure.identity_email.smtplib.SMTP", connection)
+    sender = IdentitySmtp(
+        "localhost",
+        25,
+        address if field == "sender" else "ghost@example.test",
+        "",
+        "",
+        False,
+        "https://ghost.test",
+    )
+    with pytest.raises(IdentityEmailDeliveryFailed, match=r"^Identity email delivery failed$"):
+        sender.send_test(address if field == "recipient" else "admin@example.test")
+    connection.assert_not_called()
+
+
+def test_identity_mail_uses_one_explicit_envelope_recipient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import smtplib
+    from unittest.mock import Mock
+
+    smtp = smtplib.SMTP()
+    captured = Mock(return_value={})
+    send_message = Mock(wraps=smtp.send_message)
+    monkeypatch.setattr(smtp, "send_message", send_message)
+    monkeypatch.setattr(smtp, "sendmail", captured)
+    monkeypatch.setattr(smtp, "ehlo_or_helo_if_needed", Mock())
+    monkeypatch.setattr(smtp, "quit", Mock(return_value=(221, b"bye")))
+    monkeypatch.setattr(smtp, "close", Mock())
+    monkeypatch.setattr(
+        "calendar_sync.infrastructure.identity_email.smtplib.SMTP", lambda *args, **kwargs: smtp
+    )
+    IdentitySmtp(
+        "localhost", 25, "ghost@example.test", "", "", False, "https://ghost.test"
+    ).send_test("admin@example.test")
+    assert send_message.call_args.kwargs == {
+        "from_addr": "ghost@example.test",
+        "to_addrs": ["admin@example.test"],
+    }
+    assert captured.call_args.args[:2] == ("ghost@example.test", ["admin@example.test"])
