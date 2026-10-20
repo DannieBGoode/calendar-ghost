@@ -430,7 +430,7 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_SMTP_PORT` | No | SMTP port; defaults to `587` |
 | `CALENDAR_SYNC_SMTP_USERNAME` | No | Optional SMTP authentication username |
 | `CALENDAR_SYNC_SMTP_PASSWORD` | No | Optional SMTP authentication password |
-| `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Email notification sender; with the host, each person receives their own incidents by email |
+| `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Email notification sender; with the host, each person receives their own incidents by email. Identity email requires a bare address, such as `ghost@example.com`, without a display name |
 | `CALENDAR_SYNC_SMTP_RECIPIENT` | No | Operator who receives incidents about the installation itself, such as a stalled scheduler |
 | `CALENDAR_SYNC_SMTP_STARTTLS` | No | Enable SMTP STARTTLS; defaults to `true` |
 | `CALENDAR_SYNC_PUBLIC_URL` | No | Address people open Calendar Ghost at, such as `https://calendar.example.com`: an `http` or `https` address at the root of its host, with no path. Incident email then links to each person's next step. Unset sends email without a link. An `https` address that Google and Microsoft reach also turns on [Instant Sync](docs/instant-sync.md) |

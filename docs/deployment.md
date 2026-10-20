@@ -406,8 +406,11 @@ SMTP configuration to the signed-in Installation Administrator's email address. 
 recipient field. This test ignores **Email notifications** and `CALENDAR_SYNC_SMTP_RECIPIENT`;
 incident email retains its existing transport and preferences.
 
-Set `CALENDAR_SYNC_SMTP_HOST` and `CALENDAR_SYNC_SMTP_SENDER`, with optional SMTP credentials,
-and keep `CALENDAR_SYNC_SMTP_STARTTLS=true` for a remote server. Identity email verifies the
+Set `CALENDAR_SYNC_SMTP_HOST` and `CALENDAR_SYNC_SMTP_SENDER`, with optional SMTP credentials.
+For identity email, the sender must be a bare address such as `ghost@example.com`, without a
+display name or address list. A malformed sender can appear configured but fail every test;
+each admitted test still counts toward the hourly limit. Keep `CALENDAR_SYNC_SMTP_STARTTLS=true`
+for a remote server. Identity email verifies the
 server certificate with the system trust store and uses a 10-second socket timeout. Cleartext
 is permitted only when the SMTP host is `localhost` or a literal loopback address, never merely
 because a hostname resolves to one. Set `CALENDAR_SYNC_MASTER_KEY` and
