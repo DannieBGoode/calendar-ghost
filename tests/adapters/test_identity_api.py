@@ -1,13 +1,19 @@
 """Setup, sign-in by email, the add-email step, and a User's own credentials over the Web API."""
 
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+from calendar_sync.application.identity.credentials import CredentialSnapshot
 from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import build_container
+from calendar_sync.bootstrap.container import Container, build_container
+from calendar_sync.infrastructure.clock import SystemClock
+from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
+from calendar_sync.infrastructure.persistence.registration import SqlitePasswordResetLinks
 from calendar_sync.infrastructure.security import hash_password
 from calendar_sync.interfaces.api.app import create_app
 from tests.adapters.test_user_migration import database_at_version
@@ -31,13 +37,21 @@ def test_setup_asks_for_an_email_and_a_password_and_signs_the_administrator_in(
         after = client.get("/api/v1/setup").json()
         again = client.post("/api/v1/setup/admin", json={"email": EMAIL, "password": PASSWORD})
 
-    assert before == {"administrator_configured": False, "password_only_sign_in": False}
+    assert before == {
+        "administrator_configured": False,
+        "password_only_sign_in": False,
+        "password_reset_available": False,
+    }
     assert (refused.status_code, refused.json()["code"]) == (422, "invalid_email")
     assert created.status_code == 200
     assert session["authenticated"] is True
     assert session["user"]["email"] == EMAIL
     assert session["user"]["role"] == "installation_administrator"
-    assert after == {"administrator_configured": True, "password_only_sign_in": False}
+    assert after == {
+        "administrator_configured": True,
+        "password_only_sign_in": False,
+        "password_reset_available": False,
+    }
     assert (again.status_code, again.json()["code"]) == (409, "setup_complete")
 
 
@@ -100,7 +114,11 @@ def test_the_upgraded_administrator_signs_in_by_password_until_they_add_an_email
         by_email = client.post("/api/v1/session", json={"email": EMAIL, "password": PASSWORD})
         after = client.get("/api/v1/setup").json()
 
-    assert setup == {"administrator_configured": True, "password_only_sign_in": True}
+    assert setup == {
+        "administrator_configured": True,
+        "password_only_sign_in": True,
+        "password_reset_available": False,
+    }
     assert signed_in.status_code == 200
     assert session["user"]["email"] is None
     assert (blocked.status_code, blocked.json()["code"]) == (403, "email_required")
@@ -167,3 +185,108 @@ def test_without_smtp_the_installation_sends_no_email(tmp_path: Path) -> None:
         session = client.get("/api/v1/session").json()
 
     assert session["installation_sends_email"] is False
+
+
+@pytest.mark.parametrize("operation", ["email", "password-confirmation", "password-hash"])
+def test_reset_racing_confirmed_credential_change_requires_sign_in_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    database = tmp_path / "test.db"
+    container = build_container(Settings(database))
+    passwords = container.identity.set_own_email.passwords
+    with TestClient(create_app(container), raise_server_exceptions=False) as client:
+        client.post("/api/v1/setup/admin", json={"email": EMAIL, "password": PASSWORD})
+        reset, expected_hash = _prepared_reset(container, database)
+        original_verify = passwords.verify
+        original_hash = passwords.hash
+
+        def verify(password: str, hashed: str) -> bool:
+            matches = original_verify(password, hashed)
+            reset()
+            return matches
+
+        def hash_during_reset(password: str) -> str:
+            reset()
+            return original_hash(password)
+
+        if operation == "password-hash":
+            monkeypatch.setattr(passwords, "hash", hash_during_reset)
+        else:
+            monkeypatch.setattr(passwords, "verify", verify)
+        route, payload = (
+            ("email", {"email": "stale@example.test", "password": PASSWORD})
+            if operation == "email"
+            else (
+                "password",
+                {"current_password": PASSWORD, "new_password": "a stale long password"},
+            )
+        )
+        response = client.put(f"/api/v1/account/{route}", json=payload)
+        session = client.get("/api/v1/session").json()
+
+    user = container.identity.users.list()[0]
+    assert user.email == EMAIL
+    assert container.identity.users.password_hash(user.id) == expected_hash
+    assert session["authenticated"] is False
+    assert response.status_code == 401
+    assert response.json()["code"] == "incorrect_credentials"
+
+
+def _prepared_reset(container: Container, database: Path) -> tuple[Callable[[], None], str]:
+    clock = SystemClock()
+    links = SqlitePasswordResetLinks(database, UuidIdGenerator(), clock)
+    user = container.identity.users.list()[0]
+    link = links.issue(user.id, user.id, clock.now())
+    expected_hash = hash_password("the reset password remains authoritative")
+
+    def reset() -> None:
+        assert links.reset(link.token, expected_hash) == user.id
+
+    return reset, expected_hash
+
+
+def test_reset_racing_the_upgraded_initial_add_email_requires_sign_in_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = tmp_path / "test.db"
+    database_at_version(database, 20)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO installation_admin VALUES (1, ?, '2026-01-01')", (hash_password(PASSWORD),)
+        )
+    container = build_container(Settings(database))
+    with TestClient(create_app(container), raise_server_exceptions=False) as client:
+        client.post("/api/v1/session", json={"password": PASSWORD})
+        reset, expected_hash = _prepared_reset(container, database)
+        credentials = container.identity.set_own_email.credentials
+        original_change = credentials.change_email
+
+        def change_during_reset(expected: CredentialSnapshot, email: str) -> bool:
+            reset()
+            return original_change(expected, email)
+
+        monkeypatch.setattr(credentials, "change_email", change_during_reset)
+        response = client.put("/api/v1/account/email", json={"email": "stale@example.test"})
+        session = client.get("/api/v1/session").json()
+
+    user = container.identity.users.list()[0]
+    assert user.email is None
+    assert container.identity.users.password_hash(user.id) == expected_hash
+    assert session["authenticated"] is False
+    assert response.status_code == 401
+    assert response.json()["code"] == "incorrect_credentials"
+
+
+@pytest.mark.parametrize("route", ["email", "password"])
+def test_wrong_current_password_keeps_the_existing_forbidden_response(
+    tmp_path: Path, route: str
+) -> None:
+    with _client(tmp_path / "test.db") as client:
+        client.post("/api/v1/setup/admin", json={"email": EMAIL, "password": PASSWORD})
+        payload = (
+            {"email": "stale@example.test", "password": "wrong password"}
+            if route == "email"
+            else {"current_password": "wrong password", "new_password": "a new long password"}
+        )
+        response = client.put(f"/api/v1/account/{route}", json=payload)
+    assert (response.status_code, response.json()["code"]) == (403, "incorrect_password")

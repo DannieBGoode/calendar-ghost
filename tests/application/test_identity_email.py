@@ -54,6 +54,9 @@ class Sender:
     def send_test(self, recipient: str) -> None:
         self.recipients.append(recipient)
 
+    def send_reset(self, recipient: str, token: str) -> None:
+        self.recipients.append(recipient)
+
 
 def services(tmp_path: Path) -> tuple[UserDirectory, MemoryIdentityEmailTests, Queue, FixedClock]:
     adapters = build_adapters(Settings(tmp_path / "identity.db"))

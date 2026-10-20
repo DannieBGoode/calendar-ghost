@@ -230,7 +230,7 @@ def test_an_administrator_searches_filters_sorts_and_pages_people(tmp_path: Path
     assert too_many.status_code == 422
 
 
-def test_a_client_trying_unusable_links_is_throttled_on_every_link_route(tmp_path: Path) -> None:
+def test_invitation_and_reset_attempts_have_separate_allowances(tmp_path: Path) -> None:
     forged = {"token": "forged"}
     with _client(tmp_path) as client:
         client.post("/api/v1/setup/admin", json=ADMIN)
@@ -245,9 +245,9 @@ def test_a_client_trying_unusable_links_is_throttled_on_every_link_route(tmp_pat
         ]
 
     assert {failure.json()["usable"] for failure in failures} == {False}
-    assert [response.status_code for response in throttled] == [429, 429, 429, 429]
-    assert {response.json()["code"] for response in throttled} == {"sign_in_throttled"}
-    assert all(int(response.headers["retry-after"]) > 0 for response in throttled)
+    assert [response.status_code for response in throttled] == [429, 429, 200, 410]
+    assert {response.json()["code"] for response in throttled[:2]} == {"sign_in_throttled"}
+    assert all(int(response.headers["retry-after"]) > 0 for response in throttled[:2])
 
 
 def test_an_administrator_cannot_create_a_reset_link_for_themself(tmp_path: Path) -> None:

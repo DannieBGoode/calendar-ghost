@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from calendar_sync.application.shared.errors import ApplicationError
+from calendar_sync.application.shared.errors import ApplicationError, InfrastructureFailure
 
 
 class AdminAlreadyConfigured(ApplicationError):
@@ -51,3 +51,10 @@ class PlanNotFound(ApplicationError):
 
 class PlanKeyTaken(ApplicationError):
     """Another Plan already has this key."""
+
+
+class ResetStorageUnavailable(InfrastructureFailure):
+    """Reset proof storage failed without changing a credential or consuming a proof."""
+
+    def __init__(self) -> None:
+        super().__init__("Password reset is temporarily unavailable")

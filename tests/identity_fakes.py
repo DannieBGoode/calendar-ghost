@@ -6,7 +6,15 @@ from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
-from calendar_sync.application.identity.errors import EmailTaken, PlanKeyTaken, PlanNotFound
+from calendar_sync.application.identity.administration import AdministratorRequired
+from calendar_sync.application.identity.credentials import CredentialSnapshot
+from calendar_sync.application.identity.errors import (
+    EmailTaken,
+    PlanKeyTaken,
+    PlanNotFound,
+    UserDisabled,
+)
+from calendar_sync.application.identity.password_reset import PreparedPasswordReset
 from calendar_sync.application.identity.ports import (
     AssignmentChange,
     IssuedLink,
@@ -18,6 +26,7 @@ from calendar_sync.application.identity.ports import (
     UserQuery,
     UserSort,
 )
+from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import (
     RegistrationPolicy,
     Role,
@@ -54,6 +63,7 @@ def _sort_value(user: User, sort: UserSort) -> object:
 class MemoryUsers:
     users: dict[UserId, User] = field(default_factory=dict)
     hashes: dict[UserId, str] = field(default_factory=dict)
+    revisions: dict[UserId, int] = field(default_factory=dict)
     meanwhile: Callable[[MemoryUsers], object] | None = None
     """Another request's change, landing once just before this directory's next guarded write."""
     default_plan: PlanKey | None = None
@@ -101,6 +111,7 @@ class MemoryUsers:
         self._require_free(user)
         self.users[user.id] = user
         self.hashes[user.id] = password_hash
+        self.revisions[user.id] = 0
 
     def set_email(self, user_id: UserId, email: str) -> None:
         user = self.users.get(user_id)
@@ -109,6 +120,7 @@ class MemoryUsers:
         changed = replace(user, email=email)
         self._require_free(changed)
         self.users[user_id] = changed
+        self.revisions[user_id] += 1
 
     def set_notification_email(self, user_id: UserId, notify_by_email: bool) -> None:
         if user_id in self.users:
@@ -123,6 +135,7 @@ class MemoryUsers:
 
     def set_password_hash(self, user_id: UserId, password_hash: str) -> None:
         self.hashes[user_id] = password_hash
+        self.revisions[user_id] += 1
 
     def record_sign_in(self, user_id: UserId, at: datetime) -> None:
         self.users[user_id] = replace(self.users[user_id], last_sign_in_at=at)
@@ -132,6 +145,8 @@ class MemoryUsers:
 
     def set_state(self, user_id: UserId, state: UserState) -> None:
         self._guarded(user_id, lambda user: replace(user, state=state))
+        if state is UserState.DISABLED and user_id in self.users:
+            self.revisions[user_id] += 1
 
     def delete(self, user_id: UserId) -> None:
         self._guarded(user_id, lambda _user: None)
@@ -322,32 +337,114 @@ class MemoryInvitations:
 
 
 @dataclass
+class _ResetLink:
+    id: str
+    token: str = field(repr=False)
+    issued_at: datetime
+    owner: UserId
+    revision: int
+    expires_at: datetime
+    used_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+    def usable(self, at: datetime) -> bool:
+        return self.used_at is None and self.revoked_at is None and at < self.expires_at
+
+
+@dataclass
 class MemoryResetLinks:
     users: MemoryUsers
-    links: list[_Link] = field(default_factory=list)
+    sessions: MemorySessions
+    clock: Clock
+    links: list[_ResetLink] = field(default_factory=list)
 
     def issue(self, user_id: UserId, created_by: UserId, at: datetime) -> IssuedLink:
-        for earlier in self.links:
-            if earlier.owner == user_id and earlier.usable(at):
-                earlier.revoked_at = at
-        link = _Link(
-            f"reset-{len(self.links) + 1}", f"reset-token-{len(self.links) + 1}", at, user_id
+        self.users._concurrently()
+        actor = self.users.users.get(created_by)
+        if actor is None or not actor.administers or actor.state is not UserState.ACTIVE:
+            raise AdministratorRequired("an active Installation Administrator is required")
+        user = self.users.users.get(user_id)
+        if user is None or user.state is not UserState.ACTIVE:
+            raise UserDisabled("the User is no longer active")
+        self._revoke(user_id, at)
+        return self._insert(user_id, at, link_expiry(at))
+
+    def issue_for_email(self, email: str) -> PreparedPasswordReset | None:
+        self.users._concurrently()
+        at = self.clock.now()
+        user = self.users.by_email(email)
+        if user is None or user.state is not UserState.ACTIVE:
+            return None
+        return PreparedPasswordReset(email, self._insert(user.id, at, at + timedelta(hours=1)))
+
+    def _insert(self, user_id: UserId, at: datetime, expires: datetime) -> IssuedLink:
+        link = _ResetLink(
+            f"reset-{len(self.links) + 1}",
+            f"reset-token-{len(self.links) + 1}",
+            at,
+            user_id,
+            self.users.revisions[user_id],
+            expires,
         )
         self.links.append(link)
-        return IssuedLink(link.id, link.token, link_expiry(at))
+        return IssuedLink(link.id, link.token, expires)
 
     def owner(self, token: str, at: datetime) -> UserId | None:
         link = next((link for link in self.links if link.token == token and link.usable(at)), None)
-        return link.owner if link is not None else None
+        user = self.users.users.get(link.owner) if link is not None else None
+        if user is None or user.state is not UserState.ACTIVE or link is None:
+            return None
+        return user.id if link.revision == self.users.revisions[user.id] else None
 
-    def reset(self, token: str, password_hash: str, at: datetime) -> UserId | None:
+    def reset(self, token: str, password_hash: str) -> UserId | None:
+        self.users._concurrently()
+        at = self.clock.now()
         owner = self.owner(token, at)
         if owner is None:
             return None
         link = next(link for link in self.links if link.token == token)
         link.used_at = at
         self.users.set_password_hash(owner, password_hash)
+        self._revoke(owner, at)
+        self.sessions.end_all(owner)
         return owner
+
+    def _revoke(self, user_id: UserId, at: datetime) -> None:
+        for link in self.links:
+            if link.owner == user_id and link.used_at is None and link.revoked_at is None:
+                link.revoked_at = at
+
+
+@dataclass
+class MemoryCredentialChanges:
+    users: MemoryUsers
+    sessions: MemorySessions
+    clock: Clock
+
+    def current(self, user_id: UserId) -> CredentialSnapshot | None:
+        user = self.users.users.get(user_id)
+        if user is None or user.state is not UserState.ACTIVE:
+            return None
+        return CredentialSnapshot(
+            user_id, self.users.revisions[user_id], self.users.hashes[user_id]
+        )
+
+    def change_password(self, expected: CredentialSnapshot, hashed: str, keep: str | None) -> bool:
+        self.users._concurrently()
+        if self.current(expected.user_id) != expected:
+            return False
+        if keep is not None and self.sessions.user_of(keep) != expected.user_id:
+            return False
+        self.users.set_password_hash(expected.user_id, hashed)
+        self.sessions.end_all(expected.user_id, keep=keep)
+        return True
+
+    def change_email(self, expected: CredentialSnapshot, email: str) -> bool:
+        self.users._concurrently()
+        if self.current(expected.user_id) != expected:
+            return False
+        self.users.set_email(expected.user_id, email)
+        return True
 
 
 @dataclass

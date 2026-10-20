@@ -1,6 +1,7 @@
 """Resolve identity email readiness from installation configuration."""
 
 from dataclasses import dataclass
+from typing import Protocol
 from urllib.parse import urlsplit
 
 from calendar_sync.application.identity.identity_email import (
@@ -15,7 +16,15 @@ from calendar_sync.application.identity.identity_email import (
     RequestIdentityEmailTest,
     ShowIdentityEmail,
 )
+from calendar_sync.application.identity.password_reset import (
+    DeliverPasswordReset,
+    IdentityResetSender,
+    RequestPasswordReset,
+    ResetEmailRequest,
+    SelfServicePasswordResets,
+)
 from calendar_sync.application.identity.ports import UserDirectory
+from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.shared.ports import Clock, IdGenerator
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.domain.access import UserId
@@ -24,8 +33,10 @@ from calendar_sync.infrastructure.identity_email import (
     identity_loopback,
     identity_origin,
 )
+from calendar_sync.infrastructure.identity_front_gate import MemoryIdentityFrontGate
 from calendar_sync.infrastructure.identity_mail_worker import IdentityMailWorker
 from calendar_sync.infrastructure.persistence.identity_email import SqliteIdentityEmailTests
+from calendar_sync.infrastructure.persistence.reset_admission import SqliteResetAdmission
 from calendar_sync.infrastructure.security import identity_email_fingerprint
 
 
@@ -71,17 +82,35 @@ def _reason(settings: Settings) -> IdentityEmailReason | None:
     return None
 
 
+class IdentitySender(IdentityTestSender, IdentityResetSender, Protocol):
+    """The two security-email operations sharing one verified transport."""
+
+
 @dataclass(frozen=True, slots=True)
 class IdentityEmailAdapters:
     setup: IdentityEmailSetup
     tests: IdentityEmailTests
-    sender: IdentityTestSender | None
+    sender: IdentitySender | None
 
 
 @dataclass(frozen=True, slots=True)
 class IdentityEmailServices:
     show: ShowIdentityEmail
     request_test: RequestIdentityEmailTest
+    request_reset: RequestPasswordReset
+
+    @property
+    def configured(self) -> bool:
+        return self.request_reset.setup.fingerprint is not None
+
+
+def build_reset_admission(settings: Settings, clock: Clock) -> ResetAdmission:
+    attempts = (
+        SqliteResetAdmission(settings.database_path, settings.master_key, clock)
+        if settings.master_key
+        else None
+    )
+    return ResetAdmission(MemoryIdentityFrontGate(clock), attempts, clock)
 
 
 def build_identity_email(settings: Settings, ids: IdGenerator) -> IdentityEmailAdapters:
@@ -105,21 +134,32 @@ def build_identity_email(settings: Settings, ids: IdGenerator) -> IdentityEmailA
 
 
 def compose_identity_email(
-    adapters: IdentityEmailAdapters, users: UserDirectory, clock: Clock
+    adapters: IdentityEmailAdapters,
+    users: UserDirectory,
+    clock: Clock,
+    resets: SelfServicePasswordResets,
+    admission: ResetAdmission,
 ) -> tuple[IdentityEmailServices, IdentityMailWorker | None]:
     worker = (
         IdentityMailWorker(
-            DeliverIdentityEmailTest(users, adapters.tests, adapters.setup, adapters.sender, clock),
+            DeliverIdentityEmailTest(users, adapters.tests, adapters.setup, adapters.sender, clock)
+            if adapters.sender is not None
+            else None,
             adapters.tests,
             clock,
+            reset_delivery=DeliverPasswordReset(resets, adapters.setup, adapters.sender)
+            if adapters.sender is not None
+            else None,
+            reset_admission=admission,
         )
-        if adapters.sender is not None
+        if adapters.sender is not None or admission.attempts is not None
         else None
     )
     queue: IdentityEmailQueue = worker if worker is not None else _UnavailableQueue()
     return IdentityEmailServices(
         ShowIdentityEmail(users, adapters.tests, adapters.setup, queue),
         RequestIdentityEmailTest(users, adapters.tests, adapters.setup, queue, clock),
+        RequestPasswordReset(admission, adapters.setup, worker or _UnavailableQueue()),
     ), worker
 
 
@@ -129,3 +169,6 @@ class _UnavailableQueue:
 
     def state(self, _actor: UserId) -> EmailTestState:
         return EmailTestState.IDLE
+
+    def submit_reset(self, _request: ResetEmailRequest) -> bool:
+        return False

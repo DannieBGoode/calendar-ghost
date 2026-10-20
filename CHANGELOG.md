@@ -6,6 +6,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- **Forgot password?** on sign-in lets people request a private, single-use recovery link when
+  secure identity email is configured. Emailed links last one hour; administrator-issued links
+  keep their seven-day lifetime. Reset ends existing sessions and asks for a fresh sign-in.
+  Migration 36 preserves passwords and sessions but revokes older reset links, which an
+  administrator must reissue. See [recovery and upgrade guidance](docs/deployment.md#password-recovery).
 - Administrators can test identity email in **Settings → Administration → Identity email**.
   The test uses secure SMTP and a trusted public address, sends only to the requesting
   administrator, and shows mail-server acceptance separately from inbox delivery. Its last

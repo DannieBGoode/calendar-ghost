@@ -9,9 +9,14 @@ Connected Accounts, which happens outside any unit of work.
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
+from typing import Protocol
 
 import pytest
 
+from calendar_sync.application.identity.credentials import CredentialChanges
+from calendar_sync.application.identity.errors import EmailTaken, UserDisabled
+from calendar_sync.application.identity.password_reset import SelfServicePasswordResets
+from calendar_sync.application.identity.ports import PasswordResetLinks, Sessions, UserDirectory
 from calendar_sync.application.operations.ports import (
     AccountStanding,
     CauseSighting,
@@ -38,7 +43,7 @@ from calendar_sync.application.sync.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.application.sync.watch_ports import PendingRequest, Receipt
-from calendar_sync.domain.access import UserId
+from calendar_sync.domain.access import Role, UserId, UserState
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import (
     AuditAction,
@@ -2556,3 +2561,224 @@ class PersistenceContract:
             uow.commit()
         with harness.installation() as installation:
             assert installation.users_with_unfinished_lapses() == ()
+
+
+# Identity writes use narrow ports, apart from the calendar units of work above.
+@dataclass
+class CredentialPersistenceHarness:
+    users: "UserDirectory"
+    sessions: "Sessions"
+    links: "PasswordResetLinks"
+    public: "SelfServicePasswordResets"
+    changes: "CredentialChanges"
+    clock: "MutableCredentialClock"
+
+
+class MutableCredentialClock(Protocol):
+    moment: datetime
+
+    def now(self) -> datetime: ...
+
+
+class CredentialPersistenceContract:
+    def test_reset_lifetimes_and_resend(self, credentials: CredentialPersistenceHarness) -> None:
+        h = credentials
+        first, second = h.users.list()
+        public = h.public.issue_for_email(second.email or "")
+        sibling = h.public.issue_for_email(second.email or "")
+        assert public is not None
+        assert sibling is not None
+        assert public.link.expires_at == h.clock.now() + HOUR
+        assert h.links.owner(public.link.token, h.clock.now()) == second.id
+        assert h.links.owner(sibling.link.token, h.clock.now()) == second.id
+        admin = h.links.issue(second.id, first.id, h.clock.now())
+        assert admin.expires_at == h.clock.now() + 7 * DAY
+        assert h.links.owner(public.link.token, h.clock.now()) is None
+        later = h.public.issue_for_email(second.email or "")
+        assert later is not None
+        assert h.links.reset(later.link.token, "reset-hash") == second.id
+        for link in (public.link, sibling.link, admin, later.link):
+            assert h.links.owner(link.token, h.clock.now()) is None
+            assert h.links.reset(link.token, "replay") is None
+        assert h.users.password_hash(second.id) == "reset-hash"
+
+    def test_administrator_cannot_issue_for_disabled_user(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        first, second = h.users.list()
+        h.users.set_state(second.id, UserState.DISABLED)
+        with pytest.raises(UserDisabled):
+            h.links.issue(second.id, first.id, h.clock.now())
+        assert h.public.issue_for_email(second.email or "") is None
+        assert h.public.issue_for_email("unknown@example.test") is None
+
+    @pytest.mark.parametrize("change", ["disabled", "deleted", "email", "password", "reenabled"])
+    def test_reset_refuses_disabled_deleted_changed_and_replayed_proofs(
+        self, credentials: CredentialPersistenceHarness, change: str
+    ) -> None:
+        h = credentials
+        first, second = h.users.list()
+        link = h.links.issue(second.id, first.id, h.clock.now())
+        session = h.sessions.start(first.id, "old-hash")
+        assert session is not None
+        if change in ("disabled", "reenabled"):
+            h.users.set_state(second.id, UserState.DISABLED)
+            if change == "reenabled":
+                h.users.set_state(second.id, UserState.ACTIVE)
+        elif change == "deleted":
+            h.users.delete(second.id)
+        elif change == "email":
+            h.users.set_email(second.id, "away@example.test")
+            h.users.set_email(second.id, second.email or "")
+        else:
+            h.users.set_password_hash(second.id, "changed-hash")
+        before = h.users.password_hash(second.id)
+        assert h.links.owner(link.token, h.clock.now()) is None
+        assert h.links.reset(link.token, "forbidden") is None
+        assert h.users.password_hash(second.id) == before
+        assert h.users.password_hash(first.id) == "old-hash"
+        assert h.sessions.user_of(session.token) == first.id
+
+    def test_reset_and_sign_in_serialize_sessions(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        first, second = h.users.list()
+        old = h.sessions.start(second.id, "other-hash")
+        theirs = h.sessions.start(first.id, "old-hash")
+        assert old is not None
+        assert theirs is not None
+        link = h.links.issue(second.id, first.id, h.clock.now())
+        assert h.links.reset(link.token, "new-hash") == second.id
+        assert h.sessions.user_of(old.token) is None
+        assert h.sessions.start(second.id, "other-hash") is None
+        new = h.sessions.start(second.id, "new-hash")
+        assert new is not None
+        assert h.sessions.user_of(new.token) == second.id
+        assert h.sessions.user_of(theirs.token) == first.id
+
+    def test_stale_own_password_and_email_changes_lose_to_reset(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        first, second = h.users.list()
+        expected = h.changes.current(second.id)
+        assert expected is not None
+        link = h.links.issue(second.id, first.id, h.clock.now())
+        assert h.links.reset(link.token, "new-hash") == second.id
+        assert not h.changes.change_password(expected, "stale-hash", None)
+        assert not h.changes.change_email(expected, "stale@example.test")
+        assert h.users.password_hash(second.id) == "new-hash"
+        assert h.users.get(second.id) == second
+
+    def test_credential_failure_keeps_proofs_password_and_sessions(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        first, second = h.users.list()
+        link = h.links.issue(second.id, first.id, h.clock.now())
+        expected = h.changes.current(second.id)
+        foreign = h.sessions.start(first.id, "old-hash")
+        own = h.sessions.start(second.id, "other-hash")
+        assert expected is not None
+        assert foreign is not None
+        assert own is not None
+        assert not h.changes.change_password(expected, "forbidden", foreign.token)
+        with pytest.raises(EmailTaken):
+            h.changes.change_email(expected, first.email or "")
+        assert h.changes.current(second.id) == expected
+        assert h.links.owner(link.token, h.clock.now()) == second.id
+        assert h.sessions.user_of(own.token) == second.id
+
+    def test_own_changes_revoke_proofs_and_preserve_only_the_owned_session(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        first, second = h.users.list()
+        expected = h.changes.current(second.id)
+        kept = h.sessions.start(second.id, "other-hash")
+        old = h.sessions.start(second.id, "other-hash")
+        assert expected is not None
+        assert kept is not None
+        assert old is not None
+        link = h.links.issue(second.id, first.id, h.clock.now())
+        assert h.changes.change_password(expected, "new-hash", kept.token)
+        assert h.sessions.user_of(kept.token) == second.id
+        assert h.sessions.user_of(old.token) is None
+        assert h.links.owner(link.token, h.clock.now()) is None
+        expected = h.changes.current(second.id)
+        assert expected is not None
+        link = h.links.issue(second.id, first.id, h.clock.now())
+        assert h.changes.change_email(expected, "new@example.test")
+        assert h.links.owner(link.token, h.clock.now()) is None
+        assert h.sessions.user_of(kept.token) == second.id
+
+    def test_reset_exact_expiry_changes_nothing(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        _first, second = h.users.list()
+        public = h.public.issue_for_email(second.email or "")
+        assert public is not None
+        session = h.sessions.start(second.id, "other-hash")
+        assert session is not None
+        h.clock.moment = public.link.expires_at
+        assert h.links.reset(public.link.token, "forbidden") is None
+        assert h.users.password_hash(second.id) == "other-hash"
+        assert h.sessions.user_of(session.token) == second.id
+
+    @pytest.mark.parametrize("change", ["demote", "disable"])
+    def test_issuance_rechecks_administrator_permission(
+        self, credentials: CredentialPersistenceHarness, change: str
+    ) -> None:
+        from calendar_sync.application.identity.administration import AdministratorRequired
+
+        h = credentials
+        first, second = h.users.list()
+        h.users.set_role(second.id, Role.INSTALLATION_ADMINISTRATOR)
+        if change == "demote":
+            h.users.set_role(first.id, Role.USER)
+        else:
+            h.users.set_state(first.id, UserState.DISABLED)
+        with pytest.raises(AdministratorRequired):
+            h.links.issue(second.id, first.id, h.clock.now())
+        assert h.users.password_hash(second.id) == "other-hash"
+
+    def test_noncredential_changes_preserve_proofs(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        first, second = h.users.list()
+        link = h.links.issue(second.id, first.id, h.clock.now())
+        h.users.set_role(second.id, Role.INSTALLATION_ADMINISTRATOR)
+        h.users.set_notification_email(second.id, False)
+        assert h.links.owner(link.token, h.clock.now()) == second.id
+        assert h.links.reset(link.token, "reset-hash") == second.id
+
+    def test_reset_only_invalidates_its_owners_proofs(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        first, second = h.users.list()
+        theirs = h.public.issue_for_email(first.email or "")
+        own = h.public.issue_for_email(second.email or "")
+        assert theirs is not None
+        assert own is not None
+        assert h.links.reset(own.link.token, "reset-hash") == second.id
+        assert h.links.owner(theirs.link.token, h.clock.now()) == first.id
+        assert h.users.password_hash(first.id) == "old-hash"
+
+    def test_own_changes_refuse_disabled_credentials(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        _first, second = h.users.list()
+        expected = h.changes.current(second.id)
+        assert expected is not None
+        h.users.set_state(second.id, UserState.DISABLED)
+        assert h.changes.current(second.id) is None
+        assert not h.changes.change_password(expected, "forbidden", None)
+        assert not h.changes.change_email(expected, "forbidden@example.test")
+        assert h.users.password_hash(second.id) == "other-hash"
+        assert h.users.get(second.id) == replace(second, state=UserState.DISABLED)

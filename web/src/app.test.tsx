@@ -151,6 +151,22 @@ describe("App", () => {
     }
   })
 
+  it("opens email recovery before any session, even when already signed in", async () => {
+    const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
+    const address = window.location.href
+    page.happyDOM.setURL("http://localhost:8000/forgot-password")
+    try {
+      RESPONSES["/api/v1/setup"] = { administrator_configured: true, password_reset_available: true }
+      await renderApp(testI18n())
+      expect(container.querySelector("h1")?.textContent).toBe("Forgot your password?")
+      expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/api/v1/session")).toBe(false)
+      expect(container.querySelector("input[type=email]")).not.toBeNull()
+    } finally {
+      RESPONSES["/api/v1/setup"] = { administrator_configured: true }
+      page.happyDOM.setURL(address)
+    }
+  })
+
   it("opens a password reset link before any session", async () => {
     const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
     const address = window.location.href

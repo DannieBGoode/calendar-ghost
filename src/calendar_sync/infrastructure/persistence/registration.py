@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import secrets
 import sqlite3
-from collections.abc import Sequence
-from datetime import datetime
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 
+from calendar_sync.application.identity.administration import AdministratorRequired
+from calendar_sync.application.identity.errors import ResetStorageUnavailable, UserDisabled
+from calendar_sync.application.identity.password_reset import PreparedPasswordReset
 from calendar_sync.application.identity.ports import IssuedLink, PendingInvitation
-from calendar_sync.application.shared.ports import IdGenerator
+from calendar_sync.application.shared.ports import Clock, IdGenerator
 from calendar_sync.domain.access import (
     RegistrationPolicy,
     User,
@@ -18,11 +22,10 @@ from calendar_sync.domain.access import (
     require_registration_change,
 )
 from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.credentials import revoke_resets
 from calendar_sync.infrastructure.persistence.users import insert_user
 from calendar_sync.infrastructure.security import token_hash
 
-# A link is usable while it is neither used nor revoked, and its expiry is still ahead.
-_USABLE = "used_at IS NULL AND revoked_at IS NULL AND expires_at > ?"
 _INVITATION_USABLE = "accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ?"
 
 
@@ -168,60 +171,123 @@ class SqliteInvitations:
         return True
 
 
+@contextmanager
+def _reset_transaction(database: Path) -> Iterator[sqlite3.Connection]:
+    try:
+        with transaction(database, timeout=0.1) as connection:
+            yield connection
+    except sqlite3.Error:
+        raise ResetStorageUnavailable from None
+
+
 class SqlitePasswordResetLinks:
-    def __init__(self, database_path: Path, ids: IdGenerator) -> None:
+    def __init__(self, database_path: Path, ids: IdGenerator, clock: Clock) -> None:
         self._database_path = database_path
         self._ids = ids
+        self._clock = clock
 
     def issue(self, user_id: UserId, created_by: UserId, at: datetime) -> IssuedLink:
-        link = IssuedLink(self._ids.new(), secrets.token_urlsafe(32), link_expiry(at))
-        with transaction(self._database_path) as connection:
-            # Only the newest link of a User works, so a link handed to the wrong person is
-            # stopped by issuing another.
-            connection.execute(
-                f"UPDATE password_reset_links SET revoked_at = ? WHERE user_id = ? AND {_USABLE}",  # noqa: S608
-                (at.isoformat(), user_id.value, at.isoformat()),
+        with _reset_transaction(self._database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            administrator = connection.execute(
+                "SELECT 1 FROM users WHERE id = ? AND state = 'active' "
+                "AND role = 'installation_administrator'",
+                (created_by.value,),
+            ).fetchone()
+            if administrator is None:
+                raise AdministratorRequired("an active Installation Administrator is required")
+            row = connection.execute(
+                "SELECT credential_revision FROM users WHERE id = ? AND state = 'active'",
+                (user_id.value,),
+            ).fetchone()
+            if row is None:
+                raise UserDisabled("the User is no longer active")
+            revoke_resets(connection, user_id, at.isoformat())
+            return self._insert(connection, user_id, int(row[0]), created_by, at, link_expiry(at))
+
+    def issue_for_email(self, email: str) -> PreparedPasswordReset | None:
+        with _reset_transaction(self._database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            now = self._clock.now()
+            row = connection.execute(
+                "SELECT id, email, credential_revision FROM users "
+                "WHERE email = ? AND state = 'active'",
+                (email,),
+            ).fetchone()
+            if row is None:
+                return None
+            link = self._insert(
+                connection,
+                UserId(str(row["id"])),
+                int(row["credential_revision"]),
+                None,
+                now,
+                now + timedelta(hours=1),
             )
-            connection.execute(
-                """
-                INSERT INTO password_reset_links (
-                    id, token_hash, user_id, created_by, created_at, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    link.id,
-                    token_hash(link.token),
-                    user_id.value,
-                    created_by.value,
-                    at.isoformat(),
-                    link.expires_at.isoformat(),
-                ),
-            )
+            return PreparedPasswordReset(str(row["email"]), link)
+
+    def _insert(
+        self,
+        connection: sqlite3.Connection,
+        user_id: UserId,
+        revision: int,
+        creator: UserId | None,
+        at: datetime,
+        expires: datetime,
+    ) -> IssuedLink:
+        link = IssuedLink(self._ids.new(), secrets.token_urlsafe(32), expires)
+        connection.execute(
+            """
+            INSERT INTO password_reset_links (
+                id, token_hash, user_id, credential_revision, created_by, created_at, expires_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                link.id,
+                token_hash(link.token),
+                user_id.value,
+                revision,
+                creator.value if creator else None,
+                at.isoformat(),
+                expires.isoformat(),
+            ),
+        )
         return link
 
     def owner(self, token: str, at: datetime) -> UserId | None:
-        with transaction(self._database_path) as connection:
+        with _reset_transaction(self._database_path) as connection:
             return _owner(connection, token, at)
 
-    def reset(self, token: str, password_hash: str, at: datetime) -> UserId | None:
-        with transaction(self._database_path) as connection:
+    def reset(self, token: str, password_hash: str) -> UserId | None:
+        with _reset_transaction(self._database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
-            owner = _owner(connection, token, at)
+            now = self._clock.now()
+            owner = _owner(connection, token, now)
             if owner is None:
                 return None
             connection.execute(
                 "UPDATE password_reset_links SET used_at = ? WHERE token_hash = ?",
-                (at.isoformat(), token_hash(token)),
+                (now.isoformat(), token_hash(token)),
             )
             connection.execute(
-                "UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, owner.value)
+                "UPDATE users SET password_hash = ?, credential_revision = credential_revision + 1 "
+                "WHERE id = ?",
+                (password_hash, owner.value),
             )
+            revoke_resets(connection, owner, now.isoformat())
+            connection.execute("DELETE FROM user_sessions WHERE user_id = ?", (owner.value,))
         return owner
 
 
 def _owner(connection: sqlite3.Connection, token: str, at: datetime) -> UserId | None:
     row = connection.execute(
-        f"SELECT user_id FROM password_reset_links WHERE token_hash = ? AND {_USABLE}",  # noqa: S608
+        """
+        SELECT links.user_id FROM password_reset_links AS links
+        JOIN users ON users.id = links.user_id AND users.state = 'active'
+            AND users.credential_revision = links.credential_revision
+        WHERE links.token_hash = ? AND links.used_at IS NULL AND links.revoked_at IS NULL
+            AND links.expires_at > ?
+        """,
         (token_hash(token), at.isoformat()),
     ).fetchone()
     return UserId(str(row[0])) if row is not None else None

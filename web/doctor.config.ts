@@ -17,6 +17,12 @@ export default {
   ignore: {
     overrides: [
       {
+        // An anonymous reset request only queues mail and returns generic acceptance. It changes
+        // no resource the UI caches, so invalidating queries would expose no newer state.
+        files: ["src/features/forgot-password-page.tsx"],
+        rules: ["react-doctor/query-mutation-missing-invalidation"],
+      },
+      {
         // The Activity, Incidents, People, Plans, and Rule Preview tables set explicit table roles on purpose: narrow
         // screens restyle their rows with CSS display values, which drop the native table semantics
         // in some browsers.

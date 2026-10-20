@@ -66,27 +66,49 @@ class IdentitySmtp:
 
     def send_test(self, recipient: str) -> None:
         try:
-            self._send(recipient)
+            origin = self._origin()
+            self._send(
+                recipient,
+                "Calendar Ghost: test email",
+                "Calendar Ghost can send identity email with the current settings.\n\n"
+                f"Open Calendar Ghost: {origin}\n\n"
+                "This test does not change who can join.",
+            )
         except Exception:
             raise IdentityEmailDeliveryFailed() from None
 
-    def _send(self, recipient: str) -> None:
-        if not self.use_starttls and not identity_loopback(self.host):
-            raise IdentityEmailDeliveryFailed()
+    def send_reset(self, recipient: str, token: str) -> None:
+        try:
+            origin = self._origin()
+            if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", token) is None:
+                raise IdentityEmailDeliveryFailed()
+            self._send(
+                recipient,
+                "Calendar Ghost: reset your password",
+                "A password reset was requested for your Calendar Ghost account.\n\n"
+                f"Reset your password: {origin}/password-reset#{token}\n\n"
+                "This link expires in one hour and can be used once.\n"
+                "If you did not request this, you can ignore this email.",
+            )
+        except Exception:
+            raise IdentityEmailDeliveryFailed() from None
+
+    def _origin(self) -> str:
         origin = identity_origin(self.origin)
         if origin is None:
+            raise IdentityEmailDeliveryFailed()
+        return origin
+
+    def _send(self, recipient: str, subject: str, body: str) -> None:
+        if not self.use_starttls and not identity_loopback(self.host):
             raise IdentityEmailDeliveryFailed()
         _single_mailbox(self.sender)
         _single_mailbox(recipient)
         message = EmailMessage()
-        message["Subject"] = "Calendar Ghost: test email"
+        message["Subject"] = subject
         message["From"] = self.sender
         message["To"] = recipient
-        message.set_content(
-            "Calendar Ghost can send identity email with the current settings.\n\n"
-            f"Open Calendar Ghost: {origin}\n\n"
-            "This test does not change who can join."
-        )
+        message.set_content(body)
         with smtplib.SMTP(self.host, self.port, timeout=10) as smtp:
             if self.use_starttls:
                 smtp.starttls(context=ssl.create_default_context())

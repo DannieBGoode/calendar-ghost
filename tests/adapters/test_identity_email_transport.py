@@ -125,8 +125,9 @@ def test_cleartext_identity_mail_requires_loopback(host: str) -> None:
 
 
 @pytest.mark.parametrize("mode", ["trusted", "unknown_ca", "hostname_mismatch", "refused"])
+@pytest.mark.parametrize("kind", ["test", "reset"])
 def test_identity_smtp_verifies_tls(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, kind: str
 ) -> None:
     from calendar_sync.application.identity.identity_email import IdentityEmailDeliveryFailed
     from tests.identity_smtp_server import certificate_context, smtp_server
@@ -142,13 +143,47 @@ def test_identity_smtp_verifies_tls(
         sender = IdentitySmtp(
             "localhost", port, "ghost@example.test", "", "", True, "https://ghost.test"
         )
+
+        def send() -> None:
+            if kind == "reset":
+                sender.send_reset("admin@example.test", "synthetic-token")
+            else:
+                sender.send_test("admin@example.test")
+
         if mode == "trusted":
-            sender.send_test("admin@example.test")
+            send()
             assert len(messages) == 1
         else:
             with pytest.raises(IdentityEmailDeliveryFailed):
-                sender.send_test("admin@example.test")
+                send()
             assert messages == []
+
+
+def test_reset_transport_uses_current_recipient_and_configured_fragment_origin() -> None:
+    from email import policy
+    from email.parser import BytesParser
+
+    from tests.identity_smtp_server import smtp_server
+
+    with smtp_server(None) as (port, messages):
+        IdentitySmtp(
+            "localhost",
+            port,
+            "ghost@example.test",
+            "",
+            "",
+            False,
+            "https://GHOST.example.test:443/",
+        ).send_reset("current@example.test", "synthetic-token")
+    message = BytesParser(policy=policy.default).parsebytes(messages[0])
+    assert message["Subject"] == "Calendar Ghost: reset your password"
+    assert message["To"] == "current@example.test"
+    assert message.get_content().replace("\r\n", "\n") == (
+        "A password reset was requested for your Calendar Ghost account.\n\n"
+        "Reset your password: https://ghost.example.test/password-reset#synthetic-token\n\n"
+        "This link expires in one hour and can be used once.\n"
+        "If you did not request this, you can ignore this email.\n"
+    )
 
 
 def test_test_mail_contains_only_literal_copy_and_configured_origin() -> None:

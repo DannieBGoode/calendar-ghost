@@ -10,6 +10,7 @@ from calendar_sync.application.identity.errors import IncorrectCredentials
 from calendar_sync.application.identity.sign_in import SetOwnEmail, SignIn
 from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.persistence import migrations
+from calendar_sync.infrastructure.persistence.credentials import SqliteCredentialChanges
 from calendar_sync.infrastructure.persistence.migrations import MigrationFailed, initialize_database
 from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 from calendar_sync.infrastructure.security import ScryptPasswords, hash_password
@@ -216,7 +217,9 @@ def test_the_upgraded_administrator_signs_in_by_password_alone_until_they_add_an
     sign_in = SignIn(users, passwords, sessions, MemorySignInThrottle(SystemClock()), SystemClock())
 
     upgraded = sign_in.execute(None, "the administrator's password", "client").user_id
-    SetOwnEmail(users, passwords).execute(upgraded, "admin@example.test", None)
+    SetOwnEmail(users, passwords, SqliteCredentialChanges(database, SystemClock())).execute(
+        upgraded, "admin@example.test", None
+    )
 
     with pytest.raises(IncorrectCredentials):
         sign_in.execute(None, "the administrator's password", "client")

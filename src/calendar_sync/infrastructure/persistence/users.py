@@ -94,7 +94,9 @@ class SqliteUserDirectory:
         try:
             with transaction(self._database_path) as connection:
                 connection.execute(
-                    "UPDATE users SET email = ? WHERE id = ?", (email, user_id.value)
+                    "UPDATE users SET email = ?, "
+                    "credential_revision = credential_revision + 1 WHERE id = ?",
+                    (email, user_id.value),
                 )
         except sqlite3.IntegrityError as error:
             raise _taken_or(error) from error
@@ -122,7 +124,9 @@ class SqliteUserDirectory:
     def set_password_hash(self, user_id: UserId, password_hash: str) -> None:
         with transaction(self._database_path) as connection:
             connection.execute(
-                "UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id.value)
+                "UPDATE users SET password_hash = ?, "
+                "credential_revision = credential_revision + 1 WHERE id = ?",
+                (password_hash, user_id.value),
             )
 
     def record_sign_in(self, user_id: UserId, at: datetime) -> None:
@@ -144,8 +148,9 @@ class SqliteUserDirectory:
         self._guarded(
             user_id,
             lambda user: replace(user, state=state),
-            "UPDATE users SET state = ? WHERE id = ?",
-            (state.value, user_id.value),
+            "UPDATE users SET state = ?, credential_revision = credential_revision "
+            "+ CASE WHEN ? = 'disabled' THEN 1 ELSE 0 END WHERE id = ?",
+            (state.value, state.value, user_id.value),
         )
 
     def delete(self, user_id: UserId) -> None:

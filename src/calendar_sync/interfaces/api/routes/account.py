@@ -15,6 +15,7 @@ from calendar_sync.application.identity.administration import (
 )
 from calendar_sync.application.identity.errors import (
     EmailTaken,
+    IncorrectCredentials,
     IncorrectPassword,
     PasswordPolicyViolation,
 )
@@ -90,6 +91,8 @@ def set_email(payload: SetEmailRequest, user: SignedIn, services: Services) -> S
         changed = services.identity.set_own_email.execute(user.id, payload.email, payload.password)
     except InvalidEmail as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
+    except IncorrectCredentials as error:
+        raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
     except IncorrectPassword as error:
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
     except EmailTaken as error:
@@ -136,6 +139,8 @@ def change_password(
         services.identity.change_own_password.execute(
             user.id, payload.current_password, payload.new_password, session
         )
+    except IncorrectCredentials as error:
+        raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
     except IncorrectPassword as error:
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
     except PasswordPolicyViolation as error:

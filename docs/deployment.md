@@ -279,9 +279,32 @@ Preview alone preserves a hold. Back up the data directory before changing relea
 
 Sign-in failures are counted per email and per client address for 15 minutes: after five failures
 for one email, or twenty from one address, sign-in answers `429` with a `Retry-After` header until
-the oldest failure leaves the window. Behind a reverse proxy every request comes from the proxy's
-address, so the per-address limit is shared by everyone behind it. The counts are kept in memory,
-so a restart forgets them.
+the oldest failure leaves the window. The per-address key is the client Uvicorn resolves. Without
+trusted forwarded headers, proxy clients share the proxy's peer address; correctly configured
+trusted proxies can separate them. Docker NAT may expose only one gateway address even for direct
+clients. These sign-in counts are kept in memory, so a restart forgets them. Reset limits are
+separate and persist when a Master Key exists, as described below.
+
+## Trusted proxy headers
+
+The container and packaged entry point explicitly default `FORWARDED_ALLOW_IPS` to an empty string:
+no peer, including localhost, may supply trusted forwarded headers. Compose passes an empty string
+when it is unset. Direct installations should keep this empty. Raw Uvicorn's own default is different;
+when starting it yourself, use `FORWARDED_ALLOW_IPS=` and `--proxy-headers` explicitly.
+
+Behind a reverse proxy, set `FORWARDED_ALLOW_IPS` to a comma-separated list of its actual peer IPs
+or narrowly scoped networks, for example `192.0.2.10` or a dedicated proxy subnet. Never use `*`.
+Use the addresses the application sees inside Docker, which may differ from host addresses. Restart
+after changing the setting and verify separate clients receive separate allowances. IPv6 reset
+clients within one /64 intentionally share their allowance; another /64 has its own.
+
+The edge proxy must overwrite client-supplied forwarded headers with values derived from the
+connection, including `X-Forwarded-For` and `X-Forwarded-Proto`; strip or overwrite unused
+`Forwarded` and `X-Forwarded-Host` too. Restrict the application's published port to the proxy or
+its private network so clients cannot bypass it. With multiple proxies, each trusted hop must
+enforce the same rule. Preserve `Authorization`, route `/mcp` as well as `/api/`, use HTTPS, and
+set `CALENDAR_SYNC_SECURE_COOKIES=true`. Header trust never selects the email link origin:
+only the validated `CALENDAR_SYNC_PUBLIC_URL` does that.
 
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. A scheduler pass
@@ -438,8 +461,9 @@ tracebacks. Normal stale eligibility and cancellation emit no failure warning.
 
 Migration 35 adds an installation-wide readiness record and per-administrator test admission
 counters. Existing accounts, registration policies, and ordinary email changes keep their behavior;
-Only me and Invitation only remain the two registration choices. No new account-registration,
-password-reset, or email-change email flow is enabled by this test.
+Only me and Invitation only remain the two registration choices. No new account-registration
+or email-change email flow is enabled by this test. Password recovery is independently available
+with usable configuration, without requiring a successful test.
 
 Before upgrading, stop the service and back up the complete database and its matching Master Key,
 keeping the previous image version. Migrations run at startup. For rollback, stop the service and
@@ -447,6 +471,115 @@ restore the matching pre-upgrade database backup and previous image together. Do
 upgraded database with the previous image or manually remove migration records. Changes made
 after the backup are lost on restore. A later upgrade from that pre-upgrade backup creates fresh
 readiness with no restored test verification.
+
+## Migration 36 reset proof binding
+
+Migration 36 adds a monotonic credential revision and binds Password Reset Links to it. It
+revokes outstanding reset links from earlier releases because they have no trustworthy binding.
+An administrator must issue a replacement link after upgrading. Existing passwords, sessions,
+owned calendar data, Plans, and installation settings are preserved. Issued administrator links
+still last seven days. Reset completion checks the active User, credential revision, and expiry
+under the final write lock, then changes the password and ends every browser session and other
+reset proof together. Password or email changes and disabling a User invalidate earlier proofs;
+changing the email back or enabling the User again never revives one.
+
+Stop the service and back up the complete database and matching Master Key before upgrading,
+keeping the previous image. Startup applies the migration once; a failure rolls it back. To roll
+back releases, stop the service and restore the pre-upgrade database and previous image together.
+Do not run the previous image against the upgraded database or remove migration records by hand.
+Restoring discards changes since the backup. An administrator-issued link remains the recovery
+fallback; an offline recovery command is not shipped.
+
+## Password recovery
+
+With usable identity email configuration, **Forgot password?** on sign-in lets an active User,
+including an Installation Administrator, request a single-use Password Reset Link lasting one
+hour. Set the Master Key, SMTP host and bare sender address, and an HTTPS root
+`CALENDAR_SYNC_PUBLIC_URL`; HTTP localhost or literal loopback is allowed only for development.
+Remote SMTP requires certificate-verified STARTTLS. The same configuration predicate controls the
+sign-in entry and request API; prior test-mail success is not required. Missing or unsafe settings
+leave public recovery unavailable, while existing sign-in and synchronization continue.
+
+An Installation Administrator can still create a hand-delivered seven-day link, including on an
+HTTP LAN installation without SMTP or a Master Key. Previously issued valid links can complete
+after email settings change. Both kinds change only an active User's password, end every existing
+browser session and reset proof, and require the person to sign in afterward. They never enable a
+disabled User. Requesting another emailed link preserves earlier delivered links until completion;
+an administrator issuing a replacement revokes earlier reset links.
+Reset retains Integration Tokens. After recovering access, review them in Settings and revoke any
+you do not recognize.
+
+The request response says, "If this address can receive a reset link, we will send one." The API
+returns generic 202 acceptance for eligible, disabled, and unknown addresses, email suppression,
+queue loss, and SMTP failure. Malformed input returns account-independent 422; network/global
+throttling returns 429 with `Retry-After`, and unavailable configuration/storage returns 503.
+No response promises delivery. Check spam and configuration, wait for limits, then retry the same
+form if needed. There is no outbox or automatic retry: restart, shutdown, queue saturation, or
+transport failure can lose mail. Aggregate queue/delivery latency can still vary with eligibility;
+this flow does not claim constant-time SMTP privacy.
+Request timing can also reveal recent reset-request activity for an address, because admitted and
+silently suppressed requests do different storage work. This is independent of account existence.
+
+Shutdown blocks old-generation delivery that has not already been authorized and old-generation
+readiness updates. An already-authorized bounded SMTP send may finish. Short reset preparation
+already in flight may finish after stop and leave an unused hash-only proof, without sending its
+token. That proof expires and is cleaned up normally.
+
+Identity security mail ignores **Email notifications** and the installation's incident recipient.
+It goes to the User's current account email. Existing and Invitation Only addresses, including
+direct email changes, remain eligible without retroactive verification. Check these addresses:
+a typo or an address belonging to somebody else gives that mailbox owner password recovery access.
+Verified email changes are PR 3, still unshipped. Only me remains the default; Open registration,
+PR 4's offline recovery command, and the later backup runbook remain unshipped. Plans are independent.
+
+### Recovery allowances and fallback
+
+Reset admission has separate budgets from sign-in and Invitations. Per client network, a rolling
+15-minute window permits 20 requests, 20 invalid-token checks, and 10 completion attempts. Valid
+checks do not consume the invalid-token budget, but completion attempts consume their own budget
+before proof lookup or hashing. The memory gate holds at most 10,000 networks and refuses new
+ones when full rather than evicting a live allowance. IPv4 uses its address; IPv6 uses its /64.
+A full memory gate also delays checking or completing an administrator-issued link from a new
+network until capacity becomes available; a hand-delivered proof does not bypass that gate.
+
+Durable requests additionally allow one request per email per minute, five per email per hour,
+two per email/network pair per hour, and 100 across the installation per hour. Email and pair
+suppression keep the generic acceptance response; network and global caps use 429. All admitted
+requests count, including unknown addresses and mail lost later. An attacker can exhaust a
+person's email allowance, or two sustained networks can exhaust the global allowance and delay
+recovery for everyone. Wait for the window, or use an administrator-issued link. Global/email
+request caps do not block administrator issuance, though token and completion network limits still
+apply. If no administrator can sign in, use the existing stopped-service backup recovery procedure;
+there is no offline password recovery command in this release.
+
+### Recovery retention and Master Key rotation
+
+Reset records retain hashed proofs, expiry/use/revocation times, issuer when administrator-issued,
+and credential revision bindings. Admitted counters contain times and purpose-separated HMAC
+digests of normalized emails, client networks, and pairs, derived from the Master Key with HKDF.
+No plaintext counter addresses, networks, passwords, or mail bodies persist. Queued addresses and
+delivery tokens live only in process memory. Auth diagnostics never include addresses, tokens,
+passwords, request bodies, or provider exception text. The application sends no telemetry.
+
+With a Master Key, allowances survive restart even without usable identity email. A maintenance-only
+worker then refuses both mail lanes but continues cleanup. Admitted requests, completion attempts,
+and hourly worker maintenance remove obsolete counters and expired, consumed, or revoked proofs
+in batches of at most 500; normal running maintenance aims to remove them within 24 hours. Token
+checks do not remove proofs; invalid checks may remove obsolete counters only. A stopped service,
+storage failure, or keyless installation cannot promise that cleanup deadline. Backups retain these
+records until their own retention expires. Without a Master Key, public recovery is unavailable
+and administrator token/completion limits use bounded memory only, forgotten on restart.
+After an admission commits, a cleanup storage failure leaves that admitted request or completion
+free to proceed. Cleanup retries during later admitted work or hourly maintenance; admission
+decision failures still refuse work before queueing, proof lookup, or password hashing.
+
+The digest keys are stable until the Master Key changes. Rotation changes email/network/pair
+digests, so old address-specific allowances no longer match. Do not rotate the key to clear a
+throttle. Planned key maintenance requires stopping the service and waiting at least one hour
+after its last identity admission before restarting, so all previous allowances have elapsed.
+Back up the matching key and database first. There is no supported in-place key rotation tool:
+replacing the key also makes stored provider credentials and sealed history unreadable and clears
+matching email readiness. A reset proof remains hash-bound, not encrypted with that digest key.
 
 ## Incident notifications
 

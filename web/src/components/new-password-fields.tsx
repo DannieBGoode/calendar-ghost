@@ -13,6 +13,7 @@ export function NewPasswordFields({
   onChange,
   passwordLabel,
   confirmationLabel,
+  maxLength,
 }: {
   /** Fixed ids, so a page can point at the fields; generated when absent. */
   idPrefix?: string
@@ -21,6 +22,7 @@ export function NewPasswordFields({
   onChange: (next: { password: string; confirmation: string }) => void
   passwordLabel?: string
   confirmationLabel?: string
+  maxLength?: number
 }) {
   const { t } = useI18n()
   const generated = useId()
@@ -37,6 +39,7 @@ export function NewPasswordFields({
           value={password}
           onChange={(event) => onChange({ password: event.target.value, confirmation })}
           aria-describedby={`${id}-hint`}
+          maxLength={maxLength}
           required
           minLength={12}
         />
@@ -53,6 +56,7 @@ export function NewPasswordFields({
           value={confirmation}
           onChange={(event) => onChange({ password, confirmation: event.target.value })}
           aria-invalid={mismatch}
+          maxLength={maxLength}
           required
         />
         {mismatch && (

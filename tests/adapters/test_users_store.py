@@ -606,13 +606,13 @@ def test_a_reset_link_sets_the_password_once_and_a_newer_one_replaces_it(tmp_pat
     database = _database(tmp_path)
     users = SqliteUserDirectory(database)
     users.add(FIRST, "hash-1")
-    links = SqlitePasswordResetLinks(database, SequentialIds())
+    links = SqlitePasswordResetLinks(database, SequentialIds(), MovableClock(NOW))
     earlier = links.issue(FIRST.id, FIRST.id, NOW)
     later = links.issue(FIRST.id, FIRST.id, NOW)
 
     assert links.owner(earlier.token, NOW) is None
-    assert links.reset(later.token, "new-hash", NOW) == FIRST.id
-    assert links.reset(later.token, "newer-hash", NOW) is None
+    assert links.reset(later.token, "new-hash") == FIRST.id
+    assert links.reset(later.token, "newer-hash") is None
     assert users.password_hash(FIRST.id) == "new-hash"
     assert links.owner(links.issue(FIRST.id, FIRST.id, NOW).token, NOW + timedelta(days=7)) is None
 

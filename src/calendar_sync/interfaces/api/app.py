@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import mimetypes
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -18,6 +19,7 @@ from starlette.types import Receive, Scope, Send
 from calendar_sync import __version__
 from calendar_sync.bootstrap.container import Container, service_container
 from calendar_sync.domain.access import UserId
+from calendar_sync.interfaces.api.identity_boundary import IdentityBoundary
 from calendar_sync.interfaces.api.problems import install_problem_handlers, problem
 from calendar_sync.interfaces.api.routes import (
     account,
@@ -28,6 +30,7 @@ from calendar_sync.interfaces.api.routes import (
     identity_email,
     incidents,
     integrations,
+    password_reset,
     plans,
     rules,
     session,
@@ -68,13 +71,25 @@ class ApiIdentity(
     """Everything the routers read about who is signed in."""
 
 
-class ApiAdministration(users.Administration, account.OwnAccountAdministration, Protocol):
+class ApiAdministration(
+    users.Administration,
+    password_reset.ResetAdministration,
+    account.OwnAccountAdministration,
+    Protocol,
+):
     """Everything the routers read about administering Users."""
+
+
+class ApiIdentityEmail(
+    identity_email.IdentityEmail, setup.ResetAvailability, password_reset.ResetRequests, Protocol
+):
+    """Administrator readiness and configuration-only anonymous recovery."""
 
 
 class ApiServices(
     session.SessionServices,
     users.AdministrationServices,
+    password_reset.PasswordResetServices,
     setup.SetupServices,
     account.OwnAccountServices,
     accounts.AuthorizationServices,
@@ -90,6 +105,8 @@ class ApiServices(
 
     @property
     def identity(self) -> ApiIdentity: ...
+    @property
+    def identity_email(self) -> ApiIdentityEmail: ...
     @property
     def administration(self) -> ApiAdministration: ...
     def for_user(self, user_id: UserId) -> UserApiServices: ...
@@ -132,6 +149,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
     )
+    app.add_middleware(IdentityBoundary)
     install_problem_handlers(app)
     app.state.container = services
     # Added flat rather than through include_router, which newer FastAPI versions nest, so
@@ -150,6 +168,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         storage,
         integrations,
         users,
+        password_reset,
         plans,
         watch_notices,
     ):
@@ -244,4 +263,6 @@ def run() -> None:
         # The container publishes this port; Compose decides which host interface exposes it.
         host="0.0.0.0",  # noqa: S104
         port=8000,
+        proxy_headers=True,
+        forwarded_allow_ips=os.environ.get("FORWARDED_ALLOW_IPS", ""),
     )

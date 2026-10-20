@@ -23,10 +23,17 @@ rules, or events ([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
 - Source Observations and Source Changes. Descriptions, locations, guest addresses, recurrence, and
   conferencing values are sealed with a key derived from the Installation Master Key. Earlier values
   are retained for the configured history window described in [Deployment](deployment.md).
-- Password hashes and session hashes. Plaintext passwords and session tokens are never stored.
+- Password hashes, session hashes, and a monotonic credential revision. Plaintext passwords and
+  session tokens are never stored.
 - Invitations and Password Reset Links: who created them, when, and when they expire or were used,
-  with a SHA-256 hash of each link's token. The link is shown once and never stored, and an
-  administrator never sees or sets anyone's password.
+  with a SHA-256 hash of each link's token. Reset proofs also bind to the User's credential revision.
+  Administrator links are shown once; self-service links are delivered by email. Plaintext links
+  are never stored, and an administrator never sees or sets anyone's password. Self-service links
+  last one hour and administrator reset links seven days.
+- Reset admission counters: times and purpose-separated HMAC digests of normalized email,
+  client network (IPv6 grouped by /64), and their pair, derived with HKDF from the Master Key.
+  They contain no plaintext address, network, or mail body and persist through restart when a
+  Master Key exists. Without a key, token/completion limits live in bounded memory only.
 - Integration Tokens: each token's User, name, scopes, and issue, last-use, and revocation times,
   with a SHA-256 hash of the token. The token itself is shown once when issued and never stored.
 - The Registration Policy.
@@ -116,7 +123,16 @@ The installation communicates with:
    configuration fingerprint and successful test time, and admission counters store administrator
    identifiers and request times. They store no email bodies or SMTP credentials. Attempt states
    and queued work are in memory, with no persistent delivery outbox. Acceptance by SMTP does not
-   prove inbox delivery. See [identity email setup](deployment.md#identity-email-test-readiness).
+   prove inbox delivery. Active Users may separately request password recovery mail to their
+   current account email, independent of incident preferences. Recovery resolves eligibility only
+   in the worker and uses the configured trusted origin, never request headers. Existing and
+   invited Users' addresses remain trusted without verification, so their mailbox owners can reset
+   those accounts. Queues are volatile and messages have no automatic retry. See
+   [password recovery](deployment.md#password-recovery) and
+   [identity email setup](deployment.md#identity-email-test-readiness).
+   Request timing can reveal recent reset-request activity for an address independently of whether
+   an account exists. In-flight preparation may leave an unused hash-only proof after shutdown;
+   its token is not sent, and normal expiry and cleanup still apply.
 3. Monitors, dashboards, and AI agents a User gives an Integration Token. They ask for that User's
    Installation Status; Calendar Ghost never contacts them. Status contains rule identifiers and
    states, calendar names, Provider Kinds, incident summaries, and times; it never contains event
@@ -151,8 +167,24 @@ Keep the previous database and image available until the restored installation h
 Do not use `docker compose down -v` as an upgrade step: removing the named volume removes the local
 installation state.
 
+Migration 36 preserves passwords, sessions, and User data but revokes legacy reset links, which an
+administrator must reissue. Before upgrading, stop the service and take a complete backup with its
+matching key and previous image. For rollback restore the pre-upgrade database and image together,
+losing later writes; do not run an old image against the upgraded schema or remove migration records.
+PR 4's offline recovery command and the later continuous-backup runbook are unshipped. A backup
+can revive sessions and credentials that were revoked after it was taken; recovering the matching
+database alone cannot prove that restored access remains authorized.
+
 ## Deletion and retention
 
+- Reset counters and expired, consumed, or revoked proofs are cleaned in batches of at most 500
+  during admitted requests, completion attempts, and hourly keyed-worker maintenance. Normal
+  running maintenance aims to remove them within 24 hours; stopped services or storage failures
+  delay cleanup. Token checks never purge proofs; invalid checks may purge obsolete counters only.
+  A keyed installation without SMTP still runs maintenance, refusing both mail lanes. Backups
+  retain records until their own retention expires. See
+  [Master Key maintenance](deployment.md#recovery-retention-and-master-key-rotation) before changing
+  the key, which changes address-specific counter digests as well as encrypted-data access.
 - Settings can clear older Activity and purge local log files. A backup made before that action may
   still contain the cleared values until the backup is rotated out.
 - Disconnecting a Connected Account removes its stored credentials while retaining mappings

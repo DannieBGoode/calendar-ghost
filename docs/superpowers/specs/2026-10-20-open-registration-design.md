@@ -2,7 +2,14 @@
 
 Status: design approved for planning on 2026-10-20 after the HTTPS decision and the owner's
 "continue" instruction. Each implementation PR still requires its own approved plan. No product
-code is authorized until that plan is reviewed. The second Claude design review is still pending.
+code is authorized until that plan is reviewed. The second Claude review completed on 2026-10-20,
+with clarifications below. The owner delegated PR 2 plan review to Claude and authorized execution.
+
+Delivery status on 2026-10-21: PR 1 identity email readiness is implemented. PR 2 self-service
+password recovery is implemented on an unmerged branch. Local gates, secret scans, security review,
+and independent and Claude reviews pass; supported image builds and PR/CI delivery remain pending.
+PR 3 verified email changes, PR 4 offline recovery, backup tooling/runbook, and the later
+Open activation remain unshipped. Only Me is still the default and Open remains unavailable.
 
 Builds on [the multi-user delivery order](2026-10-09-multi-user-design.md),
 [ADR 0029](../../adr/0029-isolate-users-in-one-sqlite-database.md),
@@ -157,8 +164,10 @@ verification routes are needed for this exception.
 
 An already active User is never locked out while a change is pending. Removing SMTP does not
 convert a pending change into a direct change; cancel it and explicitly start the applicable
-flow. Previously issued valid reset/email-change proofs may finish without a new SMTP send, over
-HTTPS or the loopback development exception. Public joining also needs Open to be operational.
+flow. Previously issued valid reset/email-change proofs may finish without a new SMTP send.
+The HTTPS or loopback rule governs emailed link issuance, not administrator hand-delivered reset
+completion; administrator recovery remains available on HTTP LAN installations. Public joining
+also needs Open to be operational.
 
 ## Transactional email and readiness
 
@@ -228,6 +237,9 @@ still consume a person's per-email send cap. A delivered proof stays valid on re
 and recovery guide explain the administrator-issued reset fallback. Under Only Me, the operator
 can use the offline recovery command if the sole administrator cannot recover by email. These
 fallbacks are required, not a claim that a per-email limit can distinguish the mailbox owner.
+The installation-wide reset cap can also be exhausted by two networks requesting distinct unknown
+emails. Keep the approved limits and document administrator-issued recovery as the fallback.
+Per-email and global suppression remain residual availability risks.
 
 Apply a bounded in-memory per-client gate before any SQLite write, for both issuance and token
 completion. Cap this gate at 10,000 live network keys with expiration; at capacity refuse new
@@ -254,12 +266,15 @@ do not guess that every private address is a proxy or block legitimate LAN clien
 Correct the existing deployment text that all proxy traffic necessarily shares one limit.
 
 Cap request bodies at 8 KiB, normalized email at the existing 254-character limit, tokens at 128
-ASCII characters, and new passwords at 1,024 characters before database work or hashing. Keep
-12 as the password minimum. The maximum applies to new passwords in these new flows, not existing
-Users' sign-in passwords. Apply the completion gate before hashing even for usable proofs.
+ASCII characters, and new passwords at 1,024 characters before database work or hashing.
+Sign-in and current-password confirmations accept up to 1,024 characters so every reset password
+remains usable. Setup, Invitation, and ordinary new-password creation bounds stay unchanged.
+Keep 12 as the new-password minimum. Apply the completion gate before hashing even for usable proofs.
 
-Public request handlers return before account lookup or SMTP delivery. Use bounded in-memory
-identity-mail queues, separate from scheduler/Plan mail, with 50 pending sign-up requests and
+Public request handlers do not perform or await account lookup or SMTP delivery. Worker scheduling
+may start that work before the client receives the response; no strict ordering is promised.
+Use bounded in-memory identity-mail queues, separate from scheduler/Plan mail, with 50 pending
+sign-up requests and
 50 pending reset requests. Security changes and administrator tests have their own bounded lane
 of 10 requests. These are purpose-specific lanes in the same small mail service, not a general
 job framework. Use fair scheduling so each nonempty lane gets a turn. Queued requests contain no
@@ -271,6 +286,10 @@ only aggregate safe capacity diagnostics. Only account-independent gates may ret
 Do not expose queue depth or worker outcome in public status. Shutdown, restart, or SMTP failure
 can lose a request; the UI permits retry within limits and never promises delivery. Do not persist
 plaintext tokens or build an outbox. A public response never awaits a lookup or send.
+Shutdown blocks old-generation delivery that has not already been authorized and old-generation
+readiness updates. Already-authorized bounded SMTP may finish. Short reset preparation in flight
+may finish after stop and leave an unused hash-only proof without sending its token; normal expiry
+and cleanup apply.
 
 This prevents the review's direct queue-full response oracle. It does not promise that someone
 controlling enough traffic and receiving their own email can never infer aggregate worker load
@@ -508,8 +527,21 @@ TLS issue, proxy ambiguity, direct-Invitation guard, shared recovery budgets, an
 write contention, early unused persistence/screens, oversized activation slice, and missing restore
 support. Only Me explicitly cancels proofs. The proposed ADR separates owner-approved policy from
 builder recommendations. The owner chose HTTPS identity links, the loopback development exception,
-and direct initial add-email for the upgraded first User. A second Claude review was attempted
-but blocked by its session limit; the revision has not received that outside review.
+and direct initial add-email for the upgraded first User. An earlier second review attempt was
+blocked by its session limit.
+
+The second read-only design and PR 2 plan review completed on 2026-10-20. Earlier retries used
+`--bare`, which skips saved OAuth credentials; this was a command-mode error, not missing
+authentication. The corrected review used `--safe-mode`.
+
+Accepted findings: preserve HTTP LAN administrator reset completion; refuse disabled-target
+administrator issuance with 409; keep reset prepare/purge off the event loop with 100 ms storage
+waits; move reset use cases off the shared sign-in throttle; preserve keyless administrator
+recovery with bounded memory limits. Keep the approved global/network limits and document their
+aggregate exhaustion risk instead of adding a /48 policy. Existing email addresses, including
+Invitation Only and pre-PR 3 direct changes, remain trusted recovery addresses as approved;
+document the wrong-address mailbox takeover risk without retroactive verification. These clarify
+approved behavior and delivery order rather than add policy.
 
 Do not adopt the review's suggestion that Open require Plans: it contradicts ADR 0028 and the
 approved independent switches. Do not claim Litestream makes every compaction fail: compatibility

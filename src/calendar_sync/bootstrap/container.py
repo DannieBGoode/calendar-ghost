@@ -24,7 +24,9 @@ from calendar_sync.application.identity.administration import (
     ShowOwnAccountDeletion,
     ShowRegistration,
 )
+from calendar_sync.application.identity.credentials import CredentialChanges
 from calendar_sync.application.identity.integration_tokens import IssueIntegrationToken
+from calendar_sync.application.identity.password_reset import SelfServicePasswordResets
 from calendar_sync.application.identity.plans import (
     ChangePlan,
     DefinePlan,
@@ -45,6 +47,7 @@ from calendar_sync.application.identity.ports import (
     SignInThrottle,
     UserDirectory,
 )
+from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.identity.sign_in import (
     ChangeOwnPassword,
     SetInstantSync,
@@ -152,6 +155,7 @@ from calendar_sync.bootstrap.identity_email import (
     IdentityEmailAdapters,
     IdentityEmailServices,
     build_identity_email,
+    build_reset_admission,
     compose_identity_email,
 )
 from calendar_sync.bootstrap.logs import configure_logging
@@ -168,6 +172,7 @@ from calendar_sync.domain.services import (
 from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.google.descriptor import google_provider
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator, UuidRunIdGenerator
+from calendar_sync.infrastructure.identity_front_gate import client_network
 from calendar_sync.infrastructure.identity_mail_worker import IdentityMailWorker
 from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
 from calendar_sync.infrastructure.log_files import RotatingLogFiles
@@ -188,6 +193,7 @@ from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteOperationsQueries,
 )
 from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
+from calendar_sync.infrastructure.persistence.credentials import SqliteCredentialChanges
 from calendar_sync.infrastructure.persistence.health import (
     SqliteIncidentRepository,
     SqliteRuleHealthRecords,
@@ -330,6 +336,8 @@ class Container:
     identity: IdentityServices
     identity_email: IdentityEmailServices
     identity_mail_worker: IdentityMailWorker | None
+    reset_admission: ResetAdmission
+    reset_client_network: Callable[[str], str]
     administration: AdministrationServices
     plans: PlanServices
     token_authentication: IntegrationTokenAuthentication
@@ -386,9 +394,12 @@ class Adapters:
     run_throttle: RunThrottle
     """One per process: each User's manual runs, counted across their requests."""
     identity_email: IdentityEmailAdapters
+    reset_admission: ResetAdmission
     registration: RegistrationSettings
     invitations: Invitations
     password_resets: PasswordResetLinks
+    self_service_resets: SelfServicePasswordResets
+    credential_changes: CredentialChanges
     activity: Callable[[UserId], ActivityQueries]
     operations: Callable[[UserId], OperationsQueries]
     health_records: Callable[[UserId], RuleHealthRecords]
@@ -462,8 +473,10 @@ def build_adapters(settings: Settings) -> Adapters:
     users = SqliteUserDirectory(database)
     plans = SqlitePlans(database)
     mail = _mail_server(settings)
+    resets = SqlitePasswordResetLinks(database, ids, clock)
     adapters = Adapters(
         identity_email=build_identity_email(settings, ids),
+        reset_admission=build_reset_admission(settings, clock),
         unit_of_work=SqliteUnitOfWorkFactory(database, clock, history).for_user,
         installation_units=SqliteInstallationUnitOfWorkFactory(database),
         locks=RuleLocks(),
@@ -478,7 +491,9 @@ def build_adapters(settings: Settings) -> Adapters:
         run_throttle=MemoryRunThrottle(clock),
         registration=SqliteRegistrationSettings(database),
         invitations=SqliteInvitations(database, ids),
-        password_resets=SqlitePasswordResetLinks(database, ids),
+        password_resets=resets,
+        self_service_resets=resets,
+        credential_changes=SqliteCredentialChanges(database, clock),
         activity=lambda user: SqliteActivityQueries(database, user, history),
         operations=lambda user: SqliteOperationsQueries(database, user),
         health_records=lambda user: SqliteRuleHealthRecords(database, user),
@@ -617,11 +632,17 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         adapters.plan_assignments,
     )
     identity_email, identity_mail_worker = compose_identity_email(
-        adapters.identity_email, adapters.users, adapters.clock
+        adapters.identity_email,
+        adapters.users,
+        adapters.clock,
+        adapters.self_service_resets,
+        adapters.reset_admission,
     )
     return Container(
         identity_email=identity_email,
         identity_mail_worker=identity_mail_worker,
+        reset_admission=adapters.reset_admission,
+        reset_client_network=client_network,
         secure_cookies=settings.secure_cookies,
         providers=adapters.providers,
         identity=_identity(adapters),
@@ -804,10 +825,10 @@ def _identity(adapters: Adapters) -> IdentityServices:
         sessions=sessions,
         set_up=SetUpInstallation(users, passwords, sessions, adapters.ids, adapters.clock),
         sign_in=SignIn(users, passwords, sessions, adapters.sign_in_throttle, adapters.clock),
-        set_own_email=SetOwnEmail(users, passwords),
+        set_own_email=SetOwnEmail(users, passwords, adapters.credential_changes),
         set_notification_email=SetNotificationEmail(users),
         set_instant_sync=SetInstantSync(users),
-        change_own_password=ChangeOwnPassword(users, passwords, sessions),
+        change_own_password=ChangeOwnPassword(adapters.credential_changes, passwords),
     )
 
 
@@ -833,8 +854,8 @@ def _administration(
             users, settings, invitations, passwords, sessions, adapters.ids, clock, attempts
         ),
         issue_password_reset=IssuePasswordReset(users, resets, clock),
-        check_password_reset=CheckPasswordReset(resets, clock, attempts),
-        reset_password=ResetPassword(resets, passwords, sessions, clock, attempts),
+        check_password_reset=CheckPasswordReset(resets, clock, adapters.reset_admission),
+        reset_password=ResetPassword(resets, passwords, clock, adapters.reset_admission),
         change_role=ChangeRole(users),
         change_user_state=ChangeUserState(users, sessions),
         delete_user=DeleteUser(users, sessions, owned),

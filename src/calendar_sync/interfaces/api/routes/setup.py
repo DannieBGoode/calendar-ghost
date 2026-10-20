@@ -22,7 +22,14 @@ class SetupIdentity(Identity, Protocol):
     def set_up(self) -> SetUpInstallation: ...
 
 
+class ResetAvailability(Protocol):
+    @property
+    def configured(self) -> bool: ...
+
+
 class SetupServices(SignedInAnswers, Protocol):
+    @property
+    def identity_email(self) -> ResetAvailability: ...
     @property
     def identity(self) -> SetupIdentity: ...
     @property
@@ -38,6 +45,7 @@ def setup_status(services: Services) -> SetupStatusResponse:
     users = services.identity.users
     return SetupStatusResponse(
         administrator_configured=users.count() > 0,
+        password_reset_available=services.identity_email.configured,
         password_only_sign_in=users.without_email() is not None,
     )
 

@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { AddEmailScreen } from "@/features/add-email-screen"
 import { AuthScreen } from "@/features/auth-screen"
 import { Dashboard } from "@/features/dashboard"
+import { ForgotPasswordPage } from "@/features/forgot-password-page"
 import { InvitationPage } from "@/features/invitation-page"
 import { PasswordResetPage } from "@/features/password-reset-page"
 import { rich } from "@/i18n/rich"
@@ -48,6 +49,7 @@ const navItems: { id: AppView; labelKey: MessageKey; icon: typeof Waypoints }[] 
 export default function App() {
   // A link to pass on opens its own page, before any session; accepting an Invitation signs in.
   const [publicPage, setPublicPage] = useState(() => publicPageAt(window.location.pathname))
+  if (window.location.pathname.replace(/\/+$/, "") === "/forgot-password") return <ForgotPasswordPage />
   if (publicPage === "invitation") return <InvitationPage onSignedIn={() => setPublicPage(null)} />
   if (publicPage === "password-reset") return <PasswordResetPage />
   return <SessionGate />
@@ -77,7 +79,7 @@ function SessionGate() {
 /** Setup, sign-in, or the add-email step, until a User with an email is signed in. */
 function SignInGate({ setup, session }: { setup: SetupStatus; session: SessionStatus | undefined }) {
   if (!setup.administrator_configured) return <AuthScreen mode="setup" />
-  if (!session?.authenticated) return <AuthScreen mode="login" passwordOnly={setup.password_only_sign_in} />
+  if (!session?.authenticated) return <AuthScreen mode="login" passwordOnly={setup.password_only_sign_in} passwordResetAvailable={setup.password_reset_available} />
   if (session.user?.email === null) return <AddEmailScreen />
   // Keyed by the User, so another User signing in drops everything shown or typed for the last
   // one: a revealed token, an open dialog, a copied link, every toast.

@@ -18,6 +18,25 @@ cd web && pnpm install --frozen-lockfile
 
 Run FastAPI on port 8000 and Vite on port 5173. Vite proxies `/api` and `/health` to FastAPI.
 
+```sh
+FORWARDED_ALLOW_IPS= .venv/bin/uvicorn calendar_sync.interfaces.api.app:create_app --factory --reload --proxy-headers
+```
+
+An empty `FORWARDED_ALLOW_IPS` trusts no forwarded headers, including loopback peers. The packaged
+entry point and container have this default explicitly; raw Uvicorn otherwise defaults to trusting
+loopback. To test a real reverse proxy, set only its exact peer IPs or narrowly scoped networks;
+see [proxy configuration](deployment.md#trusted-proxy-headers). Vite clients share its peer address
+unless that proxy is explicitly trusted and overwrites forwarded headers.
+
+Password recovery needs a Master Key, usable identity SMTP, and an HTTPS root
+`CALENDAR_SYNC_PUBLIC_URL`; HTTP localhost or literal loopback is allowed for development. Use a
+synthetic local SMTP relay and a disposable SQLite database. SMTP test acceptance is separate from
+recovery availability. Tests in `tests/adapters/test_identity_proxy_limits.py` use the installed
+Uvicorn middleware around the real app to exercise client limits and configured mail origin.
+Reset passwords accept 12 to 1,024 characters; sign-in and all current-password confirmations
+accept up to 1,024. Setup, Invitation, and ordinary new-password creation retain their 256-character
+maximum. Open registration, verified email changes, and PR 4's offline recovery command are unshipped.
+
 ## Corresponding source link
 
 The Web UI's **Source** link is injected at build time. A local Vite build uses the current Git

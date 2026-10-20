@@ -37,6 +37,7 @@ PUBLIC_API_ROUTES = {
     ("DELETE", "/api/v1/session"),
     ("POST", "/api/v1/invitations/check"),
     ("POST", "/api/v1/invitations/accept"),
+    ("POST", "/api/v1/password-resets/request"),
     ("POST", "/api/v1/password-resets/check"),
     ("POST", "/api/v1/password-resets"),
     ("POST", "/api/v1/watch-notices/{provider_slug}/{registration_id}"),
