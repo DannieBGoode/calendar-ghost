@@ -104,7 +104,7 @@ machine and creates only the destination representation selected by each rule.
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |
 | Incidents | Each person's Activity view, deduplication, optional email to each person, and the installation's SMTP recipient and webhook for installation incidents |
 | Monitoring | Each person's Installation Status for monitors, homelab dashboards, and AI agents through `GET /api/v1/status` and an MCP server at `/mcp`, and Installation Health for administrators, authorized with Integration Tokens issued in Settings |
-| Access | People sign in with email and password; Only me by default, or Invitation only, with single-use invitation and password reset links; an administrator role; encrypted OAuth credentials |
+| Access | People sign in with email and password; Only me by default, or Invitation only; email password recovery when configured, administrator-issued reset links, single-use invitations, an administrator role, and encrypted OAuth credentials |
 | Operator Overview | Administrators see on **People** whether each person's synchronization works and why not, with calendars only as "Calendar 1", "Calendar 2", and each person's rules, accounts, Activity, and provider calls counted; each person sees the same about themself in Settings |
 | Storage | Database and log usage in Settings, administrator-chosen Activity retention, and log download or purge |
 | Appearance | Device-aware light and dark themes with a browser-local override |
@@ -295,7 +295,14 @@ Use **Settings → Administration → Identity email** to test identity SMTP to 
 address. Its last verified time applies to the current configuration; mail-server acceptance does
 not prove inbox delivery. This is separate from incident notifications and does not change the
 Only me or Invitation only registration choices. See [identity email test readiness](docs/deployment.md#identity-email-test-readiness)
-for secure SMTP, trusted-origin requirements, limits, and migration 35 backup/rollback guidance.
+for secure SMTP and trusted-origin requirements. When configured, **Forgot password?** on sign-in
+lets active Users request a single-use link lasting one hour; administrator-issued links retain
+seven days. Reset ends existing sessions and requires a fresh sign-in. No tested-email status is
+required, and incident email preferences do not control recovery. Existing account email addresses
+are trusted without retroactive verification: check yours, since its mailbox owner can reset your
+password. See [password recovery](docs/deployment.md#password-recovery) for limits, lost-mail retry,
+administrator fallback, and migration 36 backup/rollback guidance. Open registration and verified
+email changes remain unshipped.
 
 Check service health with:
 
@@ -391,7 +398,7 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
 - Google writes use `sendUpdates=none`, Outlook projections are appointments with no attendees and
   ask for no responses, and no projection contains attendees or invitation data, so no write emails
   anyone.
-- The Web UI and operational API require a signed-in session, and answer 404 for another person's
+- Calendar views and the operational API require a signed-in session, and answer 404 for another person's
   records. Failed sign-ins are throttled per email and per client address, and unusable invitation
   and password reset links per client address. `/health` remains public
   and intentionally minimal.
@@ -476,7 +483,7 @@ python3.12 -m venv .venv
 Run FastAPI on port 8000:
 
 ```sh
-.venv/bin/uvicorn calendar_sync.interfaces.api.app:create_app --factory --reload
+FORWARDED_ALLOW_IPS= .venv/bin/uvicorn calendar_sync.interfaces.api.app:create_app --factory --reload --proxy-headers
 ```
 
 In another terminal, run Vite on port 5173:

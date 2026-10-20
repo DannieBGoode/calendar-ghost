@@ -25,6 +25,25 @@ fixes below. Review the final implementation separately before the PR.
 Claude's scoped re-review in `.context/reviews/open-registration-pr2-claude-rereview.txt`
 confirms all P1/P2 findings addressed and the design/plan ready to implement.
 
+## Delivery record
+
+PR 2 is implemented on an unmerged branch. Reports and TDD evidence live in
+`.superpowers/sdd/2026-10-20-self-service-password-reset/`:
+
+- [x] Task 1 credential-bound proofs and atomic completion: `task-1-report.md`.
+- [x] Task 2 bounded durable admission: `task-2-report.md`.
+- [x] Task 3 deferred recovery mail and worker maintenance: `task-3-report.md`.
+- [x] Task 4 bounded public API and headers: `task-4-report.md`.
+- [x] Task 5 sign-in recovery UI and production assets: `task-5-report.md`.
+  Controller live synthetic preview, keyboard checks, and screenshots passed.
+- [x] Task 6 proxy source/tests and operational guidance: `task-6-report.md`.
+- [ ] Final backend/frontend gates, history and branch secret scans, and supported image builds.
+- [ ] Authentication security review, independent whole-branch review, and outside Claude review.
+- [ ] Resolve verified findings, rerun affected gates, open the PR with screenshots, and watch CI.
+
+The controller owns these remaining release checks. Local Docker is unavailable; CI must build
+linux/amd64 and linux/arm64. No PR 3 work starts before PR 2 merges and its own plan is approved.
+
 ## Global constraints
 
 - Only Me remains the default; Open stays unavailable until PR 8. Plans remain independent.
@@ -202,7 +221,7 @@ before the session gate, without adding it to the token-only `PublicPage`/CHECKS
 Create `tests/adapters/test_identity_proxy_limits.py`; amend deployment/config tests as needed.
 
 - [ ] Write tests using Uvicorn `ProxyHeadersMiddleware` around the app: untrusted XFF ignored, exact trusted proxy resolves two separate clients, same IPv6 /64 shares allowance, another /64 has its own. Forged Host/forwarded headers never set mail origin.
-- [ ] Observe failures, set deliberate proxy headers in CLI and `run()`, empty default trust, Compose `FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-}`. Document direct use with empty trust and reverse proxy with exact IP/network allowlist, never `*`; overwrite forwarded headers at proxy, prevent direct bypass, preserve Authorization and secure cookies.
+- [ ] Observe failures, set deliberate proxy headers in CLI and `run()`, empty default trust, Compose `FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-}"`. Document direct use with empty trust and reverse proxy with exact IP/network allowlist, never `*`; overwrite forwarded headers at proxy, prevent direct bypass, preserve Authorization and secure cookies.
 - [ ] Correct deployment's claim that all proxy clients necessarily share a limit. Test empty trust against pinned Uvicorn and explain Docker NAT may expose only one gateway address. Document HTTPS emailed links, both lifetimes, generic responses, retry/loss, targeted/global-cap fallback, existing-email trust risk, retention and no telemetry. Keep later slices marked unshipped.
 - [ ] Document stopped-service backup before migration and matching database/image restore for rollback, lost post-backup writes, legacy reset reissue, Master Key rotation effects on counters. No manual down migration or old binary against upgraded schema.
 - [ ] Run each backend gate separately: `.venv/bin/ruff format --check .`, `.venv/bin/ruff check .`, `.venv/bin/mypy`, `.venv/bin/lint-imports`, `.venv/bin/pytest --cov --cov-report=term-missing --cov-fail-under=80`. Check real exits, including Markdown Python formatting.

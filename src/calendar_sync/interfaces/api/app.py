@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import mimetypes
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -262,4 +263,6 @@ def run() -> None:
         # The container publishes this port; Compose decides which host interface exposes it.
         host="0.0.0.0",  # noqa: S104
         port=8000,
+        proxy_headers=True,
+        forwarded_allow_ips=os.environ.get("FORWARDED_ALLOW_IPS", ""),
     )

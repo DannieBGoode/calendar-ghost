@@ -5,6 +5,11 @@ Status: design approved for planning on 2026-10-20 after the HTTPS decision and 
 code is authorized until that plan is reviewed. The second Claude review completed on 2026-10-20,
 with clarifications below. The owner delegated PR 2 plan review to Claude and authorized execution.
 
+Delivery status on 2026-10-20: PR 1 identity email readiness is implemented. PR 2 self-service
+password recovery is implemented on an unmerged branch, with final gates, reviews, and delivery
+pending. PR 3 verified email changes, PR 4 offline recovery, backup tooling/runbook, and the later
+Open activation remain unshipped. Only Me is still the default and Open remains unavailable.
+
 Builds on [the multi-user delivery order](2026-10-09-multi-user-design.md),
 [ADR 0029](../../adr/0029-isolate-users-in-one-sqlite-database.md),
 [ADR 0030](../../adr/0030-users-administrators-and-registration.md),

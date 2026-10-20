@@ -471,3 +471,35 @@ Migration 35 adds readiness and admission counters without changing existing reg
 account email updates. See [deployment](deployment.md#identity-email-test-readiness) for the
 stopped-service backup and matching backup/image rollback procedure. Identity test mail ignores
 incident preferences and the installation recipient; incident composition stays unchanged.
+
+## Password recovery boundary
+
+Public recovery uses narrow identity ports and never receives `InstallationUnitOfWork`. The request
+path normalizes and bounds input, admits network/email budgets, and queues work without looking up
+a User or sending SMTP. The worker resolves eligibility and issues a credential-bound proof later.
+Unknown, disabled, and eligible addresses have the same accepted response, including queue refusal
+and delivery failure. Malformed input is rejected independently of accounts. This does not promise
+constant delivery latency: aggregate SMTP timing remains observable to mailbox owners.
+
+The existing worker reserves separate lanes for ten waiting administrator tests and fifty waiting
+reset requests, alternating work on one SMTP thread. Queued addresses and transient proofs remain in
+memory, with no plaintext-token outbox or retries. Identity mail always uses the validated configured
+origin, never Host or forwarded headers. Uvicorn resolves client addresses only through explicit
+`FORWARDED_ALLOW_IPS` trust; reset admission groups IPv6 by /64.
+
+The bounded memory gate precedes SQLite. With a Master Key, admitted counters persist as
+purpose-separated HMAC digests derived with HKDF, so restart keeps allowances without retaining
+plaintext addresses or client networks. Without identity SMTP, a keyed installation still starts
+the worker for maintenance only; both mail lanes refuse admission. Without a Master Key there is
+no worker or durable reset admission, and administrator token/completion limits use memory only.
+Admitted requests, completion attempts, and hourly worker maintenance clean obsolete counters and
+expired, used, or revoked reset proofs in batches of at most 500. Token checks never purge proofs;
+recording an invalid token may purge only obsolete counters. See
+[retention and rotation](deployment.md#recovery-retention-and-master-key-rotation).
+
+Both reset kinds share atomic credential completion: the final SQLite write lock rechecks current
+time, active state, and monotonic credential revision, then updates password/revision and ends all
+sessions and sibling proofs together. Password hashing and SMTP stay outside transactions. Guarded
+own-password/email changes reject stale confirmation if a reset won first; later valid sign-ins
+remain usable. Migration 36 revokes legacy unbound proofs while preserving passwords and sessions.
+Pending email-change cancellation will join this transaction in PR 3; no placeholder store exists.

@@ -422,12 +422,30 @@ The permanent removal of a User and everything they own. Their projections are d
 _Avoid_: Account deletion, user removal
 
 **Registration Policy**:
-The installation setting that decides who may become a User: Only Me, the default, where nobody can join; Invitation Only; or Open, where anyone may sign up. Under Only Me the Web UI hides Users, Invitations, Plans, and the Operator Overview. An Installation Administrator may switch to Invitation Only or Open at any time, and back to Only Me only while no other User exists. Data is User-scoped under every policy; the policy decides only who may join and what the Web UI shows. Open requires the installation to send email, so new Users can verify their address and reset their own password; it arrives with sign-up, for the Hosted Service.
+The installation setting that decides who may become a User: Only Me, the default, where nobody
+can join; Invitation Only; or the planned Open policy, where anyone may sign up after verification.
+Under Only Me the Web UI hides Users, Invitations, Plans, and the Operator Overview. An Installation
+Administrator may switch to Invitation Only, and back to Only Me only while no other User exists.
+Data is User-scoped under every policy; the policy decides only who may join and what the Web UI
+shows. Open requires tested identity email and arrives with verified sign-up for the Hosted Service;
+it remains unavailable until PR 8 of ADR 0040. Self-service password recovery is independent of Open
+and is available under the supported policies when identity email is configured.
 _Avoid_: Signup mode, public registration
 
 **Invitation**:
 A single-use, expiring link an Installation Administrator creates so one person can become a User and choose their own credentials. It works under Invitation Only and Open, never under Only Me, and expires after 7 days. A Password Reset Link is its counterpart for an existing User; neither lets the administrator see or set a password.
 _Avoid_: Invite code, admin-created account
+
+**Password Reset Link**:
+A single-use proof allowing an existing active User to choose a new password. An Installation
+Administrator may issue a hand-delivered link lasting seven days; when identity email is configured,
+an active User may request an emailed link lasting one hour under any supported Registration
+Policy. Requests never disclose whether an address belongs to a User. Completion requires the
+current credential revision and an unexpired proof, changes the password, and ends all sessions
+and other reset proofs atomically. It never enables a disabled User or signs anyone in. Password
+and email changes and disabling a User invalidate earlier proofs permanently. Existing and
+Invitation Only email addresses remain trusted recovery addresses without retroactive verification;
+direct email changes retain that trust until verified email changes ship in PR 3 (ADR 0040).
 
 **Public Health Status**:
 The minimal unauthenticated indication that the service is running. Calendar, account, rule, OAuth, audit, and incident details require the session of the User they belong to. Installation Status is its authenticated counterpart.

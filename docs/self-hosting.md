@@ -634,3 +634,38 @@ For exact settings and the additive migration 35 upgrade/rollback procedure, see
 [Identity email test readiness](deployment.md#identity-email-test-readiness). Stop the service and
 keep a matching database backup and previous image before upgrading; rollback restores those
 together. A later upgrade from that backup starts without restored email readiness.
+
+## Recover a password
+
+When identity SMTP, the Master Key, and a trusted HTTPS root `CALENDAR_SYNC_PUBLIC_URL` are
+configured, sign-in offers **Forgot password?** under Only me and Invitation only. A successful
+test is useful to diagnose mail, but is not required for recovery. The form always answers,
+"If this address can receive a reset link, we will send one." Active Users receive a single-use
+link lasting one hour; unknown and disabled addresses receive no mail. Reset ends existing
+sessions and asks the person to sign in again. Identity mail ignores incident email preferences.
+
+Check your account email before relying on recovery. Existing and invited Users' addresses and
+direct email changes remain trusted without verification: whoever owns that mailbox can reset the
+account. Verified email changes and Open registration are not shipped. Remote identity SMTP
+requires verified STARTTLS; emailed links require HTTPS, except localhost or literal loopback
+development. An HTTP LAN installation can still use an administrator's hand-delivered seven-day
+link without email. Reset never enables a disabled User.
+
+Check spam and SMTP settings if no link arrives, then retry after waiting. Queue saturation,
+restart, shutdown, or SMTP failure can lose a message; there is no automatic retry or durable
+outbox. Attackers can exhaust a person's email allowance or the installation's global allowance;
+ask another administrator for a link or wait for the window. If no administrator can sign in,
+use the existing [backup recovery procedure](data-ownership.md#backups-and-recovery). PR 4's offline
+recovery command is not shipped. See [exact allowances and retention](deployment.md#password-recovery).
+
+Before upgrading to migration 36, stop the service and back up its complete data directory and
+matching Master Key, preserving the previous image. Existing passwords and sessions survive, but
+legacy reset links are revoked and must be reissued. Rollback means stopping and restoring the
+matching pre-upgrade database and image together, losing writes since that backup; never run an
+old image on the upgraded database or remove migration records manually.
+
+Behind HTTPS proxies, configure only their exact peer IPs or narrow networks in
+`FORWARDED_ALLOW_IPS`, never `*`. Direct use leaves it empty, trusting no forwarded headers.
+Overwrite forwarded headers at the edge, restrict direct access to the application port, preserve
+`Authorization`, and enable secure cookies. Docker NAT may otherwise make clients share one gateway
+allowance. See [trusted proxy headers](deployment.md#trusted-proxy-headers) before exposing recovery.
