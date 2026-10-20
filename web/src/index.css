@@ -631,6 +631,33 @@ p {
   line-height: 1.6;
 }
 
+/* Keep People's heading height aligned when the active tab's copy or action changes. */
+.people-page .page-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 3.2em;
+}
+
+.people-page .page-intro > span {
+  min-width: 0;
+  grid-area: 1 / 1;
+}
+
+.people-page .page-intro-reserve {
+  visibility: hidden;
+}
+
+.people-page .heading-action-placeholder {
+  min-height: 2.5rem;
+  visibility: hidden;
+}
+
+@media (pointer: coarse) {
+  .people-page .heading-action-placeholder {
+    min-height: 2.75rem;
+  }
+}
+
 /* The Overview gets one expressive surface. The rest of the app stays quiet so this remains a
    signal, not a new background treatment for every page. */
 .health-hero {
