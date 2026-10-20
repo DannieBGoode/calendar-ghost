@@ -234,6 +234,8 @@ its mappings and last successful incremental positions, and writes nothing while
   Settings says how many. If the rule's calendars belong to two accounts and both lost access, it
   restarts once both are reauthorized. If you think Google's refusal was momentary, choose **Check
   access** first: a check that passes clears the lapse and restarts the same rules.
+  If a later failure requires intervention while the rule is stopped, reauthorizing alone no longer
+  restarts it: resolve that failure and recover the rule with a preview.
 - **Google Calendar rejected synchronization**: Google refused a request for a reason other than
   authorization or rate limiting, or answered in a way Calendar Ghost could not use. Choose **Review
   this rule** and check that both calendars still exist and are shared with the accounts the rule
