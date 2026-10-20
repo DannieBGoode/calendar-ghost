@@ -11,20 +11,31 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field, replace
+from datetime import timedelta
 from pathlib import Path
 from threading import Event, Thread
+from typing import ClassVar
 
 import pytest
 
 from calendar_sync.application.identity.integration_tokens import IssueIntegrationToken
 from calendar_sync.application.identity.plans import ChangePlan
 from calendar_sync.application.identity.ports import IntegrationTokenScope, IssuedIntegrationToken
+from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.plan_holds import (
+    ChooseKeptRules,
+    PlanHolds,
+    PlanSettlementBusy,
+    SettleLocks,
+)
 from calendar_sync.application.sync.ports import Allowances, UnitOfWorkFactory
 from calendar_sync.application.sync.rules import EnableSyncRule
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.domain.plan_hold import GRACE, PlanGrace, PlanNoticeKind
 from calendar_sync.domain.plans import (
     Allowance,
     LimitedResource,
@@ -36,6 +47,7 @@ from calendar_sync.domain.plans import (
     PlanNameTaken,
     SyncInterval,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
@@ -44,8 +56,11 @@ from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAcc
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.plans import SqlitePlans
+from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWork
 from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
 from calendar_sync.infrastructure.security import CredentialCipher
+from tests.application.test_health import Incidents
+from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, endpoint, rule
 from tests.plans import FAMILY, FREE, plans_on
 from tests.users import USER, add_user, limited_user, sqlite_units
@@ -466,3 +481,365 @@ def test_two_plans_added_at_once_with_one_name_are_not_both_added(
     assert waited
     assert [type(answer) for answer in answers] == [Plan, PlanNameTaken]
     assert [listing.plan for listing in SqlitePlans(database).plans()] == [answers[0]]
+
+
+# Plan Hold settlement
+
+
+class _Job:
+    """A bounded test worker that never hides a thread failure."""
+
+    pending: ClassVar[list[_Job]] = []
+
+    def __init__(self, operation):
+        self.pending.append(self)
+        self.answers = []
+        self.started = Event()
+        self.done = Event()
+
+        def run():
+            self.started.set()
+            try:
+                self.answers.append(operation())
+            except BaseException as error:
+                self.answers.append(error)
+            finally:
+                self.done.set()
+
+        self.thread = Thread(target=run)
+        self.thread.start()
+        assert self.started.wait(2)
+
+    def finish(self):
+        self.thread.join(5)
+        assert not self.thread.is_alive()
+        assert len(self.answers) == 1
+        self.pending.remove(self)
+        return self.answers[0]
+
+
+class _DiscoveryLocks(RuleLocks):
+    """Pause settlement after discovery closes, before any rule lock is acquired."""
+
+    def __init__(self):
+        super().__init__()
+        self.discovered = Event()
+        self.proceed = Event()
+
+    def for_writes(self, rule_id):
+        if not self.discovered.is_set():
+            self.discovered.set()
+            assert self.proceed.wait(5)
+        return super().for_writes(rule_id)
+
+
+def _holds(units, plans, locks=None):
+    return PlanHolds(units, USER, plans, locks or RuleLocks(), SettleLocks(), FixedClock())
+
+
+def _save_grace(units, *, limit=1, admissions=0):
+    with units() as uow:
+        uow.plan_grace.save(PlanGrace(NOW - timedelta(days=1), limit, admissions))
+        uow.commit()
+
+
+def _stored_rule(units, rule_id):
+    with units() as uow:
+        stored = uow.rules.get(rule_id)
+    assert stored is not None
+    return stored
+
+
+def _lower(plans, limit=1):
+    plans.change(replace(TWO_RULES, limits=replace(TWO_RULES.limits, rules=limit)), NOW)
+
+
+def test_lowering_before_settle_is_seen_and_after_writer_waits(tmp_path):
+    plans, units = _member_with_rules(
+        tmp_path / "test.db", rule(), _previewed_rule(NEXT_RULE).enable()
+    )
+    locks = _DiscoveryLocks()
+    gate = HeldAllowances(plans)
+    holding = _Job(_holds(units, gate, locks).settle)
+    try:
+        assert locks.discovered.wait(2)
+        _lower(plans)
+        locks.proceed.set()
+        assert gate.reading.wait(2)
+        raising = _Job(lambda: _lower(plans, 2))
+        assert not raising.done.wait(0.1)
+    finally:
+        locks.proceed.set()
+        gate.released.set()
+    notice = holding.finish()
+    assert raising.finish() is None
+    assert notice.kind is PlanNoticeKind.GRACE_STARTED
+    assert notice.limit == 1
+    with units() as uow:
+        assert uow.plan_grace.get().rule_limit == 1
+
+
+@pytest.mark.parametrize("before", [True, False])
+def test_lapse_before_and_after_release_is_preserved(tmp_path, before):
+    plans, units = _member_with_rules(tmp_path / "test.db", rule().hold())
+    gate = HeldAllowances(plans)
+    locks = RuleLocks()
+    lapses = LapsedAuthorizations(units, Incidents(), FixedClock(), locks)
+    account = rule().source.connected_account_id
+    failure = ProviderFailure(ProviderFailureKind.AUTHENTICATION, "synthetic", account_id=account)
+
+    def lapse():
+        return lapses.lapsed(account, failure, attempted_at=NOW)
+
+    if before:
+        assert _Job(lapse).finish() is True
+        gate.released.set()
+    holding = _Job(_holds(units, gate, locks).settle)
+    try:
+        assert gate.reading.wait(2)
+        if not before:
+            lapsing = _Job(lapse)
+            assert not lapsing.done.wait(0.1)
+    finally:
+        gate.released.set()
+    assert holding.finish() is None
+    if not before:
+        assert lapsing.finish() is True
+    current = _stored_rule(units, rule().id)
+    assert current.awaiting_reauthorization
+    assert not current.held_by_plan
+    assert not current.synchronizes
+
+
+def test_start_racing_release_cannot_exceed_limit(tmp_path):
+    plans, units = _member_with_rules(
+        tmp_path / "test.db", rule().hold(), _previewed_rule(NEXT_RULE)
+    )
+    _lower(plans)
+    gate = HeldAllowances(plans)
+    locks = RuleLocks()
+    holding = _Job(_holds(units, gate, locks).settle)
+    try:
+        assert gate.reading.wait(2)
+        starting = _Job(lambda: EnableSyncRule(units, locks, plans, USER).execute(NEXT_RULE))
+        assert not starting.done.wait(0.1)
+    finally:
+        gate.released.set()
+    assert holding.finish() is None
+    assert isinstance(starting.finish(), PlanLimitReached)
+    assert _stored_rule(units, rule().id).synchronizes
+    assert _stored_rule(units, NEXT_RULE).state is SyncRuleState.PREVIEWED
+
+
+def test_new_start_during_discovery_stays_unchanged(tmp_path):
+    plans, units = _member_with_rules(tmp_path / "test.db", rule(), _previewed_rule(NEXT_RULE))
+    _save_grace(units)
+    locks = _DiscoveryLocks()
+    holding = _Job(_holds(units, plans, locks).settle)
+    try:
+        assert locks.discovered.wait(2)
+        EnableSyncRule(units, locks, plans, USER).execute(NEXT_RULE)
+        _lower(plans)
+    finally:
+        locks.proceed.set()
+    notice = holding.finish()
+    assert notice.kind is PlanNoticeKind.GRACE_STARTED
+    assert _stored_rule(units, NEXT_RULE).synchronizes
+    with units() as uow:
+        grace = uow.plan_grace.get()
+        assert grace.admissions == 1
+        assert grace.holds_at == NOW + GRACE
+
+
+def test_replacement_during_settle_waits_for_next_pass(tmp_path):
+    old = _previewed_rule(NEXT_RULE).enable()
+    plans, units = _member_with_rules(tmp_path / "test.db", rule(), old)
+    _lower(plans)
+    _save_grace(units)
+    locks = _DiscoveryLocks()
+    holding = _Job(_holds(units, plans, locks).settle)
+    try:
+        assert locks.discovered.wait(2)
+        # The replacement's atomic place move, under the same rule write lock.
+        with locks.for_writes(old.id), units() as uow:
+            draft = replace(_previewed_rule(LATER_RULE), state=SyncRuleState.DRAFT).take_place_of(
+                old
+            )
+            uow.rules.add(draft)
+            uow.rules.inherit_place(draft.id, old.id)
+            uow.rules.save(old.begin_removal())
+            uow.commit()
+    finally:
+        locks.proceed.set()
+    assert holding.finish() is None  # The unlocked draft was not held or counted in a held notice.
+    assert _stored_rule(units, LATER_RULE).keeps_place
+    with units() as uow:
+        assert uow.plan_grace.get().holds_at < NOW
+    assert _holds(units, plans, locks).settle() is None
+    assert not _stored_rule(units, LATER_RULE).keeps_place
+    with units() as uow:
+        assert uow.plan_grace.get() is None
+
+
+def test_admission_survives_removal_and_restarts_grace(tmp_path):
+    plans, units = _member_with_rules(
+        tmp_path / "test.db",
+        rule(),
+        _previewed_rule(NEXT_RULE).enable(),
+        _previewed_rule(LATER_RULE),
+    )
+    _save_grace(units)
+    _lower(plans, 3)
+    assert isinstance(
+        _Job(lambda: EnableSyncRule(units, RuleLocks(), plans, USER).execute(LATER_RULE)).finish(),
+        SyncRule,
+    )
+    with units() as uow:
+        uow.rules.remove(rule().id)
+        uow.commit()
+    _lower(plans)
+    notice = _Job(_holds(units, plans).settle).finish()
+    assert notice.kind is PlanNoticeKind.GRACE_STARTED
+    assert notice.holds_at == NOW + GRACE
+    assert _stored_rule(units, LATER_RULE).synchronizes
+
+
+def test_keep_release_during_temporary_raise_restarts_grace(tmp_path):
+    plans, units = _member_with_rules(
+        tmp_path / "test.db",
+        rule(),
+        _previewed_rule(NEXT_RULE).enable(),
+        _previewed_rule(LATER_RULE).enable().hold(),
+    )
+    _save_grace(units)
+    _lower(plans, 3)
+    choice = ChooseKeptRules(_holds(units, plans))
+    assert _Job(lambda: choice.execute([LATER_RULE])).finish() is None
+    _lower(plans)
+    notice = _Job(_holds(units, plans).settle).finish()
+    assert notice.kind is PlanNoticeKind.GRACE_STARTED
+    with units() as uow:
+        assert uow.plan_grace.admissions() == 1
+        assert uow.plan_grace.get().holds_at == NOW + GRACE
+
+
+def test_settle_failure_rolls_back_every_change(tmp_path, monkeypatch):
+    plans, units = _member_with_rules(
+        tmp_path / "test.db",
+        rule(),
+        _previewed_rule(NEXT_RULE).enable(),
+        replace(_previewed_rule(LATER_RULE), keeps_place=True),
+    )
+    _lower(plans)
+    _save_grace(units)
+
+    def fail_commit(self):
+        raise RuntimeError("synthetic commit failure")
+
+    monkeypatch.setattr(SqliteUnitOfWork, "commit", fail_commit)
+    answer = _Job(_holds(units, plans).settle).finish()
+    assert isinstance(answer, RuntimeError)
+    assert _stored_rule(units, NEXT_RULE).synchronizes
+    assert _stored_rule(units, LATER_RULE).keeps_place
+    with units() as uow:
+        assert uow.plan_grace.get().holds_at == NOW - timedelta(days=1)
+        assert uow.plan_grace.admissions() == 0
+        assert not any(each.held_by_plan for each in uow.rules.list())
+
+
+def test_keep_choice_new_candidate_changes_nothing_until_retry(tmp_path):
+    plans, units = _member_with_rules(tmp_path / "test.db", rule(), _previewed_rule(NEXT_RULE))
+    with units() as uow:
+        uow.rules.keep([rule().id])
+        uow.commit()
+    locks = _DiscoveryLocks()
+    choice = ChooseKeptRules(_holds(units, plans, locks))
+    choosing = _Job(lambda: choice.execute([NEXT_RULE]))
+    try:
+        assert locks.discovered.wait(2)
+        EnableSyncRule(units, locks, plans, USER).execute(NEXT_RULE)
+    finally:
+        locks.proceed.set()
+    assert isinstance(choosing.finish(), PlanSettlementBusy)
+    with units() as uow:
+        assert {each.rule_id for each in uow.rules.standings() if each.kept} == {rule().id}
+    choice.execute([NEXT_RULE])
+    with units() as uow:
+        assert {each.rule_id for each in uow.rules.standings() if each.kept} == {NEXT_RULE}
+
+
+def test_failed_release_returns_no_notice_and_preserves_hold(tmp_path, monkeypatch):
+    plans, units = _member_with_rules(tmp_path / "test.db", rule().hold())
+
+    def refuse(self):
+        raise RuntimeError("synthetic commit failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(SqliteUnitOfWork, "commit", refuse)
+        answer = _Job(_holds(units, plans).settle).finish()
+    assert isinstance(answer, RuntimeError)
+    assert _stored_rule(units, rule().id).held_by_plan
+    assert _holds(units, plans).settle() is None
+    assert _stored_rule(units, rule().id).synchronizes
+
+
+def test_held_notice_counts_only_locked_committed_holds(tmp_path):
+    old = _previewed_rule(NEXT_RULE).enable()
+    extra = _previewed_rule(SyncRuleId("extra")).enable()
+    plans, units = _member_with_rules(tmp_path / "test.db", rule(), old, extra)
+    _lower(plans)
+    _save_grace(units)
+    locks = _DiscoveryLocks()
+    holding = _Job(_holds(units, plans, locks).settle)
+    try:
+        assert locks.discovered.wait(2)
+        with locks.for_writes(old.id), units() as uow:
+            draft = _previewed_rule(LATER_RULE).take_place_of(old)
+            uow.rules.add(draft)
+            uow.rules.inherit_place(draft.id, old.id)
+            uow.rules.save(old.begin_removal())
+            uow.commit()
+    finally:
+        locks.proceed.set()
+    notice = holding.finish()
+    assert notice.kind is PlanNoticeKind.RULES_HELD
+    assert notice.held == 1
+    assert _stored_rule(units, extra.id).held_by_plan
+    assert _stored_rule(units, LATER_RULE).keeps_place
+    with units() as uow:
+        assert uow.plan_grace.get().holds_at < NOW
+
+
+@pytest.fixture(autouse=True)
+def _join_plan_workers():
+    """Always join workers, including when an assertion fails before finish()."""
+    try:
+        yield
+    finally:
+        for job in tuple(_Job.pending):
+            job.thread.join(6)
+            assert not job.thread.is_alive()
+            _Job.pending.remove(job)
+
+
+def test_keep_choice_counts_but_does_not_swap_fresh_unlocked_rule(tmp_path):
+    plans, units = _member_with_rules(
+        tmp_path / "test.db", rule().hold(), _previewed_rule(NEXT_RULE)
+    )
+    _lower(plans)
+    locks = _DiscoveryLocks()
+    choice = ChooseKeptRules(_holds(units, plans, locks))
+    choosing = _Job(lambda: choice.execute([rule().id]))
+    try:
+        assert locks.discovered.wait(2)
+        EnableSyncRule(units, locks, plans, USER).execute(NEXT_RULE)
+    finally:
+        locks.proceed.set()
+    assert choosing.finish() is None
+    assert _stored_rule(units, rule().id).held_by_plan
+    assert _stored_rule(units, NEXT_RULE).synchronizes
+    with units() as uow:
+        assert {each.rule_id for each in uow.rules.standings() if each.kept} == {rule().id}
+    choice.execute([rule().id])
+    assert _stored_rule(units, rule().id).synchronizes
+    assert _stored_rule(units, NEXT_RULE).held_by_plan
