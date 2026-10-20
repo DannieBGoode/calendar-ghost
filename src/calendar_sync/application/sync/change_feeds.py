@@ -148,14 +148,14 @@ class ChangeFeedCursors:
     def advance(self, run: SyncRunContext, feeds: ChangeFeeds) -> None:
         """Save both cursors, reached only after every change in both batches succeeded."""
         uow, rule = run.uow, run.rule
-        uow.cursors.save(rule.id, feeds.source.next_cursor)
-        uow.destination_cursors.save(rule.id, feeds.destination.next_cursor)
-        if feeds.listed_in_full:
-            # Retention runs with the daily pass, which lists every event still observed.
-            cutoff = self.clock.now() - SOURCE_CHANGE_RETENTION
-            uow.audit.forget_change_values(cutoff)
-            uow.observations.forget_stale(rule.id, rule.source, cutoff)
         with self.locks.for_writes(rule.id):
+            uow.cursors.save(rule.id, feeds.source.next_cursor)
+            uow.destination_cursors.save(rule.id, feeds.destination.next_cursor)
+            if feeds.listed_in_full:
+                # Retention runs with the daily pass, which lists every event still observed.
+                cutoff = self.clock.now() - SOURCE_CHANGE_RETENTION
+                uow.audit.forget_change_values(cutoff)
+                uow.observations.forget_stale(rule.id, rule.source, cutoff)
             if run.reproject:
                 current = uow.rules.get(rule.id)
                 # An edit made while this run was in flight keeps reprojection pending.

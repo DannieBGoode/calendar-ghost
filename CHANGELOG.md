@@ -127,6 +127,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- A rule stopped only by Lapsed Authorization stays stopped for review if a later failure needs
+  intervention. Restoring its accounts no longer restarts it until it passes a recovery preview.
+- Pausing or changing a rule while its run saves incremental positions no longer risks a database
+  lock timeout. A run that already applied both batches can finish saving its positions while
+  preserving the rule's new state and any pending reprojection.
 - A new rule no longer copies recurring series that ended before its starting point. A rule
   "from the past 30 days" previewed, and its first sync added, series whose last occurrence was
   years ago, because Google still lists them. A series now syncs only while one of its occurrences

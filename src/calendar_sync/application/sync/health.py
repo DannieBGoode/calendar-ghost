@@ -169,12 +169,16 @@ class RuleHealth:
             self._notify(incident, now)
 
     def _degrade(self, rule: SyncRule) -> None:
-        if not rule.synchronizes:
+        if not (rule.synchronizes or rule.stopped_by_lapsed_authorization):
             return
         with self.locks.for_writes(rule.id), self.unit_of_work() as uow:
             current = uow.rules.get(rule.id)
-            if current is not None and current.synchronizes:
-                uow.rules.save(current.degrade())
+            if current is not None and (
+                current.synchronizes or current.stopped_by_lapsed_authorization
+            ):
+                uow.rules.save(
+                    current.degrade() if current.synchronizes else current.require_preview()
+                )
                 uow.commit()
 
     def _notify(self, incident: IncidentReport, at: datetime) -> None:

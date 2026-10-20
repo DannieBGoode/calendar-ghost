@@ -92,8 +92,8 @@ re-enabling starts with both preserved incremental positions. A rule degraded on
 Authorization, when its provider refuses a connected account's credentials, records that cause. Once
 every account it uses is authorized again, by Reauthorization or a passing access check, it returns
 to Enabled without a preview and continues from the same preserved positions (ADR 0027). A Material
-Rule Change, a pause, a removal, or disconnecting one of its accounts while it is stopped clears
-that cause, so its recovery needs a preview again.
+Rule Change, a pause, a removal, disconnecting one of its accounts, or a later failure requiring
+intervention while it is stopped clears that cause, so its recovery needs a preview again.
 
 A rule counts toward its User's Plan (`counts_toward_plan`) when it is Enabled, when it is Degraded
 only by Lapsed Authorization (`holdable`), or when it keeps a place (`keeps_place`, ADR 0038).
