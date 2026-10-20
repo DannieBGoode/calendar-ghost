@@ -363,3 +363,35 @@ def test_purge_removes_only_obsolete_proofs(tmp_path: Path, status: str) -> None
     assert h.links.owner(live.token, clock.now()) == SECOND.id
     with transaction(path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM password_reset_links").fetchone()[0] == 1
+
+
+def test_token_checks_preserve_obsolete_proofs_and_clean_only_obsolete_counters(
+    tmp_path: Path,
+) -> None:
+    path, clock, h = _sqlite_identity(tmp_path)
+    attempts = SqliteResetAdmission(path, KEY, clock)
+    link = h.links.issue(SECOND.id, FIRST.id, clock.now())
+    attempts.record_invalid("192.0.2.1")
+    clock.moment = link.expires_at
+    admission = ResetAdmission(MemoryIdentityFrontGate(clock), attempts, clock)
+    assert not admission.check_token(
+        "192.0.2.2", lambda: h.links.owner(link.token, clock.now()) is not None
+    )
+    assert count(path) == 1
+    with transaction(path) as connection:
+        row = connection.execute("SELECT used_at, revoked_at FROM password_reset_links").fetchone()
+        assert row is not None
+        assert tuple(row) == (None, None)
+
+
+def test_invalid_check_only_counter_cleanup_is_bounded(tmp_path: Path) -> None:
+    path, clock, attempts = store(tmp_path)
+    with transaction(path) as connection:
+        connection.executemany(
+            "INSERT INTO reset_request_attempts(boundary, network_digest, admitted_at) "
+            "VALUES ('invalid-token', 'synthetic-digest', ?)",
+            [(clock.now().timestamp() - 3600,) for _ in range(501)],
+        )
+    admission = ResetAdmission(MemoryIdentityFrontGate(clock), attempts, clock)
+    assert not admission.check_token("192.0.2.1", lambda: False)
+    assert count(path) == 2

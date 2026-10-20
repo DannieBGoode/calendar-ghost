@@ -1872,6 +1872,37 @@
         "title": "OwnPlanResponse",
         "type": "object"
       },
+      "PasswordResetAcceptedResponse": {
+        "properties": {
+          "accepted": {
+            "const": true,
+            "default": true,
+            "title": "Accepted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "title": "PasswordResetAcceptedResponse",
+        "type": "object"
+      },
+      "PasswordResetLinkRequest": {
+        "properties": {
+          "token": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[\\x00-\\x7f]+$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "PasswordResetLinkRequest",
+        "type": "object"
+      },
       "PendingInvitationResponse": {
         "properties": {
           "created_at": {
@@ -3296,16 +3327,31 @@
         "title": "ReplaceRuleRequest",
         "type": "object"
       },
+      "RequestPasswordResetRequest": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "RequestPasswordResetRequest",
+        "type": "object"
+      },
       "ResetPasswordRequest": {
         "properties": {
           "password": {
-            "maxLength": 256,
+            "maxLength": 1024,
+            "minLength": 12,
             "title": "Password",
             "type": "string"
           },
           "token": {
-            "maxLength": 200,
+            "maxLength": 128,
             "minLength": 1,
+            "pattern": "^[\\x00-\\x7f]+$",
             "title": "Token",
             "type": "string"
           }
@@ -4097,10 +4143,16 @@
           "password_only_sign_in": {
             "title": "Password Only Sign In",
             "type": "boolean"
+          },
+          "password_reset_available": {
+            "default": false,
+            "title": "Password Reset Available",
+            "type": "boolean"
           }
         },
         "required": [
           "administrator_configured",
+          "password_reset_available",
           "password_only_sign_in"
         ],
         "title": "SetupStatusResponse",
@@ -6691,7 +6743,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LinkRequest"
+                "$ref": "#/components/schemas/PasswordResetLinkRequest"
               }
             }
           },
@@ -6720,6 +6772,44 @@
           }
         },
         "summary": "Check Password Reset"
+      }
+    },
+    "/api/v1/password-resets/request": {
+      "post": {
+        "operationId": "request_password_reset_api_v1_password_resets_request_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPasswordResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetAcceptedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Password Reset"
       }
     },
     "/api/v1/plan-assignments": {

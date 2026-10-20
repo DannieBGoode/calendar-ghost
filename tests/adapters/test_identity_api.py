@@ -37,13 +37,21 @@ def test_setup_asks_for_an_email_and_a_password_and_signs_the_administrator_in(
         after = client.get("/api/v1/setup").json()
         again = client.post("/api/v1/setup/admin", json={"email": EMAIL, "password": PASSWORD})
 
-    assert before == {"administrator_configured": False, "password_only_sign_in": False}
+    assert before == {
+        "administrator_configured": False,
+        "password_only_sign_in": False,
+        "password_reset_available": False,
+    }
     assert (refused.status_code, refused.json()["code"]) == (422, "invalid_email")
     assert created.status_code == 200
     assert session["authenticated"] is True
     assert session["user"]["email"] == EMAIL
     assert session["user"]["role"] == "installation_administrator"
-    assert after == {"administrator_configured": True, "password_only_sign_in": False}
+    assert after == {
+        "administrator_configured": True,
+        "password_only_sign_in": False,
+        "password_reset_available": False,
+    }
     assert (again.status_code, again.json()["code"]) == (409, "setup_complete")
 
 
@@ -106,7 +114,11 @@ def test_the_upgraded_administrator_signs_in_by_password_until_they_add_an_email
         by_email = client.post("/api/v1/session", json={"email": EMAIL, "password": PASSWORD})
         after = client.get("/api/v1/setup").json()
 
-    assert setup == {"administrator_configured": True, "password_only_sign_in": True}
+    assert setup == {
+        "administrator_configured": True,
+        "password_only_sign_in": True,
+        "password_reset_available": False,
+    }
     assert signed_in.status_code == 200
     assert session["user"]["email"] is None
     assert (blocked.status_code, blocked.json()["code"]) == (403, "email_required")

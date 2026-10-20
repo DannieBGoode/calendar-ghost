@@ -26,6 +26,7 @@ from calendar_sync.application.identity.ports import (
     SignInThrottle,
     UserDirectory,
 )
+from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.identity.sign_in import require_password, start_session
 from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.application.shared.ports import Clock, IdGenerator
@@ -92,8 +93,8 @@ class LinkAttemptsThrottled(SignInThrottled):
 
 @dataclass(frozen=True, slots=True)
 class LinkAttempts:
-    """Unusable Invitation and Password Reset Links tried from one client address, counted as
-    failed sign-ins are, so nobody can try tokens without end. A link is checked before any
+    """Unusable Invitations tried from one client address, counted as failed sign-ins are, so
+    nobody can try tokens without end. An Invitation is checked before any
     password is hashed, so an unusable one costs the installation no hashing."""
 
     throttle: SignInThrottle
@@ -282,11 +283,11 @@ class IssuePasswordReset:
 class CheckPasswordReset:
     links: PasswordResetLinks
     clock: Clock
-    attempts: LinkAttempts
+    attempts: ResetAdmission
 
     def execute(self, token: str, client: str) -> bool:
         now = self.clock.now()
-        return self.attempts.usable(client, lambda: self.links.owner(token, now) is not None)
+        return self.attempts.check_token(client, lambda: self.links.owner(token, now) is not None)
 
 
 @dataclass(slots=True)
@@ -296,13 +297,14 @@ class ResetPassword:
     links: PasswordResetLinks
     passwords: PasswordHasher
     clock: Clock
-    attempts: LinkAttempts
+    attempts: ResetAdmission
 
     def execute(self, token: str, password: str, client: str) -> None:
         now = self.clock.now()
         require_password(password)
         # Checked before hashing, which is slow on purpose; using it checks again.
-        if not self.attempts.usable(client, lambda: self.links.owner(token, now) is not None):
+        self.attempts.admit_completion(client)
+        if not self.attempts.check_token(client, lambda: self.links.owner(token, now) is not None):
             raise LinkUnusable("this link was already used, replaced, or has expired")
         owner = self.links.reset(token, self.passwords.hash(password))
         if owner is None:

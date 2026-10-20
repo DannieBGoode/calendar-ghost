@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from calendar_sync.application.operations.ports import IncidentResolutionValue, IncidentState
+from calendar_sync.domain.access import email_address
 
 ProjectionChoice = Literal["delete", "detach"]
 # What a rule does with events its source calendar answered Maybe to, or has not answered yet.
@@ -98,6 +99,7 @@ class ApiResponse(BaseModel):
 
 class SetupStatusResponse(ApiResponse):
     administrator_configured: bool
+    password_reset_available: bool = False
     password_only_sign_in: bool
     """Whether the upgraded first User may still sign in by password alone."""
 
@@ -726,9 +728,25 @@ class AcceptInvitationRequest(BaseModel):
     password: str = Field(max_length=256)
 
 
-class ResetPasswordRequest(BaseModel):
-    token: str = Field(min_length=1, max_length=200)
-    password: str = Field(max_length=256)
+class RequestPasswordResetRequest(BaseModel):
+    email: str = Field(repr=False)
+
+    @field_validator("email")
+    @classmethod
+    def normalized_email(cls, value: str) -> str:
+        return email_address(value)
+
+
+class PasswordResetAcceptedResponse(ApiResponse):
+    accepted: Literal[True] = True
+
+
+class PasswordResetLinkRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=128, pattern=r"^[\x00-\x7f]+$", repr=False)
+
+
+class ResetPasswordRequest(PasswordResetLinkRequest):
+    password: str = Field(min_length=12, max_length=1024, repr=False)
 
 
 class UserResponse(ApiResponse):

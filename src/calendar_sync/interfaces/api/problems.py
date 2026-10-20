@@ -37,6 +37,7 @@ from calendar_sync.application.identity.errors import (
     PasswordPolicyViolation,
     PlanKeyTaken,
     PlanNotFound,
+    ResetStorageUnavailable,
     SignInThrottled,
     UserDisabled,
 )
@@ -45,6 +46,11 @@ from calendar_sync.application.identity.identity_email import (
     IdentityEmailQueueBusy,
     IdentityEmailStorageUnavailable,
     IdentityEmailTestThrottled,
+)
+from calendar_sync.application.identity.reset_admission import (
+    ResetAdmissionStorageUnavailable,
+    ResetGlobalThrottled,
+    ResetNetworkThrottled,
 )
 from calendar_sync.application.operations.errors import (
     ActivityEventNotFound,
@@ -123,6 +129,10 @@ def problem(
 
 # Looked up along each exception's MRO, so a subclass inherits its parent's code.
 _CODES: dict[type[Exception], str] = {
+    ResetStorageUnavailable: "reset_storage_unavailable",
+    ResetAdmissionStorageUnavailable: "reset_storage_unavailable",
+    ResetGlobalThrottled: "reset_global_throttled",
+    ResetNetworkThrottled: "reset_network_throttled",
     IdentityEmailNotConfigured: "identity_email_not_configured",
     IdentityEmailQueueBusy: "identity_email_queue_busy",
     IdentityEmailStorageUnavailable: "identity_email_storage_unavailable",
@@ -306,6 +316,12 @@ async def _validation_problem(_request: Request, error: Exception) -> JSONRespon
     """FastAPI's list of errors stays the detail; params name the first one for the Web UI."""
     assert isinstance(error, RequestValidationError)
     errors = list(error.errors())
+    if _request.url.path.rstrip("/").startswith("/api/v1/password-resets"):
+        # Never echo a body, token, password, email, or validator exception context.
+        errors = [
+            {key: value for key, value in item.items() if key in {"loc", "type", "msg"}}
+            for item in errors
+        ]
     params: dict[str, Any] = {}
     if errors:
         first = errors[0]

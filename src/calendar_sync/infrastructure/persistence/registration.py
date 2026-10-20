@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import secrets
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from calendar_sync.application.identity.administration import AdministratorRequired
-from calendar_sync.application.identity.errors import UserDisabled
+from calendar_sync.application.identity.errors import ResetStorageUnavailable, UserDisabled
 from calendar_sync.application.identity.password_reset import PreparedPasswordReset
 from calendar_sync.application.identity.ports import IssuedLink, PendingInvitation
 from calendar_sync.application.shared.ports import Clock, IdGenerator
@@ -170,6 +171,15 @@ class SqliteInvitations:
         return True
 
 
+@contextmanager
+def _reset_transaction(database: Path) -> Iterator[sqlite3.Connection]:
+    try:
+        with transaction(database, timeout=0.1) as connection:
+            yield connection
+    except sqlite3.Error:
+        raise ResetStorageUnavailable from None
+
+
 class SqlitePasswordResetLinks:
     def __init__(self, database_path: Path, ids: IdGenerator, clock: Clock) -> None:
         self._database_path = database_path
@@ -177,7 +187,7 @@ class SqlitePasswordResetLinks:
         self._clock = clock
 
     def issue(self, user_id: UserId, created_by: UserId, at: datetime) -> IssuedLink:
-        with transaction(self._database_path) as connection:
+        with _reset_transaction(self._database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
             administrator = connection.execute(
                 "SELECT 1 FROM users WHERE id = ? AND state = 'active' "
@@ -196,7 +206,7 @@ class SqlitePasswordResetLinks:
             return self._insert(connection, user_id, int(row[0]), created_by, at, link_expiry(at))
 
     def issue_for_email(self, email: str) -> PreparedPasswordReset | None:
-        with transaction(self._database_path, timeout=0.1) as connection:
+        with _reset_transaction(self._database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
             now = self._clock.now()
             row = connection.execute(
@@ -245,11 +255,11 @@ class SqlitePasswordResetLinks:
         return link
 
     def owner(self, token: str, at: datetime) -> UserId | None:
-        with transaction(self._database_path) as connection:
+        with _reset_transaction(self._database_path) as connection:
             return _owner(connection, token, at)
 
     def reset(self, token: str, password_hash: str) -> UserId | None:
-        with transaction(self._database_path, timeout=0.1) as connection:
+        with _reset_transaction(self._database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
             now = self._clock.now()
             owner = _owner(connection, token, now)

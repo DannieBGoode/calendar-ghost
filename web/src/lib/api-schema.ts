@@ -588,6 +588,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/password-resets/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request Password Reset */
+        post: operations["request_password_reset_api_v1_password_resets_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plan-assignments": {
         parameters: {
             query?: never;
@@ -1749,6 +1766,20 @@ export interface components {
             /** Rules Counted */
             rules_counted: number;
         };
+        /** PasswordResetAcceptedResponse */
+        PasswordResetAcceptedResponse: {
+            /**
+             * Accepted
+             * @default true
+             * @constant
+             */
+            accepted: true;
+        };
+        /** PasswordResetLinkRequest */
+        PasswordResetLinkRequest: {
+            /** Token */
+            token: string;
+        };
         /** PendingInvitationResponse */
         PendingInvitationResponse: {
             /** Created At */
@@ -2217,6 +2248,11 @@ export interface components {
             projections: "delete" | "detach";
             source: components["schemas"]["CalendarEndpointPayload"];
         };
+        /** RequestPasswordResetRequest */
+        RequestPasswordResetRequest: {
+            /** Email */
+            email: string;
+        };
         /** ResetPasswordRequest */
         ResetPasswordRequest: {
             /** Password */
@@ -2483,6 +2519,11 @@ export interface components {
             administrator_configured: boolean;
             /** Password Only Sign In */
             password_only_sign_in: boolean;
+            /**
+             * Password Reset Available
+             * @default false
+             */
+            password_reset_available: boolean;
         };
         /** SignInRequest */
         SignInRequest: {
@@ -3841,7 +3882,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["LinkRequest"];
+                "application/json": components["schemas"]["PasswordResetLinkRequest"];
             };
         };
         responses: {
@@ -3852,6 +3893,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LinkStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_password_reset_api_v1_password_resets_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestPasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetAcceptedResponse"];
                 };
             };
             /** @description Validation Error */

@@ -31,6 +31,7 @@ from calendar_sync.application.identity.administration import (
 )
 from calendar_sync.application.identity.errors import EmailTaken, IncorrectCredentials, UserDisabled
 from calendar_sync.application.identity.ports import IssuedLink
+from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.identity.sign_in import SignIn
 from calendar_sync.domain.access import (
     LastAdministrator,
@@ -41,6 +42,7 @@ from calendar_sync.domain.access import (
     UserId,
     UserState,
 )
+from calendar_sync.infrastructure.identity_front_gate import MemoryIdentityFrontGate
 from tests.helpers import NOW
 from tests.identity_fakes import (
     CountingThrottle,
@@ -102,8 +104,14 @@ class Installation:
     def check_invitation(self) -> CheckInvitation:
         return CheckInvitation(self.registration, self.invitations, self.clock, self.attempts)
 
+    @property
+    def reset_attempts(self) -> ResetAdmission:
+        return ResetAdmission(MemoryIdentityFrontGate(self.clock), None, self.clock)
+
     def reset(self, passwords: PlainPasswords | None = None) -> ResetPassword:
-        return ResetPassword(self.resets, passwords or PlainPasswords(), self.clock, self.attempts)
+        return ResetPassword(
+            self.resets, passwords or PlainPasswords(), self.clock, self.reset_attempts
+        )
 
     def invite(self) -> InviteUser:
         return InviteUser(self.users, self.registration, self.invitations, self.clock)
@@ -364,7 +372,7 @@ def test_a_reset_link_lets_its_user_choose_a_new_password_once_and_signs_them_ou
 def test_a_newer_reset_link_replaces_the_earlier_one() -> None:
     installation = _installation(MEMBER)
     issue = IssuePasswordReset(installation.users, installation.resets, installation.clock)
-    check = CheckPasswordReset(installation.resets, installation.clock, installation.attempts)
+    check = CheckPasswordReset(installation.resets, installation.clock, installation.reset_attempts)
     earlier = issue.execute(ADMIN.id, MEMBER.id)
 
     later = issue.execute(ADMIN.id, MEMBER.id)
@@ -526,17 +534,22 @@ def test_a_usable_invitation_refused_for_another_reason_still_counts_toward_the_
     assert passwords.hashed < 50
 
 
-def test_a_client_trying_unusable_links_waits_whichever_link_route_it_uses() -> None:
+def test_reset_attempts_do_not_consume_invitation_allowance() -> None:
     installation = _installation(MEMBER)
     installation.registration.current = RegistrationPolicy.INVITATION_ONLY
     link = installation.invite().execute(ADMIN.id)
-    check_reset = CheckPasswordReset(installation.resets, installation.clock, installation.attempts)
+    check_reset = CheckPasswordReset(
+        installation.resets, installation.clock, installation.reset_attempts
+    )
 
     assert not installation.check_invitation().execute("forged", CLIENT)
     assert not check_reset.execute("forged", CLIENT)
     with pytest.raises(LinkUnusable):
         installation.reset().execute("forged", "a brand new password", CLIENT)
 
+    assert installation.check_invitation().execute(link.token, CLIENT)
+    assert not installation.check_invitation().execute("forged-again", CLIENT)
+    assert not installation.check_invitation().execute("forged-once-more", CLIENT)
     with pytest.raises(LinkAttemptsThrottled):
         installation.check_invitation().execute(link.token, CLIENT)
     with pytest.raises(LinkAttemptsThrottled):

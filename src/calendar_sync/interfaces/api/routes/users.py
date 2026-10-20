@@ -1,7 +1,7 @@
 """People and Who can join: the Registration Policy, Invitations, roles, disabling, and deletion.
 
-Every route here is an Installation Administrator's, except the two links people follow to join
-or to choose a new password, which are public and need the link's token.
+Every route here is an Installation Administrator's, except the public Invitation check and
+acceptance routes, which need the link's token. Public reset routes live in password_reset.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from calendar_sync.application.identity.administration import (
     ChangeRole,
     ChangeUserState,
     CheckInvitation,
-    CheckPasswordReset,
     DeleteUser,
     DeletionResult,
     InviteUser,
@@ -27,7 +26,6 @@ from calendar_sync.application.identity.administration import (
     ListInvitations,
     RegistrationClosed,
     RegistrationStatus,
-    ResetPassword,
     RevokeInvitation,
     SetRegistrationPolicy,
     ShowRegistration,
@@ -41,6 +39,8 @@ from calendar_sync.application.identity.errors import (
     EmailTaken,
     IncorrectCredentials,
     PasswordPolicyViolation,
+    ResetStorageUnavailable,
+    UserDisabled,
 )
 from calendar_sync.application.identity.ports import IssuedLink, UserQuery, UserSort
 from calendar_sync.application.operations.operator_overview import (
@@ -82,7 +82,6 @@ from calendar_sync.interfaces.api.schemas import (
     PersonResponse,
     RegistrationRequest,
     RegistrationResponse,
-    ResetPasswordRequest,
     RoleRequest,
     SessionResponse,
     UserDeletionResponse,
@@ -111,10 +110,6 @@ class Administration(Protocol):
     def accept_invitation(self) -> AcceptInvitation: ...
     @property
     def issue_password_reset(self) -> IssuePasswordReset: ...
-    @property
-    def check_password_reset(self) -> CheckPasswordReset: ...
-    @property
-    def reset_password(self) -> ResetPassword: ...
     @property
     def change_role(self) -> ChangeRole: ...
     @property
@@ -232,30 +227,6 @@ def accept_invitation(
     return signed_in(services.identity.users.get(session.user_id), services)
 
 
-@router.post("/api/v1/password-resets/check", response_model=LinkStatusResponse)
-def check_password_reset(
-    payload: LinkRequest, request: Request, services: Services
-) -> LinkStatusResponse:
-    check = services.administration.check_password_reset
-    try:
-        return LinkStatusResponse(usable=check.execute(payload.token, _client(request)))
-    except LinkAttemptsThrottled as error:
-        raise _throttled(error) from error
-
-
-@router.post("/api/v1/password-resets", status_code=status.HTTP_204_NO_CONTENT)
-def reset_password(payload: ResetPasswordRequest, request: Request, services: Services) -> None:
-    reset = services.administration.reset_password
-    try:
-        reset.execute(payload.token, payload.password, _client(request))
-    except LinkAttemptsThrottled as error:
-        raise _throttled(error) from error
-    except LinkUnusable as error:
-        raise problem_from(status.HTTP_410_GONE, error) from error
-    except PasswordPolicyViolation as error:
-        raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
-
-
 @router.get("/api/v1/users", response_model=UserPageResponse)
 def users(
     services: Services,
@@ -335,7 +306,9 @@ def issue_password_reset(
         )
     except UserNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
-    except YourOwnResetLink as error:
+    except ResetStorageUnavailable as error:
+        raise problem_from(status.HTTP_503_SERVICE_UNAVAILABLE, error) from error
+    except (YourOwnResetLink, UserDisabled) as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
 
 

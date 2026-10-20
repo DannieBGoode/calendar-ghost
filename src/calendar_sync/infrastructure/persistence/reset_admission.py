@@ -97,6 +97,8 @@ class SqliteResetAdmission:
                     "VALUES (?, ?, ?)",
                     (boundary, digest, now),
                 )
+                if boundary == "invalid-token":
+                    _purge_attempts(connection, now, 500)
         except sqlite3.Error:
             raise ResetAdmissionStorageUnavailable from None
 
@@ -154,13 +156,17 @@ def _email_allowed(connection: sqlite3.Connection, keys: tuple[str, str, str], n
     )
 
 
-def _purge(connection: sqlite3.Connection, cutoff: datetime, limit: int) -> int:
-    removed = connection.execute(
+def _purge_attempts(connection: sqlite3.Connection, cutoff: float, limit: int) -> int:
+    return connection.execute(
         "DELETE FROM reset_request_attempts WHERE id IN ("
         "SELECT id FROM reset_request_attempts WHERE admitted_at <= ? "
         "ORDER BY admitted_at, id LIMIT ?)",
-        (cutoff.timestamp() - HOUR, limit),
+        (cutoff - HOUR, limit),
     ).rowcount
+
+
+def _purge(connection: sqlite3.Connection, cutoff: datetime, limit: int) -> int:
+    removed = _purge_attempts(connection, cutoff.timestamp(), limit)
     remaining = limit - removed
     if remaining:
         removed += connection.execute(

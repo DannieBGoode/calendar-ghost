@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from calendar_sync.application.identity.errors import ResetStorageUnavailable
 from calendar_sync.infrastructure.persistence.credentials import SqliteCredentialChanges
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.registration import SqlitePasswordResetLinks
@@ -127,7 +128,7 @@ def test_reset_atomic_failure_preserves_credential_proofs_and_sessions(tmp_path:
             "CREATE TRIGGER refuse_session_delete BEFORE DELETE ON user_sessions "
             "BEGIN SELECT RAISE(ABORT, 'private-exception-marker'); END"
         )
-    with pytest.raises(sqlite3.IntegrityError, match="private-exception-marker"):
+    with pytest.raises(ResetStorageUnavailable, match="Password reset is temporarily unavailable"):
         h.links.reset(prepared.link.token, "forbidden")
     assert h.changes.current(SECOND.id) == expected
     assert h.sessions.user_of(session.token) == SECOND.id
@@ -137,10 +138,11 @@ def test_reset_atomic_failure_preserves_credential_proofs_and_sessions(tmp_path:
 def test_reset_tokens_are_hashed_and_secret_values_never_logged(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    from calendar_sync.application.identity.administration import LinkAttempts, ResetPassword
+    from calendar_sync.application.identity.administration import ResetPassword
+    from calendar_sync.application.identity.reset_admission import ResetAdmission
+    from calendar_sync.infrastructure.identity_front_gate import MemoryIdentityFrontGate
     from calendar_sync.infrastructure.persistence.connections import transaction
     from calendar_sync.infrastructure.security import ScryptPasswords, token_hash
-    from tests.identity_fakes import CountingThrottle
 
     path, clock, h = _sqlite_identity(tmp_path)
     prepared = h.public.issue_for_email(SECOND.email or "")
@@ -148,7 +150,12 @@ def test_reset_tokens_are_hashed_and_secret_values_never_logged(
     address = SECOND.email
     assert address is not None
     secret = "a private synthetic reset password"
-    reset = ResetPassword(h.links, ScryptPasswords(), clock, LinkAttempts(CountingThrottle()))
+    reset = ResetPassword(
+        h.links,
+        ScryptPasswords(),
+        clock,
+        ResetAdmission(MemoryIdentityFrontGate(clock), None, clock),
+    )
     with caplog.at_level("DEBUG"):
         reset.execute(prepared.link.token, secret, "synthetic-client")
     snapshot = h.changes.current(SECOND.id)
@@ -391,3 +398,23 @@ def test_reset_and_sign_in_serialize_concurrent_session_start(
     new = h.sessions.start(SECOND.id, "reset-hash")
     assert new is not None
     assert h.sessions.user_of(new.token) == SECOND.id
+
+
+def test_reset_owner_read_obeys_short_anonymous_lock_timeout(tmp_path: Path) -> None:
+    import time
+
+    from calendar_sync.infrastructure.persistence.connections import transaction
+
+    path, clock, h = _sqlite_identity(tmp_path)
+    prepared = h.public.issue_for_email(SECOND.email or "")
+    assert prepared is not None
+    # A rollback-journal exclusive lock forces readers to wait too.
+    with transaction(path) as connection:
+        connection.execute("PRAGMA journal_mode = DELETE")
+    with transaction(path) as locked:
+        locked.execute("BEGIN EXCLUSIVE")
+        started = time.monotonic()
+        with pytest.raises(ResetStorageUnavailable):
+            h.links.owner(prepared.link.token, clock.now())
+        elapsed = time.monotonic() - started
+    assert 0.08 <= elapsed < 0.5

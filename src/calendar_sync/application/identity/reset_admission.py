@@ -90,7 +90,6 @@ class ResetAdmission:
         valid = self.gate.check_token(network, checked)
         if not valid and self.attempts is not None:
             self.attempts.record_invalid(network)
-        self._maintain()
         return valid
 
     def admit_completion(self, network: str) -> None:
