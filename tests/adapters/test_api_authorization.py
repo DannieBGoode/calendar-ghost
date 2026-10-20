@@ -43,6 +43,8 @@ PUBLIC_API_ROUTES = {
 }
 # Only an Installation Administrator may use these (ADR 0030), Plans among them (ADR 0038).
 ADMINISTRATOR_ROUTES = {
+    ("GET", "/api/v1/identity-email"),
+    ("POST", "/api/v1/identity-email/test"),
     ("GET", "/api/v1/registration"),
     ("PUT", "/api/v1/registration"),
     ("GET", "/api/v1/invitations"),

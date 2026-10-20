@@ -54,10 +54,11 @@ class MemoryIdentityEmailTests:
         self.readiness = (test.fingerprint, at)
         return True
 
-    def purge(self, before: datetime, limit: int) -> None:
+    def purge(self, before: datetime, limit: int) -> int:
         old = sorted((at, key) for key, (_, at) in self.attempts.items() if at < before)
         for _, key in old[: max(0, limit)]:
             del self.attempts[key]
+        return len(old[: max(0, limit)])
 
     def return_to_setup(self) -> None:
         self.generation += 1

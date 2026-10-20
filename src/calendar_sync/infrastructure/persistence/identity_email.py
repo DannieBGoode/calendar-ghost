@@ -86,18 +86,19 @@ class SqliteIdentityEmailTests:
         except sqlite3.Error:
             raise IdentityEmailStorageUnavailable from None
 
-    def purge(self, before: datetime, limit: int) -> None:
+    def purge(self, before: datetime, limit: int) -> int:
         if limit <= 0:
-            return
+            return 0
         try:
             with transaction(self._database, timeout=0.1) as connection:
-                connection.execute(
+                result = connection.execute(
                     "DELETE FROM identity_email_test_attempts WHERE id IN "
                     "(SELECT id FROM identity_email_test_attempts "
                     "WHERE julianday(admitted_at) < julianday(?) "
                     "ORDER BY julianday(admitted_at), id LIMIT ?)",
                     (before.isoformat(), limit),
                 )
+                return result.rowcount
         except sqlite3.Error:
             raise IdentityEmailStorageUnavailable from None
 

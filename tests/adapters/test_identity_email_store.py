@@ -163,13 +163,13 @@ def test_identity_attempt_purge_is_bounded(tmp_path: Path) -> None:
     database, tests = store(tmp_path)
     for _ in range(3):
         tests.admit(FIRST.id, "f", NOW)
-    tests.purge(NOW, 2)
+    assert tests.purge(NOW, 2) == 0
     with transaction(database) as connection:
         assert (
             connection.execute("SELECT COUNT(*) FROM identity_email_test_attempts").fetchone()[0]
             == 3
         )
-    tests.purge(NOW + timedelta(seconds=1), 2)
+    assert tests.purge(NOW + timedelta(seconds=1), 2) == 2
     with transaction(database) as connection:
         assert (
             connection.execute("SELECT COUNT(*) FROM identity_email_test_attempts").fetchone()[0]
@@ -327,3 +327,25 @@ def test_missing_readiness_row_is_a_storage_failure(tmp_path: Path) -> None:
         tests.tested_at("f")
     with pytest.raises(IdentityEmailStorageUnavailable):
         tests.admit(FIRST.id, "f", NOW)
+
+
+@pytest.mark.parametrize("kind", ["memory", "sqlite"])
+def test_identity_email_purge_returns_deleted_count(tmp_path: Path, kind: str) -> None:
+    _, sqlite_tests = store(tmp_path)
+    tests = sqlite_tests if kind == "sqlite" else MemoryIdentityEmailTests({FIRST.id: FIRST})
+    for _ in range(3):
+        tests.admit(FIRST.id, "f", NOW)
+    assert tests.purge(NOW, 500) == 0
+    assert tests.purge(NOW + timedelta(seconds=1), 2) == 2
+    assert tests.purge(NOW + timedelta(seconds=1), 2) == 1
+    assert tests.purge(NOW + timedelta(seconds=1), 2) == 0
+    assert tests.purge(NOW + timedelta(seconds=1), 0) == 0
+
+
+def test_another_active_administrator_cannot_complete_an_actors_attempt(tmp_path: Path) -> None:
+    database, tests = store(tmp_path)
+    users = SqliteUserDirectory(database)
+    users.add(SECOND, "synthetic")
+    test = tests.admit(FIRST.id, "f", NOW)
+    assert not tests.record_success(replace(test, actor=SECOND.id), SECOND.email or "", NOW)
+    assert tests.tested_at("f") is None
