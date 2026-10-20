@@ -15,6 +15,10 @@ docs/development.md, Live provider checks.
     CALENDAR_GHOST_URL=http://127.0.0.1:8000 CALENDAR_GHOST_EMAIL=you@example.test \\
     CALENDAR_GHOST_PASSWORD=... .venv/bin/python scripts/live_provider_checks.py
 
+It stops at once, before it makes anything, when the signed-in User's Plan limits anything: one
+run starts more manual runs than such a Plan allows in an hour. Sign in as an administrator, give
+this User a Plan that limits nothing, or turn Plans off.
+
 It prints one Markdown table of results and exits 1 if any check failed.
 """
 
@@ -32,10 +36,12 @@ from typing import Any, cast
 
 import httpx
 
+from calendar_sync.application.sync.manual_runs import MANUAL_RUNS
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import calendar_providers
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.domain.plans import NO_LIMITS, PlanLimits, SyncInterval
 from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
@@ -829,6 +835,29 @@ def cleanup(live: Live, google_calendars: tuple[str, str]) -> Iterator[None]:
                 live.check("cleanup", "everything the run made is removed", False, repr(error))
 
 
+def require_unlimited_runs(api: httpx.Client) -> None:
+    """Stop before anything is made when the signed-in User's Plan limits anything, so it counts
+    their manual runs: one run of the checks starts more than it allows in an hour (ADR 0038).
+    Your plan answers limits only when a Plan applies."""
+    plan = api.get("/api/v1/account/plan")
+    plan.raise_for_status()
+    limits = plan.json()["limits"]
+    if limits is None:
+        return
+    applied = PlanLimits(
+        limits["rules"],
+        limits["connected_accounts"],
+        limits["integration_tokens"],
+        SyncInterval(limits["sync_interval"]),
+    )
+    if applied != NO_LIMITS:
+        raise SystemExit(
+            f"A Plan limits this User, so they may start only {MANUAL_RUNS} manual runs an hour, "
+            "and the checks need more: sign in as an administrator, give this User a Plan that "
+            "limits nothing, or turn Plans off."
+        )
+
+
 def connect() -> Live:
     settings = Settings.from_environment()
     clock = SystemClock()
@@ -849,6 +878,7 @@ def connect() -> Live:
             "password": os.environ["CALENDAR_GHOST_PASSWORD"],
         },
     ).raise_for_status()
+    require_unlimited_runs(api)
     accounts: dict[str, list[str]] = {}
     for account in api.get("/api/v1/accounts").json():
         accounts.setdefault(account["provider"], []).append(account["id"])

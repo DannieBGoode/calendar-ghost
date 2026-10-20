@@ -6,6 +6,7 @@ condition, never the HTTP status, and never change once shipped.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -66,6 +67,7 @@ from calendar_sync.application.sync.errors import (
     RuleNotExecutable,
     RuleNotFound,
 )
+from calendar_sync.application.sync.manual_runs import ManualRunsThrottled
 from calendar_sync.domain.access import InvalidEmail, LastAdministrator, OnlyMeNeedsOneUser
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.plans import (
@@ -124,6 +126,7 @@ _CODES: dict[type[Exception], str] = {
     RemovalInterrupted: "removal_interrupted",
     ReplacementInterrupted: "replacement_interrupted",
     ProviderFailure: "provider_failed",
+    ManualRunsThrottled: "manual_runs_throttled",
     AdminAlreadyConfigured: "setup_complete",
     PasswordPolicyViolation: "password_policy",
     ConnectedAccountNotFound: "account_not_found",
@@ -209,6 +212,9 @@ def _params(error: Exception) -> dict[str, ParamValue]:
         }
     if isinstance(error, SignInThrottled):
         return {"retry_after": error.retry_after}
+    if isinstance(error, ManualRunsThrottled):
+        # The wait is mostly tens of minutes, so the message names minutes, rounded up.
+        return {"retry_after": error.retry_after, "count": math.ceil(error.retry_after / 60)}
     if isinstance(error, UserDeletionInterrupted):
         return {"removed": error.removed, "remaining": error.remaining}
     return _plan_params(error)
@@ -247,7 +253,13 @@ def problem_from(status_code: int, error: Exception, *, fallback: str | None = N
     code = next((_CODES[kind] for kind in type(error).__mro__ if kind in _CODES), fallback)
     if code is None:
         raise TypeError(f"no error code for {type(error).__name__}")
-    return ApiProblem(status_code, code, str(error), _params(error))
+    return ApiProblem(status_code, code, str(error), _params(error), _headers(error))
+
+
+def _headers(error: Exception) -> dict[str, str] | None:
+    """A refusal that knows how long to wait, in seconds, tells clients when to try again."""
+    retry_after = getattr(error, "retry_after", None)
+    return None if retry_after is None else {"Retry-After": str(retry_after)}
 
 
 # Codes for errors raised outside the routes, such as Starlette's own; routes always name theirs.
