@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Collection, Iterator
+from contextlib import closing
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 from time import sleep
 
 import pytest
@@ -45,6 +46,7 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
+from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from tests.helpers import NOW, event, rescheduled, rule
 from tests.users import USER, memory_units, sqlite_units
@@ -778,6 +780,79 @@ def test_edit_during_a_run_keeps_reprojection_pending(tmp_path: Path) -> None:
     assert current is not None
     assert current.reprojection_required is True
     assert current.state is SyncRuleState.PAUSED
+
+
+def test_cursor_advance_waits_for_the_rule_write_lock_before_writing(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = sqlite_units(database)
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+
+    class SignalingRuleLocks(RuleLocks):
+        def __init__(self) -> None:
+            super().__init__()
+            self.armed = Event()
+            self.attempted = Event()
+
+        def for_writes(self, rule_id: SyncRuleId) -> Lock:
+            lock = super().for_writes(rule_id)
+            if self.armed.is_set():
+                self.attempted.set()
+            return lock
+
+    locks = SignalingRuleLocks()
+    provider = FakeCalendarProvider(event())
+    # No event writes, reprojection, or exception replays precede cursor advancement.
+    provider.source_changes = ()
+    fingerprinter = ProjectionFingerprinter()
+    use_case = ExecuteSyncRule(
+        factory,
+        provider,
+        SyncDecisionService(EventProjector(), fingerprinter),
+        fingerprinter,
+        FixedClock(),
+        UuidRunIdGenerator(),
+        locks,
+    )
+    failures: list[BaseException] = []
+
+    def synchronize() -> None:
+        try:
+            use_case.execute(rule().id)
+        except BaseException as error:
+            failures.append(error)
+
+    worker = Thread(target=synchronize, daemon=True)
+    try:
+        with locks.for_writes(rule().id):
+            locks.armed.set()
+            worker.start()
+            assert locks.attempted.wait(timeout=2), "cursor advancement never reached the lock"
+            # A lifecycle change must not wait behind a writer that is waiting for our lock.
+            with closing(open_connection(database, timeout=0)) as connection:
+                changed = connection.execute(
+                    "UPDATE sync_rules SET state = ? WHERE id = ? AND user_id = ?",
+                    (SyncRuleState.PAUSED.value, rule().id.value, USER.value),
+                )
+                assert changed.rowcount == 1
+                connection.commit()
+    finally:
+        if worker.ident is not None:
+            worker.join(timeout=2)
+        assert not worker.is_alive(), "the Sync Run did not finish after releasing the lock"
+        assert failures == []
+
+    with factory() as uow:
+        current = uow.rules.get(rule().id)
+        assert current is not None
+        assert current.state is SyncRuleState.PAUSED
+        assert uow.cursors.get(rule().id) == "source-cursor-1"
+        assert uow.destination_cursors.get(rule().id) == "destination-cursor-1"
+        outcome = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+        assert outcome is not None
+        assert outcome.succeeded
 
 
 def test_changed_rule_does_not_synchronize_until_enabled_again() -> None:

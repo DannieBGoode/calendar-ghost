@@ -102,12 +102,15 @@ would otherwise reach only future edits. When a rule's reprojection flag is set,
 ignores both cursors, then loads the authoritative source of every remaining Event Mapping,
 including events that ended before the Initial Sync Window, and applies the normal decision. A
 source that cannot be verified is recorded as a Conflict and its projection is left unchanged. The
-run clears the flag with its cursors only if the rule was not changed again meanwhile. Every change
+run clears the flag with its cursors only if the current rule still requires reprojection and its
+Material Rule Change signature matches the configuration the run applied. Every change
 to a rule's state or policy, including saving, pausing, enabling, preview validation, removal, and
 degradation, takes a short per-rule lock that also spans each provider write. Lifecycle changes
 therefore never overwrite one another and wait for at most one write already in flight; a Sync
-Run re-checks the rule before each write and stops without advancing cursors once it is paused or
-changed.
+Run re-checks the rule before each provider write and stops there without advancing cursors after
+a Pause or Material Rule Change. A run that already applied every change in both batches can
+still commit its cursors, including when both batches were empty; it preserves the current rule's
+state and keeps reprojection pending if its configuration changed meanwhile.
 
 ## Rule Removal
 
@@ -281,7 +284,13 @@ record, except that it still lists events other rules project into the source ca
 Provider writes use stable Operation Keys. Each acknowledged provider operation commits its mapping
 and audit evidence in a short SQLite transaction, while both incremental cursors advance only after
 the complete source and destination batches succeed. A retry can therefore reuse completed mappings
-without losing its safe position. Temporary failures retry with exponential backoff and jitter.
+without losing its safe position. When both a rule's short write lock and SQLite's writer lock are
+needed, the rule lock is acquired first. Cursor advancement takes that rule lock before saving
+either cursor and holds it through full-listing retention, conditional reprojection completion, and
+their commit. It records the successful run outcome in a second transaction after releasing the
+short rule lock. It never waits for that rule lock while holding SQLite's writer lock, so a
+concurrent lifecycle change can finish its database write. Provider network calls remain outside
+SQLite write transactions. Temporary failures retry with exponential backoff and jitter.
 Three consecutive scheduled failures open one deduplicated incident, resolved by the rule's next
 successful scheduled run. Only scheduled runs report their success to rule health, so Sync Now and
 Reconcile Now never resolve it. Each resolved incident records why it resolved (`sync_succeeded`,
