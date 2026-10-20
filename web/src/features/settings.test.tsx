@@ -209,7 +209,7 @@ function planRoutes({
   ownPlan = jsonResponse(plansOff),
   registration = jsonResponse({ policy: "only_me", only_me_available: true }),
 }: Scenario): Record<string, Response> {
-  return { "/api/v1/registration": registration, "/api/v1/account/plan": ownPlan }
+  return { "/api/v1/registration": registration, "/api/v1/account/plan": ownPlan, "/api/v1/identity-email": jsonResponse({ configured: false, unavailable_reason: "smtp_missing", test_state: "idle", tested_at: null }) }
 }
 
 function mockFetch({
@@ -808,7 +808,7 @@ describe("Settings tabs", () => {
   it.each([
     ["connections", ["accounts-title", "integrations-title"]],
     ["account", ["own-account-title", "appearance-title"]],
-    ["administration", ["registration-title", "storage-title"]],
+    ["administration", ["registration-title", "identity-email-title", "storage-title"]],
   ] as const)("shows the %s tab's sections", async (tab, shown) => {
     await renderSettings(testI18n(), { tab })
     expect(sections()).toEqual(shown)

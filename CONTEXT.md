@@ -563,3 +563,13 @@ _Avoid_: Event history, cached event
 **Audit Entry**:
 An Operational Record of one synchronization decision worth explaining: a write, a block, a no-change check, or a skip that explains why an expected projection is absent. Loop-prevention and bookkeeping decisions are counted on the run instead. It carries the rule, run, source and destination event identities, the action, and a stable reason code explaining why. It also records the source event's title, time, recurrence, and cancellation as the run saw them, so Activity names events without asking the provider and can show renames. Entries recorded before that decision name no event. Activity keeps every entry until an Installation Administrator clears it: Settings → Administration → Storage clears every User's entries older than a chosen age (30, 90, 180, or 365 days), keeping, per Directional Sync Rule and source event, the latest entry older than the cutoff and the latest that recorded a title.
 _Avoid_: Event log, history item
+
+### Identity Email Readiness
+
+Installation-wide evidence that the current identity SMTP configuration passed an administrator's
+test, bound to its SMTP settings, credentials, trusted public origin, and Master Key. A test is sent
+only to the requesting Installation Administrator's current email address, independently of
+Incident Notifications and their preferences. SMTP acceptance is not proof of inbox delivery.
+The last verified time and the administrator's latest in-memory attempt state are distinct;
+a failed attempt does not erase earlier matching readiness. Returning to setup clears readiness.
+This test does not activate another Registration Policy or change existing account email updates.

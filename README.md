@@ -291,6 +291,12 @@ and offers **Reclaim space** when nothing is old enough but space is still left.
 the size and date range of the service's own rotating log files and offers **Download** and **Purge
 logs**, so an administrator can retrieve or clear them without SSH access to the host.
 
+Use **Settings → Administration → Identity email** to test identity SMTP to your own administrator
+address. Its last verified time applies to the current configuration; mail-server acceptance does
+not prove inbox delivery. This is separate from incident notifications and does not change the
+Only me or Invitation only registration choices. See [identity email test readiness](docs/deployment.md#identity-email-test-readiness)
+for secure SMTP, trusted-origin requirements, limits, and migration 35 backup/rollback guidance.
+
 Check service health with:
 
 ```sh

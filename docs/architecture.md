@@ -451,3 +451,23 @@ the first finishes. Sender cancellation is awaited without waiting for an alread
 SMTP call or blocking the event loop on executor shutdown. Failed or cancelled preparation,
 shutdown, restart, and SMTP failure can lose notices; delivery has no durable outbox or retry.
 Production composition currently cannot generate Plan notices.
+
+## Identity email test boundary
+
+The identity context owns Identity Email Readiness and administrator test admission through narrow
+ports, independently of incident notifications. Bootstrap composes a dedicated SMTP adapter,
+SQLite readiness/admission store, and bounded in-memory worker. The transport verifies STARTTLS
+certificates for remote SMTP; configuration accepts HTTPS root origins with only localhost or
+literal loopback HTTP exceptions. A Master Key is required to bind persisted readiness to current
+settings without storing SMTP secrets. SQLite connections use the shared connection factory;
+identity writes use a 0.1-second timeout. SMTP runs outside database transactions and the event
+loop, in one sending thread. One worker holds at most ten waiting tests, carries no queued
+passwords, and performs no retries. The worker's latest attempt state belongs to the requesting
+administrator; installation-wide matching readiness survives restart. The administrator-only GET
+returns configuration usability, matching tested time, and that actor's state. The bodyless POST
+accepts work with 202, not an assertion of SMTP success. The Web UI polls only queued/sending work.
+
+Migration 35 adds readiness and admission counters without changing existing registration or
+account email updates. See [deployment](deployment.md#identity-email-test-readiness) for the
+stopped-service backup and matching backup/image rollback procedure. Identity test mail ignores
+incident preferences and the installation recipient; incident composition stays unchanged.

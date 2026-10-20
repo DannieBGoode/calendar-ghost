@@ -26,7 +26,7 @@ export class ApiError extends Error {
 /** The server answered, but its body was not JSON; a proxy fallback page is the usual cause. */
 export class UnreadableResponseError extends ApiError {}
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, emptyAccepted = false): Promise<T> {
   const headers = new Headers(init?.headers)
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json")
   const response = await fetch(path, { ...init, credentials: "same-origin", headers })
@@ -37,13 +37,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (response.status === 204) return undefined as T
   try {
-    return (await response.json()) as T
+    return (await readSuccess(response, emptyAccepted)) as T
   } catch (error) {
     // The request reached a server, so an unparseable body is a service failure, not a
     // connectivity one; a proxy fallback page is the usual cause.
     if (!(error instanceof SyntaxError)) throw error
     throw new UnreadableResponseError("The service returned an unreadable response.", response.status)
   }
+}
+
+async function readSuccess(response: Response, emptyAccepted: boolean): Promise<unknown> {
+  if (response.status !== 202 || !emptyAccepted) return response.json()
+  const text = await response.text()
+  return text === "" ? undefined : JSON.parse(text)
 }
 
 /**
@@ -83,8 +89,13 @@ type MethodOf<P extends keyof paths> = {
 }[Method]
 type Operation<P extends keyof paths, M extends MethodOf<P>> = paths[P][M]
 type JsonContent<R> = R extends { content: { "application/json": infer B } } ? B : undefined
-/** The body of a route's success response; undefined for 204 No Content. */
-type Success<O> = O extends { responses: infer R } ? JsonContent<R[Extract<keyof R, 200 | 201 | 204>]> : never
+/** The body of a route's success response; undefined for bodyless success. */
+type Success<O> = O extends { responses: infer R } ? JsonContent<R[Extract<keyof R, 200 | 201 | 202 | 204>]> : never
+type EmptyAcceptedPath = {
+  [P in keyof paths]: paths[P]["post"] extends { responses: { 202: { content?: never } } } ? P : never
+}[keyof paths]
+const EMPTY_ACCEPTED: Partial<Record<EmptyAcceptedPath, true>> = { "/api/v1/identity-email/test": true }
+
 type QueryValue = string | number | boolean | readonly (string | number)[] | null | undefined
 
 /**
@@ -139,11 +150,12 @@ export function call<P extends keyof paths, M extends MethodOf<P>>(
   return request<Success<Operation<P, M>>>(`${filled}${query ? queryString(query) : ""}`, {
     method: method.toUpperCase(),
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  })
+  }, method === "post" && Object.hasOwn(EMPTY_ACCEPTED, path))
 }
 
 /** Response and request bodies, generated from the backend's OpenAPI schema (web/openapi.json). */
 type Schemas = components["schemas"]
+export type IdentityEmail = Schemas["IdentityEmailResponse"]
 
 /**
  * `status` is the server's verdict; the Overview never derives its own (ADR 0024). `problems`
@@ -441,6 +453,8 @@ export const api = {
     call("/api/v1/incidents/{incident_id}", "get", { params: { incident_id: incidentId } }),
   recentChanges: (limit = 5) =>
     call("/api/v1/recent-changes", "get", { query: { limit } }),
+  identityEmail: () => call("/api/v1/identity-email", "get"),
+  testIdentityEmail: () => call("/api/v1/identity-email/test", "post"),
   storage: () => call("/api/v1/storage", "get"),
   clearableActivity: (days: number) =>
     call("/api/v1/storage/activity", "get", { query: { older_than_days: days } }),

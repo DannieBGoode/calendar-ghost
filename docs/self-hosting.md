@@ -613,3 +613,24 @@ Until then no production grace or Plan notice is generated. **Email notification
 Settings, Your account continues to control optional incident email. See the
 [migration 34 rollback notes](deployment.md#migration-34-plan-hold-engine) before opening a database
 written by a future activated release with older code.
+
+## Test identity email
+
+Open **Settings → Administration → Identity email** to send a test to your own signed-in
+administrator address. Configure the SMTP host and sender, Master Key, and a trusted
+`CALENDAR_SYNC_PUBLIC_URL` first. Identity email requires certificate-verified STARTTLS for remote
+SMTP and an HTTPS root origin; only localhost or literal loopback development permits HTTP or a
+cleartext relay. Restart after changing environment settings. The UI explains missing or unsafe
+configuration and disables the test until it is usable.
+
+The mail server accepting a test does not prove inbox delivery. Check your inbox and spam folder.
+The last verified time applies only to the current configuration and is separate from the latest
+attempt. Tests ignore your incident Email notifications preference and the installation's SMTP
+recipient. They are limited to three requests per administrator per rolling hour and use a bounded,
+in-memory worker with no retries, so a restart can lose queued work. Registration still offers
+Only me or Invitation only; ordinary email and password changes keep their existing behavior.
+
+For exact settings and the additive migration 35 upgrade/rollback procedure, see
+[Identity email test readiness](deployment.md#identity-email-test-readiness). Stop the service and
+keep a matching database backup and previous image before upgrading; rollback restores those
+together. A later upgrade from that backup starts without restored email readiness.

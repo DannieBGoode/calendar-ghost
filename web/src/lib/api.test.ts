@@ -88,6 +88,22 @@ describe("api routes", () => {
     })
   })
 
+  it("accepts the identity email route's empty 202 without accepting empty 200 or malformed JSON", async () => {
+    expectTypeOf(api.testIdentityEmail).returns.resolves.toEqualTypeOf<undefined>()
+    const accepted = vi.fn(() => Promise.resolve(new Response("", { status: 202 })))
+    vi.stubGlobal("fetch", accepted)
+    await expect(api.testIdentityEmail()).resolves.toBeUndefined()
+    expect(accepted.mock.calls[0]).toEqual(["/api/v1/identity-email/test", expect.objectContaining({ method: "POST" })])
+    respond(200, "")
+    await expect(api.testIdentityEmail()).rejects.toBeInstanceOf(UnreadableResponseError)
+    respond(200, "")
+    await expect(api.session()).rejects.toBeInstanceOf(UnreadableResponseError)
+    respond(202, "broken")
+    await expect(api.testIdentityEmail()).rejects.toBeInstanceOf(UnreadableResponseError)
+    respond(202, "")
+    await expect(api.session()).rejects.toBeInstanceOf(UnreadableResponseError)
+  })
+
   it("returns undefined for an empty success response", async () => {
     stubFetch(204)
     await expect(api.logOut()).resolves.toBeUndefined()

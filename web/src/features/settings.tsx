@@ -1,3 +1,4 @@
+import { IdentityEmailSection } from "./settings-identity-email"
 import { useQuery } from "@tanstack/react-query"
 import { CheckCircle2, ShieldAlert } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
@@ -198,6 +199,7 @@ function AdministrationTab() {
   return (
     <>
       <RegistrationSection commands={registration} />
+      <IdentityEmailSection />
       <StorageSection />
     </>
   )
