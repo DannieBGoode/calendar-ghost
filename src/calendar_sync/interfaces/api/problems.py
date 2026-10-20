@@ -40,6 +40,12 @@ from calendar_sync.application.identity.errors import (
     SignInThrottled,
     UserDisabled,
 )
+from calendar_sync.application.identity.identity_email import (
+    IdentityEmailNotConfigured,
+    IdentityEmailQueueBusy,
+    IdentityEmailStorageUnavailable,
+    IdentityEmailTestThrottled,
+)
 from calendar_sync.application.operations.errors import (
     ActivityEventNotFound,
     ActivityRuleRemoved,
@@ -117,6 +123,10 @@ def problem(
 
 # Looked up along each exception's MRO, so a subclass inherits its parent's code.
 _CODES: dict[type[Exception], str] = {
+    IdentityEmailNotConfigured: "identity_email_not_configured",
+    IdentityEmailQueueBusy: "identity_email_queue_busy",
+    IdentityEmailStorageUnavailable: "identity_email_storage_unavailable",
+    IdentityEmailTestThrottled: "identity_email_test_throttled",
     RuleNotFound: "rule_not_found",
     RuleNotExecutable: "rule_not_executable",
     DuplicateDirectionalRelationship: "duplicate_relationship",

@@ -25,6 +25,7 @@ from calendar_sync.interfaces.api.routes import (
     activity,
     compatibility,
     health,
+    identity_email,
     incidents,
     integrations,
     plans,
@@ -80,6 +81,7 @@ class ApiServices(
     integrations.StatusServices,
     plans.PlansApiServices,
     storage.StorageServices,
+    identity_email.IdentityEmailApiServices,
     watch_notices.NoticeServices,
     McpServices,
     Protocol,
@@ -102,6 +104,8 @@ def create_app(container: Container | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         tasks: list[asyncio.Task[None]] = []
+        if resolved.identity_mail_worker is not None:
+            tasks.append(asyncio.create_task(resolved.identity_mail_worker.run_forever()))
         if resolved.scheduler is not None:
             tasks.append(asyncio.create_task(resolved.scheduler.run_forever()))
         if resolved.scheduler_watch is not None:
@@ -114,6 +118,8 @@ def create_app(container: Container | None = None) -> FastAPI:
             async with mcp.running():
                 yield
         finally:
+            if resolved.identity_mail_worker is not None:
+                resolved.identity_mail_worker.stop()
             for task in tasks:
                 task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -132,6 +138,7 @@ def create_app(container: Container | None = None) -> FastAPI:
     # app.routes lists every API route for UnknownApiPath and the authorization test.
     for module in (
         health,
+        identity_email,
         setup,
         session,
         account,

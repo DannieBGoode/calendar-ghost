@@ -11,6 +11,8 @@ from calendar_sync.infrastructure.persistence.migrations import initialize_datab
 # Evidence, which says whether providers reach the installation's own address, and the Plans an
 # Installation Administrator defines, which a User names through their own row (ADR 0038).
 INSTALLATION_TABLES = {
+    # Identity email readiness proves installation SMTP, independent of any User.
+    "identity_email_readiness",
     "schema_migrations",
     "users",
     "installation_settings",

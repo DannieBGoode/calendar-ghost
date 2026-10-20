@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import secrets
 
 from cryptography.exceptions import InvalidTag
@@ -119,3 +120,17 @@ def _derive_password(password: str, salt: bytes) -> bytes:
 
 def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def identity_email_fingerprint(
+    master_key: str, values: tuple[str, int, str, str, str, bool, str]
+) -> str:
+    """Authenticate effective identity mail configuration with a purpose-separated key."""
+    key = HKDF(
+        algorithm=SHA256(),
+        length=32,
+        salt=None,
+        info=b"calendar-sync identity email readiness v1",
+    ).derive(_master_key_bytes(master_key))
+    framed = json.dumps([1, values], ensure_ascii=True, separators=(",", ":")).encode()
+    return hmac.new(key, framed, hashlib.sha256).hexdigest()

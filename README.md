@@ -291,6 +291,12 @@ and offers **Reclaim space** when nothing is old enough but space is still left.
 the size and date range of the service's own rotating log files and offers **Download** and **Purge
 logs**, so an administrator can retrieve or clear them without SSH access to the host.
 
+Use **Settings → Administration → Identity email** to test identity SMTP to your own administrator
+address. Its last verified time applies to the current configuration; mail-server acceptance does
+not prove inbox delivery. This is separate from incident notifications and does not change the
+Only me or Invitation only registration choices. See [identity email test readiness](docs/deployment.md#identity-email-test-readiness)
+for secure SMTP, trusted-origin requirements, limits, and migration 35 backup/rollback guidance.
+
 Check service health with:
 
 ```sh
@@ -424,7 +430,7 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_SMTP_PORT` | No | SMTP port; defaults to `587` |
 | `CALENDAR_SYNC_SMTP_USERNAME` | No | Optional SMTP authentication username |
 | `CALENDAR_SYNC_SMTP_PASSWORD` | No | Optional SMTP authentication password |
-| `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Email notification sender; with the host, each person receives their own incidents by email |
+| `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Email notification sender; with the host, each person receives their own incidents by email. Identity email requires a bare address, such as `ghost@example.com`, without a display name |
 | `CALENDAR_SYNC_SMTP_RECIPIENT` | No | Operator who receives incidents about the installation itself, such as a stalled scheduler |
 | `CALENDAR_SYNC_SMTP_STARTTLS` | No | Enable SMTP STARTTLS; defaults to `true` |
 | `CALENDAR_SYNC_PUBLIC_URL` | No | Address people open Calendar Ghost at, such as `https://calendar.example.com`: an `http` or `https` address at the root of its host, with no path. Incident email then links to each person's next step. Unset sends email without a link. An `https` address that Google and Microsoft reach also turns on [Instant Sync](docs/instant-sync.md) |

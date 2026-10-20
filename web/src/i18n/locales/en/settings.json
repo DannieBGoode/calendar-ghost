@@ -493,5 +493,23 @@
       "twilight": "Twilight (indigo)",
       "midnight": "Midnight (blue)"
     }
+  },
+  "identityEmail": {
+    "title": "Identity email",
+    "intro": "Send a test email to your signed-in administrator address. This is separate from incident notifications.",
+    "send": "Send test email",
+    "pending": "Sending test email…",
+    "idle": "Test the current email settings before relying on them.",
+    "accepted": "The mail server accepted the test email. Check your inbox.",
+    "failed": "The test email could not be verified. Check the email settings and try again.",
+    "lastVerified": "Last verified for these settings: {time}",
+    "loadError": "Identity email status could not be loaded.",
+    "retry": "Try again",
+    "smtpMissing": "Configure CALENDAR_SYNC_SMTP_HOST and CALENDAR_SYNC_SMTP_SENDER in the service environment, then restart the service.",
+    "smtpSecurity": "Use certificate-verified STARTTLS for remote SMTP. Only a localhost or literal loopback relay may use cleartext.",
+    "originMissing": "Set CALENDAR_SYNC_PUBLIC_URL to the installation’s HTTPS address, then restart the service.",
+    "originInvalid": "Set CALENDAR_SYNC_PUBLIC_URL to a valid root origin with no path, query, fragment, or user information.",
+    "originInsecure": "Use HTTPS for CALENDAR_SYNC_PUBLIC_URL. HTTP is allowed only for localhost or literal loopback development.",
+    "masterKeyMissing": "Configure the installation Master Key, then restart the service."
   }
 }

@@ -56,6 +56,7 @@ let calls: Call[] = []
 function serve({ role = "installation_administrator", registration, answers = {} }: Scenario) {
   const defaults: Record<string, Response> = {
     "GET /api/v1/session": jsonResponse(session(role)),
+    "GET /api/v1/identity-email": jsonResponse({ configured: false, unavailable_reason: "smtp_missing", test_state: "idle", tested_at: null }),
     "GET /api/v1/providers": jsonResponse([]),
     "GET /api/v1/accounts": jsonResponse([]),
     "GET /api/v1/integration-tokens": jsonResponse([]),
@@ -156,7 +157,10 @@ describe("Administration", () => {
 
   it("holds who can join and storage, and leaves people, invitations, and plans to the People page", async () => {
     await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false } })
+    expect(section("identity-email-title")).not.toBeNull()
     expect(section("registration-title")).not.toBeNull()
+    expect(container.querySelectorAll("input[name=registration-policy]")).toHaveLength(2)
+    expect(section("identity-email-title")?.querySelector("input")).toBeNull()
     expect(section("storage-title")).not.toBeNull()
     expect(section("plans-title")).toBeNull()
     expect(section("people-list-title")).toBeNull()
@@ -198,6 +202,8 @@ describe("Settings for someone who is not an administrator", () => {
     expect(section("own-account-title")).not.toBeNull()
     expect(section("registration-title")).toBeNull()
     expect(section("storage-title")).toBeNull()
+    expect(section("identity-email-title")).toBeNull()
+    expect(requested("/api/v1/identity-email")).toBe(false)
     expect(requested("/api/v1/registration")).toBe(false)
     expect(requested("/api/v1/users")).toBe(false)
     expect(requested("/api/v1/storage")).toBe(false)

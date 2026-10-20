@@ -148,6 +148,12 @@ from calendar_sync.application.sync.watch_ports import (
     SyncCadencePolicy,
 )
 from calendar_sync.bootstrap.config import Settings
+from calendar_sync.bootstrap.identity_email import (
+    IdentityEmailAdapters,
+    IdentityEmailServices,
+    build_identity_email,
+    compose_identity_email,
+)
 from calendar_sync.bootstrap.logs import configure_logging
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
@@ -162,6 +168,7 @@ from calendar_sync.domain.services import (
 from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.google.descriptor import google_provider
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator, UuidRunIdGenerator
+from calendar_sync.infrastructure.identity_mail_worker import IdentityMailWorker
 from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
 from calendar_sync.infrastructure.log_files import RotatingLogFiles
 from calendar_sync.infrastructure.microsoft.descriptor import microsoft_provider
@@ -321,6 +328,8 @@ class Container:
     providers: ProviderDirectory
     """Every calendar provider this release knows, and how Users connect the configured ones."""
     identity: IdentityServices
+    identity_email: IdentityEmailServices
+    identity_mail_worker: IdentityMailWorker | None
     administration: AdministrationServices
     plans: PlanServices
     token_authentication: IntegrationTokenAuthentication
@@ -376,6 +385,7 @@ class Adapters:
     """Unusable Invitation and Password Reset Links per client, apart from failed sign-ins."""
     run_throttle: RunThrottle
     """One per process: each User's manual runs, counted across their requests."""
+    identity_email: IdentityEmailAdapters
     registration: RegistrationSettings
     invitations: Invitations
     password_resets: PasswordResetLinks
@@ -453,6 +463,7 @@ def build_adapters(settings: Settings) -> Adapters:
     plans = SqlitePlans(database)
     mail = _mail_server(settings)
     adapters = Adapters(
+        identity_email=build_identity_email(settings, ids),
         unit_of_work=SqliteUnitOfWorkFactory(database, clock, history).for_user,
         installation_units=SqliteInstallationUnitOfWorkFactory(database),
         locks=RuleLocks(),
@@ -605,7 +616,12 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         adapters.plan_catalog,
         adapters.plan_assignments,
     )
+    identity_email, identity_mail_worker = compose_identity_email(
+        adapters.identity_email, adapters.users, adapters.clock
+    )
     return Container(
+        identity_email=identity_email,
+        identity_mail_worker=identity_mail_worker,
         secure_cookies=settings.secure_cookies,
         providers=adapters.providers,
         identity=_identity(adapters),

@@ -141,7 +141,11 @@
     "user_not_found": "This person no longer has access to this Calendar Ghost.",
     "your_own_deletion": "Delete your own account under Settings, Your account.",
     "your_own_reset_link": "Change your own password under Settings, Your account.",
-    "your_own_state": "You cannot turn off your own access."
+    "your_own_state": "You cannot turn off your own access.",
+    "identity_email_not_configured": "Identity email is unavailable. Check the configuration shown above.",
+    "identity_email_queue_busy": "The test email queue is full. Wait a moment and try again.",
+    "identity_email_storage_unavailable": "Identity email status could not be stored. Check the service and try again.",
+    "identity_email_test_throttled": "Three test emails have already been requested in the last hour. Wait before trying again."
   },
   "provider": {
     "google": "Google Calendar",

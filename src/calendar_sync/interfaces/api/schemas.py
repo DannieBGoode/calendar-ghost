@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -1111,3 +1112,20 @@ class NotificationPreferenceRequest(BaseModel):
 
 class InstantSyncPreferenceRequest(BaseModel):
     instant_sync: bool
+
+
+class IdentityEmailResponse(ApiResponse):
+    configured: bool
+    unavailable_reason: (
+        Literal[
+            "smtp_missing",
+            "smtp_security",
+            "origin_missing",
+            "origin_invalid",
+            "origin_insecure",
+            "master_key_missing",
+        ]
+        | None
+    )
+    tested_at: datetime | None
+    test_state: Literal["idle", "queued", "sending", "accepted", "failed"]

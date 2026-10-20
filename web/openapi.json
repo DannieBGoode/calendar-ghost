@@ -965,6 +965,64 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "IdentityEmailResponse": {
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "test_state": {
+            "enum": [
+              "idle",
+              "queued",
+              "sending",
+              "accepted",
+              "failed"
+            ],
+            "title": "Test State",
+            "type": "string"
+          },
+          "tested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tested At"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "smtp_missing",
+                  "smtp_security",
+                  "origin_missing",
+                  "origin_invalid",
+                  "origin_insecure",
+                  "master_key_missing"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          }
+        },
+        "required": [
+          "configured",
+          "unavailable_reason",
+          "tested_at",
+          "test_state"
+        ],
+        "title": "IdentityEmailResponse",
+        "type": "object"
+      },
       "IncidentMessageResponse": {
         "description": "What an Incident says as a stable code and parameters the Web UI translates (ADR 0026).",
         "properties": {
@@ -5882,6 +5940,91 @@
           }
         },
         "summary": "Google Configuration"
+      }
+    },
+    "/api/v1/identity-email": {
+      "get": {
+        "operationId": "identity_email_api_v1_identity_email_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityEmailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Identity Email"
+      }
+    },
+    "/api/v1/identity-email/test": {
+      "post": {
+        "operationId": "test_identity_email_api_v1_identity_email_test_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Identity Email"
       }
     },
     "/api/v1/incidents": {

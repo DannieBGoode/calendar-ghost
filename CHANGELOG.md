@@ -6,6 +6,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- Administrators can test identity email in **Settings → Administration → Identity email**.
+  The test uses secure SMTP and a trusted public address, sends only to the requesting
+  administrator, and shows mail-server acceptance separately from inbox delivery. Its last
+  verified time applies to the current settings. Tests are limited to three per administrator
+  per hour. Migration 35 stores readiness and admission counts; returning to setup clears
+  readiness. Registration still offers Only me or Invitation only.
 - The Plan Hold engine and private Plan notice delivery are implemented, with production
   activation explicitly disabled until PR 3 supplies visible grace and hold state, status,
   Dashboard, MCP, and the keep form together (ADR 0039). Lowering a limit still stops nothing;

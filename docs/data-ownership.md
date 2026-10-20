@@ -110,7 +110,13 @@ The installation communicates with:
    receives their own Incident Notifications at their email, unless they turn them off; the
    configured SMTP recipient and the webhook receive only incidents about the installation itself,
    such as a scheduler that stopped running. Notifications contain an incident category, rule
-   identifier, summary, and timestamp; they do not contain event content.
+   identifier, summary, and timestamp; they do not contain event content. An administrator can
+   separately request an identity email test to their own signed-in address. It ignores incident
+   preferences and the configured SMTP recipient. Identity Email Readiness stores a keyed
+   configuration fingerprint and successful test time, and admission counters store administrator
+   identifiers and request times. They store no email bodies or SMTP credentials. Attempt states
+   and queued work are in memory, with no persistent delivery outbox. Acceptance by SMTP does not
+   prove inbox delivery. See [identity email setup](deployment.md#identity-email-test-readiness).
 3. Monitors, dashboards, and AI agents a User gives an Integration Token. They ask for that User's
    Installation Status; Calendar Ghost never contacts them. Status contains rule identifiers and
    states, calendar names, Provider Kinds, incident summaries, and times; it never contains event
