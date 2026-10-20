@@ -368,7 +368,13 @@ def test_delivery_failures_log_only_a_safe_category(
         assert record.stack_info is None
         # Inspect every field, including logging arguments and traceback attachments.
         fields = repr(vars(record))
-        for value in (*secret.split(), str(FIRST.id), FIRST.email, attempt.id, attempt.fingerprint):
+        for value in (
+            *secret.split(),
+            FIRST.id.value,
+            FIRST.email,
+            attempt.id,
+            attempt.fingerprint,
+        ):
             assert value is not None
             assert value not in fields
 
