@@ -68,6 +68,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- People section tabs keep the same vertical position when the active tab's description is shorter.
+
 - Inspect Activity entries and incidents, or edit a Plan, in a full-height drawer without changing
   the table underneath. Drawers fill narrow screens, keep navigation and edit protections, and
   leave notifications and Undo reachable.

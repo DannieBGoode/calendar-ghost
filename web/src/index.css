@@ -631,6 +631,11 @@ p {
   line-height: 1.6;
 }
 
+/* Keep People's section tabs aligned when the active tab's intro is shorter than the others. */
+.people-page .page-intro {
+  min-height: 3.2em;
+}
+
 /* The Overview gets one expressive surface. The rest of the app stays quiet so this remains a
    signal, not a new background treatment for every page. */
 .health-hero {
