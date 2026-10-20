@@ -6,13 +6,10 @@ This is not a description of shipped behavior. The owner approved the revised de
 implementation still requires each PR's approved plan. The second Claude design/PR 2 plan review
 completed on 2026-10-20; the owner delegated PR 2 plan review and authorized continued execution.
 
-Delivery status on 2026-10-21: PR 1 identity email readiness is implemented. PR 2 self-service
-password recovery is implemented on its unmerged branch, including migration 36, deliberate
-proxy trust, and operational guidance. Local gates, secret scans, security review, and independent
-and Claude reviews pass; supported image builds and PR/CI delivery remain pending.
-Only Me and Invitation Only remain the supported policies. Verified email changes (PR 3), offline
-recovery (PR 4), backup tooling/runbook, and Open activation are later, unshipped slices. The
-decisions below describe the complete intended phase, not features all present in this build.
+Delivery status on 2026-10-21: PR #129 identity email readiness and PR #130 self-service
+password recovery are merged, including migrations 35 and 36. Only Me and Invitation Only remain
+supported. The five remaining PRs below replace the earlier delivery sequence. These decisions
+remain planned until each PR ships.
 
 Amends [ADR 0030](0030-users-administrators-and-registration.md), within the isolation boundary of
 [ADR 0029](0029-isolate-users-in-one-sqlite-database.md) and the optional switches of
@@ -23,8 +20,8 @@ Amends [ADR 0030](0030-users-administrators-and-registration.md), within the iso
 The Hosted Service needs people to join without an Invitation and recover their own passwords.
 For new joins under Open, an unverified address must not grant access, reserve another person's
 identity, or become a recovery address without proof. Existing and Invitation Only emails remain
-trusted recovery addresses under the approved compatibility policy. Until PR 3, direct email
-changes retain that behavior: a wrong address can let its mailbox owner reset the account, so
+trusted recovery addresses under the approved compatibility policy. Until verified email changes
+ship, direct email changes retain that behavior: a wrong address can let its mailbox owner reset the account, so
 recovery docs must make that trust explicit. Self-hosted installations keep their current default
 and operate without email unless their administrator chooses otherwise.
 
@@ -61,8 +58,8 @@ They were accepted with the revised design; their complete behavior and delivery
   and no own Plan, so the existing Default Plan behavior applies. Start a normal session afterward.
   Pending Registration has no password, Plan assignment, or owned calendar records.
 - Direct Invitation acceptance requires exactly Invitation Only in both use case and atomic SQLite
-  write. Under Open it must use verified registration. Stage the enum/schema and SQLite guards
-  before production activation; do not rely on lets_people_join to authorize direct acceptance.
+  write. Under Open it must use verified registration. Deliver the enum/schema, SQLite guards,
+  and verified admission in one PR; do not rely on lets_people_join to authorize direct acceptance.
 - Only Me cancels every pending registration proof, including Invitation-bound proofs. Reopening
   never revives cancelled proofs. Returning to setup also clears readiness and revokes Invitations.
 - All active Users, including Installation Administrators, may request self-service reset. A reset
@@ -109,8 +106,8 @@ that a person's inbox received it.
 
 The policy change needs a forward migration because SQLite currently constrains Registration
 Policy to Only Me and Invitation Only. Allocate migration numbers per implementation PR after
-checking origin/main. The prepared-schema release still refuses Open in production. Rollback
-from active Open uses a matching backup and image; do not run an old binary against a policy it
+checking origin/main. Open is selectable only with administrator choice and ready identity email
+in the end-to-end PR. Rollback from active Open uses a matching backup and image; do not run an old binary against a policy it
 cannot read.
 
 Offline recovery is a deliberate maintenance operation on a stopped installation. It does not
@@ -129,3 +126,41 @@ resumption for proof that restored Users and credentials may still operate calen
 - Reset responses that distinguish known accounts: rejected; account status stays private.
 - Requiring Plans for Open: conflicts with the settled independent switches in ADR 0028.
 - Mandatory hosted backup infrastructure on self-hosting: rejected; tooling remains optional.
+
+## Amendment: five remaining PRs and provider sign-in (2026-10-21)
+
+The owner replaced the original eight delivery slices after PR #129 and PR #130 merged:
+
+1. **Verified email changes.** This PR adds its own proof records, request/cancel/confirm UI,
+   old-address notice, upgraded first User's direct add-email exception, and reset/session races.
+   Reuse the shipped mechanisms without generalizing for sign-up. Preserve direct changes when
+   SMTP is absent. Add no storage for later PRs.
+2. **Split growing files by context, with no behavior change.** Split `bootstrap/container.py`,
+   `interfaces/api/schemas.py`, `infrastructure/persistence/sqlite.py`, and
+   `application/sync/ports.py` into context-named modules. Preserve public names and the existing
+   import-linter contracts.
+3. **Open sign-up end to end.** Deliver the Open policy value and migration, verified joining,
+   email-first sign-up, verified Invitations, administrator choice and readiness checks, and
+   screens together. Open stays unselectable until the administrator chooses it and identity
+   email is ready. Drop the temporary preparation guards required by the old split.
+4. **Sign in and sign up with Google or Microsoft.** Follow the OIDC decisions below. This has
+   its own plan and does not change calendar consent.
+5. **Hosted backup and restore.** Combine narrow offline inspection/preparation and their
+   SQLite safety tests with the optional backup tooling and tested hosted runbook. Ship before
+   hosted launch, after its own plan; this work is outside the current PR. No mandatory backup
+   service, public maintenance endpoint, scheduler mode, or Plan Hold edits.
+
+New identity rules are pure domain decisions with decision-table tests. New identity records
+receive SQLite adapters only, tested on temporary databases; do not grow the in-memory adapter.
+New identity code stays out of the four growing files until their context split. No future proof
+tables or abstractions belong in the email-change PR.
+
+OIDC is now planned in remaining PR 4, amending ADR 0030's password-only scope. Provider identities
+use issuer plus `sub`, never email. Linking starts from Your account while signed in; auto-link
+at sign-in requires a provider-verified email. Under Only Me and Invitation Only, admit only an
+existing person or an invited person whose verified email matches. Under Open, create an ordinary
+User following the Default Plan. Each provider is off by default and enabled by the administrator.
+Reuse the installation's Google and Microsoft OAuth clients with `openid email profile` scopes;
+calendar consent is separate. A person may keep or set a password, and the last sign-in method
+cannot be removed. Use maintained OIDC library support, such as Authlib or the existing Google
+libraries, with no new service and no ORM. Each remaining PR needs its own approved plan.
