@@ -37,6 +37,7 @@
   --warning-soft: oklch(0.94 0.055 80);
   --warning-foreground: oklch(0.34 0.08 70);
   --warning-bar: oklch(0.78 0.13 75);
+  --section-space: clamp(4rem, 8vw, 7rem);
   --radius: 0.625rem;
   --panel-radius: 0.875rem;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);

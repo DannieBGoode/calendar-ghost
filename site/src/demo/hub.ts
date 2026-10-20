@@ -1,5 +1,5 @@
 // The home hero's diagram (sections/Hero.astro): Sam's calendars on the left, the ghost at the hub,
-// and a short day on the right: Sam's Work calendar as work sees it, or (the switch over the whole
+// and a short day on the right: Sam's Work calendar as work sees it, or (the switch below the whole
 // diagram) Sam's Personal calendar. A chip carrying an event's title leaves each calendar and goes
 // through the ghost. Bound for Work, the gym session and the family dinner lose their titles there
 // (Busy-Only Projection), which the ghost keeps back, and leave as indigo "Busy" chips; Work's own
@@ -251,7 +251,7 @@ const RING_CLEAR = 7
 const WIDE = { portrait: 52, width: 228, height: 66 } as const
 
 /** The wide layout, left to right: the calendars in a stack as tall as the day, the ghost on the
- * figure's centre line (the axis of the view switch over it), and the day. */
+ * figure's centre line (the axis of the view switch below it), and the day. */
 function wideFrame(): Frame {
   const width = 1040
   const header = 46

@@ -24,7 +24,9 @@ p { margin: 0 0 1rem; }
 a { color: var(--primary); }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .container { width: min(72rem, 100% - 2.5rem); margin-inline: auto; }
-.section { padding-block: clamp(4rem, 8vw, 7rem); }
+.section { padding-block: var(--section-space); }
+/* Section spacing belongs to the section, without a final paragraph adding another gap. */
+.section > .container > :last-child { margin-bottom: 0; }
 .lead { font-size: 1.125rem; color: var(--muted-foreground); max-width: 46ch; }
 @media (max-width: 719px) {
   .section > .container > h2 { text-align: center; text-wrap: balance; }

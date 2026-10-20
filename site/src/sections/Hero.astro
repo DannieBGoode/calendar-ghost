@@ -1,6 +1,6 @@
 ---
 // The home page's hero: the headline, one line, and the calls to action, over a diagram of what
-// Calendar Ghost does. Over the whole diagram, a switch: what work sees, or what Sam sees. On the
+// Calendar Ghost does. Below the whole diagram, a switch: what they see, or what Sam sees. On the
 // left, "Your calendars": Sam's three calendars, each a portrait in a ring of its colour (Work's in
 // its own red) with its name and event set flush against it, and no box around them. In the
 // middle, the ghost. On the right, a short day: Sam's Work calendar, or Sam's Personal calendar,
@@ -148,7 +148,6 @@ const motionCss = motion.map((item) => item.css).join("")
       <ul class="sr-only">
         {facts.map((fact) => <li>{fact}</li>)}
       </ul>
-      <p class="hc-static-view" aria-hidden="true">{m.demo.workSees}</p>
 
       {
         hubs.map((hub, layout) => {
@@ -392,6 +391,7 @@ const motionCss = motion.map((item) => item.css).join("")
         })
       }
 
+      <p class="hc-static-view" aria-hidden="true">{m.demo.workSees}</p>
       <HubControls client:load m={{ views: { work: m.demo.workSees, you: m.demo.youSee }, viewLabel: hc.viewLabel, motion: m.motion, replay: hc.replay }} />
     </figure>
   </div>
@@ -400,7 +400,8 @@ const motionCss = motion.map((item) => item.css).join("")
 <style is:inline set:html={motionCss}></style>
 
 <style>
-  .hero { position: relative; padding-block: clamp(1.25rem, 3vh, 2.25rem) 0; overflow-x: clip; }
+  /* The diagram already reserves 3rem below the switch for its motion controls. */
+  .hero { position: relative; padding-block: clamp(1.25rem, 3vh, 2.25rem) calc(var(--section-space) - 3rem); overflow-x: clip; }
   .hero-wrap { width: min(68rem, 100% - 2 * clamp(1.25rem, 4vw, 2.5rem)); margin-inline: auto; }
   .hero h1 { margin: 0 0 1rem; font-size: clamp(2.5rem, 1.6rem + 3.4vw, 3.5rem); text-wrap: balance; }
   .hero h1 > span { display: block; }

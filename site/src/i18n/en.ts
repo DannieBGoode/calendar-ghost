@@ -101,7 +101,7 @@ export const en = {
       eventLine: "{event} {time}",
       /** The caption over the titles the ghost keeps back from Work. */
       kept: "Kept from Work",
-      /** The name of the switch over the whole diagram. */
+      /** The name of the switch below the whole diagram. */
       viewLabel: "Calendar to show",
       /** The diagram's name and its facts, for screen readers; the drawing is hidden from them. */
       summary: "Sam's calendars, and what work sees of them",
@@ -116,7 +116,7 @@ export const en = {
   demo: {
     days: ["Mon", "Tue", "Wed", "Thu", "Fri"] as [string, string, string, string, string],
     youSee: "What you see",
-    workSees: "What work sees",
+    workSees: "What they see",
     busy: "Busy",
     workCalendar: "Work calendar · sam@work.example",
     calendars: { personal: "Personal", family: "Family", work: "Work" },

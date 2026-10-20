@@ -28,6 +28,29 @@ const HEADINGS = [
   en.footer.cta,
 ]
 
+test("section transitions keep the same vertical rhythm on desktop and mobile", async ({ browser }) => {
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" })
+    const page = await context.newPage()
+    await page.goto("/")
+    const views = page.getByRole("group", { name: en.hero.diagram.viewLabel })
+    await expect(views).toBeVisible()
+    const sections = await page.locator("main > .section, .footer").evaluateAll((elements) => elements.map((section) => {
+      const content = section.querySelector(":scope > .container")!
+      const box = content.getBoundingClientRect()
+      return { name: section.getAttribute("aria-labelledby") ?? "footer", top: box.top, bottom: box.bottom, inset: parseFloat(getComputedStyle(section).paddingTop) }
+    }))
+    const gap = sections[0]!.inset * 2
+    const switchBox = (await views.boundingBox())!
+    expect(Math.abs(sections[0]!.top - (switchBox.y + switchBox.height) - gap), `hero at ${width}px`).toBeLessThan(1)
+    for (const [index, section] of sections.slice(1).entries()) {
+      const previous = sections[index]!
+      expect(Math.abs(section.top - previous.bottom - gap), `${previous.name} to ${section.name} at ${width}px`).toBeLessThan(1)
+    }
+    await context.close()
+  }
+})
+
 test("compatible calendars distinguish available and planned providers on desktop and mobile", async ({ browser }) => {
   for (const width of [1280, 1024, 768, 390, 320]) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, javaScriptEnabled: false })
@@ -267,13 +290,18 @@ test.describe("the hero", () => {
     })
   }
 
-  test("on a phone, the headline, the call to action, and the diagram's switch fit the first screen", async ({ browser }) => {
+  test("on a phone, the headline and call to action fit the first screen, and the switch follows the diagram", async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" })
     const page = await context.newPage()
     await page.goto("/")
     await expect(page.getByRole("heading", { level: 1 })).toBeInViewport()
     await expect(page.getByRole("link", { name: en.hero.primary }).first()).toBeInViewport()
-    await expect(page.getByRole("group", { name: hc.viewLabel })).toBeInViewport()
+    const views = page.getByRole("group", { name: hc.viewLabel })
+    const group = (await views.boundingBox())!
+    const diagram = (await page.locator(".hc-tall .hc-svg").boundingBox())!
+    expect(group.y).toBeGreaterThanOrEqual(diagram.y + diagram.height)
+    expect(Math.abs(group.x + group.width / 2 - (diagram.x + diagram.width / 2))).toBeLessThan(4)
+    await expect(views.getByRole("button", { name: "What they see", exact: true })).toHaveAttribute("aria-pressed", "true")
     await context.close()
   })
 
@@ -377,7 +405,7 @@ test.describe("the hero", () => {
     await expect.poll(() => runningCount(page)).toBeGreaterThan(0)
   })
 
-  test("the switch over the whole diagram turns the day into Sam's Personal calendar, every title kept, nothing held back, and back", async ({ browser }) => {
+  test("the switch below the whole diagram turns the day into Sam's Personal calendar, every title kept, nothing held back, and back", async ({ browser }) => {
     const context = await browser.newContext({ reducedMotion: "reduce" })
     const page = await context.newPage()
     await page.goto("/")
@@ -386,11 +414,12 @@ test.describe("the hero", () => {
     const you = views.getByRole("button", { name: en.demo.youSee })
     await expect(work).toHaveAttribute("aria-pressed", "true")
     for (const button of [work, you]) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
-    // It sits over the whole diagram, centred.
+    // It sits below the whole diagram, centred.
     const figure = (await page.locator(".hc").boundingBox())!
     const group = (await views.boundingBox())!
     expect(Math.abs(group.x + group.width / 2 - (figure.x + figure.width / 2))).toBeLessThan(4)
-    expect(group.y + group.height).toBeLessThanOrEqual((await page.locator(".hc-wide .hc-svg").boundingBox())!.y + 1)
+    const diagram = (await page.locator(".hc-wide .hc-svg").boundingBox())!
+    expect(group.y).toBeGreaterThanOrEqual(diagram.y + diagram.height)
 
     await you.click()
     await expect(page.locator(".hc")).toHaveAttribute("data-view", "you")
@@ -498,7 +527,7 @@ test.describe("the hero", () => {
     [390, 844],
     [320, 740],
   ] as const) {
-    test(`at ${width}px the diagram runs down, inside the page: the switch, the calendars, the ghost, then the day`, async ({ browser }) => {
+    test(`at ${width}px the diagram runs down, inside the page: the calendars, the ghost, the day, then the switch`, async ({ browser }) => {
       const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" })
       const page = await context.newPage()
       await page.goto("/")
@@ -513,7 +542,7 @@ test.describe("the hero", () => {
       const day = (await tall.locator(".hc-day .hc-box").boundingBox())!
       expect(views.x).toBeGreaterThanOrEqual(0)
       expect(views.x + views.width).toBeLessThanOrEqual(width)
-      expect(views.y + views.height).toBeLessThanOrEqual(Math.min(...pills.map((pill) => pill.y)))
+      expect(views.y).toBeGreaterThanOrEqual(box.y + box.height)
       expect(Math.max(...pills.map((pill) => pill.y + pill.height))).toBeLessThan(ghost.y)
       expect(ghost.y + ghost.height).toBeLessThan(day.y)
       // The pills in one tidy row, the same height, side by side and apart.
