@@ -147,3 +147,26 @@ tokens, whose names can say what a person runs.
   would make every restore lose credentials, which is more complexity than the promise is worth.
 - **Usernames instead of email.** Friendlier for children, but Open registration needs email anyway,
   which would leave two identifiers.
+
+## Amendment: planned Open registration (2026-10-20)
+
+[ADR 0040](0040-open-registration-and-email-ownership.md) and
+[the open-registration design](../superpowers/specs/2026-10-20-open-registration-design.md)
+record the approved design for the next phase. Implementation still requires each PR's approved
+plan; the decisions above continue to describe shipped behavior until those slices land.
+
+The proposal makes Open available to any installation whose administrator chooses it after a
+successful SMTP test. Public registration and Invitations redeemed under Open require email
+verification before a User is created. Existing Users retain access. Returning to Invitation Only
+cancels pending public sign-ups, while keeping existing Users and Invitations.
+
+It also adds self-service password reset under every Registration Policy when identity email is
+configured, with a generic response and 1-hour single-use links. Administrator-issued Invitations
+and Password Reset Links retain 7 days. Email changes require proof of the new address whenever
+SMTP is configured, retaining the current address until confirmation. Security email does not
+depend on the User's Email notifications preference. Identity email links require HTTPS, with
+HTTP loopback allowed for development. SMTP with an HTTP LAN address does not enable email
+recovery or verified email changes, and keeps existing sign-in access. The upgraded first User's
+one initial add-email step remains direct so email configuration cannot block their upgrade.
+Hosted Service continuous backup guidance
+remains optional for self-hosted installations.
