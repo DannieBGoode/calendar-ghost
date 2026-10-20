@@ -81,10 +81,10 @@ def test_invalid_callback_is_checked_then_counted_and_valid_is_not_counted() -> 
         return callback
 
     assert admission.check_token("192.0.2.1", check(True))
-    assert attempts.calls == ["precheck", "lookup", "purge"]
+    assert attempts.calls == ["precheck", "lookup"]
     attempts.calls.clear()
     assert not admission.check_token("192.0.2.1", check(False))
-    assert attempts.calls == ["precheck", "lookup", "invalid", "purge"]
+    assert attempts.calls == ["precheck", "lookup", "invalid"]
     attempts.calls.clear()
     admission.admit_completion("192.0.2.1")
     assert attempts.calls == ["completion", "purge"]

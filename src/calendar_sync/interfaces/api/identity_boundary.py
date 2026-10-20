@@ -3,6 +3,8 @@
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from calendar_sync.interfaces.api.problems import problem
+
 BODY_LIMIT = 8192
 PRIVATE_HEADERS = [(b"cache-control", b"no-store"), (b"referrer-policy", b"no-referrer")]
 
@@ -41,13 +43,15 @@ class IdentityBoundary:
         if scope["method"] == "POST" and reset_api(scope["path"].rstrip("/")):
             body = await _bounded_body(receive)
             if body is None:
+                failure = problem(413, "request_too_large", "Request body is too large")
                 await JSONResponse(
                     {
-                        "detail": "Request body is too large",
-                        "code": "request_too_large",
-                        "params": {},
+                        "detail": failure.detail,
+                        "code": failure.code,
+                        "params": failure.params,
                     },
-                    status_code=413,
+                    status_code=failure.status_code,
+                    headers=failure.headers,
                 )(scope, receive, private_send)
                 return
             if body["type"] == "http.disconnect":
