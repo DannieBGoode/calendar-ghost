@@ -14,6 +14,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from itertools import zip_longest
 from typing import Protocol
 
@@ -79,6 +80,22 @@ class ScheduledRun:
     full: bool
 
 
+@dataclass(frozen=True, slots=True)
+class PlanNoticeDelivery:
+    """One private delivery job; the scheduler only coalesces its opaque owner key."""
+
+    owner_key: str
+    deliver: Callable[[], None]
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduledPreparation:
+    """One invocation's work and its notices, published only after its begin succeeds."""
+
+    begin: Callable[[], tuple[ScheduledRun, ...]]
+    notices_due: Callable[[], tuple[PlanNoticeDelivery, ...]]
+
+
 @dataclass(slots=True)
 class ScheduledPass:
     installation: InstallationUnitOfWorkFactory
@@ -95,6 +112,17 @@ class ScheduledPass:
     _listed: dict[SyncRuleId, datetime] = field(default_factory=dict, init=False)
     """When the pass that last listed each enabled rule began. A rule not listed since the start
     counts from its last run, read once, so Sync Now and instant runs never move it."""
+
+    def prepare(self) -> ScheduledPreparation:
+        """Give the scheduler invocation-scoped work without exposing Plan policy or content."""
+        notices: dict[UserId, PlanNotice] = {}
+        return ScheduledPreparation(
+            partial(self.begin, notices=notices),
+            lambda: tuple(
+                PlanNoticeDelivery(owner.value, partial(self.send_plan_notice, owner, notice))
+                for owner, notice in notices.items()
+            ),
+        )
 
     def begin(self, *, notices: dict[UserId, PlanNotice] | None = None) -> tuple[ScheduledRun, ...]:
         """Prepare a pass, then list its runs: the enabled rules due at it of every User who is

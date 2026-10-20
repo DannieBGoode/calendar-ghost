@@ -8,9 +8,11 @@ import pytest
 
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.plan_holds import PlanHolds, PlanSettlementBusy, SettleLocks
+from calendar_sync.application.sync.ports import Allowances
 from calendar_sync.domain.access import Role
 from calendar_sync.domain.model import SyncRuleId, SyncRuleState
 from calendar_sync.domain.plan_hold import GRACE, PlanGrace, PlanNoticeKind
+from calendar_sync.infrastructure.persistence.memory import InMemoryUserUnitOfWorkFactory
 from tests.application.test_plan_limits import _plans, _plans_off, _rule, _units
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, rule
@@ -20,27 +22,33 @@ NEXT = SyncRuleId("next")
 LATER = SyncRuleId("later")
 
 
-def engine(units, plans=None, locks=None):
+def engine(
+    units: InMemoryUserUnitOfWorkFactory,
+    plans: Allowances | None = None,
+    locks: RuleLocks | None = None,
+) -> PlanHolds:
     return PlanHolds(
         units, USER, plans or _plans(), locks or RuleLocks(), SettleLocks(), FixedClock()
     )
 
 
-def expired(units, limit=1):
+def expired(units: InMemoryUserUnitOfWorkFactory, limit: int = 1) -> None:
     units.state.plan_grace = PlanGrace(NOW - timedelta(seconds=1), limit, 0)
 
 
-def test_grace_then_atomic_holds_and_give_up_without_activity():
+def test_grace_then_atomic_holds_and_give_up_without_activity() -> None:
     units = _units(
         rule(), _rule(NEXT, SyncRuleState.ENABLED), replace(_rule(LATER), keeps_place=True)
     )
     holds = engine(units)
     notice = holds.settle()
+    assert notice is not None
     assert notice.kind is PlanNoticeKind.GRACE_STARTED
     assert notice.holds_at == NOW + GRACE
     assert (notice.count, notice.held, notice.reserved) == (3, 1, 1)
     expired(units)
     notice = holds.settle()
+    assert notice is not None
     assert (notice.kind, notice.held) == (PlanNoticeKind.RULES_HELD, 1)
     assert units.state.rules[NEXT].held_by_plan
     assert not units.state.rules[LATER].keeps_place
@@ -49,7 +57,7 @@ def test_grace_then_atomic_holds_and_give_up_without_activity():
     assert units.database.incidents_of(USER) == {}
 
 
-def test_give_up_alone_sends_no_held_notice():
+def test_give_up_alone_sends_no_held_notice() -> None:
     units = _units(rule(), replace(_rule(NEXT), keeps_place=True))
     expired(units)
     assert engine(units).settle() is None
@@ -58,7 +66,7 @@ def test_give_up_alone_sends_no_held_notice():
 
 
 @pytest.mark.parametrize("authorized", [True, False])
-def test_release_uses_fresh_account_authorization(authorized):
+def test_release_uses_fresh_account_authorization(authorized: bool) -> None:
     units = _units(rule().hold())
     if not authorized:
         units.state.lapsed[rule().source.connected_account_id] = NOW
@@ -70,7 +78,7 @@ def test_release_uses_fresh_account_authorization(authorized):
 
 
 @pytest.mark.parametrize("plans", [_plans_off(), _plans(Role.INSTALLATION_ADMINISTRATOR)])
-def test_no_limit_releases_all_holds(plans):
+def test_no_limit_releases_all_holds(plans: Allowances | None) -> None:
     units = _units(rule().hold(), _rule(NEXT, SyncRuleState.ENABLED).hold())
     expired(units)
     engine(units, plans).settle()
@@ -78,7 +86,7 @@ def test_no_limit_releases_all_holds(plans):
     assert units.state.plan_grace is None
 
 
-def test_disabled_user_clears_grace_and_retains_holds():
+def test_disabled_user_clears_grace_and_retains_holds() -> None:
     units = _units(rule(), _rule(NEXT, SyncRuleState.ENABLED).hold())
     units.database.disabled.add(USER)
     expired(units)
@@ -87,7 +95,7 @@ def test_disabled_user_clears_grace_and_retains_holds():
     assert units.state.plan_grace is None
 
 
-def test_scheduled_settlement_never_swaps():
+def test_scheduled_settlement_never_swaps() -> None:
     units = _units(rule(), _rule(NEXT, SyncRuleState.ENABLED).hold())
     units.state.rule_kept.add(NEXT)
     engine(units).settle()
@@ -95,22 +103,23 @@ def test_scheduled_settlement_never_swaps():
     assert units.state.rules[NEXT].held_by_plan
 
 
-def test_notify_false_only_suppresses_notice():
+def test_notify_false_only_suppresses_notice() -> None:
     units = _units(rule(), _rule(NEXT, SyncRuleState.ENABLED))
     assert engine(units).settle(notify=False) is None
+    assert units.state.plan_grace is not None
     assert units.state.plan_grace.holds_at == NOW + GRACE
     expired(units)
     assert engine(units).settle(notify=False) is None
     assert units.state.rules[NEXT].held_by_plan
 
 
-def test_busy_rule_skips_user_without_delaying_listing():
+def test_busy_rule_skips_user_without_delaying_listing() -> None:
     units = _units(rule(), _rule(NEXT, SyncRuleState.ENABLED))
     locks = RuleLocks()
     completed = Event()
-    outcomes = []
+    outcomes: list[BaseException] = []
 
-    def settle():
+    def settle() -> None:
         try:
             engine(units, locks=locks).settle()
         except BaseException as error:
@@ -134,7 +143,7 @@ def test_busy_rule_skips_user_without_delaying_listing():
     assert units.state.plan_grace is None
 
 
-def test_allowance_failure_changes_nothing():
+def test_allowance_failure_changes_nothing() -> None:
     from tests.identity_fakes import BrokenAllowances
 
     units = _units(rule(), _rule(NEXT, SyncRuleState.ENABLED))
@@ -146,7 +155,7 @@ def test_allowance_failure_changes_nothing():
     assert units.state.plan_grace == before
 
 
-def test_explicit_unlimited_plan_releases_all_holds():
+def test_explicit_unlimited_plan_releases_all_holds() -> None:
     from tests.plans import FREE
 
     plans = _plans()
@@ -158,7 +167,7 @@ def test_explicit_unlimited_plan_releases_all_holds():
     assert units.state.plan_grace is None
 
 
-def test_settle_locks_are_shared_per_user_but_independent_between_users():
+def test_settle_locks_are_shared_per_user_but_independent_between_users() -> None:
     from tests.users import OTHER_USER
 
     locks = SettleLocks()

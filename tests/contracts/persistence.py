@@ -2500,7 +2500,9 @@ class PersistenceContract:
         # run that completed at the instant of its preview counts as since.
         assert [each.always_due for each in scheduled] == [True, False, True, True, True, False]
 
-    def test_plan_standings_include_grace_only_and_disabled_held_owners(self, harness):
+    def test_plan_standings_include_grace_only_and_disabled_held_owners(
+        self, harness: PersistenceHarness
+    ) -> None:
         grace = PlanGrace(NOW + DAY, 1, 0)
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE.hold())
@@ -2524,7 +2526,9 @@ class PersistenceContract:
         assert standings[OTHER_USER].standings == ()
         assert standings[OTHER_USER].grace == grace
 
-    def test_held_rules_have_no_scheduled_instant_or_wanted_watch_work(self, harness):
+    def test_held_rules_have_no_scheduled_instant_or_wanted_watch_work(
+        self, harness: PersistenceHarness
+    ) -> None:
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE.hold())
             uow.commit()
@@ -2538,7 +2542,9 @@ class PersistenceContract:
         with harness.installation() as installation:
             assert [each.user for each in installation.instant_sync_owners()] == [USER]
 
-    def test_only_exact_lapse_stop_code_wants_lapse_recovery(self, harness):
+    def test_only_exact_lapse_stop_code_wants_lapse_recovery(
+        self, harness: PersistenceHarness
+    ) -> None:
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE.hold())
             uow.rules.add(OTHER_RULE.degrade(awaiting_reauthorization=True))

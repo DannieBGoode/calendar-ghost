@@ -11,7 +11,11 @@ from typing import cast
 
 import pytest
 
-from calendar_sync.application.operations.ports import CauseSighting, InstallationUnitOfWorkFactory
+from calendar_sync.application.operations.ports import (
+    CauseSighting,
+    InstallationUnitOfWorkFactory,
+    UserPlanStanding,
+)
 from calendar_sync.application.operations.scheduled_pass import (
     RECHECK_INTERVAL,
     ScheduledPass,
@@ -22,16 +26,20 @@ from calendar_sync.application.operations.scheduled_pass import (
 )
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.health import RunHealth
-from calendar_sync.application.sync.ports import ScheduledRule
+from calendar_sync.application.sync.plan_holds import PlanHolds
+from calendar_sync.application.sync.ports import ScheduledRule, UnitOfWork
 from calendar_sync.application.sync.synchronization import SyncRunResult
 from calendar_sync.application.sync.watch_ports import SyncCadencePolicy
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.cadence import DEFAULT_CADENCE, SCHEDULED_EVERY, SyncCadence
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.domain.plan_hold import PlanNotice, RuleStanding
+from calendar_sync.domain.plans import Allowance
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.memory_installation import (
+    InMemoryInstallationUnitOfWork,
     InMemoryInstallationUnitOfWorkFactory,
 )
 from tests.fake_calendar import FixedClock
@@ -527,22 +535,16 @@ def test_plan_settlement_follows_lapses_and_precedes_listing() -> None:
     units = _units(rule(), _rule(SyncRuleId("next"), SyncRuleState.ENABLED))
     order: list[str] = []
 
-    class TrackedInstallation(InMemoryInstallationUnitOfWorkFactory):
-        def __call__(self):
-            base = super().__call__()
-            original = base.scheduled_rules
-
-            def listed():
-                order.append("list")
-                assert units.state.plan_grace is not None
-                return original()
-
-            base.scheduled_rules = listed
-            return base
+    class TrackedInstallation(InMemoryInstallationUnitOfWork):
+        def scheduled_rules(self) -> tuple[ScheduledRule, ...]:
+            order.append("list")
+            assert units.state.plan_grace is not None
+            return super().scheduled_rules()
 
     class Health(RecordingHealth):
-        def finish_interrupted_lapses(self):
+        def finish_interrupted_lapses(self) -> int:
             order.append("lapses")
+            return 0
 
     units.state.rules[rule().id] = rule().degrade(awaiting_reauthorization=True)
     locks = RuleLocks()
@@ -553,7 +555,10 @@ def test_plan_settlement_follows_lapses_and_precedes_listing() -> None:
         cast(SyncRuns, RecordingExecuteRule([])), cast(RunHealth, Health())
     )
     scheduled = ScheduledPass(
-        TrackedInstallation(units.database), lambda owner: services, FixedClock(), plan_holds=step
+        lambda: TrackedInstallation(units.database),
+        lambda owner: services,
+        FixedClock(),
+        plan_holds=step,
     )
     scheduled.begin()
     assert order == ["lapses", "list"]
@@ -561,7 +566,9 @@ def test_plan_settlement_follows_lapses_and_precedes_listing() -> None:
     assert scheduled.plan_notices_due() == ()
 
 
-def test_plan_settlement_rotates_failures_and_unchanged_users_cost_no_slot(caplog) -> None:
+def test_plan_settlement_rotates_failures_and_unchanged_users_cost_no_slot(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     from calendar_sync.application.operations.ports import UserPlanStanding
     from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
     from calendar_sync.application.sync.plan_holds import PlanSettlementBusy
@@ -571,14 +578,15 @@ def test_plan_settlement_rotates_failures_and_unchanged_users_cost_no_slot(caplo
     plans = _plans()
     attempted: list[UserId] = []
 
-    class Holds:
-        def __init__(self, owner):
+    class Holds(PlanHolds):
+        def __init__(self, owner: UserId) -> None:
             self.owner = owner
 
-        def settle(self):
+        def settle(self, notify: bool = True) -> PlanNotice | None:
             attempted.append(self.owner)
             if self.owner.value.endswith("0"):
                 raise PlanSettlementBusy("private SMTP credentials")
+            return None
 
     standings = (RuleStanding(rule().id, RulePlace.COUNTED, 1, False),)
     changed = [
@@ -598,15 +606,18 @@ def test_plan_settlement_rotates_failures_and_unchanged_users_cost_no_slot(caplo
     assert "private SMTP credentials" not in caplog.text
 
 
-def test_plan_allowance_batch_failure_settles_nobody(caplog) -> None:
+def test_plan_allowance_batch_failure_settles_nobody(caplog: pytest.LogCaptureFixture) -> None:
     from calendar_sync.application.operations.ports import UserPlanStanding
     from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
 
     class Broken:
-        def of_users(self, users):
+        def of(self, owner: UserId) -> Allowance:
             raise RuntimeError("private provider data")
 
-    def forbidden(owner):
+        def of_users(self, users: Collection[UserId]) -> Mapping[UserId, Allowance]:
+            raise RuntimeError("private provider data")
+
+    def forbidden(owner: UserId) -> PlanHolds:
         pytest.fail("No User can settle after an unreadable allowance batch")
 
     step = ScheduledPlanHolds(Broken(), forbidden, FixedClock())
@@ -614,12 +625,14 @@ def test_plan_allowance_batch_failure_settles_nobody(caplog) -> None:
     assert "private provider data" not in caplog.text
 
 
-def test_unreadable_plan_standings_never_stop_rule_listing(caplog):
+def test_unreadable_plan_standings_never_stop_rule_listing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
     from tests.application.test_plan_limits import _plans
 
     class BrokenPlansInstallation(Installation):
-        def plan_standings(self):
+        def plan_standings(self) -> Sequence[UserPlanStanding]:
             raise ValueError("private stored grace content")
 
     installation = BrokenPlansInstallation(rules=[_enabled(USER, "running")])
@@ -632,7 +645,7 @@ def test_unreadable_plan_standings_never_stop_rule_listing(caplog):
     assert "private stored grace content" not in caplog.text
 
 
-def test_raised_limit_updates_grace_without_restarting_expiry():
+def test_raised_limit_updates_grace_without_restarting_expiry() -> None:
     from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
     from calendar_sync.application.sync.locking import RuleLocks
     from calendar_sync.application.sync.plan_holds import PlanHolds, SettleLocks
@@ -651,7 +664,7 @@ def test_raised_limit_updates_grace_without_restarting_expiry():
     assert units.state.plan_grace == PlanGrace(expiry, 1, 0)
 
 
-def test_released_hold_can_run_in_the_same_pass():
+def test_released_hold_can_run_in_the_same_pass() -> None:
     from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
     from calendar_sync.application.sync.locking import RuleLocks
     from calendar_sync.application.sync.plan_holds import PlanHolds, SettleLocks
@@ -675,7 +688,7 @@ def test_released_hold_can_run_in_the_same_pass():
     assert scheduled.plan_notices_due() == ()
 
 
-def test_a_malformed_prefilter_skips_only_its_user(caplog):
+def test_a_malformed_prefilter_skips_only_its_user(caplog: pytest.LogCaptureFixture) -> None:
     from calendar_sync.application.operations.ports import UserPlanStanding
     from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
     from calendar_sync.domain.plan_hold import PlanGrace
@@ -683,11 +696,16 @@ def test_a_malformed_prefilter_skips_only_its_user(caplog):
 
     attempted = []
 
-    class Holds:
-        def settle(self):
-            attempted.append(OTHER_USER)
+    class Holds(PlanHolds):
+        def __init__(self) -> None:
+            pass
 
-    malformed = UserPlanStanding(USER, True, (None,), None, 0)
+        def settle(self, notify: bool = True) -> PlanNotice | None:
+            attempted.append(OTHER_USER)
+            return None
+
+    # Deliberately corrupt the installation snapshot to exercise its defensive boundary.
+    malformed = UserPlanStanding(USER, True, (cast(RuleStanding, None),), None, 0)
     grace_only = UserPlanStanding(OTHER_USER, True, (), PlanGrace(NOW, 1, 0), 0)
     step = ScheduledPlanHolds(_plans(), lambda owner: Holds(), FixedClock())
     assert step.settle([malformed, grace_only]) == ()
@@ -695,7 +713,10 @@ def test_a_malformed_prefilter_skips_only_its_user(caplog):
     assert "AttributeError" in caplog.text
 
 
-def test_later_user_transaction_failure_rolls_back_only_that_user(caplog):
+def test_later_user_transaction_failure_rolls_back_only_that_user(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
     from calendar_sync.application.sync.locking import RuleLocks
     from calendar_sync.application.sync.plan_holds import PlanHolds, SettleLocks
@@ -719,19 +740,21 @@ def test_later_user_transaction_failure_rolls_back_only_that_user(caplog):
             uow.plan_grace.save(grace)
             uow.commit()
     plans = _plans()
-    plans.users.add(replace(plans.users.get(USER), id=OTHER_USER, email="other@example.test"), "x")
+    user = plans.users.get(USER)
+    assert user is not None
+    plans.users.add(replace(user, id=OTHER_USER, email="other@example.test"), "x")
     locks, settle_locks = RuleLocks(), SettleLocks()
 
-    def fails_commit():
+    def fails_commit() -> UnitOfWork:
         unit = units[OTHER_USER]()
 
-        def fail():
+        def fail() -> None:
             raise RuntimeError("private event content and SMTP credentials")
 
-        unit.commit = fail
+        monkeypatch.setattr(unit, "commit", fail)
         return unit
 
-    def holds_for(owner):
+    def holds_for(owner: UserId) -> PlanHolds:
         factory = fails_commit if owner == OTHER_USER else units[owner]
         return PlanHolds(factory, owner, plans, locks, settle_locks, FixedClock())
 
@@ -747,11 +770,13 @@ def test_later_user_transaction_failure_rolls_back_only_that_user(caplog):
     assert "private event content" not in caplog.text
 
 
-def test_plan_delivery_failure_does_not_escape_the_scheduled_pass(caplog):
+def test_plan_delivery_failure_does_not_escape_the_scheduled_pass(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
 
     class BrokenDelivery:
-        def plan_changed(self, notice):
+        def plan_changed(self, notice: PlanNotice) -> None:
             raise RuntimeError("private SMTP password and owner@example.test")
 
     services = ScheduledServices(
@@ -768,7 +793,7 @@ def test_plan_delivery_failure_does_not_escape_the_scheduled_pass(caplog):
     assert "owner@example.test" not in caplog.text
 
 
-def test_selected_user_reads_allowance_again_inside_settlement():
+def test_selected_user_reads_allowance_again_inside_settlement() -> None:
     from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
     from calendar_sync.application.sync.locking import RuleLocks
     from calendar_sync.application.sync.plan_holds import PlanHolds, SettleLocks
@@ -783,10 +808,10 @@ def test_selected_user_reads_allowance_again_inside_settlement():
     class FreshAllowance:
         reads = 0
 
-        def of_users(self, owners):
+        def of_users(self, owners: Collection[UserId]) -> Mapping[UserId, Allowance]:
             return plans.of_users(owners)
 
-        def of(self, owner):
+        def of(self, owner: UserId) -> Allowance:
             self.reads += 1
             return UNLIMITED
 

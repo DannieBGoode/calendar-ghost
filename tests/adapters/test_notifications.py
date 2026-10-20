@@ -375,7 +375,9 @@ def test_the_public_address_is_read_from_the_environment(monkeypatch: pytest.Mon
 
 
 @pytest.mark.parametrize(("held", "reserved"), [(2, 0), (0, 2), (1, 1)])
-def test_plan_email_counts_places_privately_and_names_utc(monkeypatch, held, reserved):
+def test_plan_email_counts_places_privately_and_names_utc(
+    monkeypatch: pytest.MonkeyPatch, held: int, reserved: int
+) -> None:
     from datetime import timedelta, timezone
 
     from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
@@ -419,7 +421,9 @@ def test_plan_email_counts_places_privately_and_names_utc(monkeypatch, held, res
 @pytest.mark.parametrize(
     "changes", [{"notify_by_email": False}, {"email": None}, {"state": UserState.DISABLED}]
 )
-def test_plan_email_uses_existing_owner_gates(monkeypatch, changes):
+def test_plan_email_uses_existing_owner_gates(
+    monkeypatch: pytest.MonkeyPatch, changes: dict[str, object]
+) -> None:
     from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
 
     RecordingSmtp.sent = []
@@ -430,10 +434,12 @@ def test_plan_email_uses_existing_owner_gates(monkeypatch, changes):
     assert RecordingSmtp.sent == []
 
 
-def test_plan_email_failure_logs_only_error_class(monkeypatch, caplog):
+def test_plan_email_failure_logs_only_error_class(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
 
-    def refuse(*args, **kwargs):
+    def refuse(*args: object, **kwargs: object) -> None:
         raise OSError("SMTP private password recipient@example.test")
 
     monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", refuse)
@@ -445,7 +451,9 @@ def test_plan_email_failure_logs_only_error_class(monkeypatch, caplog):
     assert "recipient@example.test" not in caplog.text
 
 
-def test_plan_held_notice_has_exact_body_and_no_link_without_public_address(monkeypatch):
+def test_plan_held_notice_has_exact_body_and_no_link_without_public_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
 
     RecordingSmtp.sent = []
@@ -462,8 +470,8 @@ def test_plan_held_notice_has_exact_body_and_no_link_without_public_address(monk
 
 
 def test_composed_plan_notices_email_only_the_owner_not_installation_channels(
-    tmp_path, monkeypatch
-):
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
 
     RecordingSmtp.sent = []
@@ -490,6 +498,6 @@ def test_composed_plan_notices_email_only_the_owner_not_installation_channels(
     assert posted == []
 
 
-def test_no_configured_smtp_has_no_plan_notice_adapter(tmp_path):
+def test_no_configured_smtp_has_no_plan_notice_adapter(tmp_path: Path) -> None:
     adapters = build_adapters(Settings(tmp_path / "test.db"))
     assert adapters.plan_notices(UserId("owner")) is None

@@ -1119,7 +1119,7 @@ def test_stopping_everything_gives_up_on_stops_at_the_deadline_and_removes_every
     assert scenario.registrations() == []
 
 
-def test_upkeep_retires_watches_when_the_only_rule_is_held_by_its_plan():
+def test_upkeep_retires_watches_when_the_only_rule_is_held_by_its_plan() -> None:
     scenario = seeded(RegistrationState.LIVE)
     scenario.units.rules = [source_rule().hold()]
 

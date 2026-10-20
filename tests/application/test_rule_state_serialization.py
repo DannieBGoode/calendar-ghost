@@ -8,20 +8,29 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import timedelta
-from threading import Event, Thread
+from datetime import datetime, timedelta
+from pathlib import Path
+from threading import Event, Lock, Thread
 
 import pytest
 
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.health import RuleHealth
 from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import (
+    CalendarProvider,
+    ProviderChangeSet,
+    UnitOfWork,
+    UnitOfWorkFactory,
+)
 from calendar_sync.application.sync.preview import PreviewSyncRule
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.model import (
+    CalendarEndpoint,
     ProjectionContent,
     ProjectionHandling,
+    SyncRuleId,
     SyncRuleState,
     TransformationPolicy,
 )
@@ -154,13 +163,13 @@ def test_occurrence_writes_wait_for_the_rule_write_lock() -> None:
 class _WriterGate:
     """Open settlement's writer unit only after a run reaches its cursor lock."""
 
-    def __init__(self, units):
+    def __init__(self, units: UnitOfWorkFactory) -> None:
         self.units = units
         self.calls = 0
         self.locked = Event()
         self.proceed = Event()
 
-    def __call__(self):
+    def __call__(self) -> UnitOfWork:
         self.calls += 1
         if self.calls == 2:
             self.locked.set()
@@ -169,19 +178,19 @@ class _WriterGate:
 
 
 class _CursorLocks(RuleLocks):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.armed = Event()
         self.attempted = Event()
 
-    def for_writes(self, rule_id):
+    def for_writes(self, rule_id: SyncRuleId) -> Lock:
         lock = super().for_writes(rule_id)
         if self.armed.is_set():
             self.attempted.set()
         return lock
 
 
-def _run(units, provider, locks):
+def _run(units: UnitOfWorkFactory, provider: CalendarProvider, locks: RuleLocks) -> ExecuteSyncRule:
     fingerprinter = ProjectionFingerprinter()
     return ExecuteSyncRule(
         units,
@@ -194,7 +203,7 @@ def _run(units, provider, locks):
     )
 
 
-def test_cursor_advance_and_settle_finish_without_busy_timeout(tmp_path):
+def test_cursor_advance_and_settle_finish_without_busy_timeout(tmp_path: Path) -> None:
     plans, units = _member_with_rules(tmp_path / "test.db", rule())
     gate = _WriterGate(units)
     locks = _CursorLocks()
@@ -215,7 +224,7 @@ def test_cursor_advance_and_settle_finish_without_busy_timeout(tmp_path):
         assert uow.destination_cursors.get(rule().id) == "destination-cursor-1"
 
 
-def test_in_flight_run_stops_before_its_next_write_after_hold(tmp_path):
+def test_in_flight_run_stops_before_its_next_write_after_hold(tmp_path: Path) -> None:
     plans, units = _member_with_rules(
         tmp_path / "test.db", _previewed_rule(NEXT_RULE).enable(), rule()
     )
@@ -225,7 +234,9 @@ def test_in_flight_run_stops_before_its_next_write_after_hold(tmp_path):
     reading, proceed = Event(), Event()
 
     class HeldReadProvider(FakeCalendarProvider):
-        def changes(self, source, cursor, not_ended_before):
+        def changes(
+            self, source: CalendarEndpoint, cursor: str | None, not_ended_before: datetime
+        ) -> ProviderChangeSet:
             if source == rule().source:
                 reading.set()
                 assert proceed.wait(5)
@@ -237,6 +248,7 @@ def test_in_flight_run_stops_before_its_next_write_after_hold(tmp_path):
         assert reading.wait(2)
         # A live run owns its run lock, but settlement can take its idle write lock.
         notice = _holds(units, plans, locks).settle()
+        assert notice is not None
         assert notice.held == 1
         assert _stored_rule(units, rule().id).held_by_plan
     finally:
@@ -249,12 +261,14 @@ def test_in_flight_run_stops_before_its_next_write_after_hold(tmp_path):
         assert uow.cursors.get(rule().id) is None
 
 
-def test_hold_release_as_lapse_then_intervention_prevents_authorized_restoration():
+def test_hold_release_as_lapse_then_intervention_prevents_authorized_restoration() -> None:
     units = _units(_previewed_rule(NEXT_RULE).enable(), rule())
     locks = RuleLocks()
     expired(units)
     holds = engine(units, locks=locks)
-    assert holds.settle().held == 1
+    notice = holds.settle()
+    assert notice is not None
+    assert notice.held == 1
     account = rule().source.connected_account_id
     units.state.lapsed[account] = NOW
     units.state.rules[NEXT_RULE] = units.state.rules[NEXT_RULE].pause()

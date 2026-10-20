@@ -108,7 +108,7 @@ def test_the_plan_use_cases_share_the_installations_one_plans_store(tmp_path: Pa
     )
 
 
-def test_composed_users_share_process_settlement_locks(tmp_path):
+def test_composed_users_share_process_settlement_locks(tmp_path: Path) -> None:
     settings = Settings(tmp_path / "test.db")
     adapters = build_adapters(settings)
     container = compose(settings, adapters)
@@ -123,7 +123,7 @@ def test_composed_users_share_process_settlement_locks(tmp_path):
     )
 
 
-def test_production_composition_does_not_activate_plan_holds(tmp_path):
+def test_production_composition_does_not_activate_plan_holds(tmp_path: Path) -> None:
     from dataclasses import replace
     from datetime import timedelta
 
@@ -176,5 +176,7 @@ def test_production_composition_does_not_activate_plan_holds(tmp_path):
     assert owner == member
     assert notice.kind is PlanNoticeKind.RULES_HELD
     with units() as uow:
-        assert uow.rules.get(second.id).held_by_plan
+        held = uow.rules.get(second.id)
+        assert held is not None
+        assert held.held_by_plan
         assert uow.plan_grace.get() is None

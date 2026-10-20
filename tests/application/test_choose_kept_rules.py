@@ -17,7 +17,7 @@ from tests.application.test_plan_limits import _plans_off, _rule, _units
 from tests.helpers import rule
 
 
-def test_full_choice_saved_during_grace_without_holds():
+def test_full_choice_saved_during_grace_without_holds() -> None:
     units = _units(rule(), _rule(NEXT, SyncRuleState.ENABLED))
     holds = engine(units)
     holds.settle()
@@ -31,7 +31,7 @@ def test_full_choice_saved_during_grace_without_holds():
 
 
 @pytest.mark.parametrize("chosen", [[rule().id, NEXT], [SyncRuleId("foreign")], [LATER]])
-def test_invalid_choice_is_atomic(chosen):
+def test_invalid_choice_is_atomic(chosen: list[SyncRuleId]) -> None:
     units = _units(rule(), _rule(NEXT, SyncRuleState.ENABLED).hold(), _rule(LATER))
     units.state.rule_kept.add(rule().id)
     before = dict(units.state.rules)
@@ -44,7 +44,7 @@ def test_invalid_choice_is_atomic(chosen):
     assert units.state.rules == before
 
 
-def test_keep_releases_into_free_place_and_records_admission():
+def test_keep_releases_into_free_place_and_records_admission() -> None:
     units = _units(rule().hold(), _rule(NEXT, SyncRuleState.ENABLED).hold())
     ChooseKeptRules(engine(units)).execute([NEXT])
     assert units.state.rules[NEXT].synchronizes
@@ -52,7 +52,7 @@ def test_keep_releases_into_free_place_and_records_admission():
     assert units.state.plan_admissions == 1
 
 
-def test_keep_swaps_worst_counted_without_admission():
+def test_keep_swaps_worst_counted_without_admission() -> None:
     units = _units(rule(), _rule(NEXT, SyncRuleState.ENABLED).hold())
     ChooseKeptRules(engine(units)).execute([NEXT])
     assert units.state.rules[NEXT].synchronizes
@@ -60,7 +60,7 @@ def test_keep_swaps_worst_counted_without_admission():
     assert units.state.plan_admissions == 0
 
 
-def test_keep_never_swaps_reserved_rule():
+def test_keep_never_swaps_reserved_rule() -> None:
     units = _units(
         replace(rule(state=SyncRuleState.DRAFT), keeps_place=True),
         _rule(NEXT, SyncRuleState.ENABLED).hold(),
@@ -70,7 +70,7 @@ def test_keep_never_swaps_reserved_rule():
     assert units.state.rules[NEXT].held_by_plan
 
 
-def test_keep_disabled_user_does_not_swap():
+def test_keep_disabled_user_does_not_swap() -> None:
     units = _units(rule(), _rule(NEXT, SyncRuleState.ENABLED).hold())
     units.database.disabled.add(engine(units).owner)
     ChooseKeptRules(engine(units)).execute([NEXT])
@@ -78,13 +78,13 @@ def test_keep_disabled_user_does_not_swap():
     assert units.state.rules[NEXT].held_by_plan
 
 
-def test_keep_without_plans_never_limits_or_holds():
+def test_keep_without_plans_never_limits_or_holds() -> None:
     units = _units(rule(), _rule(NEXT, SyncRuleState.ENABLED).hold())
     ChooseKeptRules(engine(units, _plans_off())).execute([rule().id, NEXT])
     assert all(each.synchronizes for each in units.state.rules.values())
 
 
-def test_keep_choice_contention_changes_nothing():
+def test_keep_choice_contention_changes_nothing() -> None:
     units = _units(rule(), _rule(NEXT, SyncRuleState.ENABLED).hold())
     locks = RuleLocks()
     expired(units)
@@ -96,7 +96,7 @@ def test_keep_choice_contention_changes_nothing():
     assert units.state.rules[NEXT].held_by_plan
 
 
-def test_choice_releases_best_kept_then_swaps_worst_counted():
+def test_choice_releases_best_kept_then_swaps_worst_counted() -> None:
     from tests.application.test_plan_limits import _plans
     from tests.helpers import NOW
     from tests.plans import FREE
@@ -113,14 +113,14 @@ def test_choice_releases_best_kept_then_swaps_worst_counted():
     assert units.state.plan_admissions == 1
 
 
-def test_choice_releases_only_chosen_rules_into_free_places():
+def test_choice_releases_only_chosen_rules_into_free_places() -> None:
     units = _units(rule().hold(), _rule(NEXT, SyncRuleState.ENABLED).hold())
     ChooseKeptRules(engine(units)).execute([])
     assert all(each.held_by_plan for each in units.state.rules.values())
     assert units.state.plan_admissions == 0
 
 
-def test_foreign_choice_changes_neither_users_rules_nor_kept_marks():
+def test_foreign_choice_changes_neither_users_rules_nor_kept_marks() -> None:
     from tests.users import OTHER_USER
 
     units = _units(rule())

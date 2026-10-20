@@ -9,11 +9,11 @@ does meanwhile.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from pathlib import Path
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from typing import ClassVar
 
 import pytest
@@ -35,7 +35,7 @@ from calendar_sync.application.sync.rules import EnableSyncRule
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
-from calendar_sync.domain.plan_hold import GRACE, PlanGrace, PlanNoticeKind
+from calendar_sync.domain.plan_hold import GRACE, PlanGrace, PlanNotice, PlanNoticeKind
 from calendar_sync.domain.plans import (
     Allowance,
     LimitedResource,
@@ -491,13 +491,13 @@ class _Job:
 
     pending: ClassVar[list[_Job]] = []
 
-    def __init__(self, operation):
+    def __init__(self, operation: Callable[[], object]) -> None:
         self.pending.append(self)
-        self.answers = []
+        self.answers: list[object] = []
         self.started = Event()
         self.done = Event()
 
-        def run():
+        def run() -> None:
             self.started.set()
             try:
                 self.answers.append(operation())
@@ -510,7 +510,7 @@ class _Job:
         self.thread.start()
         assert self.started.wait(2)
 
-    def finish(self):
+    def finish(self) -> object:
         self.thread.join(5)
         assert not self.thread.is_alive()
         assert len(self.answers) == 1
@@ -521,40 +521,42 @@ class _Job:
 class _DiscoveryLocks(RuleLocks):
     """Pause settlement after discovery closes, before any rule lock is acquired."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.discovered = Event()
         self.proceed = Event()
 
-    def for_writes(self, rule_id):
+    def for_writes(self, rule_id: SyncRuleId) -> Lock:
         if not self.discovered.is_set():
             self.discovered.set()
             assert self.proceed.wait(5)
         return super().for_writes(rule_id)
 
 
-def _holds(units, plans, locks=None):
+def _holds(
+    units: UnitOfWorkFactory, plans: Allowances, locks: RuleLocks | None = None
+) -> PlanHolds:
     return PlanHolds(units, USER, plans, locks or RuleLocks(), SettleLocks(), FixedClock())
 
 
-def _save_grace(units, *, limit=1, admissions=0):
+def _save_grace(units: UnitOfWorkFactory, *, limit: int = 1, admissions: int = 0) -> None:
     with units() as uow:
         uow.plan_grace.save(PlanGrace(NOW - timedelta(days=1), limit, admissions))
         uow.commit()
 
 
-def _stored_rule(units, rule_id):
+def _stored_rule(units: UnitOfWorkFactory, rule_id: SyncRuleId) -> SyncRule:
     with units() as uow:
         stored = uow.rules.get(rule_id)
     assert stored is not None
     return stored
 
 
-def _lower(plans, limit=1):
+def _lower(plans: SqlitePlans, limit: int = 1) -> None:
     plans.change(replace(TWO_RULES, limits=replace(TWO_RULES.limits, rules=limit)), NOW)
 
 
-def test_lowering_before_settle_is_seen_and_after_writer_waits(tmp_path):
+def test_lowering_before_settle_is_seen_and_after_writer_waits(tmp_path: Path) -> None:
     plans, units = _member_with_rules(
         tmp_path / "test.db", rule(), _previewed_rule(NEXT_RULE).enable()
     )
@@ -573,14 +575,17 @@ def test_lowering_before_settle_is_seen_and_after_writer_waits(tmp_path):
         gate.released.set()
     notice = holding.finish()
     assert raising.finish() is None
+    assert isinstance(notice, PlanNotice)
     assert notice.kind is PlanNoticeKind.GRACE_STARTED
     assert notice.limit == 1
     with units() as uow:
-        assert uow.plan_grace.get().rule_limit == 1
+        grace = uow.plan_grace.get()
+        assert grace is not None
+        assert grace.rule_limit == 1
 
 
 @pytest.mark.parametrize("before", [True, False])
-def test_lapse_before_and_after_release_is_preserved(tmp_path, before):
+def test_lapse_before_and_after_release_is_preserved(tmp_path: Path, before: bool) -> None:
     plans, units = _member_with_rules(tmp_path / "test.db", rule().hold())
     gate = HeldAllowances(plans)
     locks = RuleLocks()
@@ -588,7 +593,7 @@ def test_lapse_before_and_after_release_is_preserved(tmp_path, before):
     account = rule().source.connected_account_id
     failure = ProviderFailure(ProviderFailureKind.AUTHENTICATION, "synthetic", account_id=account)
 
-    def lapse():
+    def lapse() -> bool:
         return lapses.lapsed(account, failure, attempted_at=NOW)
 
     if before:
@@ -611,7 +616,7 @@ def test_lapse_before_and_after_release_is_preserved(tmp_path, before):
     assert not current.synchronizes
 
 
-def test_start_racing_release_cannot_exceed_limit(tmp_path):
+def test_start_racing_release_cannot_exceed_limit(tmp_path: Path) -> None:
     plans, units = _member_with_rules(
         tmp_path / "test.db", rule().hold(), _previewed_rule(NEXT_RULE)
     )
@@ -631,7 +636,7 @@ def test_start_racing_release_cannot_exceed_limit(tmp_path):
     assert _stored_rule(units, NEXT_RULE).state is SyncRuleState.PREVIEWED
 
 
-def test_new_start_during_discovery_stays_unchanged(tmp_path):
+def test_new_start_during_discovery_stays_unchanged(tmp_path: Path) -> None:
     plans, units = _member_with_rules(tmp_path / "test.db", rule(), _previewed_rule(NEXT_RULE))
     _save_grace(units)
     locks = _DiscoveryLocks()
@@ -643,15 +648,17 @@ def test_new_start_during_discovery_stays_unchanged(tmp_path):
     finally:
         locks.proceed.set()
     notice = holding.finish()
+    assert isinstance(notice, PlanNotice)
     assert notice.kind is PlanNoticeKind.GRACE_STARTED
     assert _stored_rule(units, NEXT_RULE).synchronizes
     with units() as uow:
         grace = uow.plan_grace.get()
+        assert grace is not None
         assert grace.admissions == 1
         assert grace.holds_at == NOW + GRACE
 
 
-def test_replacement_during_settle_waits_for_next_pass(tmp_path):
+def test_replacement_during_settle_waits_for_next_pass(tmp_path: Path) -> None:
     old = _previewed_rule(NEXT_RULE).enable()
     plans, units = _member_with_rules(tmp_path / "test.db", rule(), old)
     _lower(plans)
@@ -674,14 +681,16 @@ def test_replacement_during_settle_waits_for_next_pass(tmp_path):
     assert holding.finish() is None  # The unlocked draft was not held or counted in a held notice.
     assert _stored_rule(units, LATER_RULE).keeps_place
     with units() as uow:
-        assert uow.plan_grace.get().holds_at < NOW
+        grace = uow.plan_grace.get()
+        assert grace is not None
+        assert grace.holds_at < NOW
     assert _holds(units, plans, locks).settle() is None
     assert not _stored_rule(units, LATER_RULE).keeps_place
     with units() as uow:
         assert uow.plan_grace.get() is None
 
 
-def test_admission_survives_removal_and_restarts_grace(tmp_path):
+def test_admission_survives_removal_and_restarts_grace(tmp_path: Path) -> None:
     plans, units = _member_with_rules(
         tmp_path / "test.db",
         rule(),
@@ -699,12 +708,13 @@ def test_admission_survives_removal_and_restarts_grace(tmp_path):
         uow.commit()
     _lower(plans)
     notice = _Job(_holds(units, plans).settle).finish()
+    assert isinstance(notice, PlanNotice)
     assert notice.kind is PlanNoticeKind.GRACE_STARTED
     assert notice.holds_at == NOW + GRACE
     assert _stored_rule(units, LATER_RULE).synchronizes
 
 
-def test_keep_release_during_temporary_raise_restarts_grace(tmp_path):
+def test_keep_release_during_temporary_raise_restarts_grace(tmp_path: Path) -> None:
     plans, units = _member_with_rules(
         tmp_path / "test.db",
         rule(),
@@ -717,13 +727,18 @@ def test_keep_release_during_temporary_raise_restarts_grace(tmp_path):
     assert _Job(lambda: choice.execute([LATER_RULE])).finish() is None
     _lower(plans)
     notice = _Job(_holds(units, plans).settle).finish()
+    assert isinstance(notice, PlanNotice)
     assert notice.kind is PlanNoticeKind.GRACE_STARTED
     with units() as uow:
         assert uow.plan_grace.admissions() == 1
-        assert uow.plan_grace.get().holds_at == NOW + GRACE
+        grace = uow.plan_grace.get()
+        assert grace is not None
+        assert grace.holds_at == NOW + GRACE
 
 
-def test_settle_failure_rolls_back_every_change(tmp_path, monkeypatch):
+def test_settle_failure_rolls_back_every_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     plans, units = _member_with_rules(
         tmp_path / "test.db",
         rule(),
@@ -733,7 +748,7 @@ def test_settle_failure_rolls_back_every_change(tmp_path, monkeypatch):
     _lower(plans)
     _save_grace(units)
 
-    def fail_commit(self):
+    def fail_commit(self: SqliteUnitOfWork) -> None:
         raise RuntimeError("synthetic commit failure")
 
     monkeypatch.setattr(SqliteUnitOfWork, "commit", fail_commit)
@@ -742,12 +757,14 @@ def test_settle_failure_rolls_back_every_change(tmp_path, monkeypatch):
     assert _stored_rule(units, NEXT_RULE).synchronizes
     assert _stored_rule(units, LATER_RULE).keeps_place
     with units() as uow:
-        assert uow.plan_grace.get().holds_at == NOW - timedelta(days=1)
+        grace = uow.plan_grace.get()
+        assert grace is not None
+        assert grace.holds_at == NOW - timedelta(days=1)
         assert uow.plan_grace.admissions() == 0
         assert not any(each.held_by_plan for each in uow.rules.list())
 
 
-def test_keep_choice_new_candidate_changes_nothing_until_retry(tmp_path):
+def test_keep_choice_new_candidate_changes_nothing_until_retry(tmp_path: Path) -> None:
     plans, units = _member_with_rules(tmp_path / "test.db", rule(), _previewed_rule(NEXT_RULE))
     with units() as uow:
         uow.rules.keep([rule().id])
@@ -768,10 +785,12 @@ def test_keep_choice_new_candidate_changes_nothing_until_retry(tmp_path):
         assert {each.rule_id for each in uow.rules.standings() if each.kept} == {NEXT_RULE}
 
 
-def test_failed_release_returns_no_notice_and_preserves_hold(tmp_path, monkeypatch):
+def test_failed_release_returns_no_notice_and_preserves_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     plans, units = _member_with_rules(tmp_path / "test.db", rule().hold())
 
-    def refuse(self):
+    def refuse(self: SqliteUnitOfWork) -> None:
         raise RuntimeError("synthetic commit failure")
 
     with monkeypatch.context() as patch:
@@ -783,7 +802,7 @@ def test_failed_release_returns_no_notice_and_preserves_hold(tmp_path, monkeypat
     assert _stored_rule(units, rule().id).synchronizes
 
 
-def test_held_notice_counts_only_locked_committed_holds(tmp_path):
+def test_held_notice_counts_only_locked_committed_holds(tmp_path: Path) -> None:
     old = _previewed_rule(NEXT_RULE).enable()
     extra = _previewed_rule(SyncRuleId("extra")).enable()
     plans, units = _member_with_rules(tmp_path / "test.db", rule(), old, extra)
@@ -802,16 +821,19 @@ def test_held_notice_counts_only_locked_committed_holds(tmp_path):
     finally:
         locks.proceed.set()
     notice = holding.finish()
+    assert isinstance(notice, PlanNotice)
     assert notice.kind is PlanNoticeKind.RULES_HELD
     assert notice.held == 1
     assert _stored_rule(units, extra.id).held_by_plan
     assert _stored_rule(units, LATER_RULE).keeps_place
     with units() as uow:
-        assert uow.plan_grace.get().holds_at < NOW
+        grace = uow.plan_grace.get()
+        assert grace is not None
+        assert grace.holds_at < NOW
 
 
 @pytest.fixture(autouse=True)
-def _join_plan_workers():
+def _join_plan_workers() -> Iterator[None]:
     """Always join workers, including when an assertion fails before finish()."""
     try:
         yield
@@ -822,7 +844,7 @@ def _join_plan_workers():
             _Job.pending.remove(job)
 
 
-def test_keep_choice_counts_but_does_not_swap_fresh_unlocked_rule(tmp_path):
+def test_keep_choice_counts_but_does_not_swap_fresh_unlocked_rule(tmp_path: Path) -> None:
     plans, units = _member_with_rules(
         tmp_path / "test.db", rule().hold(), _previewed_rule(NEXT_RULE)
     )

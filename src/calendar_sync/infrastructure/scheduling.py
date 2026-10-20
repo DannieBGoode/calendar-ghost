@@ -21,10 +21,12 @@ from calendar_sync.application.operations.installation_health import (
 )
 from calendar_sync.application.operations.instant_sync import InstantRun
 from calendar_sync.application.operations.ports import SchedulerHeartbeat, SchedulerProgress
-from calendar_sync.application.operations.scheduled_pass import ScheduledPass, ScheduledRun
+from calendar_sync.application.operations.scheduled_pass import (
+    PlanNoticeDelivery,
+    ScheduledPass,
+    ScheduledRun,
+)
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.domain.access import UserId
-from calendar_sync.domain.plan_hold import PlanNotice
 from calendar_sync.infrastructure.clock import SystemClock
 
 logger = logging.getLogger(__name__)
@@ -56,9 +58,8 @@ class _PlanMail:
     Submit each bounded SMTP call separately so cancellation cannot begin another send.
     """
 
-    def __init__(self, scheduled_pass: ScheduledPass) -> None:
-        self._pass = scheduled_pass
-        self._pending: dict[UserId, PlanNotice] = {}
+    def __init__(self) -> None:
+        self._pending: dict[str, PlanNoticeDelivery] = {}
         self._threads = _Threads(1, "plan-mail")
         self._task: asyncio.Task[None] | None = None
         self._closed = False
@@ -66,10 +67,10 @@ class _PlanMail:
     def open(self) -> None:
         self._closed = False
 
-    def queue(self, notices: Collection[tuple[UserId, PlanNotice]]) -> None:
+    def queue(self, notices: Collection[PlanNoticeDelivery]) -> None:
         if self._closed:
             return
-        self._pending.update(notices)
+        self._pending.update((notice.owner_key, notice) for notice in notices)
         if self._pending and self._task is None:
             self._task = asyncio.create_task(self._send())
 
@@ -79,9 +80,9 @@ class _PlanMail:
                 batch = tuple(islice(self._pending.items(), 100))
                 for owner, _ in batch:
                     del self._pending[owner]
-                for owner, notice in batch:
+                for _, notice in batch:
                     try:
-                        await self._threads.run(partial(self._pass.send_plan_notice, owner, notice))
+                        await self._threads.run(notice.deliver)
                     except Exception as error:
                         logger.error("Plan notice delivery failed (%s)", type(error).__name__)
         finally:
@@ -118,7 +119,7 @@ class SyncScheduler:
         concurrency: int = 4,
     ) -> None:
         self._pass = scheduled_pass
-        self._mail = _PlanMail(scheduled_pass)
+        self._mail = _PlanMail()
         self._interval_seconds = interval_seconds
         self._clock = clock or SystemClock()
         self._concurrency = concurrency
@@ -174,10 +175,10 @@ class SyncScheduler:
     async def _run_pass(self) -> frozenset[str]:
         """Runs each rule the pass lists once; returns the ids of the rules it listed."""
         # In a worker thread: finishing a lapse may wait for a rule's lock.
-        notices: dict[UserId, PlanNotice] = {}
-        runs = await self._threads.run(partial(self._pass.begin, notices=notices))
+        preparation = self._pass.prepare()
+        runs = await self._threads.run(preparation.begin)
         # Only a successful, uncancelled listing hands its notices to this lifecycle's worker.
-        self._mail.queue(tuple(notices.items()))
+        self._mail.queue(preparation.notices_due())
         # Different rules run side by side, so one waiting on a slow provider does not hold up the
         # rest; the same rule never does, because each run holds that rule's lock.
         slots = asyncio.Semaphore(self._concurrency)
