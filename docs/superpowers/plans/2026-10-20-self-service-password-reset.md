@@ -22,6 +22,8 @@ The authentication diagnosis was incorrect: `--bare` skips saved OAuth credentia
 `--safe-mode` read-only review completed and is recorded in
 `.context/reviews/open-registration-pr2-claude-review.txt`. Its P1/P2 findings have the explicit
 fixes below. Review the final implementation separately before the PR.
+Claude's scoped re-review in `.context/reviews/open-registration-pr2-claude-rereview.txt`
+confirms all P1/P2 findings addressed and the design/plan ready to implement.
 
 ## Global constraints
 
@@ -56,7 +58,7 @@ fixes below. Review the final implementation separately before the PR.
 - Existing own-password and direct-email writes must reject stale credential confirmation when a reset lands during their request. Include only the credential mutation needed for this race.
 - Offline recovery command is PR 4. In PR 2 document administrator-issued fallback and the existing stopped-service backup recovery path, clearly stating the command is not shipped.
 - The identity origin rule governs emailed link issuance, not administrator hand-delivered link completion. Valid proofs may finish after SMTP/origin settings change; administrator resets still work on HTTP LAN installations.
-- Without a Master Key, reset token/completion network limits use the bounded memory gate only. Public email recovery remains unavailable. Configured recovery persists its admitted limits.
+- Without a Master Key, reset token/completion network limits use the bounded memory gate only. Public email recovery remains unavailable. Whenever a Master Key exists, token/completion limits persist even if identity email is unavailable.
 - Keep approved global/network caps. Document that two networks can exhaust the global allowance; administrator links remain the fallback. Do not add a /48 policy.
 - Existing/Invitation Only emails remain eligible as approved, including direct changes before PR 3. Document wrong-email mailbox takeover risk without retroactive verification.
 - Malformed email returns account-independent 422.
@@ -66,7 +68,7 @@ fixes below. Review the final implementation separately before the PR.
 | Requirement | Existing boundary | Task |
 | --- | --- | --- |
 | Issuance, expiry, sibling/session races | `application/identity/administration.py`, `persistence/registration.py`, `persistence/users.py`, `identity_fakes.py` | 1 |
-| Narrow public ports, durable limits, network grouping | new reset modules; existing `infrastructure/throttle.py` stays sign-in-only | 2 |
+| Narrow public ports, durable limits, network grouping | new reset modules; existing `infrastructure/throttle.py` keeps sign-in and Invitation links, reset leaves it | 2 |
 | Deferred lookup, reserved reset lane, secure mail | `identity_mail_worker.py`, `infrastructure/identity_email.py`, `bootstrap/identity_email.py` | 3 |
 | Generic public request, bounded completion, authorization | `routes/users.py`, `routes/setup.py`, `schemas.py`, `app.py` | 4 |
 | Live sign-in entry, request/retry/completion | `web/src/app.tsx`, `auth-screen.tsx`, `password-reset-page.tsx`, `lib/api.ts` | 5 |
