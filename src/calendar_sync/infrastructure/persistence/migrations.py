@@ -44,6 +44,7 @@ _FORWARD_MIGRATIONS = (
     (32, "0032_audit_entry_provenance.sql"),
     (33, "0033_plans.sql"),
     (34, "0034_plan_holds.sql"),
+    (35, "0035_identity_email.sql"),
 )
 
 
