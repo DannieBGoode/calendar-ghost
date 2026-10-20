@@ -23,6 +23,7 @@ from calendar_sync.application.operations.ports import (
 )
 from calendar_sync.application.operations.scheduled_pass import (
     ScheduledPass,
+    ScheduledRun,
     ScheduledServices,
     SyncRuns,
 )
@@ -967,7 +968,8 @@ def test_a_failed_pass_is_logged_and_the_next_interval_runs_again(
     with caplog.at_level("ERROR", logger="calendar_sync.infrastructure.scheduling"):
         asyncio.run(asyncio.wait_for(two_passes(), timeout=5))
 
-    assert opened == 2
+    # Preparation and listing use separate scopes so per-User writes are visible.
+    assert opened >= 2
     assert [record.getMessage() for record in caplog.records] == [
         "Scheduled pass failed; trying again at the next interval"
     ]
@@ -1588,3 +1590,232 @@ def test_the_scheduler_says_when_its_next_pass_begins(monkeypatch: pytest.Monkey
     # Before its first pass it is about to run; between passes it rests for the interval.
     assert before.next_pass_at == clock.now()
     assert [progress.next_pass_at for progress in resting] == [clock.now() + timedelta(seconds=300)]
+
+
+class PlanMailPass:
+    """A pass with controllable notices and one rule, without a provider."""
+
+    def __init__(self):
+        from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
+
+        self.notice = PlanNotice(PlanNoticeKind.GRACE_STARTED, 2, 1, 1, FixedClock().now())
+        self.due = [(USER, self.notice), (OTHER_USER, self.notice)]
+        self.started = Event()
+        self.release = Event()
+        self.sent = []
+        self.threads = []
+        self.listings = 0
+        self.runs = 0
+
+    def begin(self):
+        self.listings += 1
+        return (ScheduledRun(ScheduledRule(USER, rule(), None), False),)
+
+    def run(self, item):
+        self.runs += 1
+
+    def checks_due(self):
+        return ()
+
+    def plan_notices_due(self):
+        due, self.due = self.due, []
+        return tuple(due)
+
+    def send_plan_notice(self, owner, notice):
+        from threading import current_thread
+
+        self.threads.append(current_thread().name)
+        self.sent.append((owner, notice))
+        if len(self.sent) == 1:
+            self.started.set()
+            assert self.release.wait(5)
+
+
+async def _until(predicate):
+    async with asyncio.timeout(5):
+        while not predicate():
+            await asyncio.sleep(0)
+
+
+def test_slow_plan_email_holds_up_no_rule():
+    planned = PlanMailPass()
+    scheduler = SyncScheduler(planned, concurrency=1)
+
+    async def scenario():
+        try:
+            await asyncio.wait_for(scheduler.run_once(), 2)
+            await _until(planned.started.is_set)
+            assert planned.runs == 1
+            assert scheduler.progress().last_completed_at is not None
+        finally:
+            planned.release.set()
+            scheduler._mail.close()
+
+    asyncio.run(scenario())
+    assert all(name.startswith("plan-mail") for name in planned.threads)
+
+
+def test_next_pass_lists_while_smtp_is_blocked():
+    planned = PlanMailPass()
+    scheduler = SyncScheduler(planned, concurrency=1)
+
+    async def scenario():
+        try:
+            await scheduler.run_once()
+            await _until(planned.started.is_set)
+            await asyncio.wait_for(scheduler.run_once(), 2)
+            assert planned.listings == 2
+            assert planned.runs == 2
+            assert len(planned.sent) == 1
+        finally:
+            planned.release.set()
+            scheduler._mail.close()
+
+    asyncio.run(scenario())
+
+
+def test_plan_mail_replaces_latest_pending_and_never_drains_twice():
+    planned = PlanMailPass()
+    scheduler = SyncScheduler(planned)
+    newer = replace(planned.notice, held=2)
+    latest = replace(planned.notice, held=3)
+
+    async def scenario():
+        try:
+            await scheduler.run_once()
+            await _until(planned.started.is_set)
+            planned.due = [(USER, newer)]
+            await scheduler.run_once()
+            planned.due = [(USER, latest)]
+            await scheduler.run_once()
+            await scheduler.run_once()
+            planned.release.set()
+            await _until(lambda: len(planned.sent) == 3)
+            await _until(lambda: scheduler._mail._task is None)
+            assert planned.sent == [
+                (USER, planned.notice),
+                (OTHER_USER, planned.notice),
+                (USER, latest),
+            ]
+        finally:
+            scheduler._mail.close()
+            planned.release.set()
+
+    asyncio.run(scenario())
+
+
+def test_cancelling_scheduler_starts_no_subsequent_plan_send():
+    planned = PlanMailPass()
+    scheduler = SyncScheduler(planned)
+
+    async def scenario():
+        task = asyncio.create_task(scheduler.run_forever())
+        try:
+            await _until(planned.started.is_set)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            planned.release.set()
+            await asyncio.sleep(0.02)
+            assert planned.sent == [(USER, planned.notice)]
+        finally:
+            planned.release.set()
+            task.cancel()
+
+    asyncio.run(scenario())
+
+
+def test_scheduler_restart_reopens_mail_after_cancellation():
+    planned = PlanMailPass()
+    scheduler = SyncScheduler(planned)
+
+    async def scenario():
+        first = asyncio.create_task(scheduler.run_forever())
+        try:
+            await _until(planned.started.is_set)
+            first.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await first
+            planned.due = [(OTHER_USER, replace(planned.notice, held=3))]
+            restarted = asyncio.create_task(scheduler.run_forever())
+            try:
+                await _until(lambda: planned.listings >= 2)
+                assert len(planned.sent) == 1
+                planned.release.set()
+                await _until(lambda: len(planned.sent) == 2)
+                assert len(set(planned.threads)) == 1
+                assert planned.sent[1] == (OTHER_USER, replace(planned.notice, held=3))
+            finally:
+                restarted.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await restarted
+        finally:
+            planned.release.set()
+            first.cancel()
+
+    asyncio.run(scenario())
+
+
+def test_cancel_before_mail_task_starts_can_restart():
+    planned = PlanMailPass()
+    planned.release.set()
+    scheduler = SyncScheduler(planned)
+
+    async def scenario():
+        scheduler._mail.queue()
+        await scheduler._mail.stop()
+        assert planned.sent == []
+        assert scheduler._mail._task is None
+        planned.due = [(USER, planned.notice)]
+        await scheduler.run_once()
+        await _until(lambda: len(planned.sent) == 1)
+        await scheduler._mail.stop()
+
+    asyncio.run(scenario())
+
+
+def test_plan_mail_has_only_one_sending_batch_of_at_most_one_hundred():
+    planned = PlanMailPass()
+    planned.due = [(UserId(f"user-{index:03}"), planned.notice) for index in range(205)]
+    scheduler = SyncScheduler(planned)
+
+    async def scenario():
+        try:
+            await scheduler.run_once()
+            await _until(planned.started.is_set)
+            # Only the first hundred left pending state; its one active send holds the batch.
+            assert len(scheduler._mail._pending) == 105
+            assert len(planned.sent) == 1
+            await scheduler.run_once()
+            assert len(scheduler._mail._pending) == 105
+            await scheduler._mail.stop()
+            planned.release.set()
+            assert scheduler._mail._pending == {}
+        finally:
+            planned.release.set()
+            await scheduler._mail.stop()
+
+    asyncio.run(scenario())
+
+
+def test_failed_plan_delivery_does_not_stop_next_notice_or_rules(caplog):
+    planned = PlanMailPass()
+    planned.release.set()
+
+    def send(owner, notice):
+        planned.sent.append((owner, notice))
+        if owner == USER:
+            raise OSError("private credentials")
+
+    planned.send_plan_notice = send
+    scheduler = SyncScheduler(planned)
+
+    async def scenario():
+        await scheduler.run_once()
+        await _until(lambda: len(planned.sent) == 2)
+        assert planned.runs == 1
+        await scheduler._mail.stop()
+
+    asyncio.run(scenario())
+    assert "OSError" in caplog.text
+    assert "private credentials" not in caplog.text

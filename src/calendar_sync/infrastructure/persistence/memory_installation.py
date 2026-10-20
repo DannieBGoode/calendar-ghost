@@ -22,6 +22,7 @@ from calendar_sync.application.operations.ports import (
     RecordedRule,
     ResourceUse,
     StatusRecords,
+    UserPlanStanding,
 )
 from calendar_sync.application.sync.ports import ProviderCallCounts, ScheduledRule
 from calendar_sync.application.sync.watch_ports import NoticeKind, WatchNotice
@@ -37,6 +38,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
 )
+from calendar_sync.domain.plan_hold import RulePlace, RuleStanding
 from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.runs import RunKind
 from calendar_sync.domain.watches import (
@@ -73,6 +75,42 @@ class InMemoryInstallationUnitOfWork:
 
     def commit(self) -> None:
         return None
+
+    def plan_standings(self) -> Sequence[UserPlanStanding]:
+        result = []
+        for owner, state in sorted(
+            self._database.partitions.items(), key=lambda item: item[0].value
+        ):
+            standings = tuple(
+                sorted(
+                    (
+                        RuleStanding(
+                            rule.id,
+                            RulePlace.HELD
+                            if rule.stopped_by_plan_hold
+                            else RulePlace.RESERVED
+                            if rule.keeps_place
+                            else RulePlace.COUNTED,
+                            state.rule_order.get(rule.id, 0),
+                            rule.id in state.rule_kept,
+                        )
+                        for rule in state.rules.values()
+                        if rule.counts_toward_plan or rule.stopped_by_plan_hold
+                    ),
+                    key=lambda each: each.rank,
+                )
+            )
+            if standings or state.plan_grace is not None:
+                result.append(
+                    UserPlanStanding(
+                        owner,
+                        owner not in self._database.disabled,
+                        standings,
+                        state.plan_grace,
+                        state.plan_admissions,
+                    )
+                )
+        return tuple(result)
 
     def scheduled_rules(self) -> tuple[ScheduledRule, ...]:
         return tuple(

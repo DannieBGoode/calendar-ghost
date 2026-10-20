@@ -106,3 +106,75 @@ def test_the_plan_use_cases_share_the_installations_one_plans_store(tmp_path: Pa
     assert adapters.allowances.of(member) == Allowance(
         AllowanceBasis.PLAN, plan=FAMILY, assigned=FAMILY
     )
+
+
+def test_composed_users_share_process_settlement_locks(tmp_path):
+    settings = Settings(tmp_path / "test.db")
+    adapters = build_adapters(settings)
+    container = compose(settings, adapters)
+    first = container.for_user(USER)
+    second = container.for_user(USER)
+    other = container.for_user(OTHER_USER)
+    assert first.plan_holds.settle_locks is second.plan_holds.settle_locks
+    assert first.plan_holds.settle_locks is other.plan_holds.settle_locks
+    assert first.choose_kept_rules.holds is first.plan_holds
+    assert first.plan_holds.settle_locks.for_user(USER) is second.plan_holds.settle_locks.for_user(
+        USER
+    )
+
+
+def test_production_composition_does_not_activate_plan_holds(tmp_path):
+    from dataclasses import replace
+    from datetime import timedelta
+
+    from calendar_sync.application.operations.scheduled_pass import ScheduledPass
+    from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
+    from calendar_sync.bootstrap.container import _scheduled_services
+    from calendar_sync.domain.model import SyncRuleId
+    from calendar_sync.domain.plan_hold import PlanGrace, PlanNoticeKind
+    from tests.fake_calendar import FakeCalendars, FixedClock
+    from tests.helpers import NOW, endpoint, rule
+    from tests.plans import FREE
+    from tests.users import sqlite_units
+
+    settings = Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    adapters = replace(
+        build_adapters(settings), clock=FixedClock(), calendar_provider=FakeCalendars()
+    )
+    container = compose(settings, adapters)
+    admin = administrator(adapters)
+    member = limited_user(settings.database_path)
+    container.plans.define_plan.execute(admin, as_new(FREE))
+    container.plans.set_plans_setting.execute(admin, True, FREE.key)
+    units = sqlite_units(settings.database_path, user=member)
+    grace = PlanGrace(NOW - timedelta(seconds=1), 1, 0)
+    second = replace(rule(), id=SyncRuleId("second"), source=endpoint("personal-account", "second"))
+    with units() as uow:
+        uow.rules.add(rule())
+        uow.rules.add(second)
+        uow.plan_grace.save(grace)
+        uow.commit()
+    assert container.scheduler is not None
+    production = container.scheduler._pass
+    production.begin()
+    assert production.plan_holds is None
+    assert production.plan_notices_due() == ()
+    with units() as uow:
+        assert all(each.synchronizes for each in uow.rules.list())
+        assert uow.plan_grace.get() == grace
+
+    explicit = ScheduledPass(
+        adapters.installation_units,
+        lambda owner: _scheduled_services(container.for_user(owner)),
+        adapters.clock,
+        plan_holds=ScheduledPlanHolds(
+            adapters.allowances, lambda owner: container.for_user(owner).plan_holds, adapters.clock
+        ),
+    )
+    explicit.begin()
+    ((owner, notice),) = explicit.plan_notices_due()
+    assert owner == member
+    assert notice.kind is PlanNoticeKind.RULES_HELD
+    with units() as uow:
+        assert uow.rules.get(second.id).held_by_plan
+        assert uow.plan_grace.get() is None

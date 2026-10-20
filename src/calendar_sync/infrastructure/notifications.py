@@ -5,7 +5,7 @@ import logging
 import smtplib
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from email.message import EmailMessage
 from typing import Protocol
 from urllib.parse import quote
@@ -17,6 +17,7 @@ from calendar_sync.application.operations.installation_health import (
 )
 from calendar_sync.domain.access import User, UserId, UserState
 from calendar_sync.domain.incidents import IncidentFacts, IncidentReport, IncidentStep, next_step
+from calendar_sync.domain.plan_hold import PlanNotice, PlanNoticeKind
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,21 @@ class OwnerNotifier:
             self._server.send(user.email, notification)
         except Exception:
             logger.exception("Incident notification delivery failed")
+
+    def plan_changed(self, notice: PlanNotice) -> None:
+        user = self._users.get(self._owner)
+        if (
+            user is None
+            or user.email is None
+            or not user.notify_by_email
+            or user.state is not UserState.ACTIVE
+        ):
+            return
+        link = self._public_url + "/settings/account#your-plan" if self._public_url else None
+        try:
+            self._server.send_plan(user.email, notice, link)
+        except Exception as error:
+            logger.error("Plan notice delivery failed (%s)", type(error).__name__)
 
 
 class UserLookup(Protocol):
@@ -210,6 +226,20 @@ class SmtpServer:
                 )
             )
         )
+        self._deliver(message)
+
+    def send_plan(self, recipient: str, notice: PlanNotice, link: str | None) -> None:
+        message = EmailMessage()
+        message["Subject"] = "Calendar Ghost: your plan"
+        message["From"] = self.sender
+        message["To"] = recipient
+        body = _plan_body(notice)
+        if link is not None:
+            body += "\n\n" + link
+        message.set_content(body)
+        self._deliver(message)
+
+    def _deliver(self, message: EmailMessage) -> None:
         with smtplib.SMTP(self.host, self.port, timeout=10) as smtp:
             if self.use_starttls:
                 smtp.starttls()
@@ -227,3 +257,25 @@ class SmtpChannel(NotificationChannel):
 
     def send(self, incident: IncidentNotification) -> None:
         self.server.send(self.recipient, incident)
+
+
+def _plan_body(notice: PlanNotice) -> str:
+    if notice.kind is PlanNoticeKind.RULES_HELD:
+        return (
+            f"{notice.held} of your rules are now held by your plan. They keep their events "
+            "and resume by themselves when your plan has room."
+        )
+    at = notice.holds_at.astimezone(UTC)
+    body = f"{notice.count} of your rules count toward your plan, which allows {notice.limit}."
+    deadline = at.strftime("%Y-%m-%d at %H:%M UTC")
+    if notice.held:
+        body += f" After {deadline}, {notice.held} of them will be held until your plan has room."
+    else:
+        body += f" Your grace ends after {deadline}."
+    body += " You can choose which rules keep syncing under Settings, Your account, Your plan."
+    if notice.reserved:
+        body += (
+            f" {notice.reserved} replacement drafts will also give up their reserved places "
+            "and will need a Start within your plan's limit."
+        )
+    return body

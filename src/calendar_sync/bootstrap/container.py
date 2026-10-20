@@ -106,6 +106,12 @@ from calendar_sync.application.sync.instant_sync import (
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.manual_runs import AdmitManualRun, RunThrottle
+from calendar_sync.application.sync.plan_holds import (
+    ChooseKeptRules,
+    PlanHolds,
+    PlanNotices,
+    SettleLocks,
+)
 from calendar_sync.application.sync.ports import (
     AccountCalendars,
     Allowances,
@@ -217,6 +223,9 @@ class UserServices:
     """The use cases one User's requests call. Each sees only that User's records (ADR 0029)."""
 
     user_id: UserId
+    plan_holds: PlanHolds
+    choose_kept_rules: ChooseKeptRules
+    plan_notices: PlanNotices | None
     activity: ActivityQueries
     operations: OperationsQueries
     get_installation_status: GetInstallationStatus
@@ -387,6 +396,7 @@ class Adapters:
     """The one way a User's own Plan changes: administrators now, billing later."""
     notifications: Callable[[UserId], IncidentNotifications | None] = lambda _owner: None
     """Each User's own Incident Notifications, by email when the installation sends it."""
+    plan_notices: Callable[[UserId], PlanNotices | None] = lambda _owner: None
     installation_notifications: InstallationNotifications | None = None
     """The installation's SMTP recipient and webhook, which hear only installation incidents."""
     sends_email: bool = False
@@ -473,6 +483,9 @@ def build_adapters(settings: Settings) -> Adapters:
         notifications=lambda owner: (
             OwnerNotifier(users, owner, mail, public_address(settings)) if mail else None
         ),
+        plan_notices=lambda owner: (
+            OwnerNotifier(users, owner, mail, public_address(settings)) if mail else None
+        ),
         installation_notifications=_installation_notifier(settings, mail),
         sends_email=mail is not None,
         sync_cadence=PlanCadence(plans),
@@ -538,9 +551,11 @@ def calendar_providers(
 
 
 def compose(settings: Settings, adapters: Adapters) -> Container:
+    settle_locks = SettleLocks()
+
     def user_services(user_id: UserId) -> UserServices:
         # Read when called, after the scheduler exists: every User's status reads its heartbeat.
-        return _compose_user(user_id, adapters, scheduler, instant_status)
+        return _compose_user(user_id, adapters, scheduler, instant_status, settle_locks)
 
     cadence = adapters.sync_cadence
     scheduled_pass = ScheduledPass(
@@ -548,6 +563,8 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         lambda owner: _scheduled_services(user_services(owner)),
         adapters.clock,
         cadence=cadence,
+        # PR 3 activates this only with visible grace, holds, and keep choice recovery.
+        plan_holds=None,
     )
     runs_rules = adapters.calendar_provider is not None and adapters.accounts is not None
     scheduler = (
@@ -831,6 +848,7 @@ def _scheduled_services(services: UserServices) -> ScheduledServices:
         services.execute_sync_rule,
         services.rule_health,
         RecheckAdministratorLapses(check, services.rule_health.incidents) if check else None,
+        plan_notices=services.plan_notices,
     )
 
 
@@ -839,6 +857,7 @@ def _compose_user(
     adapters: Adapters,
     heartbeat: SchedulerHeartbeat | None,
     instant: InstantSyncStatus,
+    settle_locks: SettleLocks,
 ) -> UserServices:
     unit_of_work, locks, clock = adapters.unit_of_work(user_id), adapters.locks, adapters.clock
     provider = adapters.calendar_provider
@@ -894,8 +913,12 @@ def _compose_user(
             incidents=rule_health,
         )
     calendars = adapters.account_calendars
+    holds = PlanHolds(unit_of_work, user_id, adapters.allowances, locks, settle_locks, clock)
     return UserServices(
         user_id=user_id,
+        plan_holds=holds,
+        choose_kept_rules=ChooseKeptRules(holds),
+        plan_notices=adapters.plan_notices(user_id),
         activity=adapters.activity(user_id),
         operations=operations,
         get_installation_status=GetInstallationStatus(

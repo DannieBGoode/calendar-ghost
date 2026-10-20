@@ -2499,3 +2499,54 @@ class PersistenceContract:
         # Only a rule that ran without failing since its preview waits for its interval, and a
         # run that completed at the instant of its preview counts as since.
         assert [each.always_due for each in scheduled] == [True, False, True, True, True, False]
+
+    def test_plan_standings_include_grace_only_and_disabled_held_owners(self, harness):
+        grace = PlanGrace(NOW + DAY, 1, 0)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE.hold())
+            uow.rules.add(replace(OTHER_RULE, state=SyncRuleState.PREVIEWED, keeps_place=True))
+            uow.rules.keep({RULE.id})
+            uow.plan_grace.admit(2)
+            uow.commit()
+        with harness.units(OTHER_USER)() as uow:
+            uow.plan_grace.save(grace)
+            uow.commit()
+        harness.disable(USER)
+        with harness.installation() as installation:
+            standings = {each.owner: each for each in installation.plan_standings()}
+        assert set(standings) == {USER, OTHER_USER}
+        assert not standings[USER].active
+        assert standings[USER].admissions == 2
+        assert [(each.rule_id, each.place, each.kept) for each in standings[USER].standings] == [
+            (RULE.id, RulePlace.HELD, True),
+            (OTHER_RULE.id, RulePlace.RESERVED, False),
+        ]
+        assert standings[OTHER_USER].standings == ()
+        assert standings[OTHER_USER].grace == grace
+
+    def test_held_rules_have_no_scheduled_instant_or_wanted_watch_work(self, harness):
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE.hold())
+            uow.commit()
+        harness.request_run(USER, RULE.id, NOW)
+        with harness.installation() as installation:
+            assert installation.scheduled_rules() == ()
+            assert installation.pending_instant_runs() == ()
+            assert installation.users_with_unfinished_lapses() == ()
+            assert installation.instant_sync_owners() == ()
+        _watching(harness, replace(_live(), confirmed_at=NOW))
+        with harness.installation() as installation:
+            assert [each.user for each in installation.instant_sync_owners()] == [USER]
+
+    def test_only_exact_lapse_stop_code_wants_lapse_recovery(self, harness):
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE.hold())
+            uow.rules.add(OTHER_RULE.degrade(awaiting_reauthorization=True))
+            uow.commit()
+        with harness.installation() as installation:
+            assert list(installation.users_with_unfinished_lapses()) == [USER]
+        with harness.unit_of_work() as uow:
+            uow.rules.save(OTHER_RULE.degrade())
+            uow.commit()
+        with harness.installation() as installation:
+            assert installation.users_with_unfinished_lapses() == ()
