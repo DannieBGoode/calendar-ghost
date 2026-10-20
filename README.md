@@ -248,9 +248,10 @@ entry says what is now different in the destination calendar and whether anythin
 so Activity names events without asking the provider and shows when an event was renamed. By default Activity lists changes, skips, and blocks; **All decisions** and **No change needed** also list
 the checks that found an event already up to date. Choose a rule from the picker, which shows each
 rule's calendars and accounts, or select a row's rule to filter to it. Select an entry to open its
-details beside the table: the event, what happened and why, the copy in the destination calendar,
-and technical identifiers on demand. The rule, filter, and open entry are kept in the address, so
-the view survives reloads and can be linked.
+details in a full-height drawer over the unchanged table: the event, what happened and why, the
+copy in the destination calendar, and technical identifiers on demand. The drawer fills narrow
+screens. The rule, filter, and open entry are kept in the address, so the view survives reloads
+and can be linked.
 
 The main sections have stable URLs at `/overview`, `/rules`, `/activity`, and `/settings`, so they
 can be bookmarked and browser back/forward navigation works as expected. Settings has three tabs,
