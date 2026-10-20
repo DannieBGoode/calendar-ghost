@@ -1,6 +1,7 @@
 """Anonymous reset admission, separate from sign-in and Invitation allowances."""
 
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
@@ -102,4 +103,6 @@ class ResetAdmission:
         return self.attempts.purge(before, min(limit, PURGE_BATCH)) if self.attempts else 0
 
     def _maintain(self) -> None:
-        self.purge(self.clock.now(), PURGE_BATCH)
+        # Admission has committed already; obsolete rows can wait for the next cleanup.
+        with suppress(ResetAdmissionStorageUnavailable):
+            self.purge(self.clock.now(), PURGE_BATCH)

@@ -643,6 +643,7 @@ test is useful to diagnose mail, but is not required for recovery. The form alwa
 "If this address can receive a reset link, we will send one." Active Users receive a single-use
 link lasting one hour; unknown and disabled addresses receive no mail. Reset ends existing
 sessions and asks the person to sign in again. Identity mail ignores incident email preferences.
+Reset retains Integration Tokens: review them in Settings after recovery and revoke unfamiliar ones.
 
 Check your account email before relying on recovery. Existing and invited Users' addresses and
 direct email changes remain trusted without verification: whoever owns that mailbox can reset the
@@ -657,6 +658,8 @@ outbox. Attackers can exhaust a person's email allowance or the installation's g
 ask another administrator for a link or wait for the window. If no administrator can sign in,
 use the existing [backup recovery procedure](data-ownership.md#backups-and-recovery). PR 4's offline
 recovery command is not shipped. See [exact allowances and retention](deployment.md#password-recovery).
+The full memory gate can also delay administrator-link completion from a new network until
+capacity becomes available.
 
 Before upgrading to migration 36, stop the service and back up its complete data directory and
 matching Master Key, preserving the previous image. Existing passwords and sessions survive, but

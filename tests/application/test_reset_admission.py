@@ -2,6 +2,8 @@
 
 from collections.abc import Callable
 from datetime import datetime
+from functools import partial
+from unittest.mock import Mock
 
 import pytest
 
@@ -88,3 +90,48 @@ def test_invalid_callback_is_checked_then_counted_and_valid_is_not_counted() -> 
     attempts.calls.clear()
     admission.admit_completion("192.0.2.1")
     assert attempts.calls == ["completion", "purge"]
+
+
+@pytest.mark.parametrize("method", ["admit", "check_invalid", "record_invalid", "admit_completion"])
+def test_admission_storage_decision_faults_propagate(
+    monkeypatch: pytest.MonkeyPatch, method: str
+) -> None:
+    clock = ResetClock()
+    attempts = Attempts()
+    admission = ResetAdmission(MemoryIdentityFrontGate(clock), attempts, clock)
+    monkeypatch.setattr(attempts, method, Mock(side_effect=ResetAdmissionStorageUnavailable))
+    operations: dict[str, Callable[[], object]] = {
+        "admit": partial(admission.admit, "synthetic@example.test", "192.0.2.1"),
+        "admit_completion": partial(admission.admit_completion, "192.0.2.1"),
+        "check_invalid": partial(admission.check_token, "192.0.2.1", lambda: False),
+        "record_invalid": partial(admission.check_token, "192.0.2.1", lambda: False),
+    }
+    with pytest.raises(ResetAdmissionStorageUnavailable):
+        operations[method]()
+    assert "purge" not in attempts.calls
+
+
+@pytest.mark.parametrize("boundary", ["request", "completion"])
+def test_unexpected_cleanup_errors_propagate(
+    monkeypatch: pytest.MonkeyPatch, boundary: str
+) -> None:
+    clock = ResetClock()
+    attempts = Attempts()
+    admission = ResetAdmission(MemoryIdentityFrontGate(clock), attempts, clock)
+    monkeypatch.setattr(attempts, "purge", Mock(side_effect=RuntimeError("programming error")))
+    operation = (
+        partial(admission.admit, "synthetic@example.test", "192.0.2.1")
+        if boundary == "request"
+        else partial(admission.admit_completion, "192.0.2.1")
+    )
+    with pytest.raises(RuntimeError, match="programming error"):
+        operation()
+
+
+def test_explicit_cleanup_storage_fault_still_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = ResetClock()
+    attempts = Attempts()
+    admission = ResetAdmission(MemoryIdentityFrontGate(clock), attempts, clock)
+    monkeypatch.setattr(attempts, "purge", Mock(side_effect=ResetAdmissionStorageUnavailable))
+    with pytest.raises(ResetAdmissionStorageUnavailable):
+        admission.purge(clock.now(), 500)

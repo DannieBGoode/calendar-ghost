@@ -270,8 +270,10 @@ Sign-in and current-password confirmations accept up to 1,024 characters so ever
 remains usable. Setup, Invitation, and ordinary new-password creation bounds stay unchanged.
 Keep 12 as the new-password minimum. Apply the completion gate before hashing even for usable proofs.
 
-Public request handlers return before account lookup or SMTP delivery. Use bounded in-memory
-identity-mail queues, separate from scheduler/Plan mail, with 50 pending sign-up requests and
+Public request handlers do not perform or await account lookup or SMTP delivery. Worker scheduling
+may start that work before the client receives the response; no strict ordering is promised.
+Use bounded in-memory identity-mail queues, separate from scheduler/Plan mail, with 50 pending
+sign-up requests and
 50 pending reset requests. Security changes and administrator tests have their own bounded lane
 of 10 requests. These are purpose-specific lanes in the same small mail service, not a general
 job framework. Use fair scheduling so each nonempty lane gets a turn. Queued requests contain no
@@ -283,6 +285,10 @@ only aggregate safe capacity diagnostics. Only account-independent gates may ret
 Do not expose queue depth or worker outcome in public status. Shutdown, restart, or SMTP failure
 can lose a request; the UI permits retry within limits and never promises delivery. Do not persist
 plaintext tokens or build an outbox. A public response never awaits a lookup or send.
+Shutdown blocks old-generation delivery that has not already been authorized and old-generation
+readiness updates. Already-authorized bounded SMTP may finish. Short reset preparation in flight
+may finish after stop and leave an unused hash-only proof without sending its token; normal expiry
+and cleanup apply.
 
 This prevents the review's direct queue-full response oracle. It does not promise that someone
 controlling enough traffic and receiving their own email can never infer aggregate worker load

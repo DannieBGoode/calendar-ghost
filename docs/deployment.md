@@ -506,6 +506,8 @@ after email settings change. Both kinds change only an active User's password, e
 browser session and reset proof, and require the person to sign in afterward. They never enable a
 disabled User. Requesting another emailed link preserves earlier delivered links until completion;
 an administrator issuing a replacement revokes earlier reset links.
+Reset retains Integration Tokens. After recovering access, review them in Settings and revoke any
+you do not recognize.
 
 The request response says, "If this address can receive a reset link, we will send one." The API
 returns generic 202 acceptance for eligible, disabled, and unknown addresses, email suppression,
@@ -515,6 +517,13 @@ No response promises delivery. Check spam and configuration, wait for limits, th
 form if needed. There is no outbox or automatic retry: restart, shutdown, queue saturation, or
 transport failure can lose mail. Aggregate queue/delivery latency can still vary with eligibility;
 this flow does not claim constant-time SMTP privacy.
+Request timing can also reveal recent reset-request activity for an address, because admitted and
+silently suppressed requests do different storage work. This is independent of account existence.
+
+Shutdown blocks old-generation delivery that has not already been authorized and old-generation
+readiness updates. An already-authorized bounded SMTP send may finish. Short reset preparation
+already in flight may finish after stop and leave an unused hash-only proof, without sending its
+token. That proof expires and is cleaned up normally.
 
 Identity security mail ignores **Email notifications** and the installation's incident recipient.
 It goes to the User's current account email. Existing and Invitation Only addresses, including
@@ -530,6 +539,8 @@ Reset admission has separate budgets from sign-in and Invitations. Per client ne
 checks do not consume the invalid-token budget, but completion attempts consume their own budget
 before proof lookup or hashing. The memory gate holds at most 10,000 networks and refuses new
 ones when full rather than evicting a live allowance. IPv4 uses its address; IPv6 uses its /64.
+A full memory gate also delays checking or completing an administrator-issued link from a new
+network until capacity becomes available; a hand-delivered proof does not bypass that gate.
 
 Durable requests additionally allow one request per email per minute, five per email per hour,
 two per email/network pair per hour, and 100 across the installation per hour. Email and pair
@@ -558,6 +569,9 @@ checks do not remove proofs; invalid checks may remove obsolete counters only. A
 storage failure, or keyless installation cannot promise that cleanup deadline. Backups retain these
 records until their own retention expires. Without a Master Key, public recovery is unavailable
 and administrator token/completion limits use bounded memory only, forgotten on restart.
+After an admission commits, a cleanup storage failure leaves that admitted request or completion
+free to proceed. Cleanup retries during later admitted work or hourly maintenance; admission
+decision failures still refuse work before queueing, proof lookup, or password hashing.
 
 The digest keys are stable until the Master Key changes. Rotation changes email/network/pair
 digests, so old address-specific allowances no longer match. Do not rotate the key to clear a

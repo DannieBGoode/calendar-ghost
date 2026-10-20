@@ -3,6 +3,7 @@
 import asyncio
 import json
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 from unittest.mock import Mock
@@ -11,9 +12,10 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.types import Message, Scope
 
+from calendar_sync.application.identity.ports import IssuedLink
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Container, build_container
-from calendar_sync.domain.access import UserId
+from calendar_sync.domain.access import Role, UserId, UserState
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
@@ -379,6 +381,133 @@ def test_disabled_target_issuance_has_stable_conflict_and_no_proof(tmp_path: Pat
     private(response)
     with transaction(path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM password_reset_links").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("change", ["demote", "disable"])
+def test_issuer_permission_race_is_private_and_preserves_existing_proof(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    path = tmp_path / "test.db"
+    container = build_container(Settings(path))
+    client = TestClient(create_app(container), raise_server_exceptions=False)
+    sign_in(client)
+    token = issued(container, path)
+    add_user(path, UserId("second-administrator"))
+    links = container.administration.issue_password_reset.links
+    issue = links.issue
+    with transaction(path) as connection:
+        before = [tuple(row) for row in connection.execute("SELECT * FROM password_reset_links")]
+
+    def changed_before_lock(user: UserId, actor: UserId, at: datetime) -> IssuedLink:
+        if change == "demote":
+            container.identity.users.set_role(actor, Role.USER)
+        else:
+            container.identity.users.set_state(actor, UserState.DISABLED)
+        return issue(user, actor, at)
+
+    monkeypatch.setattr(links, "issue", changed_before_lock)
+    response = client.post(f"/api/v1/users/{OTHER_USER.value}/password-reset-links")
+    assert response.status_code == 403
+    assert response.json()["code"] == "administrator_required"
+    private(response)
+    with transaction(path) as connection:
+        assert [
+            tuple(row) for row in connection.execute("SELECT * FROM password_reset_links")
+        ] == before
+    assert client.post(CHECK, json={"token": token}).json() == {"usable": True}
+
+
+@pytest.mark.parametrize("boundary", ["request", "completion"])
+def test_committed_admission_proceeds_when_only_cleanup_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, boundary: str
+) -> None:
+    path = tmp_path / "test.db"
+    container = build_container(configured(path))
+    client = TestClient(create_app(container), raise_server_exceptions=False)
+    sign_in(client)
+    token = issued(container, path)
+    attempts = container.reset_admission.attempts
+    assert attempts is not None
+    purge = attempts.purge
+    purged = Mock()
+
+    def locked_purge(before: datetime, limit: int) -> int:
+        with transaction(path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            assert (
+                connection.execute(
+                    "SELECT COUNT(*) FROM reset_request_attempts WHERE boundary = ?", (boundary,)
+                ).fetchone()[0]
+                == 1
+            )
+            purged()
+            # Only this separate cleanup transaction fails; the allowance is durable already.
+            return purge(before, limit)
+
+    monkeypatch.setattr(attempts, "purge", locked_purge)
+    worker = container.identity_mail_worker
+    assert worker is not None
+    submit = Mock(return_value=True)
+    monkeypatch.setattr(worker, "submit_reset", submit)
+    reset = container.administration.reset_password
+    original_hash = reset.passwords.hash
+
+    def hash_after_cleanup(password: str) -> str:
+        purged.assert_called_once_with()
+        return original_hash(password)
+
+    hashed = Mock(side_effect=hash_after_cleanup)
+    monkeypatch.setattr(reset.passwords, "hash", hashed)
+    if boundary == "request":
+        response = client.post(REQUEST, json={"email": "unknown@example.test"})
+        assert (response.status_code, response.json()) == (202, {"accepted": True})
+        suppressed = client.post(REQUEST, json={"email": "unknown@example.test"})
+        assert (suppressed.status_code, suppressed.json()) == (202, {"accepted": True})
+        private(suppressed)
+        submit.assert_called_once()
+        hashed.assert_not_called()
+    else:
+        response = client.post(COMPLETE, json={"token": token, "password": "a new long password"})
+        assert response.status_code == 204
+        hashed.assert_called_once_with("a new long password")
+        assert client.post(CHECK, json={"token": token}).json() == {"usable": False}
+        submit.assert_not_called()
+    private(response)
+    purged.assert_called_once_with()
+    with transaction(path) as connection:
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM reset_request_attempts WHERE boundary = ?", (boundary,)
+            ).fetchone()[0]
+            == 1
+        )
+        assert connection.execute("SELECT COUNT(*) FROM password_reset_links").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("boundary", ["request", "completion"])
+def test_admission_decision_failure_precedes_queue_lookup_and_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, boundary: str
+) -> None:
+    path = tmp_path / "test.db"
+    container = build_container(configured(path))
+    worker = container.identity_mail_worker
+    assert worker is not None
+    work = Mock(side_effect=AssertionError("work before admission"))
+    monkeypatch.setattr(worker, "submit_reset", work)
+    monkeypatch.setattr(container.administration.reset_password.passwords, "hash", work)
+    monkeypatch.setattr(container.administration.reset_password.links, "owner", work)
+    with transaction(path) as connection:
+        connection.execute("DROP TABLE reset_request_attempts")
+    client = TestClient(create_app(container), raise_server_exceptions=False)
+    response = client.post(
+        REQUEST if boundary == "request" else COMPLETE,
+        json={"email": "unknown@example.test"}
+        if boundary == "request"
+        else {"token": "forged", "password": "a new long password"},
+    )
+    assert (response.status_code, response.json()["code"]) == (503, "reset_storage_unavailable")
+    private(response)
+    work.assert_not_called()
 
 
 def test_admin_issuance_and_bearer_token_without_proof_are_private(tmp_path: Path) -> None:

@@ -130,6 +130,9 @@ The installation communicates with:
    those accounts. Queues are volatile and messages have no automatic retry. See
    [password recovery](deployment.md#password-recovery) and
    [identity email setup](deployment.md#identity-email-test-readiness).
+   Request timing can reveal recent reset-request activity for an address independently of whether
+   an account exists. In-flight preparation may leave an unused hash-only proof after shutdown;
+   its token is not sent, and normal expiry and cleanup still apply.
 3. Monitors, dashboards, and AI agents a User gives an Integration Token. They ask for that User's
    Installation Status; Calendar Ghost never contacts them. Status contains rule identifiers and
    states, calendar names, Provider Kinds, incident summaries, and times; it never contains event

@@ -304,6 +304,8 @@ def issue_password_reset(
         return _link(
             services.administration.issue_password_reset.execute(actor, _named_user(user_id))
         )
+    except AdministratorRequired as error:
+        raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
     except UserNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except ResetStorageUnavailable as error:

@@ -38,8 +38,14 @@ PR 2 is implemented on an unmerged branch. Reports and TDD evidence live in
   Controller live synthetic preview, keyboard checks, and screenshots passed.
 - [x] Task 6 proxy source/tests and operational guidance: `task-6-report.md`.
 - [ ] Final backend/frontend gates, history and branch secret scans, and supported image builds.
-- [ ] Authentication security review, independent whole-branch review, and outside Claude review.
+- [x] Authentication security review, independent whole-branch review, and outside Claude review.
 - [ ] Resolve verified findings, rerun affected gates, open the PR with screenshots, and watch CI.
+
+Final whole-branch, security, and outside Claude reviews completed. The combined fix wave maps
+issuer permission races to private 403 and makes only typed post-admission cleanup faults best
+effort, with real SQLite RED/GREEN regressions. See `.context/reviews/pr2-final-fix-report.md`.
+Final controller backend/branch checks, scoped re-review, supported image builds, PR and CI remain
+pending; the preceding full frontend/site gates passed on unchanged source and dependencies.
 
 The controller owns these remaining release checks. Local Docker is unavailable; CI must build
 linux/amd64 and linux/arm64. No PR 3 work starts before PR 2 merges and its own plan is approved.
@@ -168,7 +174,7 @@ Reset preparation and purge run off the event loop and use a 0.1-second storage 
 - [ ] Write `test_reset_worker_rechecks_eligibility`: active current-address User only, no send for disabled/deleted/stale configuration. Issue close to send, with transaction closed before SMTP.
 - [ ] Write `test_reset_preparation_lock_does_not_block_event_loop`: busy preparation fails in about 100 ms, sends nothing, unrelated loop work progresses, purge also stays off the loop.
 - [ ] Write `test_reset_and_test_lanes_have_separate_capacity_and_fair_turns`: reset holds 50 waiting items, existing test lane 10; alternate nonempty lanes, one SMTP executor, no later sign-up lane.
-- [ ] Write `test_overflow_stopped_worker_and_smtp_failure_are_lossy`: no HTTP outcome change, no retry/outbox, no passwords queued, no stopped-loop persistence authority, safe aggregate diagnostics only.
+- [ ] Write `test_overflow_stopped_worker_and_smtp_failure_are_lossy`: no HTTP outcome change, no retry/outbox, no passwords queued, no new old-generation delivery authorization or readiness update after stop; already-authorized SMTP may finish, and short in-flight preparation may leave an unused hash-only proof for normal expiry/cleanup, safe aggregate diagnostics only.
 - [ ] Write `test_reset_transport_uses_current_recipient_and_configured_fragment_origin`: ignore notification preference/SMTP_RECIPIENT; verified TLS, ten-second timeout, literal security template, no event content, no caller-supplied origin.
 - [ ] Observe failures, implement delivery/composition and bounded cleanup, rerun `.venv/bin/pytest tests/application/test_password_reset.py tests/adapters/test_identity_mail_worker.py tests/adapters/test_identity_email_transport.py tests/adapters/test_identity_email_store.py`; expect pass. Review/fix, commit and inspect diff size.
 
@@ -222,7 +228,7 @@ Create `tests/adapters/test_identity_proxy_limits.py`; amend deployment/config t
 
 - [ ] Write tests using Uvicorn `ProxyHeadersMiddleware` around the app: untrusted XFF ignored, exact trusted proxy resolves two separate clients, same IPv6 /64 shares allowance, another /64 has its own. Forged Host/forwarded headers never set mail origin.
 - [ ] Observe failures, set deliberate proxy headers in CLI and `run()`, empty default trust, Compose `FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-}"`. Document direct use with empty trust and reverse proxy with exact IP/network allowlist, never `*`; overwrite forwarded headers at proxy, prevent direct bypass, preserve Authorization and secure cookies.
-- [ ] Correct deployment's claim that all proxy clients necessarily share a limit. Test empty trust against pinned Uvicorn and explain Docker NAT may expose only one gateway address. Document HTTPS emailed links, both lifetimes, generic responses, retry/loss, targeted/global-cap fallback, existing-email trust risk, retention and no telemetry. Keep later slices marked unshipped.
+- [ ] Correct deployment's claim that all proxy clients necessarily share a limit. Test empty trust against installed Uvicorn 0.54.0 (project range `>=0.34,<1`) and explain Docker NAT may expose only one gateway address. Document HTTPS emailed links, both lifetimes, generic responses, retry/loss, targeted/global-cap fallback, existing-email trust risk, retention and no telemetry. Keep later slices marked unshipped.
 - [ ] Document stopped-service backup before migration and matching database/image restore for rollback, lost post-backup writes, legacy reset reissue, Master Key rotation effects on counters. No manual down migration or old binary against upgraded schema.
 - [ ] Run each backend gate separately: `.venv/bin/ruff format --check .`, `.venv/bin/ruff check .`, `.venv/bin/mypy`, `.venv/bin/lint-imports`, `.venv/bin/pytest --cov --cov-report=term-missing --cov-fail-under=80`. Check real exits, including Markdown Python formatting.
 - [ ] Run each frontend gate separately: `pnpm audit --audit-level=high`, `pnpm run api:check`, `typecheck`, `lint`, `knip`, `doctor`, `test`, `build`. There is no package `audit` script; use the actual pnpm audit command. Never commit a SHA-only rebuild.
