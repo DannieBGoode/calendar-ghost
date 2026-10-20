@@ -47,6 +47,7 @@ from calendar_sync.application.identity.ports import (
     SignInThrottle,
     UserDirectory,
 )
+from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.identity.sign_in import (
     ChangeOwnPassword,
     SetInstantSync,
@@ -154,6 +155,7 @@ from calendar_sync.bootstrap.identity_email import (
     IdentityEmailAdapters,
     IdentityEmailServices,
     build_identity_email,
+    build_reset_admission,
     compose_identity_email,
 )
 from calendar_sync.bootstrap.logs import configure_logging
@@ -333,6 +335,7 @@ class Container:
     identity: IdentityServices
     identity_email: IdentityEmailServices
     identity_mail_worker: IdentityMailWorker | None
+    reset_admission: ResetAdmission
     administration: AdministrationServices
     plans: PlanServices
     token_authentication: IntegrationTokenAuthentication
@@ -389,6 +392,7 @@ class Adapters:
     run_throttle: RunThrottle
     """One per process: each User's manual runs, counted across their requests."""
     identity_email: IdentityEmailAdapters
+    reset_admission: ResetAdmission
     registration: RegistrationSettings
     invitations: Invitations
     password_resets: PasswordResetLinks
@@ -470,6 +474,7 @@ def build_adapters(settings: Settings) -> Adapters:
     resets = SqlitePasswordResetLinks(database, ids, clock)
     adapters = Adapters(
         identity_email=build_identity_email(settings, ids),
+        reset_admission=build_reset_admission(settings, clock),
         unit_of_work=SqliteUnitOfWorkFactory(database, clock, history).for_user,
         installation_units=SqliteInstallationUnitOfWorkFactory(database),
         locks=RuleLocks(),
@@ -625,11 +630,16 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         adapters.plan_assignments,
     )
     identity_email, identity_mail_worker = compose_identity_email(
-        adapters.identity_email, adapters.users, adapters.clock
+        adapters.identity_email,
+        adapters.users,
+        adapters.clock,
+        adapters.self_service_resets,
+        adapters.reset_admission,
     )
     return Container(
         identity_email=identity_email,
         identity_mail_worker=identity_mail_worker,
+        reset_admission=adapters.reset_admission,
         secure_cookies=settings.secure_cookies,
         providers=adapters.providers,
         identity=_identity(adapters),

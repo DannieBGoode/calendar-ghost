@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import threading
+import time
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timedelta
@@ -18,12 +19,374 @@ from calendar_sync.application.identity.identity_email import (
     IdentityEmailSetup,
     IdentityEmailStorageUnavailable,
 )
+from calendar_sync.application.identity.password_reset import (
+    DeliverPasswordReset,
+    PreparedPasswordReset,
+    ResetEmailRequest,
+)
+from calendar_sync.application.identity.ports import IssuedLink
+from calendar_sync.bootstrap.config import Settings
+from calendar_sync.bootstrap.container import build_adapters
 from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.identity_mail_worker import IdentityMailWorker
+from calendar_sync.infrastructure.persistence.connections import transaction
 from tests.adapters.test_users_store import FIRST
 from tests.application.test_identity_email import Sender, services
 from tests.helpers import NOW
 from tests.identity_email_fakes import MemoryIdentityEmailTests
+
+
+class ResetSender:
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+
+    def send_reset(self, recipient: str, token: str) -> None:
+        self.sent.append(recipient)
+
+
+class ResetStore:
+    def issue_for_email(self, email: str) -> PreparedPasswordReset:
+        return PreparedPasswordReset(email, IssuedLink("reset", "synthetic-token", NOW))
+
+
+def test_reset_and_test_lanes_have_separate_capacity_and_fair_turns(tmp_path: Path) -> None:
+    class OrderedSender(BarrierSender):
+        def send_test(self, recipient: str) -> None:
+            super().send_test(recipient)
+            order.append("test")
+
+        def send_reset(self, recipient: str, token: str) -> None:
+            order.append("reset")
+
+    async def run() -> None:
+        users, tests, _, clock = services(tmp_path)
+        sender = OrderedSender()
+        worker = IdentityMailWorker(
+            DeliverIdentityEmailTest(
+                users, tests, IdentityEmailSetup("current", None), sender, clock
+            ),
+            tests,
+            clock,
+            reset_delivery=DeliverPasswordReset(
+                ResetStore(), IdentityEmailSetup("current", None), sender
+            ),
+        )
+        task = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: worker.running)
+        worker.submit(tests.admit(FIRST.id, "current", NOW))
+        await checkpoint(sender.started.is_set)
+        for index in range(50):
+            assert worker.submit_reset(ResetEmailRequest(f"{index}@example.test", "current"))
+        assert not worker.submit_reset(ResetEmailRequest("full@example.test", "current"))
+        for index in range(10):
+            assert worker.submit(EmailTest(str(index), UserId(str(index)), 0, "current"))
+        assert not worker.submit(EmailTest("full", UserId("full"), 0, "current"))
+        # Every synthetic actor is eligible for this queue-scheduling test.
+        for index in range(10):
+            users.add(replace(FIRST, id=UserId(str(index)), email=f"{index}@example.test"), "hash")
+        sender.release.set()
+        await checkpoint(lambda: len(order) == 61)
+        assert order[:21] == ["test", *[lane for _ in range(10) for lane in ("reset", "test")]]
+        await stop(worker, task)
+        assert not worker.submit_reset(ResetEmailRequest("stopped@example.test", "current"))
+
+    from dataclasses import replace
+
+    order: list[str] = []
+    asyncio.run(run())
+
+
+def test_cancelled_reset_preparation_cannot_send_on_restart(tmp_path: Path) -> None:
+    class BlockedStore(ResetStore):
+        def issue_for_email(self, email: str) -> PreparedPasswordReset:
+            preparations.append(email)
+            started.set()
+            assert release.wait(5)
+            return super().issue_for_email(email)
+
+    started, release = threading.Event(), threading.Event()
+    preparations: list[str] = []
+    sender = ResetSender()
+    worker, _, _ = worker_services(tmp_path)
+    worker._reset_delivery = DeliverPasswordReset(
+        BlockedStore(), IdentityEmailSetup("current", None), sender
+    )
+
+    async def run() -> None:
+        task = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: worker.running)
+        assert worker.submit_reset(ResetEmailRequest("private@example.test", "current"))
+        await checkpoint(started.is_set)
+        await stop(worker, task)
+        restarted = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: worker.running)
+        assert worker.submit_reset(ResetEmailRequest("new@example.test", "current"))
+        await asyncio.sleep(0.02)
+        assert preparations == ["private@example.test"]
+        release.set()
+        await checkpoint(lambda: sender.sent == ["new@example.test"])
+        assert preparations == ["private@example.test", "new@example.test"]
+        await stop(worker, restarted)
+
+    asyncio.run(run())
+
+
+def test_cleanup_backlog_gives_both_mail_lanes_a_turn(tmp_path: Path) -> None:
+    from unittest.mock import Mock
+
+    order: list[str] = []
+
+    class SenderWithOrder(Sender):
+        def send_test(self, recipient: str) -> None:
+            order.append("test")
+
+        def send_reset(self, recipient: str, token: str) -> None:
+            order.append("reset")
+
+    def purge(before: datetime, limit: int) -> int:
+        assert limit == 500
+        order.append("purge")
+        return 500 if order.count("purge") < 3 else 0
+
+    async def run() -> None:
+        users, tests, _, clock = services(tmp_path)
+        sender = SenderWithOrder()
+        admission = Mock()
+        admission.purge.side_effect = purge
+        worker = IdentityMailWorker(
+            DeliverIdentityEmailTest(
+                users, tests, IdentityEmailSetup("current", None), sender, clock
+            ),
+            tests,
+            clock,
+            reset_delivery=DeliverPasswordReset(
+                ResetStore(), IdentityEmailSetup("current", None), sender
+            ),
+            reset_admission=admission,
+        )
+        task = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: worker.running)
+        assert worker.submit(tests.admit(FIRST.id, "current", NOW))
+        assert worker.submit_reset(ResetEmailRequest("private@example.test", "current"))
+        await checkpoint(lambda: order.count("purge") == 3)
+        assert order == ["purge", "test", "purge", "reset", "purge"]
+        await stop(worker, task)
+
+    asyncio.run(run())
+
+
+def test_reset_preparation_lock_does_not_block_event_loop(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    database = tmp_path / "busy.db"
+    adapters = build_adapters(Settings(database))
+    adapters.users.add(FIRST, "hash")
+    sender = ResetSender()
+    worker, _, _ = worker_services(tmp_path)
+    worker._reset_delivery = DeliverPasswordReset(
+        adapters.self_service_resets, IdentityEmailSetup("current", None), sender
+    )
+
+    async def run() -> None:
+        task = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: worker.running)
+        # Wait until maintenance finishes so this measures preparation's lock budget.
+        await asyncio.sleep(0.02)
+        with transaction(database) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            started = time.monotonic()
+            assert worker.submit_reset(ResetEmailRequest(FIRST.email or "", "current"))
+            ticks = 0
+            while not caplog.records:
+                ticks += 1
+                await asyncio.sleep(0.005)
+                assert time.monotonic() - started < 1
+            elapsed = time.monotonic() - started
+            assert 0.08 <= elapsed < 0.5
+            assert ticks >= 5
+        assert sender.sent == []
+        with transaction(database) as connection:
+            assert (
+                connection.execute("SELECT COUNT(*) FROM password_reset_links").fetchone()[0] == 0
+            )
+        await stop(worker, task)
+
+    asyncio.run(run())
+    assert [record.getMessage() for record in caplog.records] == [
+        "Identity password reset email failed"
+    ]
+
+
+def test_hourly_reset_purge_runs_off_loop_and_is_bounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import Mock
+
+    class AdvancingClock:
+        at = NOW
+
+        def now(self) -> datetime:
+            return self.at
+
+    async def run() -> None:
+        worker, tests, _ = worker_services(tmp_path)
+        clock = AdvancingClock()
+        worker._clock = clock
+        admission = Mock()
+        main_thread = threading.get_ident()
+        observed: list[tuple[datetime, int]] = []
+
+        def purge(before: datetime, limit: int) -> int:
+            assert threading.get_ident() != main_thread
+            observed.append((before, limit))
+            return 500 if len(observed) == 1 else 0
+
+        admission.purge.side_effect = purge
+        worker._reset_admission = admission
+        original = tests.purge
+
+        def test_purge(before: datetime, limit: int) -> int:
+            assert threading.get_ident() != main_thread
+            return original(before, limit)
+
+        monkeypatch.setattr(tests, "purge", test_purge)
+        task = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: len(observed) == 2)
+        assert observed == [(NOW, 500), (NOW, 500)]
+        clock.at += timedelta(hours=1)
+        assert worker.submit(EmailTest("wake", FIRST.id, 0, "stale"))
+        await checkpoint(lambda: len(observed) == 3)
+        assert observed[-1] == (clock.at, 500)
+        await stop(worker, task)
+
+    asyncio.run(run())
+
+
+def test_keyed_unconfigured_lifespan_purges_without_scheduler_or_smtp(tmp_path: Path) -> None:
+    from dataclasses import replace
+    from unittest.mock import patch
+
+    from fastapi.testclient import TestClient
+
+    from calendar_sync.bootstrap.container import compose
+    from calendar_sync.infrastructure.security import CredentialCipher
+    from calendar_sync.interfaces.api.app import create_app
+
+    database = tmp_path / "maintenance.db"
+    settings = Settings(database, master_key=CredentialCipher.generate_key())
+    adapters = build_adapters(settings)
+    with transaction(database) as connection:
+        connection.executemany(
+            "INSERT INTO reset_request_attempts(boundary, network_digest, admitted_at) "
+            "VALUES ('completion', ?, 0)",
+            [(f"synthetic-digest-{index}",) for index in range(1201)],
+        )
+    container = replace(compose(settings, adapters), scheduler=None, scheduler_watch=None)
+    worker = container.identity_mail_worker
+    assert worker is not None
+
+    def remaining() -> int:
+        with transaction(database) as connection:
+            return int(
+                connection.execute("SELECT COUNT(*) FROM reset_request_attempts").fetchone()[0]
+            )
+
+    with patch("calendar_sync.infrastructure.identity_email.smtplib.SMTP") as smtp:
+        with TestClient(create_app(container)):
+            deadline = time.monotonic() + 5
+            while remaining():
+                assert time.monotonic() < deadline
+                time.sleep(0.005)
+            assert worker.running
+            assert not worker.submit(EmailTest("no-send", FIRST.id, 0, "stale"))
+            assert not worker.submit_reset(ResetEmailRequest("private@example.test", "stale"))
+            assert not container.identity_email.configured
+        assert not worker.running
+        smtp.assert_not_called()
+
+
+def test_composed_request_reaches_current_user_with_committed_proof(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from fastapi.testclient import TestClient
+
+    from calendar_sync.bootstrap.container import compose
+    from calendar_sync.infrastructure.security import CredentialCipher
+    from calendar_sync.interfaces.api.app import create_app
+
+    database = tmp_path / "composed.db"
+    delivered = threading.Event()
+    recipients: list[str] = []
+
+    class CommittedSender(Sender):
+        def send_reset(self, recipient: str, token: str) -> None:
+            with transaction(database) as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                proof = connection.execute(
+                    "SELECT created_by, created_at, expires_at FROM password_reset_links"
+                ).fetchone()
+                assert proof["created_by"] is None
+                assert datetime.fromisoformat(proof["expires_at"]) - datetime.fromisoformat(
+                    proof["created_at"]
+                ) == timedelta(hours=1)
+            assert adapters.password_resets.owner(token, adapters.clock.now()) == FIRST.id
+            recipients.append(recipient)
+            delivered.set()
+
+    settings = Settings(
+        database,
+        master_key=CredentialCipher.generate_key(),
+        smtp_host="localhost",
+        smtp_sender="ghost@example.test",
+        smtp_recipient="operator@example.test",
+        public_url="https://ghost.test",
+    )
+    adapters = build_adapters(settings)
+    adapters.users.add(replace(FIRST, notify_by_email=False), "synthetic")
+    adapters = replace(
+        adapters, identity_email=replace(adapters.identity_email, sender=CommittedSender())
+    )
+    container = replace(compose(settings, adapters), scheduler=None, scheduler_watch=None)
+    with TestClient(create_app(container)):
+        container.identity_email.request_reset.execute(FIRST.email or "", "192.0.2.1")
+        assert delivered.wait(5)
+    assert recipients == [FIRST.email]
+
+
+@pytest.mark.parametrize("phase", ["prepare", "send"])
+def test_reset_failure_is_lossy_and_logs_no_secrets(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, phase: str
+) -> None:
+    from unittest.mock import Mock
+
+    async def run() -> None:
+        worker, tests, _ = worker_services(tmp_path)
+        sender = Mock()
+        resets = Mock(wraps=ResetStore())
+        secret = "private@example.test synthetic-token synthetic-password body"
+        if phase == "prepare":
+            resets.issue_for_email.side_effect = RuntimeError(secret)
+        else:
+            sender.send_reset.side_effect = RuntimeError(secret)
+        worker._reset_delivery = DeliverPasswordReset(
+            resets, IdentityEmailSetup("current", None), sender
+        )
+        task = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: worker.running)
+        assert worker.submit_reset(ResetEmailRequest("private@example.test", "current"))
+        await checkpoint(lambda: len(caplog.records) == 1)
+        # No retry, readiness write, or public delivery status accompanies a failure.
+        await asyncio.sleep(0.02)
+        assert resets.issue_for_email.call_count == 1
+        assert sender.send_reset.call_count == (phase == "send")
+        assert tests.readiness is None
+        await stop(worker, task)
+        fields = repr(vars(caplog.records[0]))
+        assert caplog.records[0].getMessage() == "Identity password reset email failed"
+        assert caplog.records[0].exc_info is None
+        assert all(value not in fields for value in secret.split())
+
+    asyncio.run(run())
 
 
 class BarrierSender(Sender):
