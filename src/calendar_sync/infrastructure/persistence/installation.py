@@ -125,13 +125,16 @@ class SqliteInstallationUnitOfWork:
                 users.plan_grace_limit, users.plan_grace_admissions, users.plan_admissions,
                 rule.id AS rule_id, rule.state AS rule_state, rule.awaiting_reauthorization,
                 rule.keeps_place, rule.plan_kept, rule.creation_order
-            FROM users LEFT JOIN sync_rules rule ON rule.user_id = users.id AND (
-                rule.state = 'enabled' OR rule.keeps_place = 1
+            FROM users LEFT JOIN sync_rules rule ON rule.user_id = users.id
+            AND rule.awaiting_reauthorization IN (0, 1, 2) AND (
+                rule.state = 'enabled'
+                OR (rule.keeps_place = 1 AND rule.state IN (?, ?))
                 OR (rule.state = 'degraded' AND rule.awaiting_reauthorization IN (1, 2))
             )
             WHERE users.plan_holds_at IS NOT NULL OR rule.id IS NOT NULL
             ORDER BY users.id, (rule.plan_kept != 0) DESC, rule.creation_order, rule.id
-            """
+            """,
+            (SyncRuleState.DRAFT.value, SyncRuleState.PREVIEWED.value),
         ).fetchall()
         return _plan_standings(rows)
 
@@ -478,6 +481,7 @@ def _plan_standings(rows: Sequence[sqlite3.Row]) -> tuple[UserPlanStanding, ...]
                 if row["rule_state"] == "degraded" and row["awaiting_reauthorization"] == 2
                 else RulePlace.RESERVED
                 if row["keeps_place"]
+                and row["rule_state"] in (SyncRuleState.DRAFT.value, SyncRuleState.PREVIEWED.value)
                 else RulePlace.COUNTED
             )
             rules.append(

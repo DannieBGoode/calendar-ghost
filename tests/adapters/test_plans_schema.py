@@ -237,6 +237,34 @@ def test_stop_codes_read_and_write_exactly(tmp_path: Path, code: int, state: Syn
         assert written == (2 if stored.held_by_plan else 1 if code == 1 else 0)
 
 
+@pytest.mark.parametrize("keeps_place", [False, True])
+@pytest.mark.parametrize("code", [0, 1, 2, 9, -1])
+@pytest.mark.parametrize("state", list(SyncRuleState))
+def test_installation_plan_standings_match_defensive_user_reads(
+    tmp_path: Path, state: SyncRuleState, code: int, keeps_place: bool
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    units = sqlite_units(database)
+    with units() as uow:
+        uow.rules.add(replace(rule(), state=state))
+        uow.commit()
+    with transaction(database) as connection:
+        connection.execute(
+            "UPDATE sync_rules SET awaiting_reauthorization = ?, keeps_place = ?",
+            (code, int(keeps_place)),
+        )
+
+    with units() as uow:
+        fresh = uow.rules.standings()
+    with SqliteInstallationUnitOfWorkFactory(database)() as installation:
+        standings = installation.plan_standings()
+
+    assert [(each.owner, each.standings) for each in standings] == (
+        [(USER, fresh)] if fresh else []
+    )
+
+
 def test_grace_acquire_requires_an_existing_user(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
