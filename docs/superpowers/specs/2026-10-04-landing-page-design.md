@@ -137,6 +137,9 @@ Other pages:
   which file it is built from, with a link to edit it.
 - **404.** A worried ghost that gives up and naps, a short joke, and a link home.
 
+Sections share a fluid vertical inset of `clamp(4rem, 8vw, 7rem)`, including the transition from
+the hero and the closing night band. Final content margins add no extra section spacing.
+
 ## The hero's diagram
 
 Sam's Tuesday, read left to right (top to bottom on phones):
@@ -153,8 +156,9 @@ call keeps its title. Each lands in the day at its time, the day rests, and the 
 (about ten seconds). An emoji stands before every title the drawing shows; the ghost's own glyph
 stands wherever a title is hidden from Work.
 
-A switch over the diagram, "What work sees" / "What you see", turns the day into Sam's Personal
-calendar, where every title is kept and nothing is held back. A small labelled Pause and Replay sit
+A switch below the diagram on desktop and mobile, "What they see" / "What you see", turns the day
+into Sam's Personal calendar, where every title is kept and nothing is held back. "What they see"
+is selected by default and shows Sam's Work calendar. A small labelled Pause and Replay sit
 in the diagram's corner.
 
 The geometry and timing are worked out at build time and the motion is CSS, so the diagram moves

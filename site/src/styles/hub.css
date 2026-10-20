@@ -16,7 +16,7 @@
   --hc-busy: var(--primary);
   position: relative;
   margin: clamp(1.5rem, 4vh, 2.5rem) auto 0;
-  padding-block: 3.25rem 3rem;
+  padding-block: 0 3rem;
 }
 
 .hc [data-calendar="personal"], .hc [data-source="personal"] { --hc-source: var(--hc-personal); }
@@ -125,18 +125,18 @@
 /* The figure's own label for the view, where the switch goes: it stands in for it without
    JavaScript, and gives way to it once the switch is there. */
 .hc-static-view {
-  position: absolute; top: 0; left: 50%; transform: translateX(-50%); margin: 0;
-  min-height: 2.75rem; display: flex; align-items: center;
+  margin: 0.5rem 0 0;
+  min-height: 3.125rem; display: flex; align-items: center; justify-content: center;
   font: 550 0.8125rem/1 var(--font-sans); color: var(--muted-foreground);
 }
 .hc[data-enhanced] .hc-static-view { display: none; }
 
-/* The controls (islands/HubControls.tsx): the switch centred over the whole diagram, and a small
+/* The controls (islands/HubControls.tsx): the switch centred below the whole diagram, and a small
    labelled pair, Pause and Replay, in its bottom-right corner. */
 .hc-controls { display: contents; }
 .hc-views {
-  position: absolute; z-index: 2; top: 0; left: 50%; transform: translateX(-50%);
-  display: inline-flex; padding: 2px; border: 1px solid var(--hc-line); border-radius: 999px; background: var(--background);
+  position: relative; z-index: 2; width: max-content; margin: 0.5rem auto 0;
+  display: flex; padding: 2px; border: 1px solid var(--hc-line); border-radius: 999px; background: var(--background);
 }
 .hc-view {
   min-height: 2.75rem; padding: 0 0.9rem; border: 0; border-radius: 999px; background: transparent;
