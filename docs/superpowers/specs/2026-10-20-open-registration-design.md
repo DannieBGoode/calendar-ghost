@@ -260,9 +260,10 @@ do not guess that every private address is a proxy or block legitimate LAN clien
 Correct the existing deployment text that all proxy traffic necessarily shares one limit.
 
 Cap request bodies at 8 KiB, normalized email at the existing 254-character limit, tokens at 128
-ASCII characters, and new passwords at 1,024 characters before database work or hashing. Keep
-12 as the password minimum. The maximum applies to new passwords in these new flows, not existing
-Users' sign-in passwords. Apply the completion gate before hashing even for usable proofs.
+ASCII characters, and new passwords at 1,024 characters before database work or hashing.
+Sign-in and current-password confirmations accept up to 1,024 characters so every reset password
+remains usable. Setup, Invitation, and ordinary new-password creation bounds stay unchanged.
+Keep 12 as the new-password minimum. Apply the completion gate before hashing even for usable proofs.
 
 Public request handlers return before account lookup or SMTP delivery. Use bounded in-memory
 identity-mail queues, separate from scheduler/Plan mail, with 50 pending sign-up requests and

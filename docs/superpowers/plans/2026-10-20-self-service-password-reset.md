@@ -36,7 +36,7 @@ confirms all P1/P2 findings addressed and the design/plan ready to implement.
 - SMTP and password hashing stay outside SQLite transactions. Anonymous identity writes wait at most 100 ms.
 - All Web UI text uses `t()`, values use `i18n.format`, plural parameters use `count`. No em dashes.
 - Body maximum 8 KiB; normalized email 254 characters; token 128 ASCII characters; new password 12 to 1,024 characters.
-- Sign-in password bounds and unrelated Invitation behavior stay unchanged. Rebuild substantive web bundles with source.
+- Sign-in and current-password confirmations accept up to 1,024 characters so every reset password remains usable. Setup, Invitation, and ordinary new-password creation bounds stay unchanged. Rebuild substantive web bundles with source.
 
 ## Review Focus
 

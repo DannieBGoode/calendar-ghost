@@ -323,7 +323,7 @@
       "ChangePasswordRequest": {
         "properties": {
           "current_password": {
-            "maxLength": 256,
+            "maxLength": 1024,
             "title": "Current Password",
             "type": "string"
           },
@@ -731,7 +731,7 @@
       "DeleteOwnAccountRequest": {
         "properties": {
           "password": {
-            "maxLength": 256,
+            "maxLength": 1024,
             "title": "Password",
             "type": "string"
           },
@@ -4097,7 +4097,7 @@
           "password": {
             "anyOf": [
               {
-                "maxLength": 256,
+                "maxLength": 1024,
                 "type": "string"
               },
               {
@@ -4173,7 +4173,7 @@
             "title": "Email"
           },
           "password": {
-            "maxLength": 256,
+            "maxLength": 1024,
             "minLength": 1,
             "title": "Password",
             "type": "string"

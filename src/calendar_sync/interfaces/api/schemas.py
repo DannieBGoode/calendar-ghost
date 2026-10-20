@@ -112,7 +112,7 @@ class SetupRequest(BaseModel):
 class SignInRequest(BaseModel):
     email: str | None = Field(default=None, max_length=320)
     """Left out only by the upgraded first User, until they add an email."""
-    password: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class SignedInUserResponse(ApiResponse):
@@ -138,12 +138,12 @@ class SessionResponse(ApiResponse):
 
 class SetEmailRequest(BaseModel):
     email: str = Field(max_length=320)
-    password: str | None = Field(default=None, max_length=256)
+    password: str | None = Field(default=None, max_length=1024)
     """The current password, needed to change an email but not to add the first one."""
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str = Field(max_length=256)
+    current_password: str = Field(max_length=1024)
     new_password: str = Field(max_length=256)
 
 
@@ -1069,7 +1069,7 @@ class UserStateRequest(BaseModel):
 
 
 class DeleteOwnAccountRequest(BaseModel):
-    password: str = Field(max_length=256)
+    password: str = Field(max_length=1024)
     projections: ProjectionChoice
 
 
