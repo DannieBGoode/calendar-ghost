@@ -152,7 +152,11 @@
     "plansOff": "With Plans off, everyone has every feature without limits. Open does not turn Plans on.",
     "closeWarning": "Switch to Invitation only? This cancels unfinished public sign-ups. Existing people and invitations stay.",
     "closeConfirm": "Switch to Invitation only",
-    "keepOpen": "Keep Open"
+    "keepOpen": "Keep Open",
+    "openInterrupted": "Open remains selected. New people cannot join until Identity email is ready again.",
+    "openPausedHint": "New joining is temporarily unavailable.",
+    "restoreConfigured": "Configure Identity email to restore joining.",
+    "restoreTested": "Send a successful test of the current Identity email configuration to restore joining."
   },
   "links": {
     "copy": "Copy link",

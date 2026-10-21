@@ -113,6 +113,19 @@ function fillForm(email: string, password: string, confirmation = password) {
 }
 
 describe("InvitationPage", () => {
+  it.each(["direct", "verified"])("offers sign-in from a usable %s Invitation", async (acceptance) => {
+    serve({ "/api/v1/invitations/check": jsonResponse({ usable: true, acceptance }) })
+    await renderPage(testI18n(), `#${TOKEN}`)
+    expect(container.querySelector("a[href='/']")).not.toBeNull()
+  })
+
+  it("states the unusable Invitation recovery instruction once", async () => {
+    serve({ "/api/v1/invitations/check": jsonResponse({ usable: false }) })
+    await renderPage(testI18n(), `#${TOKEN}`)
+    const text = container.textContent
+    expect(text.match(/Ask the person who invited you/g)).toHaveLength(1)
+  })
+
   it("requests verified email under Open without accepting the invitation", async () => {
     const calls = serve({ "/api/v1/invitations/check": jsonResponse({ usable: true, acceptance: "verified" }), "/api/v1/registrations/request": jsonResponse({ accepted: true }, 202) })
     await renderPage(testI18n(), `#${TOKEN}`)
@@ -122,6 +135,7 @@ describe("InvitationPage", () => {
     expect(calls.find((call) => call.url === "/api/v1/registrations/request")?.body).toEqual({ email: "robin@example.test", invitation_token: TOKEN })
     expect(calls.some((call) => call.url === "/api/v1/invitations/accept")).toBe(false)
     expect(container.textContent).toContain("If this address can join")
+    expect(container.querySelector("a[href='/']")).not.toBeNull()
     expect(window.location.hash).toBe(`#${TOKEN}`)
   })
 
@@ -146,6 +160,7 @@ describe("InvitationPage", () => {
     expect(container.querySelector<HTMLInputElement>("input[type=email]")!.value).toBe("robin@example.test")
     expect(container.textContent).not.toContain("This invitation cannot be used")
     if (mode === "verified") expect(container.querySelector('[role="alert"]')?.textContent).toContain("Joining is unavailable")
+    expect(container.querySelector("a[href='/']")).not.toBeNull()
   })
 
   it("does not submit a direct form after the fragment changes before hashchange", async () => {

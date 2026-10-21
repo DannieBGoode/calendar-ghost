@@ -48,7 +48,7 @@ export function RegistrationSection({ commands }: { commands: RegistrationComman
         <p>{t("settings.registration.closeWarning")}</p>
         <div className="mt-4 flex flex-wrap gap-3"><Button disabled={change.isPending} onClick={() => change.mutate("invitation_only", { onSuccess: () => setConfirmClose(false) })}>{t("settings.registration.closeConfirm")}</Button><Button variant="outline" onClick={() => setConfirmClose(false)}>{t("settings.registration.keepOpen")}</Button></div>
       </div>}
-      <p className="field-hint">{t("settings.registration.plansOff")}</p>
+      <p className="field-hint registration-plan-note">{t("settings.registration.plansOff")}</p>
       {change.error && (
         <p className="field-error" role="alert">
           {apiErrorMessage(i18n, change.error)}
@@ -70,6 +70,7 @@ function PolicyChoice({
 }) {
   const { t } = useI18n()
   const { policy } = registration
+  const openInterrupted = policy === "open" && !registration.open_available
   const onlyMeBlocked = !registration.only_me_available && policy !== "only_me"
   return (
     <fieldset className="settings-list projection-choice registration-choice" aria-labelledby="registration-title">
@@ -106,13 +107,29 @@ function PolicyChoice({
         </label>
         <label className="radio-row">
           <input type="radio" name="registration-policy" value="open" checked={policy === "open"} disabled={pending || !registration.open_available} onChange={() => onChoose("open")} />
-          <span><strong>{t("settings.registration.open")}</strong><small>{t("settings.registration.openHint")}</small></span>
+          <span><strong>{t("settings.registration.open")}</strong><small>{t(openInterrupted ? "settings.registration.openPausedHint" : "settings.registration.openHint")}</small></span>
         </label>
       </div>
-      {!registration.open_available && <div className="p-5">
-        <p role="status">{t(registration.open_unavailable_reason === "identity_email_not_tested" ? "settings.registration.notTested" : "settings.registration.notConfigured")}</p>
-        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-3"><a className="text-link" href="#identity-email-title">{t("settings.registration.identityEmail")}</a><a className="text-link" href={`${SOURCE_URL}/docs/deployment.md#trusted-proxy-headers`} target="_blank" rel="noreferrer">{t("settings.registration.proxyGuide")}</a></div>
-      </div>}
+      <OpenReadiness registration={registration} />
     </fieldset>
   )
+}
+
+function OpenReadiness({ registration }: { registration: Registration }) {
+  const { t } = useI18n()
+  const untested = registration.open_unavailable_reason === "identity_email_not_tested"
+  const selected = registration.policy === "open"
+  const reason = selected
+    ? t(untested ? "settings.registration.restoreTested" : "settings.registration.restoreConfigured")
+    : t(untested ? "settings.registration.notTested" : "settings.registration.notConfigured")
+  return <div className="p-5">
+    {!registration.open_available && <div role="status">
+      {selected && <p>{t("settings.registration.openInterrupted")}</p>}
+      <p>{reason}</p>
+    </div>}
+    <div className="mt-3 flex flex-wrap gap-x-6 gap-y-3">
+      <a className="text-link" href="#identity-email-title">{t("settings.registration.identityEmail")}</a>
+      <a className="text-link" href={`${SOURCE_URL}/docs/deployment.md#trusted-proxy-headers`} target="_blank" rel="noreferrer">{t("settings.registration.proxyGuide")}</a>
+    </div>
+  </div>
 }

@@ -106,6 +106,19 @@ async function submit() {
 }
 
 describe("RegistrationPage", () => {
+  it("keeps sign-in available on a usable verification form and temporary completion failure", async () => {
+    serve({ "/api/v1/registrations/check": jsonResponse({ usable: true, email: "robin@example.test" }), "/api/v1/registrations": jsonResponse({ code: "registration_unavailable" }, 503) })
+    await renderPage(testI18n(), `#${TOKEN}`)
+    expect(container.querySelector("a[href='/']")).not.toBeNull()
+    const fields = container.querySelectorAll<HTMLInputElement>("input[type=password]")
+    type(fields[0]!, "a very long password")
+    type(fields[1]!, "a very long password")
+    await submit()
+    expect(container.querySelector("form")).not.toBeNull()
+    expect(container.querySelector("[role=alert]")?.textContent).toContain("Joining is unavailable")
+    expect(container.querySelector("a[href='/']")).not.toBeNull()
+  })
+
   it("translates the bound-email form and bounds passwords", async () => {
     serve({ "/api/v1/registrations/check": jsonResponse({ usable: true, email: "long-email-address-with-several-parts@example.test" }) })
     await renderPage(pseudoI18n(), `#${TOKEN}`)

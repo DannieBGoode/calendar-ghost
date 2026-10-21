@@ -150,6 +150,25 @@ function requested(path: string): boolean {
 }
 
 describe("Administration", () => {
+  it("keeps trusted-proxy guidance visible before ready Open is selected", async () => {
+    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false, open_available: true, open_unavailable_reason: null } })
+    expect(container.querySelector<HTMLInputElement>("input[value=open]")!.disabled).toBe(false)
+    expect(container.querySelector("a[href$='#trusted-proxy-headers']")).not.toBeNull()
+  })
+
+  it.each([
+    ["identity_email_not_configured", "Configure Identity email to restore joining."],
+    ["identity_email_not_tested", "Send a successful test of the current Identity email configuration to restore joining."],
+  ] as const)("explains selected Open with interrupted joining: %s", async (reason, recovery) => {
+    await renderSettings(testI18n(), { registration: { policy: "open", only_me_available: false, open_available: false, open_unavailable_reason: reason } })
+    expect(container.querySelector<HTMLInputElement>("input[value=open]")!.checked).toBe(true)
+    expect(section("registration-title")?.textContent).toContain("Open remains selected. New people cannot join until Identity email is ready again.")
+    expect(section("registration-title")?.textContent).toContain(recovery)
+    expect(section("registration-title")?.textContent).not.toContain("before choosing Open")
+    expect(container.querySelector("a[href='#identity-email-title']")).not.toBeNull()
+    expect(container.querySelector("a[href$='#trusted-proxy-headers']")).not.toBeNull()
+  })
+
   it.each([
     ["identity_email_not_configured", "Configure Identity email"],
     ["identity_email_not_tested", "successful Identity email test"],

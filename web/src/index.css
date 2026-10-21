@@ -281,6 +281,8 @@ p {
   --brand-line: var(--ghost-white);
   --brand-eyes: var(--twilight-canvas);
   display: flex;
+  min-width: 0;
+  overflow-wrap: anywhere;
   flex-direction: column;
   justify-content: center;
   padding: clamp(2.5rem, 7vw, 7rem);
@@ -350,6 +352,8 @@ p {
 
 .auth-form-panel {
   display: flex;
+  min-width: 0;
+  overflow-wrap: anywhere;
   width: 100%;
   max-width: 34rem;
   margin: auto;
@@ -388,6 +392,19 @@ p {
   margin-top: 2rem;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+/* Auth actions must grow with enlarged text rather than impose a min-content width. */
+.auth-form-panel :is(button, a.inline-flex) {
+  height: auto;
+  min-height: 2.75rem;
+  padding-block: 0.625rem;
+  white-space: normal;
+  text-align: center;
+}
+
+.registration-plan-note {
+  max-width: 70ch;
 }
 
 .auth-legal {
@@ -6967,7 +6984,7 @@ thead + .incident-group th {
   }
 
   .auth-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .auth-intro {

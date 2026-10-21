@@ -31,7 +31,10 @@ function RegistrationLink(props: Props) {
       {...registrationPanel(t, sessionFailed, unusable)} icon={UserPlus}>
       <RegistrationCheckState status={check.status} error={check.error} onRecheck={() => { void check.recheck() }} />
       {(unusable || sessionFailed) && <RegistrationRecovery sessionFailed={sessionFailed} />}
-      {!outcome && check.status === "usable" && check.data?.email && <RegistrationForm {...props} email={check.data.email} onRefused={setOutcome} />}
+      {!outcome && check.status === "usable" && check.data?.email && <>
+        <RegistrationForm {...props} email={check.data.email} onRefused={setOutcome} />
+        <div className="mt-6"><Button variant="ghost" size="lg" asChild><a href="/">{t("auth.signIn")}</a></Button></div>
+      </>}
     </AuthFrame>
   )
 }
@@ -68,7 +71,7 @@ function RegistrationForm({ token, isCurrent, onSignedIn, email, onRefused }: Fo
   }
   return (
     <form className="auth-form" onSubmit={submit}>
-      <p className="break-words">{t("auth.registration.email", { email })}</p>
+      <p>{t("auth.registration.email", { email })}</p>
       <NewPasswordFields {...passwords} onChange={setPasswords} maxLength={1024} />
       {complete.error && <p className="inline-error" role="alert">{complete.error instanceof ApiError && complete.error.status === 503 ? t("auth.signUp.unavailable") : apiErrorMessage(i18n, complete.error)}</p>}
       <Button type="submit" size="lg" disabled={!ready || complete.isPending}>{t(complete.isPending ? "auth.pleaseWait" : "auth.registration.submit")}</Button>

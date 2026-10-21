@@ -37,6 +37,7 @@ function InvitationLink({ token, isCurrent, onSignedIn }: LinkProps) {
       {check.status === "usable" && !refused && (verified
         ? <RegistrationRequestForm invitationToken={token} initialEmail={email} onEmail={setEmail} isCurrent={isCurrent} onUnavailable={recheck} />
         : <InvitationAcceptForm token={token} isCurrent={isCurrent} onSignedIn={onSignedIn} email={email} onEmail={setEmail} onRecheck={recheck} onUnusable={setRefusal} />)}
+      {check.status === "usable" && !refused && <div className="mt-6"><Button variant="ghost" size="lg" asChild><a href="/">{t("auth.invitation.signIn")}</a></Button></div>}
     </AuthFrame>
   )
 }
