@@ -53,6 +53,9 @@ PUBLIC_API_ROUTES = {
     ("POST", "/api/v1/password-resets/request"),
     ("POST", "/api/v1/password-resets/check"),
     ("POST", "/api/v1/password-resets"),
+    ("POST", "/api/v1/registrations/request"),
+    ("POST", "/api/v1/registrations/check"),
+    ("POST", "/api/v1/registrations"),
     ("POST", "/api/v1/watch-notices/{provider_slug}/{registration_id}"),
 }
 # Only an Installation Administrator may use these (ADR 0030), Plans among them (ADR 0038).

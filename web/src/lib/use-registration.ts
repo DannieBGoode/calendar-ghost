@@ -8,6 +8,7 @@ import { api, type RegistrationPolicy } from "@/lib/api"
 const SAVED: Record<RegistrationPolicy, MessageKey> = {
   only_me: "settings.registration.saved.onlyMe",
   invitation_only: "settings.registration.saved.invitationOnly",
+  open: "settings.registration.saved.open",
 }
 
 /** The Registration Policy and the command that changes it; for Installation Administrators only. */

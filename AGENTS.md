@@ -192,7 +192,9 @@ the Docker build context, and has its own `Site` workflow.
   User's record answers 404, never 403, so its existence is not revealed (ADR 0029); the Operator
   Overview's route for one User, `/api/v1/users/{user_id}/overview`, also answers 404 to anyone
   who does not administer, as for an unknown User. Only setup,
-  sign-in, the session status and sign-out, the bounded public Password Reset Link request
+  sign-in, the session status and sign-out, the bounded public verified registration routes
+  (`/api/v1/registrations/request`, `/api/v1/registrations/check`, `/api/v1/registrations`),
+  the bounded public Password Reset Link request
   (`/api/v1/password-resets/request`), the token-protected Invitation and Password Reset Link
   routes (`/api/v1/invitations/check`, `/api/v1/invitations/accept`,
   `/api/v1/password-resets/check`, `/api/v1/password-resets`), the Watch Notice route providers

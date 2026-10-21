@@ -11,7 +11,9 @@ from fastapi.testclient import TestClient
 
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_container
+from calendar_sync.domain.access import RegistrationPolicy
 from calendar_sync.infrastructure.identity_email import IdentitySmtp
+from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api import app as api_app
 from tests.users import ADMIN_EMAIL, add_user
@@ -34,20 +36,21 @@ def proxy_client(path: Path, trusted: str, peer: str = PROXY) -> TestClient:
 
 
 @pytest.mark.parametrize(("trusted", "peer"), [("", "127.0.0.1"), (PROXY, "192.0.2.11")])
+@pytest.mark.parametrize("check", [CHECK, "/api/v1/registrations/check"])
 def test_empty_or_untrusted_proxy_cannot_rotate_allowance(
-    tmp_path: Path, trusted: str, peer: str
+    tmp_path: Path, trusted: str, peer: str, check: str
 ) -> None:
     client = proxy_client(tmp_path / "test.db", trusted, peer)
     for index in range(20):
         response = client.post(
-            CHECK,
+            check,
             json={"token": "forged"},
             headers={"X-Forwarded-For": f"198.51.100.{index + 1}"},
         )
         assert response.status_code == 200
     assert (
         client.post(
-            CHECK,
+            check,
             json={"token": "forged"},
             headers={"X-Forwarded-For": "203.0.113.1", "Forwarded": "for=203.0.113.2"},
         ).status_code
@@ -57,15 +60,16 @@ def test_empty_or_untrusted_proxy_cannot_rotate_allowance(
 
 @pytest.mark.parametrize("trusted", [PROXY, "192.0.2.0/24"])
 @pytest.mark.parametrize("ipv6", [False, True])
+@pytest.mark.parametrize("check", [CHECK, "/api/v1/registrations/check"])
 def test_trusted_proxy_separates_clients_and_groups_ipv6_by_64(
-    tmp_path: Path, trusted: str, ipv6: bool
+    tmp_path: Path, trusted: str, ipv6: bool, check: str
 ) -> None:
     client = proxy_client(tmp_path / "test.db", trusted)
     for index in range(20):
         address = f"2001:db8:1234:abcd::{index + 1:x}" if ipv6 else "198.51.100.1"
         assert (
             client.post(
-                CHECK, json={"token": "forged"}, headers={"X-Forwarded-For": address}
+                check, json={"token": "forged"}, headers={"X-Forwarded-For": address}
             ).status_code
             == 200
         )
@@ -75,14 +79,15 @@ def test_trusted_proxy_separates_clients_and_groups_ipv6_by_64(
     ):
         assert (
             client.post(
-                CHECK, json={"token": "forged"}, headers={"X-Forwarded-For": address}
+                check, json={"token": "forged"}, headers={"X-Forwarded-For": address}
             ).status_code
             == expected
         )
 
 
-def test_forged_origin_headers_cannot_choose_reset_mail_origin(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("registration", [False, True])
+def test_forged_origin_headers_cannot_choose_identity_mail_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registration: bool
 ) -> None:
     sent = threading.Event()
     bodies: list[str] = []
@@ -102,15 +107,25 @@ def test_forged_origin_headers_cannot_choose_reset_mail_origin(
             public_url="https://calendar.example.test",
         )
     )
-    add_user(path, email=ADMIN_EMAIL)
+    actor = add_user(path, email=ADMIN_EMAIL)
+    if registration:
+        with transaction(path) as connection:
+            connection.execute(
+                "UPDATE identity_email_readiness SET fingerprint = ?, tested_at = ?",
+                (
+                    container.registrations.check.fingerprint,
+                    container.registrations.complete.clock.now().isoformat(),
+                ),
+            )
+        container.administration.set_registration_policy.execute(actor, RegistrationPolicy.OPEN)
     config = uvicorn.Config(
         api_app.create_app(container), forwarded_allow_ips=PROXY, log_config=None
     )
     config.load()
     with TestClient(config.loaded_app, client=(PROXY, 1234)) as client:
         response = client.post(
-            "/api/v1/password-resets/request",
-            json={"email": ADMIN_EMAIL},
+            "/api/v1/registrations/request" if registration else "/api/v1/password-resets/request",
+            json={"email": "new@example.test" if registration else ADMIN_EMAIL},
             headers={
                 "Host": "attacker.example.test",
                 "X-Forwarded-Host": "attacker.example.test",
@@ -122,7 +137,8 @@ def test_forged_origin_headers_cannot_choose_reset_mail_origin(
         assert response.status_code == 202
         assert sent.wait(3), "recovery worker did not deliver the synthetic message"
     assert len(bodies) == 1
-    assert "https://calendar.example.test/password-reset#" in bodies[0]
+    page = "verify-email" if registration else "password-reset"
+    assert f"https://calendar.example.test/{page}#" in bodies[0]
     assert "attacker.example.test" not in bodies[0]
 
 

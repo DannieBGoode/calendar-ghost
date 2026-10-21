@@ -7,6 +7,7 @@ import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 from calendar_sync.application.identity.errors import (
     EmailTaken,
@@ -222,10 +223,19 @@ class CheckInvitation:
     attempts: LinkAttempts
 
     def execute(self, token: str, client: str) -> bool:
+        return self.acceptance(token, client) is not None
+
+    def acceptance(self, token: str, client: str) -> Literal["direct", "verified"] | None:
         now = self.clock.now()
-        return self.attempts.usable(
+        usable = self.attempts.usable(
             client, lambda: _invitation_usable(self.settings, self.invitations, token, now)
         )
+        if not usable:
+            return None
+        policy = self.settings.policy()
+        if not may_issue_invitation(policy):
+            return None
+        return "direct" if may_accept_invitation_directly(policy) else "verified"
 
 
 @dataclass(slots=True)

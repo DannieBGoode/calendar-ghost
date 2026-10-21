@@ -65,7 +65,7 @@ function serve({ role = "installation_administrator", registration, answers = {}
       logs: { bytes: 0, files: 0, oldest_at: null, newest_at: null },
       activity_ages: [30, 90, 180, 365],
     }),
-    "GET /api/v1/registration": jsonResponse(registration ?? { policy: "invitation_only", only_me_available: false }),
+    "GET /api/v1/registration": jsonResponse(registration ?? { policy: "invitation_only", only_me_available: false, open_available: false, open_unavailable_reason: "identity_email_not_configured" }),
   }
   const routes = { ...defaults, ...answers }
   calls = []
@@ -156,7 +156,7 @@ describe("Administration", () => {
   })
 
   it("holds who can join and storage, and leaves people, invitations, and plans to the People page", async () => {
-    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false } })
+    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false, open_available: false, open_unavailable_reason: "identity_email_not_configured" } })
     expect(section("identity-email-title")).not.toBeNull()
     expect(section("registration-title")).not.toBeNull()
     expect(container.querySelectorAll("input[name=registration-policy]")).toHaveLength(2)
@@ -172,8 +172,8 @@ describe("Administration", () => {
 
   it("switches to Invitation only", async () => {
     await renderSettings(testI18n(), {
-      registration: { policy: "only_me", only_me_available: true },
-      answers: { "PUT /api/v1/registration": jsonResponse({ policy: "invitation_only", only_me_available: true }) },
+      registration: { policy: "only_me", only_me_available: true, open_available: false, open_unavailable_reason: "identity_email_not_configured" },
+      answers: { "PUT /api/v1/registration": jsonResponse({ policy: "invitation_only", only_me_available: true, open_available: false, open_unavailable_reason: "identity_email_not_configured" }) },
     })
     await click(container.querySelector<HTMLInputElement>("input[value='invitation_only']")!)
     expect(sent("PUT", "/api/v1/registration")?.body).toEqual({ policy: "invitation_only" })
@@ -183,7 +183,7 @@ describe("Administration", () => {
   })
 
   it("keeps Only me unavailable while other people are here, and says why", async () => {
-    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false } })
+    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false, open_available: false, open_unavailable_reason: "identity_email_not_configured" } })
     const onlyMe = container.querySelector<HTMLInputElement>("input[value='only_me']")!
     expect(onlyMe.disabled).toBe(true)
     expect(container.querySelector<HTMLInputElement>("input[value='invitation_only']")!.checked).toBe(true)

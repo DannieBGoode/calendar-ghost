@@ -70,14 +70,19 @@ def test_identity_email_api_failures_are_safe(tmp_path: Path) -> None:
     assert "admin@example.test" not in response.text
 
 
-def test_open_remains_unavailable(tmp_path: Path) -> None:
+def test_open_requires_usable_identity_email(tmp_path: Path) -> None:
     client, _, _ = client_for(tmp_path)
     client.post("/api/v1/setup/admin", json=ADMIN)
-    assert client.put("/api/v1/registration", json={"policy": "open"}).status_code == 422
+    refused = client.put("/api/v1/registration", json={"policy": "open"})
+    assert (refused.status_code, refused.json()["code"], refused.json()["params"]) == (
+        409,
+        "open_registration_unavailable",
+        {"reason": "identity_email_not_configured"},
+    )
     schema = client.get("/api/openapi.json").json()
     assert schema["components"]["schemas"]["RegistrationRequest"]["properties"]["policy"][
         "enum"
-    ] == ["only_me", "invitation_only"]
+    ] == ["only_me", "invitation_only", "open"]
 
 
 def live_client(tmp_path: Path) -> tuple[TestClient, Adapters, Container, BarrierSender]:

@@ -174,6 +174,15 @@ def test_validation_is_private_and_precedes_storage(
         (REQUEST, {"email": "unknown@example.test"}, 202),
         (CHECK, {"token": "forged"}, 200),
         (COMPLETE, {"token": "forged", "password": "a new long password"}, 410),
+        ("/api/v1/registrations/request", {"email": "unknown@example.test"}, 503),
+        ("/api/v1/registrations/check", {"token": "forged"}, 200),
+        ("/api/v1/registrations", {"token": "forged", "password": "a new long password"}, 410),
+        ("/api/v1/invitations/check", {"token": "forged"}, 200),
+        (
+            "/api/v1/invitations/accept",
+            {"token": "forged", "email": "new@example.test", "password": "a new long password"},
+            410,
+        ),
     ],
 )
 @pytest.mark.parametrize("content_length", [None, "1", "99999"])
@@ -348,10 +357,14 @@ def test_normalized_email_bound_retains_existing_normalization(
 
 
 @pytest.mark.parametrize(("length", "status"), [(128, 200), (129, 422)])
-def test_token_size_is_reset_only(tmp_path: Path, length: int, status: int) -> None:
+def test_token_size_bounds_reset_and_invitation_proofs(
+    tmp_path: Path, length: int, status: int
+) -> None:
     client = TestClient(create_app(build_container(Settings(tmp_path / "test.db"))))
     assert client.post(CHECK, json={"token": "t" * length}).status_code == status
-    assert client.post("/api/v1/invitations/check", json={"token": "t" * length}).status_code == 200
+    assert (
+        client.post("/api/v1/invitations/check", json={"token": "t" * length}).status_code == status
+    )
 
 
 @pytest.mark.parametrize(("length", "status"), [(11, 422), (12, 204), (1024, 204), (1025, 422)])

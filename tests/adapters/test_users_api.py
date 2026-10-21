@@ -42,7 +42,12 @@ def test_only_me_lets_nobody_join_until_the_administrator_invites(tmp_path: Path
         token = _invite(admin)
         pending = admin.get("/api/v1/invitations").json()
 
-    assert initial == {"policy": "only_me", "only_me_available": True}
+    assert initial == {
+        "policy": "only_me",
+        "only_me_available": True,
+        "open_available": False,
+        "open_unavailable_reason": "identity_email_not_configured",
+    }
     assert (closed.status_code, closed.json()["code"]) == (409, "registration_closed")
     assert opened["policy"] == "invitation_only"
     assert len(token) >= 40
@@ -62,11 +67,11 @@ def test_an_invited_person_joins_with_their_own_email_and_password(tmp_path: Pat
         listed = admin.get("/api/v1/users").json()["users"]
         back_to_only_me = admin.put("/api/v1/registration", json={"policy": "only_me"})
 
-    assert checked == {"usable": True}
+    assert checked == {"usable": True, "acceptance": "direct"}
     assert joined.json()["user"]["role"] == "user"
     assert dashboard["sync_rules"] == 0
     assert (reused.status_code, reused.json()["code"]) == (410, "link_unusable")
-    assert rechecked == {"usable": False}
+    assert rechecked == {"usable": False, "acceptance": None}
     assert [(user["email"], user["role"], user["state"]) for user in listed] == [
         ("admin@example.test", "installation_administrator", "active"),
         ("member@example.test", "user", "active"),

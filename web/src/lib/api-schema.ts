@@ -809,6 +809,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Registration */
+        post: operations["complete_registration_api_v1_registrations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/registrations/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Registration */
+        post: operations["check_registration_api_v1_registrations_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/registrations/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request Registration */
+        post: operations["request_registration_api_v1_registrations_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/rules": {
         parameters: {
             query?: never;
@@ -1346,6 +1397,13 @@ export interface components {
             /** Removed */
             removed: number;
         };
+        /** CompleteRegistrationRequest */
+        CompleteRegistrationRequest: {
+            /** Password */
+            password: string;
+            /** Token */
+            token: string;
+        };
         /** ConfirmEmailChangeRequest */
         ConfirmEmailChangeRequest: {
             /** Password */
@@ -1737,6 +1795,13 @@ export interface components {
             revoked_at: string | null;
             /** Scopes */
             scopes: ("installation:read" | "status:read")[];
+        };
+        /** InvitationStatusResponse */
+        InvitationStatusResponse: {
+            /** Acceptance */
+            acceptance: ("direct" | "verified") | null;
+            /** Usable */
+            usable: boolean;
         };
         /** IssueIntegrationTokenRequest */
         IssueIntegrationTokenRequest: {
@@ -2325,18 +2390,37 @@ export interface components {
             /** Starts */
             starts: string | null;
         };
+        /** RegistrationCheckRequest */
+        RegistrationCheckRequest: {
+            /** Token */
+            token: string;
+        };
+        /** RegistrationCheckResponse */
+        RegistrationCheckResponse: {
+            /** Email */
+            email: string | null;
+            /** Usable */
+            usable: boolean;
+        };
         /** RegistrationRequest */
         RegistrationRequest: {
             /**
              * Policy
              * @enum {string}
              */
-            policy: "only_me" | "invitation_only";
+            policy: "only_me" | "invitation_only" | "open";
         };
         /** RegistrationResponse */
         RegistrationResponse: {
             /** Only Me Available */
             only_me_available: boolean;
+            /**
+             * Open Available
+             * @default false
+             */
+            open_available: boolean;
+            /** Open Unavailable Reason */
+            open_unavailable_reason: ("identity_email_not_configured" | "identity_email_not_tested") | null;
             /**
              * Policy
              * @enum {string}
@@ -2638,6 +2722,11 @@ export interface components {
              * @default false
              */
             password_reset_available: boolean;
+            /**
+             * Public Registration Available
+             * @default false
+             */
+            public_registration_available: boolean;
         };
         /** SignInRequest */
         SignInRequest: {
@@ -2645,6 +2734,22 @@ export interface components {
             email?: string | null;
             /** Password */
             password: string;
+        };
+        /** SignUpAcceptedResponse */
+        SignUpAcceptedResponse: {
+            /**
+             * Accepted
+             * @default true
+             * @constant
+             */
+            accepted: true;
+        };
+        /** SignUpRequest */
+        SignUpRequest: {
+            /** Email */
+            email: string;
+            /** Invitation Token */
+            invitation_token?: string | null;
         };
         /** SignedInUserResponse */
         SignedInUserResponse: {
@@ -4041,7 +4146,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LinkStatusResponse"];
+                    "application/json": components["schemas"]["InvitationStatusResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4539,6 +4644,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegistrationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_registration_api_v1_registrations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteRegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_registration_api_v1_registrations_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegistrationCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_registration_api_v1_registrations_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignUpRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignUpAcceptedResponse"];
                 };
             };
             /** @description Validation Error */

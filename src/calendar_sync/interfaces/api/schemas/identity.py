@@ -9,6 +9,7 @@ from typing import (
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     field_validator,
 )
@@ -29,6 +30,7 @@ from calendar_sync.interfaces.api.schemas.shared import (
 class SetupStatusResponse(ApiResponse):
     administrator_configured: bool
     password_reset_available: bool = False
+    public_registration_available: bool = False
     password_only_sign_in: bool
     """Whether the upgraded first User may still sign in by password alone."""
 
@@ -99,10 +101,14 @@ class RegistrationResponse(ApiResponse):
     policy: Literal["only_me", "invitation_only", "open"]
     only_me_available: bool
     """Whether Only Me may be chosen now: only while no other User exists."""
+    open_available: bool = False
+    open_unavailable_reason: (
+        Literal["identity_email_not_configured", "identity_email_not_tested"] | None
+    ) = None
 
 
 class RegistrationRequest(BaseModel):
-    policy: Literal["only_me", "invitation_only"]
+    policy: Literal["only_me", "invitation_only", "open"]
 
 
 class IssuedLinkResponse(ApiResponse):
@@ -119,17 +125,20 @@ class PendingInvitationResponse(ApiResponse):
 
 
 class LinkRequest(BaseModel):
-    token: str = Field(min_length=1, max_length=200)
+    token: str = Field(min_length=1, max_length=128, pattern=r"^[\x00-\x7f]+$", repr=False)
 
 
 class LinkStatusResponse(ApiResponse):
     usable: bool
 
 
-class AcceptInvitationRequest(BaseModel):
-    token: str = Field(min_length=1, max_length=200)
+class InvitationStatusResponse(LinkStatusResponse):
+    acceptance: Literal["direct", "verified"] | None
+
+
+class AcceptInvitationRequest(LinkRequest):
     email: str = Field(max_length=320)
-    password: str = Field(max_length=256)
+    password: str = Field(max_length=256, repr=False)
 
 
 class RequestPasswordResetRequest(BaseModel):
@@ -150,6 +159,29 @@ class PasswordResetLinkRequest(BaseModel):
 
 
 class ResetPasswordRequest(PasswordResetLinkRequest):
+    password: str = Field(min_length=12, max_length=1024, repr=False)
+
+
+class SignUpRequest(RequestPasswordResetRequest):
+    model_config = ConfigDict(extra="forbid")
+    invitation_token: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[\x00-\x7f]+$", repr=False
+    )
+
+
+class SignUpAcceptedResponse(ApiResponse):
+    accepted: Literal[True] = True
+
+
+class RegistrationCheckRequest(PasswordResetLinkRequest):
+    model_config = ConfigDict(extra="forbid")
+
+
+class RegistrationCheckResponse(LinkStatusResponse):
+    email: str | None
+
+
+class CompleteRegistrationRequest(RegistrationCheckRequest):
     password: str = Field(min_length=12, max_length=1024, repr=False)
 
 

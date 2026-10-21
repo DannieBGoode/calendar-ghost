@@ -55,7 +55,7 @@ class SqliteRegistrationSettings:
         self._clock = clock
 
     def policy(self) -> RegistrationPolicy:
-        with transaction(self._database_path) as connection:
+        with _registration_transaction(self._database_path) as connection:
             return _policy(connection)
 
     def set_policy(

@@ -43,6 +43,11 @@ from calendar_sync.application.identity.errors import (
     UserDisabled,
 )
 from calendar_sync.application.identity.ports import IssuedLink, UserQuery, UserSort
+from calendar_sync.application.identity.registration_ports import (
+    InvitationVerificationRequired,
+    OpenRegistrationUnavailable,
+    RegistrationStorageUnavailable,
+)
 from calendar_sync.application.operations.operator_overview import (
     OperatorOverview,
     OverviewQuery,
@@ -70,12 +75,13 @@ from calendar_sync.interfaces.api.dependencies import (
 )
 from calendar_sync.interfaces.api.plan_payload import person_plan_overview_response
 from calendar_sync.interfaces.api.problems import ApiProblem, problem_from
+from calendar_sync.interfaces.api.routes.registration import RegistrationAvailability, unavailable
 from calendar_sync.interfaces.api.routes.session import SignedInAnswers, signed_in
 from calendar_sync.interfaces.api.schemas.identity import (
     AcceptInvitationRequest,
+    InvitationStatusResponse,
     IssuedLinkResponse,
     LinkRequest,
-    LinkStatusResponse,
     PendingInvitationResponse,
     RegistrationRequest,
     RegistrationResponse,
@@ -122,6 +128,8 @@ class Administration(Protocol):
 
 class AdministrationServices(SignedInAnswers, Protocol):
     @property
+    def registrations(self) -> RegistrationAvailability: ...
+    @property
     def administration(self) -> Administration: ...
     @property
     def operator_overview(self) -> OperatorOverview: ...
@@ -140,7 +148,10 @@ NO_STORE = {"Cache-Control": "no-store"}
 
 @router.get("/api/v1/registration", response_model=RegistrationResponse)
 def registration(services: Services, actor: Administrator) -> RegistrationResponse:
-    return _registration(services.administration.show_registration.execute(actor))
+    try:
+        return _registration(services.administration.show_registration.execute(actor), services)
+    except RegistrationStorageUnavailable as error:
+        raise unavailable() from error
 
 
 @router.put("/api/v1/registration", response_model=RegistrationResponse)
@@ -150,9 +161,13 @@ def set_registration(
     policy = RegistrationPolicy(payload.policy)
     try:
         changed = services.administration.set_registration_policy.execute(actor, policy)
-    except OnlyMeNeedsOneUser as error:
+        return _registration(changed, services)
+    except (OnlyMeNeedsOneUser, OpenRegistrationUnavailable) as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
-    return _registration(changed)
+    except AdministratorRequired as error:
+        raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
+    except RegistrationStorageUnavailable as error:
+        raise unavailable() from error
 
 
 @router.get("/api/v1/invitations", response_model=list[PendingInvitationResponse])
@@ -196,15 +211,18 @@ def _throttled(error: LinkAttemptsThrottled) -> ApiProblem:
     return throttled
 
 
-@router.post("/api/v1/invitations/check", response_model=LinkStatusResponse)
+@router.post("/api/v1/invitations/check", response_model=InvitationStatusResponse)
 def check_invitation(
     payload: LinkRequest, request: Request, services: Services
-) -> LinkStatusResponse:
+) -> InvitationStatusResponse:
     check = services.administration.check_invitation
     try:
-        return LinkStatusResponse(usable=check.execute(payload.token, _client(request)))
+        acceptance = check.acceptance(payload.token, _client(request))
+        return InvitationStatusResponse(usable=acceptance is not None, acceptance=acceptance)
     except LinkAttemptsThrottled as error:
         raise _throttled(error) from error
+    except RegistrationStorageUnavailable as error:
+        raise unavailable() from error
 
 
 @router.post("/api/v1/invitations/accept", response_model=SessionResponse)
@@ -218,6 +236,10 @@ def accept_invitation(
         raise _throttled(error) from error
     except LinkUnusable as error:
         raise problem_from(status.HTTP_410_GONE, error) from error
+    except InvitationVerificationRequired as error:
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
+    except RegistrationStorageUnavailable as error:
+        raise unavailable() from error
     except (InvalidEmail, PasswordPolicyViolation) as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     except EmailTaken as error:
@@ -351,9 +373,15 @@ def deletion_response(result: DeletionResult) -> UserDeletionResponse:
     )
 
 
-def _registration(status_: RegistrationStatus) -> RegistrationResponse:
+def _registration(
+    status_: RegistrationStatus, services: AdministrationServices
+) -> RegistrationResponse:
+    readiness = services.registrations.readiness.status()
     return RegistrationResponse(
-        policy=status_.policy.value, only_me_available=status_.only_me_available
+        policy=status_.policy.value,
+        only_me_available=status_.only_me_available,
+        open_available=readiness.available,
+        open_unavailable_reason=readiness.reason,
     )
 
 

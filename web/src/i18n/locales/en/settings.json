@@ -140,7 +140,8 @@
     "invitationOnlyHint": "People join with a link you create. Each link works once and expires after 7 days.",
     "saved": {
       "onlyMe": "Only you can use this Calendar Ghost now.",
-      "invitationOnly": "People can now join with an invitation link."
+      "invitationOnly": "People can now join with an invitation link.",
+      "open": "People can now join after verifying their email."
     }
   },
   "links": {
