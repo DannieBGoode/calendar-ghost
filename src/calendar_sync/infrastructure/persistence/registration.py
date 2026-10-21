@@ -94,6 +94,10 @@ class SqliteRegistrationSettings:
             users = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
             require_registration_change(RegistrationPolicy.ONLY_ME, int(users))
             _revoke_registration(connection, RegistrationPolicy.ONLY_ME, at)
+            connection.execute("DELETE FROM provider_sign_in_settings")
+            connection.execute("DELETE FROM provider_flows")
+            connection.execute("DELETE FROM provider_link_flows")
+            connection.execute("DELETE FROM provider_pending_links")
             connection.execute(
                 "UPDATE identity_email_readiness SET fingerprint = NULL, tested_at = NULL, "
                 "generation = generation + 1 WHERE singleton = 1"

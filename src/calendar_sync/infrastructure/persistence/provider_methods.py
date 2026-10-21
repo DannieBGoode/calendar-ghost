@@ -47,11 +47,12 @@ def _live_owner(connection: sqlite3.Connection, owner: LinkOwner, now: str) -> b
     )
 
 
-def _advance(connection: sqlite3.Connection, owner: LinkOwner, now: str) -> None:
+def advance_methods(connection: sqlite3.Connection, owner: LinkOwner, now: str) -> None:
     connection.execute(
         "UPDATE users SET credential_revision = credential_revision + 1 WHERE id = ?",
         (owner.user_id.value,),
     )
+    connection.execute("DELETE FROM provider_link_flows WHERE user_id=?", (owner.user_id.value,))
     revoke_resets(connection, owner.user_id, now)
     revoke_email_changes(connection, owner.user_id, now)
     connection.execute(
@@ -106,7 +107,7 @@ class SqliteProviderMethods:
                 "DELETE FROM provider_identities WHERE id = ? AND user_id = ?",
                 (identity_id, owner.user_id.value),
             )
-            _advance(connection, owner, now)
+            advance_methods(connection, owner, now)
         return True
 
     def set_password(self, owner: LinkOwner, expected: CredentialSnapshot, hashed: str) -> bool:
@@ -122,5 +123,5 @@ class SqliteProviderMethods:
             connection.execute(
                 "UPDATE users SET password_hash = ? WHERE id = ?", (hashed, owner.user_id.value)
             )
-            _advance(connection, owner, now)
+            advance_methods(connection, owner, now)
         return True

@@ -141,3 +141,33 @@ def claim_pending(
         ).rowcount
         == 1
     )
+
+
+def claim_flow(connection: sqlite3.Connection, flow: ProviderFlow, now: datetime) -> bool:
+    """Finish only the flow claimed before exchange and still live after external work."""
+    query = (
+        "DELETE FROM provider_flows WHERE state_hash=? AND browser_hash=? AND provider=? "
+        "AND claimed_at IS NOT NULL AND expires_at>?"
+        if flow.context.owner is None
+        else "DELETE FROM provider_link_flows WHERE state_hash=? AND browser_hash=? AND provider=? "
+        "AND claimed_at IS NOT NULL AND expires_at>?"
+    )
+    return (
+        connection.execute(
+            query, (flow.state_hash, flow.browser_hash, flow.provider, now.isoformat())
+        ).rowcount
+        == 1
+    )
+
+
+def cancel_browser(
+    connection: sqlite3.Connection, browser_hash: str, keep_session_hash: str | None = None
+) -> None:
+    """Shared by sign-in writers in the same transaction as replacing the browser session."""
+    connection.execute("DELETE FROM provider_flows WHERE browser_hash=?", (browser_hash,))
+    connection.execute("DELETE FROM provider_link_flows WHERE browser_hash=?", (browser_hash,))
+    connection.execute("DELETE FROM provider_pending_links WHERE browser_hash=?", (browser_hash,))
+    connection.execute(
+        "DELETE FROM user_sessions WHERE browser_hash=? AND token_hash IS NOT ?",
+        (browser_hash, keep_session_hash),
+    )

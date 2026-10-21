@@ -34,7 +34,9 @@ def test_upgrade_from_38_preserves_every_user_field_and_references(tmp_path: Pat
             (FIRST.id.value, SECOND.id.value),
         )
         connection.execute(
-            "INSERT INTO user_sessions VALUES ('session', ?, 'start', 'end')", (SECOND.id.value,)
+            "INSERT INTO user_sessions(token_hash,user_id,created_at,expires_at) "
+            "VALUES ('session', ?, 'start', 'end')",
+            (SECOND.id.value,),
         )
         before_users = [dict(row) for row in connection.execute("SELECT * FROM users ORDER BY id")]
         before_schema = [

@@ -195,3 +195,7 @@ class ProviderAdmission(Protocol):
     def confirm(
         self, pending: str, browser: BrowserProof, expected: CredentialSnapshot
     ) -> Session | None: ...
+
+
+class ProviderFlowMaintenance(Protocol):
+    def purge(self, before: datetime, limit: int) -> int: ...

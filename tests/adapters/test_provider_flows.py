@@ -31,6 +31,7 @@ def database(tmp_path: Path) -> Path:
     path = tmp_path / "flows.db"
     initialize_database(path)
     with transaction(path) as connection:
+        connection.execute("INSERT INTO provider_sign_in_settings VALUES ('google',1)")
         for name in ("one", "two"):
             connection.execute(
                 "INSERT INTO users(id, email, password_hash, role, state, created_at) "
@@ -137,6 +138,9 @@ def test_pending_rotation_binding_expiry_and_sealing(database: Path) -> None:
         False,
     )
     first = service.defer(flow, claims)
+    state = secrets.token_urlsafe(32)
+    flow = service.begin(intent, state)
+    assert service.consume(ProviderCallback("google", state, "code", browser)) == flow
     second = service.defer(
         flow, replace(claims, key=ProviderIdentityKey(claims.key.issuer, "new-subject"))
     )
@@ -217,6 +221,7 @@ def test_pending_refuses_stale_context(database: Path, change: str) -> None:
     service = flows(database, clock)
     browser, state = BrowserProof(secrets.token_urlsafe(32)), secrets.token_urlsafe(32)
     flow = service.begin(BeginIntent("google", browser), state)
+    assert service.consume(ProviderCallback("google", state, "code", browser)) == flow
     claims = ProviderClaims(ProviderIdentityKey("https://issuer.test", "subject"), None, False)
     pending = service.defer(flow, claims)
     if change == "expiry":
@@ -254,9 +259,13 @@ def test_pending_claim_shares_final_transaction(database: Path) -> None:
     service = flows(database)
     browser, state = BrowserProof(secrets.token_urlsafe(32)), secrets.token_urlsafe(32)
     flow = service.begin(BeginIntent("google", browser), state)
+    assert service.consume(ProviderCallback("google", state, "code", browser)) == flow
     claims = ProviderClaims(ProviderIdentityKey("https://issuer.test", "subject"), None, False)
     first = service.defer(flow, claims)
     assert service.load_pending(browser, first.token) is not None
+    state = secrets.token_urlsafe(32)
+    flow = service.begin(BeginIntent("google", browser), state)
+    assert service.consume(ProviderCallback("google", state, "code", browser)) == flow
     second = service.defer(flow, claims)
     with transaction(database) as connection:
         assert not claim_pending(connection, token_hash(first.token), flow.browser_hash, NOW)

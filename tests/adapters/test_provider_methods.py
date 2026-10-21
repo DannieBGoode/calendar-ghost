@@ -59,7 +59,8 @@ def methods(tmp_path: Path) -> MethodsHarness:
             ("foreign", FIRST),
         ]:
             connection.execute(
-                "INSERT INTO user_sessions VALUES (?, ?, ?, ?)",
+                "INSERT INTO user_sessions(token_hash,user_id,created_at,expires_at) "
+                "VALUES (?, ?, ?, ?)",
                 (
                     token_hash(token),
                     user.id.value,

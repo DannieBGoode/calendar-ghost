@@ -831,6 +831,18 @@ in batches of 250; stopped services and backups may retain them longer. OIDC sto
 IPv6 networks use /64, and the front gate admits at most 10,000 live network keys. Denied requests
 add no durable counter. These adapters become active when the provider sign-in routes are composed.
 
+A callback claims its flow once before contacting the provider. The claimed record stays
+revocable until admission or a pending password proof replaces it; setup and another successful
+sign-in in the same browser cancel it. Pending proofs also carry a purpose-keyed email digest for
+atomic sibling invalidation. The admission transaction rechecks current ownership, credentials,
+provider configuration, policy and Invitation evidence, then commits identity binding, any new
+ordinary User without an own Plan, proof consumption and a fresh seven-day session together.
+Provider sessions retain a hash of their anonymous browser binding for atomic cross-tab replacement;
+that binding is never itself a session token. Explicit owned linking keeps the current session,
+advances the credential revision and ends other sessions and proofs. Password checks, token
+hashing, sealing and provider calls happen before the final write lock. The provider storage and
+admission adapters remain inactive until their routes and ordinary sign-in integration are composed.
+
 Before upgrading, stop the service, back up the complete database/data directory with its matching
 Master Key, and retain the previous image. Startup applies the migration and checks all foreign
 keys atomically. There is no down migration. To roll back, stop the service and restore the

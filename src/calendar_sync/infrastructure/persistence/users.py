@@ -63,7 +63,7 @@ class SqliteUserDirectory:
         self._read_timeout = read_timeout
 
     def sign_in_credentials(self, email: str | None) -> SignInCredentials | None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=self._sign_in_timeout) as connection:
             row = connection.execute(
                 f"SELECT {_COLUMNS}, password_hash, credential_revision FROM users "  # noqa: S608
                 "WHERE email IS ?",

@@ -23,6 +23,8 @@ from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import email_address
 from calendar_sync.domain.provider_identity import ProviderClaims
 from calendar_sync.infrastructure.persistence.provider_flow_records import (
+    cancel_browser,
+    claim_flow,
     context_json,
     flow_transaction,
     live_owner,
@@ -73,7 +75,12 @@ class SqliteProviderFlows:
             connection.execute("BEGIN IMMEDIATE")
             require_capacity(connection, now.isoformat())
             if intent.owner is None:
-                connection.execute("INSERT INTO provider_flows VALUES (?, ?, ?, ?, ?)", values)
+                connection.execute(
+                    "INSERT INTO "
+                    "provider_flows(state_hash,provider,browser_hash,expires_at,sealed_context) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    values,
+                )
             else:
                 if not live_owner(connection, intent.owner, now.isoformat()):
                     raise ProviderSignInRefused
@@ -98,10 +105,14 @@ class SqliteProviderFlows:
         with flow_transaction(self._database) as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "DELETE FROM provider_flows WHERE state_hash = ? RETURNING *", (hashed,)
+                "UPDATE provider_flows SET claimed_at=? WHERE state_hash = "
+                "? AND claimed_at IS NULL RETURNING *",
+                (self._clock.now().isoformat(), hashed),
             ).fetchone()
             owned = connection.execute(
-                "DELETE FROM provider_link_flows WHERE state_hash = ? RETURNING *", (hashed,)
+                "UPDATE provider_link_flows SET claimed_at=? WHERE "
+                "state_hash = ? AND claimed_at IS NULL RETURNING *",
+                (self._clock.now().isoformat(), hashed),
             ).fetchone()
             if owned is not None:
                 row = owned
@@ -129,18 +140,33 @@ class SqliteProviderFlows:
         token = secrets.token_urlsafe(32)
         hashed = token_hash(token)
         sealed = seal_pending(flow, claims, self._secrets, hashed)
+        email_digest = self.email_digest(claims.email)
         with flow_transaction(self._database) as connection:
             connection.execute("BEGIN IMMEDIATE")
-            connection.execute(
-                "DELETE FROM provider_pending_links WHERE browser_hash = ?", (flow.browser_hash,)
-            )
+            enabled = connection.execute(
+                "SELECT 1 FROM provider_sign_in_settings WHERE provider=? AND enabled=1",
+                (flow.provider,),
+            ).fetchone()
+            if not enabled or flow.context.config_fingerprint != self.fingerprints.get(
+                flow.provider
+            ):
+                raise ProviderSignInRefused
+            if not claim_flow(connection, flow, self._clock.now()):
+                raise ProviderSignInRefused
+            cancel_browser(connection, flow.browser_hash)
             require_capacity(connection, self._clock.now().isoformat())
             connection.execute(
-                "INSERT INTO provider_pending_links VALUES (?, ?, ?, ?)",
-                (hashed, flow.browser_hash, flow.expires_at.isoformat(), sealed),
+                "INSERT INTO "
+                "provider_pending_links(email_digest,token_hash,browser_hash,"
+                "expires_at,sealed_context) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (email_digest, hashed, flow.browser_hash, flow.expires_at.isoformat(), sealed),
             )
         self._maintain()
         return PendingLink(token, flow.expires_at)
+
+    def email_digest(self, email: str | None) -> str | None:
+        return self._secrets.digest("pending-email", email) if email is not None else None
 
     def pending(self, browser: BrowserProof, token: str) -> PendingLink | None:
         loaded = self.load_pending(browser, token)
