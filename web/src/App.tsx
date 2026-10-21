@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { AddEmailScreen } from "@/features/add-email-screen"
 import { AuthScreen } from "@/features/auth-screen"
+import { EmailChangePage } from "@/features/email-change-page"
 import { Dashboard } from "@/features/dashboard"
 import { ForgotPasswordPage } from "@/features/forgot-password-page"
 import { InvitationPage } from "@/features/invitation-page"
@@ -47,8 +48,10 @@ const navItems: { id: AppView; labelKey: MessageKey; icon: typeof Waypoints }[] 
 ]
 
 export default function App() {
+  useUserScopedCache()
   // A link to pass on opens its own page, before any session; accepting an Invitation signs in.
   const [publicPage, setPublicPage] = useState(() => publicPageAt(window.location.pathname))
+  if (window.location.pathname.replace(/\/+$/, "") === "/email-change") return <EmailChangePage />
   if (window.location.pathname.replace(/\/+$/, "") === "/forgot-password") return <ForgotPasswordPage />
   if (publicPage === "invitation") return <InvitationPage onSignedIn={() => setPublicPage(null)} />
   if (publicPage === "password-reset") return <PasswordResetPage />
@@ -58,7 +61,6 @@ export default function App() {
 /** Waits for the setup and session state, then shows the sign-in steps or the signed-in app. */
 function SessionGate() {
   const { t } = useI18n()
-  useUserScopedCache()
   const setup = useQuery({ queryKey: ["setup"], queryFn: api.setup })
   const configured = setup.data?.administrator_configured === true
   const session = useQuery({

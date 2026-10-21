@@ -23,7 +23,22 @@
       "change": "Change email",
       "newLabel": "New email",
       "save": "Save email",
-      "saved": "You now sign in with {email}."
+      "saved": "You now sign in with {email}.",
+      "pending": "Awaiting verification: {email}",
+      "pendingNote": "Your current email stays active until you confirm the new one.",
+      "expires": "Link expires:",
+      "cancelPending": "Cancel email change",
+      "cancelled": "The pending email change was cancelled.",
+      "unavailable": "Email changes are unavailable. Ask your administrator to check identity email settings. Your current email still works.",
+      "verifyNote": "Open the link at your new address and enter your current password again. A new request replaces your previous link.",
+      "cooldown": {
+        "one": "Wait {count} second before requesting another link for the same address.",
+        "other": "Wait {count} seconds before requesting another link for the same address."
+      },
+      "directNote": "Email verification is not configured here. Saving changes your sign-in email and signs out your other devices.",
+      "request": "Request verification",
+      "requested": "If the address can be used, a verification link will be sent. Your current email stays active until you confirm it.",
+      "cancelBeforeDirect": "Cancel the pending change before saving an email without verification."
     },
     "password": {
       "title": "Password",

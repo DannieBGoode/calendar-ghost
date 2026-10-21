@@ -4,8 +4,7 @@ import { useRef, useState, type SyntheticEvent } from "react"
 import { CurrentPasswordField } from "@/components/current-password-field"
 import { NewPasswordFields } from "@/components/new-password-fields"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { OwnEmailItem } from "@/features/settings-own-email"
 import { InstantSyncItem } from "@/features/settings-instant-sync"
 import { SelfDeletionItem } from "@/features/settings-self-deletion"
 import { apiErrorMessage } from "@/i18n/api-errors"
@@ -42,7 +41,7 @@ export function OwnAccountSection({
         </div>
       </div>
       <div className="settings-list">
-        <EmailItem email={user.email} onDone={setMessage} />
+        <OwnEmailItem email={user.email} onDone={setMessage} />
         <PasswordItem onDone={setMessage} />
         <EmailNotificationsItem user={user} sendsEmail={sendsEmail} onDone={setMessage} />
         <InstantSyncItem user={user} onDone={setMessage} />
@@ -56,87 +55,8 @@ export function OwnAccountSection({
   )
 }
 
-function EmailItem({ email, onDone }: { email: string | null; onDone: Announce }) {
-  const i18n = useI18n()
-  const { t } = i18n
-  const queryClient = useQueryClient()
-  const [open, setOpen] = useState(false)
-  const [next, setNext] = useState("")
-  const [password, setPassword] = useState("")
-  const toggle = useRef<HTMLButtonElement>(null)
-  const first = useRef<HTMLInputElement>(null)
-  useDisclosureFocus(open, first, toggle)
-  const save = useMutation({
-    mutationFn: () => api.setOwnEmail(next.trim(), password),
-    onSuccess: async (user) => {
-      setOpen(false)
-      setPassword("")
-      onDone(t("settings.ownAccount.email.saved", { email: user.email ?? next.trim() }))
-      await queryClient.invalidateQueries({ queryKey: ["session"] })
-    },
-  })
-
-  function submit(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (next.trim() && password) save.mutate()
-  }
-
-  // Cancelling forgets what was typed and any refusal, so the form opens fresh.
-  function cancel() {
-    setOpen(false)
-    setNext("")
-    setPassword("")
-    save.reset()
-  }
-
-  return (
-    <div className="setting-item">
-      <div className="setting-row">
-        <div>
-          <h3>{t("settings.ownAccount.email.title")}</h3>
-          <p>{email ?? t("settings.ownAccount.email.none")}</p>
-        </div>
-        {!open && (
-          <Button ref={toggle} id="own-email-toggle" type="button" variant="outline" onClick={() => setOpen(true)}>
-            {t("settings.ownAccount.email.change")}
-          </Button>
-        )}
-      </div>
-      {open && (
-        <form className="setting-form" onSubmit={submit}>
-          <div className="field-stack">
-            <Label htmlFor="own-email">{t("settings.ownAccount.email.newLabel")}</Label>
-            <Input
-              ref={first}
-              id="own-email"
-              type="email"
-              autoComplete="email"
-              value={next}
-              onChange={(event) => setNext(event.target.value)}
-              required
-            />
-          </div>
-          <CurrentPasswordField id="own-email-password" value={password} onChange={setPassword} />
-          {save.error && (
-            <p className="field-error" role="alert">
-              {apiErrorMessage(i18n, save.error)}
-            </p>
-          )}
-          <div className="setting-form-actions">
-            <Button type="submit" disabled={!next.trim() || !password || save.isPending}>
-              {save.isPending ? t("auth.pleaseWait") : t("settings.ownAccount.email.save")}
-            </Button>
-            <Button type="button" variant="ghost" onClick={cancel}>
-              {t("settings.ownAccount.cancel")}
-            </Button>
-          </div>
-        </form>
-      )}
-    </div>
-  )
-}
-
 function PasswordItem({ onDone }: { onDone: Announce }) {
+  const queryClient = useQueryClient()
   const i18n = useI18n()
   const { t } = i18n
   const [open, setOpen] = useState(false)
@@ -152,6 +72,7 @@ function PasswordItem({ onDone }: { onDone: Announce }) {
       setCurrent("")
       setPasswords({ password: "", confirmation: "" })
       onDone(t("settings.ownAccount.password.saved"))
+      void queryClient.invalidateQueries({ queryKey: ["own-email-change"] })
     },
   })
   const ready = current.length > 0 && newPasswordReady(passwords.password, passwords.confirmation)

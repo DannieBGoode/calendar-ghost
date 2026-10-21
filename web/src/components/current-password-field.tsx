@@ -10,10 +10,14 @@ export function CurrentPasswordField({
   value,
   onChange,
   ref,
+  invalid = false,
+  errorId,
 }: {
   id: string
   value: string
   onChange: (value: string) => void
+  invalid?: boolean
+  errorId?: string | undefined
   ref?: Ref<HTMLInputElement>
 }) {
   const { t } = useI18n()
@@ -27,6 +31,9 @@ export function CurrentPasswordField({
         autoComplete="current-password"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        maxLength={1024}
+        aria-invalid={invalid}
+        aria-describedby={errorId}
         required
       />
     </div>

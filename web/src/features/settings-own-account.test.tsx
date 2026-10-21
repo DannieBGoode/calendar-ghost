@@ -38,6 +38,7 @@ let calls: Call[] = []
 
 function serve(answers: Record<string, Response> = {}) {
   const routes: Record<string, Response> = {
+    "GET /api/v1/account/email-change": jsonResponse({ mode: "direct", reason: null, pending: null }),
     "PUT /api/v1/account/email": jsonResponse({ ...user, email: "robin@home.example.test" }),
     "PUT /api/v1/account/password": NO_CONTENT,
     "PUT /api/v1/account/notifications": jsonResponse({ ...user, notify_by_email: false }),
@@ -106,6 +107,7 @@ async function renderSection(
   root = createRoot(container)
   // As fresh as the app keeps answers, so a test can tell a cached answer from a new one.
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
+  queryClient.setQueryData(["session"], { authenticated: true, user: signedIn })
   for (const [key, data] of Object.entries(cached)) queryClient.setQueryData([key], data)
   act(() => {
     root?.render(
@@ -242,6 +244,46 @@ describe("OwnAccountSection", () => {
     expect(status()).toBe("You now sign in with robin@home.example.test.")
   })
 
+  it("keeps the current email beside the pending address and deadline, and cancels the exact request", async () => {
+    await renderSection(testI18n(), { answers: {
+      "GET /api/v1/account/email-change": jsonResponse({ mode: "verified", reason: null, pending: { id: "pending-one", email: "new@example.test", expires_at: "2026-10-22T12:00:00Z" } }),
+      "DELETE /api/v1/account/email-change?request_id=pending-one": NO_CONTENT,
+    } })
+    expect(container.textContent).toContain(user.email)
+    expect(container.textContent).toContain("new@example.test")
+    expect(container.querySelector("time")?.dateTime).toBe("2026-10-22T12:00:00Z")
+    await click(button("Cancel email change"))
+    expect(calls.some((call) => call.method === "DELETE" && call.path.endsWith("request_id=pending-one"))).toBe(true)
+    expect(calls.filter((call) => call.method === "GET" && call.path.endsWith("email-change")).length).toBeGreaterThan(1)
+  })
+
+  it("requests verification without changing the current address, clears the password, and explains replacement and cooldown", async () => {
+    await renderSection(testI18n(), { answers: {
+      "GET /api/v1/account/email-change": jsonResponse({ mode: "verified", reason: null, pending: null }),
+      "POST /api/v1/account/email-change": jsonResponse({ accepted: true }, 202),
+    } })
+    await click(button("Change email"))
+    expect(container.textContent).toContain("replaces your previous link")
+    expect(container.textContent).toContain("60 seconds")
+    type(field("own-email"), "new@example.test")
+    type(field("own-email-password"), "a very long password")
+    await submit(field("own-email").form!)
+    expect(sent("POST", "/api/v1/account/email-change")).toEqual({ email: "new@example.test", password: "a very long password" })
+    expect(sent("PUT", "/api/v1/account/email")).toBeUndefined()
+    expect(container.textContent).toContain(user.email)
+    expect(container.textContent).toContain("If the address can be used")
+    expect(container.querySelector("#own-email-password")).toBeNull()
+  })
+
+  it("refuses changes when configured email is unsafe and leaves sign-in access visible", async () => {
+    await renderSection(testI18n(), { answers: {
+      "GET /api/v1/account/email-change": jsonResponse({ mode: "unavailable", reason: "origin_insecure", pending: null }),
+    } })
+    expect(container.textContent).toContain(user.email)
+    expect(container.textContent).toContain("administrator")
+    expect(button("Change email").disabled).toBe(true)
+  })
+
   it("changes the password once the new one is confirmed, and says other devices were signed out", async () => {
     await renderSection(testI18n())
     await click(button("Change password"))
@@ -258,6 +300,7 @@ describe("OwnAccountSection", () => {
       new_password: "a very long password",
     })
     expect(status()).toBe("Your password was changed. Your other devices were signed out.")
+    expect(calls.filter((call) => call.method === "GET" && call.path.endsWith("email-change")).length).toBeGreaterThan(1)
   })
 
   it("explains an incorrect current password", async () => {
