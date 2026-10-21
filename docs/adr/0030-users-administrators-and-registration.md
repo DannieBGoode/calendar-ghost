@@ -29,8 +29,10 @@ by a password alone.
   every installation, with no setting to reveal more. What it shows about a User is documented
   (see the amendment below).
 - **Registration Policy** is Only Me by default, Invitation Only, or Open. Under Only Me, which
-  new and upgraded installations start with, nobody can join, and the Web UI hides Users,
-  Invitations, Plans, and the Operator Overview. An Installation Administrator may switch to
+  new and upgraded installations start with, public joining is closed. The provider sign-in
+  amendment below permits a narrow live-Invitation exception and keeps People accessible when
+  other Users exist. With only the administrator, the Web UI hides Users, Invitations, Plans,
+  and the Operator Overview. An Installation Administrator may switch to
   Invitation Only or Open at any time, but back to Only Me only while no other User exists. Data
   is always User-scoped whatever the policy; the policy only decides who may join and what the Web
   UI shows. Open is available to any installation whose administrator explicitly chooses it
@@ -38,7 +40,8 @@ by a password alone.
   email verification; Invitation Only works directly without SMTP. Invitations and
   administrator-issued Password Reset Links are single-use and expire after 7 days; self-service
   reset links last 1 hour. None lets an administrator see or set a password.
-- **Users sign in with email and password.** Under Invitation Only, an email is not verified,
+- **Users sign in with email/password or an enabled Provider Identity**, as amended below.
+  Under Invitation Only, an email is not verified,
   because the administrator vouched for the person and the installation may not send email.
 - **Upgrading** turns the existing administrator into the first User, with the role and every
   existing record, and no email. Until that User adds one, sign-in accepts the password alone; the
@@ -102,9 +105,9 @@ their detail:
   Administrator, that no Plan limits administrators, with any Plan they were given; and a Plan that
   applies once Plans are on. A person's page offers "Change plan". A failure to read Plans leaves
   the Plan out instead of failing the page.
-- **Plans have no effect under Only Me.** Installation Administrators are never limited, and under
-  Only Me the only User administers, so the Web UI hides Plans there, as it hides Users and
-  Invitations.
+- **Plans have no effect for the sole administrator under Only Me.** Installation Administrators
+  are never limited, so that view hides Plans, Users, and Invitations. The provider sign-in
+  amendment below covers ordinary Users admitted later through a live Invitation.
 - **Returning to setup turns Plans off,** keeping their definitions and the default, so a new
   first User never inherits limits nobody can see. Invitations carry no Plan: an invited User
   starts on the Default Plan.
@@ -154,7 +157,7 @@ tokens, whose names can say what a person runs.
 [ADR 0040](0040-open-registration-and-email-ownership.md) and
 [the open-registration design](../superpowers/specs/2026-10-20-open-registration-design.md)
 record verified registration, recovery, and email ownership. The end-to-end Open implementation
-is complete on the delivery branch; final review and publication are tracked in its plan.
+merged as PR #133; review and publication evidence remains in its plan.
 
 Open is available to any installation whose administrator chooses it after a
 successful SMTP test. Public registration and Invitations redeemed under Open require email
@@ -184,9 +187,9 @@ replaces the earlier deferral of OIDC beyond password sign-in with a planned Goo
 sign-in PR. After merged PR #129 and PR #130, the remaining order is verified email changes;
 context module splits with no behavior change; Open sign-up end to end; Google/Microsoft sign-in
 and sign-up; and hosted backup/restore before hosted launch. Verified email changes and context
-splits are complete, and Open sign-up is implemented on the delivery branch with final review and
-publication pending. Provider sign-in and hosted backup/restore remain planned, each requiring its
-own approved plan.
+splits are merged in PRs #131 and #132, and Open sign-up in PR #133. Provider sign-in is implemented
+on its delivery branch under the [approved plan](../superpowers/plans/2026-10-21-provider-sign-in.md), with final
+whole-branch reviews, gates, publication, and CI tracked there. Hosted backup/restore remains planned.
 
 Provider identities are issuer plus `sub`, never email. Linking starts from Your account while
 signed in. Auto-link at sign-in requires the provider to assert a verified email. Only Me and
@@ -194,5 +197,30 @@ Invitation Only admit existing people or an invited person whose verified email 
 creates an ordinary User following the Default Plan. Each provider is off by default and enabled
 by the administrator. Reuse existing OAuth clients with only `openid email profile` sign-in scopes;
 calendar consent remains separate. People may keep or set a password and cannot remove their last
-sign-in method. Use maintained library support, with no new service and no ORM. Shipped sign-in
-remains email/password until that PR lands.
+usable sign-in method. Authlib and joserfc supply maintained protocol/cryptographic support, with
+no new service and no ORM.
+
+The Only Me wording above is amended narrowly: choosing it still requires one User, cancels all
+registration proofs, and forbids ordinary Invitation issuance and password acceptance. It does
+not revoke still-live Invitations. A later provider admission can consume one with an email
+matching the provider-verified email, creating an ordinary User with no own Plan while Only Me
+remains selected. Public joining without that Invitation stays closed. People and its existing
+management controls remain available whenever other Users exist; the sole-administrator Only Me
+view still hides them. This also amends the earlier assertion that Only Me always has one User
+and therefore never needs Plans: an ordinary User admitted this way follows the Default Plan
+under the existing Allowance rules. Installation Administrators remain unlimited.
+
+Provider Identity means exact validated issuer plus `sub`, independent of mutable email, and is
+not a Connected Account or a charge against its Allowance. Microsoft email is unverified in this
+implementation. Unlinked people receive the generic password-link form; newcomers finish the
+existing verified registration flow under Open, then explicitly link from Your account. No new
+email-proof mechanism is introduced. Replacing a Microsoft client ID changes its pairwise `sub`,
+so people need a password or another method to recover and link the new identity.
+
+A usable method is a password or a linked provider currently configured and enabled. Unlinking
+and administrator disablement must leave each affected active User one. Disablement retains
+bindings; external configuration loss can still interrupt access. A live owning session may set
+a first password, but changing email or deleting oneself still requires a current password.
+There is no password removal. Administrator-issued reset can set a first password without
+enabling a disabled User. See [ADR 0040](0040-open-registration-and-email-ownership.md#amendment-provider-sign-in-implementation-2026-10-21)
+and the [operational recovery guide](../deployment.md#provider-sign-in-limits-and-recovery).

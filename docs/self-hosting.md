@@ -338,6 +338,8 @@ link first; it cannot outlive that expiry, and the Invitation is consumed only w
 finishes. Under Invitation Only the email/password form still joins directly without SMTP.
 A verification link already bound to an Invitation can finish there without current SMTP readiness.
 Only Me refuses both routes. Revoking an Invitation also makes its verification links unusable.
+The separate provider admission exception is described below; it does not enable either password
+joining route under Only Me.
 
 If no link arrives, check spam, ask the administrator to check identity email, and resend within
 the limits. Earlier delivered links stay valid until one completes; there is no automatic retry
@@ -352,6 +354,90 @@ registration proof. Reopening never revives cancelled links; request new ones. R
 also revokes Invitations and clears email readiness.
 See [exact limits and retention](deployment.md#verified-registration) and
 [migration 38 rollback](deployment.md#migration-38-open-registration).
+
+### Sign in with Google or Microsoft
+
+Both providers start off, including after an upgrade. Setup still creates the first administrator
+with email and password. To offer provider sign-in:
+
+1. Keep the installation's existing Google Web application or Microsoft Entra client ID and
+   secret, and its Installation Master Key. Set `CALENDAR_SYNC_PUBLIC_URL` to the exact HTTPS
+   root origin people use, such as `https://calendar.example.com`, and set
+   `CALENDAR_SYNC_SECURE_COOKIES=true`. No path, user information, query, or fragment is allowed.
+   HTTP localhost or literal loopback is permitted for development; use `http://localhost:8000`
+   for the providers' local Web callbacks. An HTTP LAN address is not usable.
+2. Add the following exact **Web** redirect URIs to the existing client registrations, replacing
+   the example origin with yours. Keep the calendar callbacks already registered:
+
+   | Provider | Additional sign-in callback |
+   | --- | --- |
+   | Google | `https://calendar.example.com/api/v1/sign-in/google/callback` |
+   | Microsoft | `https://calendar.example.com/api/v1/sign-in/microsoft/callback` |
+
+   Sign-in requests exactly `openid email profile`, without calendar, `offline_access`, or
+   `User.Read` scopes. Add `email`/`profile` identity permissions to the client registration as
+   needed. The `CALENDAR_SYNC_*_REDIRECT_URI` settings still name calendar callbacks; sign-in
+   callbacks derive only from `CALENDAR_SYNC_PUBLIC_URL`. The browser must return to that origin.
+3. Apply [path-only authentication logging](deployment.md#provider-sign-in-http-and-proxy-logs)
+   on every reverse proxy and restart after changing environment settings. In
+   **Settings → Administration → Sign-in providers**, check the displayed callback and enable
+   each provider you want to offer. Missing configuration keeps it unavailable. For existing
+   Users and invited provider admission under closed policies, SMTP is unnecessary. Open
+   admission still needs the [matching successful identity email test](#test-identity-email).
+
+People can use the enabled buttons on sign-in, joining, and Invitation pages. Under Open, a
+provider-verified email can create an ordinary User with no own Plan, following the Default Plan
+when Plans are on. It creates no Connected Account and uses none of that Allowance. Connect
+calendars separately under **Settings → Connections**; signing in grants no calendar access.
+
+A Provider Identity is the validated issuer plus `sub`, not the email shown by the provider.
+Once linked, it continues to identify the same User if that email changes, without changing the
+User's Calendar Ghost email. A new binding may automatically link to an existing active User
+only with provider-verified email. You can instead sign in through a method you already have and
+choose **Link** in **Settings → Your account**. A binding belonging to another User is refused.
+
+Microsoft email is treated as unverified: neither `email`, `preferred_username`, nor `upn`
+establishes ownership. An already-linked Microsoft identity signs in normally. An unlinked
+identity gets the same email/password form whether an account exists or not. Existing Users
+enter their Calendar Ghost password, or sign in separately and link from Your account. Newcomers
+use **Create account**, finish the existing email verification/password flow when Open is
+available, then explicitly link Microsoft from Your account. Under Invitation Only, use the
+ordinary Invitation flow first. No Microsoft email claim alone creates a User.
+
+Only Me and Invitation Only admit a new User through provider sign-in only with a still-live
+Invitation and an email entered for that Invitation matching the provider-verified email. The
+final transaction rechecks both and consumes the Invitation. Choosing Only Me still requires you
+to be the sole User and cancels registration proofs; it keeps live Invitations. This narrow
+provider exception can admit another User later while Only Me remains selected. People and its
+existing management controls then stay available. Only Me still forbids issuing Invitations,
+ordinary password acceptance, and public joining without an Invitation. Before choosing Only Me,
+revoke any outstanding Invitation on People if that person should no longer join. Returning to
+setup revokes all of them.
+
+Your account lists your password and linked providers. **Set password** creates a first password
+from your live session, with 12 to 256 characters; replacing one requires its current value.
+Set a password before changing your email or deleting yourself, since those actions still
+require it. Linking from Your account, unlinking, and setting a first password keep the current session, end other
+browser sessions, and invalidate pending reset and email-change work. Password removal is not
+offered. You cannot remove your last usable method, and an administrator cannot disable a
+provider if an active User would have no password or other configured, enabled linked provider.
+Disablement keeps the bindings for later re-enablement.
+
+Environment changes can still interrupt provider-only access. Keep a password or another usable
+method before changing provider configuration. Restore the original settings, or have an active
+administrator issue a seven-day Password Reset Link, which can set a first password without
+enabling a disabled User. If nobody can administer, restore configuration or follow
+[backup recovery](data-ownership.md#backups-and-recovery); no offline reset command is shipped.
+Microsoft's `sub` is specific to the client ID, so replacing that ID loses the match to existing
+bindings. Sign in with a password or another method, link the new identity, then remove the old
+binding. Rotating a secret on the same client is different, but invalidates in-flight flows.
+See Microsoft's [ID-token claims reference](https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference).
+
+Flows expire after ten minutes. Retry from sign-in after expiry or configuration changes. A
+shared limit of 100 provider starts per hour can temporarily block everyone who relies only on
+provider sign-in; wait for the allowance, use a password, or use administrator-issued recovery.
+See [exact limits and network bounds](deployment.md#provider-sign-in-limits-and-recovery) and
+[migration 39 backup and rollback](deployment.md#migration-39-provider-sign-in-storage).
 
 ## 5. Use a LAN host or HTTPS
 
@@ -627,6 +713,13 @@ migration. To roll back, close public registration first, stop the service, and 
 pre-upgrade database and image together, losing all later writes. Never run an old image against
 stored Open or remove migration records manually. See
 [the migration procedure](deployment.md#migration-38-open-registration).
+
+Migration 39 preserves existing Users and passwords, allows a missing password for provider
+admission, and adds identity bindings and short-lived flows. Both providers start disabled.
+Before upgrading, stop and back up the complete data directory with its matching Master Key and
+previous image. Rollback restores that database, key, and image together, losing later writes;
+never run an old binary on the upgraded schema. See
+[migration 39](deployment.md#migration-39-provider-sign-in-storage).
 
 ## 8. Troubleshooting
 

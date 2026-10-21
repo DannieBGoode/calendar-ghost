@@ -90,7 +90,8 @@ machine and creates only the destination representation selected by each rule.
 - **Safe activation:** every rule must pass a side-effect-free preview before it can be enabled.
 - **Self-contained:** SQLite, scheduling, the API, and the Web UI run as one lightweight service.
 - **No telemetry:** a functional installation communicates only with the Google and Microsoft APIs
-  needed for calendar synchronization and any notification endpoint you explicitly configure.
+  needed for calendar synchronization or optional provider sign-in, and any notification endpoint
+  you explicitly configure.
 
 ## Current capabilities
 
@@ -104,7 +105,7 @@ machine and creates only the destination representation selected by each rule.
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |
 | Incidents | Each person's Activity view, deduplication, optional email to each person, and the installation's SMTP recipient and webhook for installation incidents |
 | Monitoring | Each person's Installation Status for monitors, homelab dashboards, and AI agents through `GET /api/v1/status` and an MCP server at `/mcp`, and Installation Health for administrators, authorized with Integration Tokens issued in Settings |
-| Access | People sign in with email and password; Only me by default, Invitation only, or administrator-chosen Open with verified joining; verified email changes and email password recovery when configured, administrator-issued reset links, single-use invitations, an administrator role, and encrypted OAuth credentials |
+| Access | Email/password and optional administrator-enabled Google or Microsoft sign-in; Only me by default, Invitation only, or administrator-chosen Open with verified joining; verified email changes and password recovery when configured, administrator-issued reset links, single-use invitations, and an administrator role |
 | Operator Overview | Administrators see on **People** whether each person's synchronization works and why not, with calendars only as "Calendar 1", "Calendar 2", and each person's rules, accounts, Activity, and provider calls counted; each person sees the same about themself in Settings |
 | Storage | Database and log usage in Settings, administrator-chosen Activity retention, and log download or purge |
 | Appearance | Device-aware light and dark themes with a browser-local override |
@@ -312,6 +313,18 @@ Returning to Invitation only cancels unfinished public sign-ups; reopening does 
 See [verified joining](docs/self-hosting.md#let-people-join-with-verified-email) and
 [migration 38 and rollback](docs/deployment.md#migration-38-open-registration).
 
+Google and Microsoft sign-in are optional and off by default. An administrator configures the
+existing provider clients and separate sign-in callbacks, then enables each provider in
+**Settings → Administration → Sign-in providers**. Link a provider under **Settings → Your account**;
+calendar access still requires its own consent under **Settings → Connections**. A provider-only
+User can set a password there and must do so before changing email or deleting themself.
+Microsoft does not supply verified-email evidence for automatic linking: use an existing
+password, or join through email verification first and explicitly link afterward. Under Only me,
+a still-live Invitation with matching provider-verified email is the narrow exception to closed
+joining; ordinary Invitation issuance and password acceptance remain unavailable. See
+[provider sign-in setup and recovery](docs/self-hosting.md#sign-in-with-google-or-microsoft)
+and [migration 39](docs/deployment.md#migration-39-provider-sign-in-storage).
+
 In **Settings → Your account**, request an email change with your current password.
 Your current address remains your sign-in and recovery address while a request is pending. Open
 the single-use Email Change Link sent to the new address within 24 hours, sign in to the
@@ -438,7 +451,7 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `CALENDAR_SYNC_DATABASE_PATH` | No | SQLite path; defaults locally to `./calendar-sync.db`, while Compose uses `/data/calendar-sync.db` |
-| `CALENDAR_SYNC_MASTER_KEY` | To connect accounts | URL-safe Base64 value decoding to exactly 32 bytes |
+| `CALENDAR_SYNC_MASTER_KEY` | To connect accounts or use provider sign-in | URL-safe Base64 value decoding to exactly 32 bytes |
 | `CALENDAR_SYNC_GOOGLE_CLIENT_ID` | For Google | OAuth Web application client ID |
 | `CALENDAR_SYNC_GOOGLE_CLIENT_SECRET` | For Google | OAuth Web application client secret |
 | `CALENDAR_SYNC_GOOGLE_REDIRECT_URI` | For Google | Exact registered OAuth callback |
@@ -464,6 +477,12 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 
 Notification delivery is best-effort. A delivery failure never prevents the incident from being
 recorded locally or stops later synchronization attempts.
+
+Provider sign-in reuses these client IDs and secrets, with only `openid email profile` scopes.
+Its callbacks derive from `CALENDAR_SYNC_PUBLIC_URL`, which must be an HTTPS root origin (HTTP
+localhost or loopback for development); the calendar redirect variables do not select them.
+Administrator enablement is stored in SQLite, off by default. Open provider admission additionally
+requires matching tested identity email, just like verified email joining.
 
 ## Architecture
 

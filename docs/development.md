@@ -39,8 +39,10 @@ maximum. Verified email changes are available when identity email configuration 
 with the synthetic SMTP capture and a disposable SQLite database; the request keeps the old
 address until the signed-in owner completes the link with their current password. Open registration
 also requires a matching successful administrator email test and explicit Open selection.
-Verified-registration passwords accept 12 to 1,024 characters. Provider sign-in and offline recovery
-tooling remain planned. See [registration boundaries](architecture.md#verified-registration-boundary).
+Verified-registration passwords accept 12 to 1,024 characters. Provider-only Users can set a first
+password of 12 to 256 characters. Offline recovery tooling remains planned. See
+[registration boundaries](architecture.md#verified-registration-boundary) and
+[provider sign-in](architecture.md#provider-sign-in-boundary).
 
 ## Corresponding source link
 
@@ -277,6 +279,14 @@ rules out.
 
 ### Provider sign-in preview
 
+Production provider sign-in requires a Master Key, existing OAuth client ID/secret, trusted
+`CALENDAR_SYNC_PUBLIC_URL`, the separate `/api/v1/sign-in/{slug}/callback` registered with each
+provider, and explicit administrator enablement. Both providers are off by default. For local
+provider checks use `http://localhost:<port>` consistently in the browser and configured origin;
+provider POSTs require the exact configured Origin, so a Vite origin on a different port cannot
+start that flow. Use the compiled UI on the callback origin or configure the development proxy
+and registered callback consistently. See [setup](self-hosting.md#sign-in-with-google-or-microsoft).
+
 Run `.venv/bin/python scripts/dev_preview.py --sign-in both` to show both identity buttons.
 Google signs into the preview administrator through a synthetic loopback callback; Microsoft
 opens the generic password-link form, which accepts the preview email and password above.
@@ -289,5 +299,25 @@ The optional `--port` also sets the preview's callback origin. For the sign-up s
 These fixtures use a fresh in-memory Master Key for identity proofs only, real temporary preview
 storage, and synthetic local provider responses. They load no environment clients, make no
 provider network calls, send no mail, and start no calendar synchronization. They add no routes
-to the production application. On light and dark appearances, check the sign-in page at 375px
+to the production application. On light and dark appearances, check the sign-in page at 390px
 and desktop widths, then Your account, Administration, and the provider-link form.
+
+The [synthetic review gallery](assets/reviews/provider-sign-in/README.md) compares sign-in in both
+themes and viewport sizes, plus selected Your account and Administration views, and records the
+source revision and limits of the live checks.
+
+OIDC tests use synthetic signed tokens, fake transport, a fixed clock, and temporary SQLite
+databases. They exercise issuer/audience/nonce/expiry checks, Microsoft tenant and JWK issuer
+validation, admission/credential races, last-method protection, protocol privacy, and bounded
+storage/network work without personal provider accounts. Synthetic preview results are not
+live Google or Microsoft verification; the calendar checks above do not verify provider sign-in.
+
+The implementation uses `Authlib>=1.9.1,<2` for code-flow/S256 PKCE mechanics,
+`joserfc>=1.6.8,<2` for RS256/claims verification, and `requests>=2.32.5,<3` for bounded HTTP.
+See [Authlib's client guidance](https://docs.authlib.org/en/latest/oauth2/client/web/)
+and [joserfc's JWT API](https://jose.authlib.org/en/guide/jwt/). Provider-specific issuer policy
+remains in each provider package. The local identity assets and their origins are recorded in
+`web/src/assets/sign-in/README.md`; follow the official
+[Google](https://developers.google.com/identity/branding-guidelines) and
+[Microsoft](https://learn.microsoft.com/en-us/entra/identity-platform/howto-add-branding-in-apps)
+button guidance, with comparable prominence and no runtime remote fonts or branding fetches.

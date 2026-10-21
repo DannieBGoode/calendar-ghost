@@ -146,3 +146,8 @@ the provider-specific construction. `bootstrap/provider_sign_in.py` composes the
 identity ports. The existing calendar descriptor, callbacks, scopes, and import contracts stay
 unchanged. The sign-in callback is derived from the trusted public origin, with separate
 `openid email profile` consent. No neutral layer branches on a provider name.
+
+The identity adapter returns only validated identity claims; provider access and refresh tokens
+are discarded. This descriptor creates no Connected Account and consumes none of its Allowance.
+See [ADR 0040](0040-open-registration-and-email-ownership.md#amendment-provider-sign-in-implementation-2026-10-21)
+for admission, usable methods, and migration 39.

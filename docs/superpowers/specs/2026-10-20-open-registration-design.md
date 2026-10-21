@@ -6,13 +6,14 @@ code is authorized until that plan is reviewed. The second Claude review complet
 with clarifications below. The owner delegated PR 2 plan review to Claude and authorized execution.
 
 Delivery status on 2026-10-21: PR #129 identity email readiness and PR #130 self-service
-password recovery are merged, including migrations 35 and 36. Verified email changes (migration
-37) and all four context splits are complete. Open sign-up end to end (migration 38) is implemented
-on the delivery branch under its
-[approved implementation plan](../plans/2026-10-21-open-registration.md); final security/outside
-review, complete gates, PR publication, and CI remain pending. Only Me remains the default; choosing Open explicitly
-requires matching tested identity email. Provider sign-in and hosted backup/restore, including
-offline recovery tooling, remain deferred. The delivery sequence below records the approved scope.
+password recovery are merged, including migrations 35 and 36. PR #131 verified email changes
+(migration 37), PR #132 with all four context splits, and PR #133 Open sign-up end to end
+(migration 38) are merged. Open sign-up's evidence remains in its
+[approved implementation plan](../plans/2026-10-21-open-registration.md). Only Me remains the default; choosing Open explicitly
+requires matching tested identity email. Provider sign-in (migration 39) is implemented on its
+delivery branch under its [approved plan](../plans/2026-10-21-provider-sign-in.md); whole-branch
+reviews, final gates, screenshots, publication, and CI remain tracked there. Hosted backup/restore,
+including offline recovery tooling, remains deferred. The delivery sequence below records the approved scope.
 
 Builds on [the multi-user delivery order](2026-10-09-multi-user-design.md),
 [ADR 0029](../../adr/0029-isolate-users-in-one-sqlite-database.md),
@@ -112,8 +113,9 @@ Switching Open to Invitation Only atomically invalidates pending public proofs. 
 again does not revive them. An Invitation-bound proof may finish under Invitation Only, with its
 verification requirement retained. Switching to Only Me atomically cancels all pending
 registration proofs, both public and Invitation-bound; reopening never revives them. Under Only Me
-nobody joins, by either route. The existing
-one-User restriction on returning to Only Me remains. Returning to setup revokes all pending
+nobody joins by either email/password route. The separate provider admission exception below
+retains still-live Invitations. The existing one-User restriction on returning to Only Me remains.
+Returning to setup revokes all pending
 registration proofs and Invitations, turns Plans off as today, and clears email-test readiness.
 
 Open becomes selectable in the end-to-end Open PR only after its complete verified admission
@@ -452,8 +454,9 @@ callers required by the current PR.
    email-first sign-up, verified Invitations, administrator choice and readiness checks, and
    screens together. Open stays unselectable until the administrator chooses it and identity
    email is ready. Drop the temporary preparation guards required by the old split.
-4. **Sign in and sign up with Google or Microsoft.** Follow the OIDC decisions below. This has
-   its own plan and does not change calendar consent.
+4. **Sign in and sign up with Google or Microsoft.** Implemented on the delivery branch under
+   its approved plan, with migration 39 and the OIDC decisions below. Final reviews and delivery
+   evidence remain tracked in that plan. Calendar consent stays separate.
 5. **Hosted backup and restore.** Combine narrow offline inspection/preparation and their
    SQLite safety tests with the optional backup tooling and tested hosted runbook. Ship before
    hosted launch, after its own plan; this work is outside the current PR. No mandatory backup
@@ -478,7 +481,7 @@ Do not start the next PR before this one merges and its own plan is approved. Ke
 
 ## Google and Microsoft sign-in decisions
 
-The fourth remaining PR adds optional OIDC sign-in and sign-up. Each provider is off by default;
+The fourth remaining PR implements optional OIDC sign-in and sign-up. Each provider is off by default;
 the Installation Administrator enables it. A provider identity is its issuer plus `sub`, never
 its email. Linking is initiated from Your account while signed in. Sign-in may auto-link only
 when the provider states that the email is verified.
@@ -486,13 +489,43 @@ when the provider states that the email is verified.
 Only Me and Invitation Only admit only existing people or an invited person whose verified email
 matches. Open may create an ordinary User following the Default Plan. Provider sign-in must obey
 Registration Policy at the final admission write. This is a separate admission decision from
-password-based Invitation acceptance; it does not open public joining under Only Me.
+password-based Invitation acceptance; it does not open public joining under Only Me. Choosing
+Only Me still requires the sole User, cancels all registration proofs, and keeps live Invitations.
+A later provider admission may consume one with matching provider-verified email without changing
+the selected policy. Ordinary Invitation issuance and password acceptance remain forbidden there.
+People and its existing management controls stay accessible when other Users exist. This narrow
+exception amends the earlier blanket Only Me wording; returning to setup still revokes Invitations.
 
 Reuse the installation's Google and Microsoft OAuth clients with sign-in scopes only:
-`openid email profile`. Calendar consent remains a separate step. A person can always keep or
-set a password, and cannot remove their last sign-in method. Use a maintained OIDC library such
-as Authlib or the Google libraries already in use. Add no service or ORM. These are planned
-features; this document change enables none of them.
+`openid email profile`. Calendar consent remains a separate step under Connections; a Provider
+Identity creates no Connected Account and uses none of its Allowance. New provider admission
+creates an ordinary User with no own Plan. Authlib supplies code-flow/S256 PKCE mechanics and
+joserfc verifies RS256 signatures/claims, with issuer and tenant validation in each provider
+package. Separate identity descriptors preserve downward context dependencies. Add no service or ORM.
+
+The approved implementation treats Microsoft `email`, `preferred_username`, and `upn` as
+unverified. Already-linked identities sign in; otherwise a generic email/password form proves an
+existing User. New people finish the existing verified email registration flow under Open and
+explicitly link from Your account. No new proof mechanism or email-based Microsoft admission is
+added. Replacing its client ID changes its pairwise `sub`, so recovery needs a password or another
+usable method followed by explicit linking.
+
+A usable method is a password or a linked provider currently configured and enabled. SQL NULL
+represents no password. A live owning session may set a first password; existing-password
+replacement, email changes, and User Deletion still require the current one. Provider-only Users
+first set a password for those sensitive actions. Password removal is absent. Unlinking and
+administrator disablement refuse to strand an active User and preserve the current session;
+disablement retains identity bindings. External configuration loss can still interrupt access;
+restore it or use administrator-issued password reset, which can set a first password.
+
+Flows/pending proofs last at most ten minutes, and provider sessions seven days. Starts allow
+20/network/15 minutes and 100/installation/hour, callbacks 20/network/15 minutes, and password
+confirmations 10/network/15 minutes. A global flood can temporarily block provider-only sign-in;
+password sign-in and administrator-issued recovery have independent budgets. The Master Key,
+trusted public origin, existing client credentials, and explicit administrator enablement are
+required. Open additionally needs matching email readiness. Callback queries need path-only
+upstream logging. Exact transport bounds, configuration recovery, and stopped-service migration
+39 backup/restore rollback are in [deployment](../../deployment.md#provider-sign-in-limits-and-recovery).
 
 ## Acceptance evidence
 
