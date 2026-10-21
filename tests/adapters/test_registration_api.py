@@ -448,6 +448,53 @@ def test_session_race_directs_to_sign_in_without_duplicate_admission(
     )
 
 
+@pytest.mark.parametrize("phase", ["session", "record"])
+def test_post_admission_storage_failure_recovers_through_sign_in(
+    tmp_path: Path, phase: str
+) -> None:
+    path = tmp_path / "test.db"
+    _, container = ready(path)
+    public = TestClient(create_app(container), raise_server_exceptions=False)
+    token = proof(container)
+    trigger = (
+        "BEFORE INSERT ON user_sessions"
+        if phase == "session"
+        else "BEFORE UPDATE OF last_sign_in_at ON users"
+    )
+    with transaction(path) as connection:
+        connection.execute(
+            f"CREATE TRIGGER fail_sign_in {trigger} BEGIN "
+            "SELECT RAISE(ABORT, 'synthetic private storage failure'); END"
+        )
+    response = public.post(COMPLETE, json={"token": token, "password": ADMIN_PASSWORD})
+    assert response.status_code == 401
+    assert response.json()["code"] == "incorrect_credentials"
+    private(response)
+    assert "synthetic private storage failure" not in response.text
+    assert "set-cookie" not in response.headers
+    assert public.get("/api/v1/session").json()["authenticated"] is False
+    after = snapshot(path)
+    assert len(after["users"]) == 2
+    assert len(after["user_sessions"]) == (1 if phase == "session" else 2)
+    assert (
+        container.registrations.check.proofs.check(token, container.registrations.check.fingerprint)
+        is None
+    )
+    with transaction(path) as connection:
+        assert connection.execute("SELECT used_at FROM registration_proofs").fetchone()[0]
+    again = public.post(COMPLETE, json={"token": token, "password": ADMIN_PASSWORD})
+    assert (again.status_code, again.json()["code"]) == (410, "link_unusable")
+    private(again)
+    retried = snapshot(path)
+    assert retried["users"] == after["users"]
+    assert retried["user_sessions"] == after["user_sessions"]
+    with transaction(path) as connection:
+        connection.execute("DROP TRIGGER fail_sign_in")
+    signed_in = public.post("/api/v1/session", json={"email": EMAIL, "password": ADMIN_PASSWORD})
+    assert signed_in.status_code == 200
+    assert signed_in.json()["user"]["email"] == EMAIL
+
+
 def test_account_independent_throttles_and_storage_fail_closed(tmp_path: Path) -> None:
     path = tmp_path / "test.db"
     client, _ = ready(path)

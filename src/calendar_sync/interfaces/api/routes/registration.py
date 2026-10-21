@@ -125,7 +125,7 @@ def complete_registration(
     except PasswordPolicyViolation as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     except IncorrectCredentials as error:
-        # Admission committed; use sign-in if credentials changed before session creation.
+        # Admission committed; recover at sign-in after a session failure or credential race.
         raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
     set_session_cookie(response, session.token, services.secure_cookies)
     return signed_in(services.identity.users.get(session.user_id), services)

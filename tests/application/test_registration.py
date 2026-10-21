@@ -9,7 +9,11 @@ from unittest.mock import Mock, patch
 import pytest
 
 from calendar_sync.application.identity.administration import LinkUnusable
-from calendar_sync.application.identity.errors import IncorrectCredentials, PasswordPolicyViolation
+from calendar_sync.application.identity.errors import (
+    IncorrectCredentials,
+    PasswordPolicyViolation,
+    SignInStorageUnavailable,
+)
 from calendar_sync.application.identity.ports import Session
 from calendar_sync.application.identity.registration import (
     CheckRegistration,
@@ -125,7 +129,7 @@ def test_completion_gates_before_hash_and_starts_session_after_commit(tmp_path: 
     assert cast(Mock, use_case.passwords).hash.call_count == 1
 
 
-@pytest.mark.parametrize("failure", ["storage", "credential-race"])
+@pytest.mark.parametrize("failure", ["storage", "credential-race", "unexpected"])
 def test_session_failure_keeps_created_user(tmp_path: Path, failure: str) -> None:
     from calendar_sync.application.identity.sign_in import SignIn
     from calendar_sync.infrastructure.throttle import MemorySignInThrottle
@@ -137,12 +141,14 @@ def test_session_failure_keeps_created_user(tmp_path: Path, failure: str) -> Non
             use_case.sessions,
             "start",
             **(
-                {"side_effect": RuntimeError("unavailable")}
+                {"side_effect": RuntimeError("unexpected bug")}
+                if failure == "unexpected"
+                else {"side_effect": SignInStorageUnavailable()}
                 if failure == "storage"
                 else {"return_value": None}
             ),
         ),
-        pytest.raises(RuntimeError if failure == "storage" else IncorrectCredentials),
+        pytest.raises(RuntimeError if failure == "unexpected" else IncorrectCredentials),
     ):
         use_case.execute(token, "long-password", "network")
     user = use_case.users.by_email("new@example.test")

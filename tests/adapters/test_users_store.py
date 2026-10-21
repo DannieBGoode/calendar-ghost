@@ -4,11 +4,12 @@ import logging
 import sqlite3
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.identity.errors import EmailTaken
+from calendar_sync.application.identity.errors import EmailTaken, SignInStorageUnavailable
 from calendar_sync.application.identity.ports import (
     AssignmentChange,
     IssuedLink,
@@ -37,7 +38,7 @@ from calendar_sync.infrastructure.persistence.registration import (
     SqlitePasswordResetLinks,
     SqliteRegistrationSettings,
 )
-from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
+from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 from calendar_sync.infrastructure.throttle import MemorySignInThrottle
 from tests.adapters.test_user_migration import (
     OWNED_TABLES,
@@ -77,6 +78,42 @@ def test_only_the_first_user_is_added_as_the_first(tmp_path: Path) -> None:
     assert not users.add_first(SECOND, "hash-2")
     assert users.list() == (FIRST,)
     assert users.password_hash(FIRST.id) == "hash-1"
+
+
+@pytest.mark.parametrize("phase", ["session", "record"])
+def test_sign_in_writes_raise_typed_storage_failure_and_roll_back(
+    tmp_path: Path, phase: str
+) -> None:
+    users = _users(tmp_path)
+    users.add(FIRST, "hash-1")
+    path = tmp_path / "test.db"
+    sessions = SqliteSessions(path, MovableClock(NOW))
+    trigger = (
+        "BEFORE INSERT ON user_sessions"
+        if phase == "session"
+        else "BEFORE UPDATE OF last_sign_in_at ON users"
+    )
+    with transaction(path) as connection:
+        connection.execute(
+            f"CREATE TRIGGER fail_sign_in {trigger} BEGIN "
+            "SELECT RAISE(ABORT, 'private provider marker'); END"
+        )
+    write = (
+        partial(sessions.start, FIRST.id, "hash-1", FIRST.email, 0)
+        if phase == "session"
+        else partial(users.record_sign_in, FIRST.id, NOW)
+    )
+    with pytest.raises(SignInStorageUnavailable) as failure:
+        write()
+    assert str(failure.value) == "Sign-in storage is temporarily unavailable"
+    assert failure.value.__suppress_context__
+    assert users.get(FIRST.id) == FIRST
+    with transaction(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM user_sessions").fetchone()[0] == 0
+        connection.execute("DROP TRIGGER fail_sign_in")
+    assert sessions.start(FIRST.id, "hash-1", FIRST.email, 0)
+    users.record_sign_in(FIRST.id, NOW)
+    assert users.get(FIRST.id) == replace(FIRST, last_sign_in_at=NOW)
 
 
 def test_users_are_searched_filtered_sorted_and_paged(tmp_path: Path) -> None:

@@ -4,7 +4,11 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 from calendar_sync.application.identity.administration import LinkUnusable
-from calendar_sync.application.identity.errors import PasswordPolicyViolation
+from calendar_sync.application.identity.errors import (
+    IncorrectCredentials,
+    PasswordPolicyViolation,
+    SignInStorageUnavailable,
+)
 from calendar_sync.application.identity.identity_email import IdentityEmailSetup
 from calendar_sync.application.identity.ports import (
     PasswordHasher,
@@ -95,8 +99,12 @@ class CompleteRegistration:
         user = self.proofs.complete(token, hashed, self.fingerprint)
         if user is None:
             raise LinkUnusable("this registration link is no longer usable")
-        session = start_session(self.sessions, user.id, hashed, user.email, 0)
-        self.users.record_sign_in(user.id, self.clock.now())
+        try:
+            session = start_session(self.sessions, user.id, hashed, user.email, 0)
+            self.users.record_sign_in(user.id, self.clock.now())
+        except SignInStorageUnavailable:
+            # Admission already committed. Retrying this proof cannot create another User.
+            raise IncorrectCredentials("your account was created; sign in to continue") from None
         return session
 
 

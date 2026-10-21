@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 import secrets
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from calendar_sync.application.identity.credentials import CredentialSnapshot
-from calendar_sync.application.identity.errors import EmailTaken
+from calendar_sync.application.identity.errors import EmailTaken, SignInStorageUnavailable
 from calendar_sync.application.identity.ports import (
     Session,
     SignInCredentials,
@@ -38,6 +39,15 @@ _SORT_COLUMNS = {
     UserSort.EMAIL: "email",
     UserSort.LAST_SIGN_IN: "last_sign_in_at",
 }
+
+
+@contextmanager
+def _sign_in_transaction(database: Path) -> Iterator[sqlite3.Connection]:
+    try:
+        with transaction(database, timeout=0.1) as connection:
+            yield connection
+    except sqlite3.Error:
+        raise SignInStorageUnavailable from None
 
 
 class SqliteUserDirectory:
@@ -157,7 +167,7 @@ class SqliteUserDirectory:
             revoke_email_changes(connection, user_id, datetime.now(UTC).isoformat())
 
     def record_sign_in(self, user_id: UserId, at: datetime) -> None:
-        with transaction(self._database_path) as connection:
+        with _sign_in_transaction(self._database_path) as connection:
             connection.execute(
                 "UPDATE users SET last_sign_in_at = ? WHERE id = ?",
                 (at.isoformat(), user_id.value),
@@ -331,7 +341,7 @@ class SqliteSessions:
         self, user_id: UserId, password_hash: str, email: str | None, revision: int
     ) -> Session | None:
         token = secrets.token_urlsafe(32)
-        with transaction(self._database_path) as connection:
+        with _sign_in_transaction(self._database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
             now = self._clock.now()
             expires = now + SESSION_LIFETIME

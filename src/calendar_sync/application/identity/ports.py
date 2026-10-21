@@ -112,7 +112,9 @@ class UserDirectory(Protocol):
 
     def set_password_hash(self, user_id: UserId, password_hash: str) -> None: ...
 
-    def record_sign_in(self, user_id: UserId, at: datetime) -> None: ...
+    def record_sign_in(self, user_id: UserId, at: datetime) -> None:
+        """Record the most recent sign-in; raises SignInStorageUnavailable if writing fails."""
+        ...
 
     def set_role(self, user_id: UserId, role: Role) -> None:
         """Change only a User's role. Raises LastAdministrator, changing nothing, when that
@@ -226,7 +228,8 @@ class Sessions(Protocol):
         """Start a session only while the User is active and `password_hash`, the hash their
         password was just checked against, email and revision still match; all in one step with
         the start.
-        None otherwise, such as after a password change or reset that landed meanwhile."""
+        None otherwise, such as after a password change or reset that landed meanwhile.
+        Raises SignInStorageUnavailable if persistence fails."""
         ...
 
     def user_of(self, token: str | None) -> UserId | None:
