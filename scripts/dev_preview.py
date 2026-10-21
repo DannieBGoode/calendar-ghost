@@ -62,13 +62,8 @@ from calendar_sync.application.sync.provider_ports import (
     ProviderChangeSet,
 )
 from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import (
-    Adapters,
-    Container,
-    UserServices,
-    build_adapters,
-    compose,
-)
+from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
+from calendar_sync.bootstrap.shared import UserServices
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent

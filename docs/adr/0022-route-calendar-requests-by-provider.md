@@ -111,7 +111,7 @@ second provider existed.
   Kind, the slug its connection flow lives under, its display and calendar names, the
   troubleshooting section for each Cause it can raise, and any Installation Hint only it explains,
   such as Google's 7-day grants in Testing mode), whether the installation configured it, its OAuth
-  flow, and its calendar roles. `bootstrap/container.py` composes the descriptors in one place;
+  flow, and its calendar roles. `bootstrap/sync.py` composes the descriptors in one place;
   routing, Installation Hints, and the Web API read them. Adding a provider adds its package and
   one line there.
 - **Only Provider Kinds name providers in the core.** The domain, application, and interfaces name

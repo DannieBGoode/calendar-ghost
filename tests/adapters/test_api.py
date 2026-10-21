@@ -43,11 +43,11 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import (
     Adapters,
     Container,
-    UserServices,
     build_adapters,
     build_container,
     compose,
 )
+from calendar_sync.bootstrap.shared import UserServices
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent

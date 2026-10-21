@@ -79,7 +79,13 @@ The domain imports only Python's standard library and provider-neutral domain mo
 Web API routes only parse input, call one use case or port, and map its result or application
 error to HTTP. `bootstrap/container.py` composes in two steps: `build_adapters` makes the SQLite and
 provider adapters from Settings, and `compose` wires the use cases from them into the `Container`
-the routes call. The `Container` holds installation-wide services (identity, administration,
+the routes call. The root retains `Container`, `Adapters`, and those factory functions;
+`bootstrap/sync.py` composes provider descriptors and each User's synchronization services,
+`bootstrap/identity.py` composes identity and administration, `bootstrap/operations.py` composes
+Plans and the scheduled and Instant Sync loops, and `bootstrap/shared.py` holds `UserServices`
+and shared address and mail helpers. Existing identity email composition stays in
+`bootstrap/identity_email.py` and `bootstrap/identity_email_changes.py`. The `Container` holds
+installation-wide services (identity, administration,
 Installation Health, the Operator Overview, the scheduler) and `for_user`, which composes one User's use cases from
 adapters made for that User: their unit of work, account store, Activity queries, incidents, and
 Incident Notifications. A route resolves the signed-in User from the session and calls only that
@@ -293,7 +299,7 @@ about the provider ([ADR 0022](adr/0022-route-calendar-requests-by-provider.md),
   neutral `NoticeRequest` (headers, query, body) into Watch Notices, so no Starlette type crosses
   the descriptor ([ADR 0036](adr/0036-instant-sync-through-provider-notices.md)).
 
-`calendar_providers` in `bootstrap/container.py` composes the descriptors into a
+`calendar_providers` in `bootstrap/sync.py` composes the descriptors into a
 `ProviderDirectory`. Routing builds its adapter map from it, Installation Hints read the guides, and
 the Web API lists the connectable providers at `GET /api/v1/providers` and runs their flows. Without
 the installation master key, a descriptor offers only its guide.
@@ -323,7 +329,7 @@ To add a provider:
 2. Add its Provider Kind to `domain/accounts.py` and its settings to `bootstrap/config.py`.
 3. Create `infrastructure/<provider>/` with its guide, adapter, translation, OAuth flow on the
    shared mechanics in `infrastructure/oauth.py`, Cause mapping, and `descriptor.py`.
-4. Add one line to `calendar_providers` in `bootstrap/container.py`, and import-linter contracts
+4. Add one line to `calendar_providers` in `bootstrap/sync.py`, and import-linter contracts
    that keep its SDK in its package and it independent of the other providers.
 5. Give it a test package under `tests/adapters/<provider>/` that runs the Calendar Provider
    contract through a fake of its API, a table-driven Cause test, and a privacy leak test.

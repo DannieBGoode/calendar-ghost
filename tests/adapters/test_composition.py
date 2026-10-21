@@ -129,7 +129,7 @@ def test_production_composition_does_not_activate_plan_holds(tmp_path: Path) -> 
 
     from calendar_sync.application.operations.scheduled_pass import ScheduledPass
     from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
-    from calendar_sync.bootstrap.container import _scheduled_services
+    from calendar_sync.bootstrap.operations import _scheduled_services
     from calendar_sync.domain.model import SyncRuleId
     from calendar_sync.domain.plan_hold import PlanGrace, PlanNoticeKind
     from tests.fake_calendar import FakeCalendars, FixedClock
