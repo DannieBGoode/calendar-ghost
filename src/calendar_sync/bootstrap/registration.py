@@ -24,6 +24,7 @@ from calendar_sync.infrastructure.persistence.registration_proofs import SqliteR
 from calendar_sync.infrastructure.persistence.registration_readiness import (
     SqliteRegistrationReadiness,
 )
+from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +33,8 @@ class RegistrationAdapters:
     readiness: RegistrationReadiness
     admission: RegistrationAdmission
     fingerprint: str | None
+    users: UserDirectory
+    sessions: Sessions
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,14 +54,14 @@ def build_registration(
         SqliteRegistrationReadiness(database, setup),
         SqliteRegistrationAdmission(database, settings.master_key, clock),
         setup.fingerprint,
+        SqliteUserDirectory(database, sign_in_timeout=0.1),
+        SqliteSessions(database, clock, sign_in_timeout=0.1),
     )
 
 
 def compose_registration(
     adapters: RegistrationAdapters,
-    users: UserDirectory,
     passwords: PasswordHasher,
-    sessions: Sessions,
     clock: Clock,
     queue: RegistrationEmailQueue,
 ) -> RegistrationServices:
@@ -69,8 +72,8 @@ def compose_registration(
         CompleteRegistration(
             adapters.proofs,
             passwords,
-            sessions,
-            users,
+            adapters.sessions,
+            adapters.users,
             clock,
             adapters.admission,
             adapters.fingerprint,

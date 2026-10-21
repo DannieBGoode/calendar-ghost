@@ -439,9 +439,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         identity_email=identity_email,
         registrations=compose_registration(
             adapters.identity_email.registrations,
-            adapters.users,
             adapters.passwords,
-            adapters.sessions,
             adapters.clock,
             identity_mail_worker or _UnavailableQueue(),
         ),
