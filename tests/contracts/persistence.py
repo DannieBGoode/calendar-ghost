@@ -2581,6 +2581,39 @@ class MutableCredentialClock(Protocol):
 
 
 class CredentialPersistenceContract:
+    def test_session_requires_current_email_and_revision(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        _first, second = h.users.list()
+        facts = h.users.sign_in_credentials(second.email)
+        assert facts is not None
+        assert facts.user == second
+        h.users.set_email(second.id, "away@example.test")
+        assert h.sessions.start(second.id, "other-hash", second.email, 0) is None
+        assert h.sessions.start(second.id, "other-hash", "away@example.test", 1) is not None
+        h.users.set_email(second.id, second.email or "")
+        assert h.sessions.start(second.id, "other-hash", second.email, 0) is None
+        assert h.sessions.start(second.id, "other-hash", second.email, 2) is not None
+        assert h.users.sign_in_credentials("unknown@example.test") is None
+
+    def test_initial_email_session_requires_the_nullable_snapshot(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        from dataclasses import replace
+
+        h = credentials
+        first = h.users.list()[0]
+        upgraded = replace(first, id=UserId("upgraded"), email=None)
+        h.users.add(upgraded, "upgraded-hash")
+        facts = h.users.sign_in_credentials(None)
+        assert facts is not None
+        assert facts.user == upgraded
+        assert h.sessions.start(upgraded.id, "upgraded-hash", None, 0) is not None
+        h.users.set_email(upgraded.id, "added@example.test")
+        assert h.sessions.start(upgraded.id, "upgraded-hash", None, 0) is None
+        assert h.sessions.start(upgraded.id, "upgraded-hash", "added@example.test", 1) is not None
+
     def test_reset_lifetimes_and_resend(self, credentials: CredentialPersistenceHarness) -> None:
         h = credentials
         first, second = h.users.list()
@@ -2620,7 +2653,7 @@ class CredentialPersistenceContract:
         h = credentials
         first, second = h.users.list()
         link = h.links.issue(second.id, first.id, h.clock.now())
-        session = h.sessions.start(first.id, "old-hash")
+        session = h.sessions.start(first.id, "old-hash", first.email, 0)
         assert session is not None
         if change in ("disabled", "reenabled"):
             h.users.set_state(second.id, UserState.DISABLED)
@@ -2645,15 +2678,15 @@ class CredentialPersistenceContract:
     ) -> None:
         h = credentials
         first, second = h.users.list()
-        old = h.sessions.start(second.id, "other-hash")
-        theirs = h.sessions.start(first.id, "old-hash")
+        old = h.sessions.start(second.id, "other-hash", second.email, 0)
+        theirs = h.sessions.start(first.id, "old-hash", first.email, 0)
         assert old is not None
         assert theirs is not None
         link = h.links.issue(second.id, first.id, h.clock.now())
         assert h.links.reset(link.token, "new-hash") == second.id
         assert h.sessions.user_of(old.token) is None
-        assert h.sessions.start(second.id, "other-hash") is None
-        new = h.sessions.start(second.id, "new-hash")
+        assert h.sessions.start(second.id, "other-hash", second.email, 0) is None
+        new = h.sessions.start(second.id, "new-hash", second.email, 1)
         assert new is not None
         assert h.sessions.user_of(new.token) == second.id
         assert h.sessions.user_of(theirs.token) == first.id
@@ -2679,8 +2712,8 @@ class CredentialPersistenceContract:
         first, second = h.users.list()
         link = h.links.issue(second.id, first.id, h.clock.now())
         expected = h.changes.current(second.id)
-        foreign = h.sessions.start(first.id, "old-hash")
-        own = h.sessions.start(second.id, "other-hash")
+        foreign = h.sessions.start(first.id, "old-hash", first.email, 0)
+        own = h.sessions.start(second.id, "other-hash", second.email, 0)
         assert expected is not None
         assert foreign is not None
         assert own is not None
@@ -2697,8 +2730,8 @@ class CredentialPersistenceContract:
         h = credentials
         first, second = h.users.list()
         expected = h.changes.current(second.id)
-        kept = h.sessions.start(second.id, "other-hash")
-        old = h.sessions.start(second.id, "other-hash")
+        kept = h.sessions.start(second.id, "other-hash", second.email, 0)
+        old = h.sessions.start(second.id, "other-hash", second.email, 0)
         assert expected is not None
         assert kept is not None
         assert old is not None
@@ -2721,7 +2754,7 @@ class CredentialPersistenceContract:
         _first, second = h.users.list()
         public = h.public.issue_for_email(second.email or "")
         assert public is not None
-        session = h.sessions.start(second.id, "other-hash")
+        session = h.sessions.start(second.id, "other-hash", second.email, 0)
         assert session is not None
         h.clock.moment = public.link.expires_at
         assert h.links.reset(public.link.token, "forbidden") is None

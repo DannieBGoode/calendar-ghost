@@ -8,6 +8,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from calendar_sync.application.identity.credentials import CredentialSnapshot
 from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId, UserState
 from calendar_sync.domain.plans import AssignmentSource, NewPlan, Plan, PlanKey
 
@@ -52,9 +53,19 @@ class UserPage:
     """How many Users match, across every page."""
 
 
+@dataclass(frozen=True, slots=True)
+class SignInCredentials:
+    user: User
+    credential: CredentialSnapshot
+
+
 class UserDirectory(Protocol):
     """Every User of the installation, and their password hashes. Signing in, inviting, and
     administering Users read it; it holds none of a User's calendars, rules, or activity."""
+
+    def sign_in_credentials(self, email: str | None) -> SignInCredentials | None:
+        """Read the User, password hash, email and revision in one coherent snapshot."""
+        ...
 
     def count(self) -> int: ...
 
@@ -206,9 +217,12 @@ class PasswordHasher(Protocol):
 
 
 class Sessions(Protocol):
-    def start(self, user_id: UserId, password_hash: str) -> Session | None:
+    def start(
+        self, user_id: UserId, password_hash: str, email: str | None, revision: int
+    ) -> Session | None:
         """Start a session only while the User is active and `password_hash`, the hash their
-        password was just checked against, is still theirs; both in one step with the start.
+        password was just checked against, email and revision still match; all in one step with
+        the start.
         None otherwise, such as after a password change or reset that landed meanwhile."""
         ...
 

@@ -490,6 +490,21 @@ Do not run the previous image against the upgraded database or remove migration 
 Restoring discards changes since the backup. An administrator-issued link remains the recovery
 fallback; an offline recovery command is not shipped.
 
+## Migration 37 email-change proofs
+
+Migration 37 adds only email-change storage: owned, expiring proofs and issuance allowances,
+plus anonymous network-attempt counters. User ownership is non-null on proofs and issuance
+rows, with deletion cascading from the User; network counters contain only purpose-separated
+HMAC digests and times. Existing Users, passwords, sessions, calendars, reset proofs, and
+installation settings are preserved. Startup applies the migration once, atomically.
+
+Stop the service and back up the complete database with its matching Master Key before upgrading,
+keeping the previous image. To roll back, stop the service and restore that pre-upgrade database
+and previous image together. Do not run the previous image against the upgraded database or remove
+migration records. Restoring discards changes since the backup, including later proof and allowance
+records. New proofs store only token hashes and are never reusable after a credential revision
+changes; a successful email change retains only its confirming session.
+
 ## Password recovery
 
 With usable identity email configuration, **Forgot password?** on sign-in lets an active User,

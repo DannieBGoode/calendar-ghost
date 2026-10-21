@@ -18,6 +18,12 @@ class PendingEmailChange:
 
 
 @dataclass(frozen=True, slots=True)
+class PreparedEmailChange:
+    recipient: str = field(repr=False)
+    token: str = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
 class EmailChangeCompletion:
     previous_email: str = field(repr=False)
 

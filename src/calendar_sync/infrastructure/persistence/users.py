@@ -7,15 +7,23 @@ import secrets
 import sqlite3
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from calendar_sync.application.identity.credentials import CredentialSnapshot
 from calendar_sync.application.identity.errors import EmailTaken
-from calendar_sync.application.identity.ports import Session, UserPage, UserQuery, UserSort
+from calendar_sync.application.identity.ports import (
+    Session,
+    SignInCredentials,
+    UserPage,
+    UserQuery,
+    UserSort,
+)
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import Role, User, UserId, UserState, require_administrator_remains
 from calendar_sync.domain.plans import InvalidPlan, PlanKey
 from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.email_change_records import revoke_email_changes
 from calendar_sync.infrastructure.security import token_hash
 
 logger = logging.getLogger(__name__)
@@ -36,12 +44,29 @@ class SqliteUserDirectory:
     def __init__(self, database_path: Path) -> None:
         self._database_path = database_path
 
+    def sign_in_credentials(self, email: str | None) -> SignInCredentials | None:
+        with transaction(self._database_path, timeout=0.1) as connection:
+            row = connection.execute(
+                f"SELECT {_COLUMNS}, password_hash, credential_revision FROM users "  # noqa: S608
+                "WHERE email IS ?",
+                (email,),
+            ).fetchone()
+        if row is None:
+            return None
+        user = _user(row)
+        return SignInCredentials(
+            user,
+            CredentialSnapshot(
+                user.id, int(row["credential_revision"]), str(row["password_hash"]), user.email
+            ),
+        )
+
     def count(self) -> int:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             return int(connection.execute("SELECT COUNT(*) FROM users").fetchone()[0])
 
     def list(self) -> tuple[User, ...]:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             rows = connection.execute(
                 f"SELECT {_COLUMNS} FROM users ORDER BY created_at, rowid"  # noqa: S608
             ).fetchall()
@@ -52,7 +77,7 @@ class SqliteUserDirectory:
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         column = _SORT_COLUMNS[query.sort]
         direction = "DESC" if query.descending else "ASC"
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             total = connection.execute(
                 f"SELECT COUNT(*) FROM users {where}",  # noqa: S608
                 parameters,
@@ -78,7 +103,7 @@ class SqliteUserDirectory:
         return self._one("email IS NULL")
 
     def add_first(self, user: User, password_hash: str) -> bool:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             # Held from the check to the insert, so two first-run requests cannot both succeed.
             connection.execute("BEGIN IMMEDIATE")
             if connection.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None:
@@ -87,50 +112,52 @@ class SqliteUserDirectory:
         return True
 
     def add(self, user: User, password_hash: str) -> None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             insert_user(connection, user, password_hash)
 
     def set_email(self, user_id: UserId, email: str) -> None:
         try:
-            with transaction(self._database_path) as connection:
+            with transaction(self._database_path, timeout=0.1) as connection:
                 connection.execute(
                     "UPDATE users SET email = ?, "
                     "credential_revision = credential_revision + 1 WHERE id = ?",
                     (email, user_id.value),
                 )
+                revoke_email_changes(connection, user_id, datetime.now(UTC).isoformat())
         except sqlite3.IntegrityError as error:
             raise _taken_or(error) from error
 
     def set_notification_email(self, user_id: UserId, notify_by_email: bool) -> None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             connection.execute(
                 "UPDATE users SET notify_by_email = ? WHERE id = ?",
                 (int(notify_by_email), user_id.value),
             )
 
     def set_instant_sync(self, user_id: UserId, wanted: bool) -> None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             connection.execute(
                 "UPDATE users SET instant_sync = ? WHERE id = ?", (int(wanted), user_id.value)
             )
 
     def password_hash(self, user_id: UserId) -> str | None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             row = connection.execute(
                 "SELECT password_hash FROM users WHERE id = ?", (user_id.value,)
             ).fetchone()
         return str(row[0]) if row is not None else None
 
     def set_password_hash(self, user_id: UserId, password_hash: str) -> None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             connection.execute(
                 "UPDATE users SET password_hash = ?, "
                 "credential_revision = credential_revision + 1 WHERE id = ?",
                 (password_hash, user_id.value),
             )
+            revoke_email_changes(connection, user_id, datetime.now(UTC).isoformat())
 
     def record_sign_in(self, user_id: UserId, at: datetime) -> None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             connection.execute(
                 "UPDATE users SET last_sign_in_at = ? WHERE id = ?",
                 (at.isoformat(), user_id.value),
@@ -172,7 +199,7 @@ class SqliteUserDirectory:
         The write lock is held from the check to the write, so two administrators changing each
         other at once are serialized and the second is checked against the first's result.
         """
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             connection.execute("BEGIN IMMEDIATE")
             # The User, every active administrator, and one other User when there is one: all
             # require_administrator_remains needs, however many Users the installation has.
@@ -191,9 +218,12 @@ class SqliteUserDirectory:
                 return
             require_administrator_remains(users, user_id, change(current))
             connection.execute(statement, parameters)
+            after = change(current)
+            if after is not None and after.state is UserState.DISABLED:
+                revoke_email_changes(connection, user_id, datetime.now(UTC).isoformat())
 
     def _one(self, condition: str, *values: object) -> User | None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             # Interpolates only the constant columns and one of this class's own conditions.
             row = connection.execute(
                 f"SELECT {_COLUMNS} FROM users WHERE {condition}",  # noqa: S608
@@ -297,18 +327,22 @@ class SqliteSessions:
         self._database_path = database_path
         self._clock = clock
 
-    def start(self, user_id: UserId, password_hash: str) -> Session | None:
+    def start(
+        self, user_id: UserId, password_hash: str, email: str | None, revision: int
+    ) -> Session | None:
         token = secrets.token_urlsafe(32)
-        now = self._clock.now()
-        expires = now + SESSION_LIFETIME
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            now = self._clock.now()
+            expires = now + SESSION_LIFETIME
             # One statement, so a password change or reset that ends every session cannot fall
             # between the check and the insert.
             started = connection.execute(
                 """
                 INSERT INTO user_sessions(token_hash, user_id, created_at, expires_at)
                 SELECT ?, id, ?, ? FROM users
-                WHERE id = ? AND password_hash = ? AND state = 'active'
+                WHERE id = ? AND password_hash = ? AND email IS ?
+                    AND credential_revision = ? AND state = 'active'
                 """,
                 (
                     token_hash(token),
@@ -316,6 +350,8 @@ class SqliteSessions:
                     expires.isoformat(),
                     user_id.value,
                     password_hash,
+                    email,
+                    revision,
                 ),
             ).rowcount
             connection.execute(
@@ -326,7 +362,7 @@ class SqliteSessions:
     def user_of(self, token: str | None) -> UserId | None:
         if not token:
             return None
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             row = connection.execute(
                 """
                 SELECT user_sessions.user_id, user_sessions.expires_at FROM user_sessions
@@ -342,14 +378,14 @@ class SqliteSessions:
     def end(self, token: str | None) -> None:
         if not token:
             return
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             connection.execute(
                 "DELETE FROM user_sessions WHERE token_hash = ?", (token_hash(token),)
             )
 
     def end_all(self, user_id: UserId, *, keep: str | None = None) -> None:
         kept = token_hash(keep) if keep else None
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             connection.execute(
                 "DELETE FROM user_sessions WHERE user_id = ? AND token_hash IS NOT ?",
                 (user_id.value, kept),

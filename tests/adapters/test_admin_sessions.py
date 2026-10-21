@@ -25,7 +25,7 @@ class MovableClock:
 
 
 def _start(sessions: SqliteSessions, user: UserId) -> Session:
-    session = sessions.start(user, UNUSABLE)
+    session = sessions.start(user, UNUSABLE, f"{user.value}@example.test", 0)
     assert session is not None
     return session
 
@@ -97,10 +97,10 @@ def test_a_session_starts_only_with_the_password_checked_and_while_the_user_is_a
             "UPDATE users SET password_hash = 'scrypt$new' WHERE id = ?", (USER.value,)
         )
 
-    assert sessions.start(USER, UNUSABLE) is None
-    assert sessions.start(USER, "scrypt$new") is not None
+    assert sessions.start(USER, UNUSABLE, f"{USER.value}@example.test", 0) is None
+    assert sessions.start(USER, "scrypt$new", f"{USER.value}@example.test", 0) is not None
 
     with sqlite3.connect(database) as connection:
         connection.execute("UPDATE users SET state = 'disabled' WHERE id = ?", (USER.value,))
-    assert sessions.start(USER, "scrypt$new") is None
-    assert sessions.start(UserId("missing"), UNUSABLE) is None
+    assert sessions.start(USER, "scrypt$new", f"{USER.value}@example.test", 0) is None
+    assert sessions.start(UserId("missing"), UNUSABLE, None, 0) is None

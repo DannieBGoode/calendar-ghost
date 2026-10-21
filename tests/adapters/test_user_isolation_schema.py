@@ -15,6 +15,8 @@ INSTALLATION_TABLES = {
     "identity_email_readiness",
     # Reset admission is anonymous, with no User or eligibility outcome.
     "reset_request_attempts",
+    # Anonymous network counters are installation-level; issuance counters remain owned.
+    "email_change_network_attempts",
     "schema_migrations",
     "users",
     "installation_settings",

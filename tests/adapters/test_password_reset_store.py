@@ -86,7 +86,7 @@ def test_reset_checks_expiry_after_hash_and_lock_wait(
     path, clock, h = _sqlite_identity(tmp_path)
     prepared = h.public.issue_for_email(SECOND.email or "")
     assert prepared is not None
-    session = h.sessions.start(SECOND.id, "other-hash")
+    session = h.sessions.start(SECOND.id, "other-hash", SECOND.email, 0)
     assert session is not None
     waiting = Event()
 
@@ -120,7 +120,7 @@ def test_reset_atomic_failure_preserves_credential_proofs_and_sessions(tmp_path:
     path, _, h = _sqlite_identity(tmp_path)
     prepared = h.public.issue_for_email(SECOND.email or "")
     assert prepared is not None
-    session = h.sessions.start(SECOND.id, "other-hash")
+    session = h.sessions.start(SECOND.id, "other-hash", SECOND.email, 0)
     assert session is not None
     expected = h.changes.current(SECOND.id)
     with transaction(path) as connection:
@@ -215,7 +215,10 @@ def test_reset_migration_fresh_upgrade_restart_and_legacy_revocation(
         from tests.users import add_account
 
         add_account(path, "preserved-account", FIRST.id)
-        session = SqliteSessions(path, ResetClock()).start(FIRST.id, "preserved-hash")
+        from calendar_sync.application.identity.ports import Session
+        from tests.users import session_for
+
+        session = Session(session_for(path, FIRST.id), NOW + timedelta(days=7), FIRST.id)
         assert session is not None
         with transaction(path) as connection:
             connection.execute(
@@ -233,7 +236,7 @@ def test_reset_migration_fresh_upgrade_restart_and_legacy_revocation(
     initialize_database(path)
     initialize_database(path)
     with transaction(path) as connection:
-        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 36
+        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 37
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         if version:
             assert connection.execute("SELECT credential_revision FROM users").fetchone()[0] == 0
@@ -312,7 +315,7 @@ def test_own_credential_change_rolls_back_every_write_on_fault(
     path, _, h = _sqlite_identity(tmp_path)
     prepared = h.public.issue_for_email(SECOND.email or "")
     assert prepared is not None
-    session = h.sessions.start(SECOND.id, "other-hash")
+    session = h.sessions.start(SECOND.id, "other-hash", SECOND.email, 0)
     expected = h.changes.current(SECOND.id)
     assert session is not None
     assert expected is not None
@@ -339,7 +342,7 @@ def test_own_credential_change_rolls_back_every_write_on_fault(
 def test_own_password_change_refuses_expired_kept_session(tmp_path: Path) -> None:
     path, clock, h = _sqlite_identity(tmp_path)
     expected = h.changes.current(SECOND.id)
-    session = h.sessions.start(SECOND.id, "other-hash")
+    session = h.sessions.start(SECOND.id, "other-hash", SECOND.email, 0)
     assert expected is not None
     assert session is not None
     clock.moment = session.expires_at
@@ -376,12 +379,10 @@ def test_reset_and_sign_in_serialize_concurrent_session_start(
             yield connection
 
     @contextmanager
-    def session_transaction(path: Path) -> Iterator[sqlite3.Connection]:
-        with transaction(path) as connection:
+    def session_transaction(path: Path, *, timeout: float = 5.0) -> Iterator[sqlite3.Connection]:
+        with transaction(path, timeout=timeout) as connection:
             connection.set_trace_callback(
-                lambda statement: (
-                    starting.set() if "INSERT INTO user_sessions" in statement else None
-                )
+                lambda statement: starting.set() if statement == "BEGIN IMMEDIATE" else None
             )
             yield connection
 
@@ -390,12 +391,12 @@ def test_reset_and_sign_in_serialize_concurrent_session_start(
     with ThreadPoolExecutor(max_workers=2) as executor:
         resetting = executor.submit(h.links.reset, prepared.link.token, "reset-hash")
         assert changing.wait(timeout=1)
-        stale = executor.submit(h.sessions.start, SECOND.id, "other-hash")
+        stale = executor.submit(h.sessions.start, SECOND.id, "other-hash", SECOND.email, 0)
         assert starting.wait(timeout=1)
         proceed.set()
         assert resetting.result(timeout=1) == SECOND.id
         assert stale.result(timeout=1) is None
-    new = h.sessions.start(SECOND.id, "reset-hash")
+    new = h.sessions.start(SECOND.id, "reset-hash", SECOND.email, 1)
     assert new is not None
     assert h.sessions.user_of(new.token) == SECOND.id
 

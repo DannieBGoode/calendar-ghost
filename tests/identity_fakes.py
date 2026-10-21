@@ -22,6 +22,7 @@ from calendar_sync.application.identity.ports import (
     PlanListing,
     PlansSetting,
     Session,
+    SignInCredentials,
     UserPage,
     UserQuery,
     UserSort,
@@ -69,6 +70,15 @@ class MemoryUsers:
     default_plan: PlanKey | None = None
     """The Default Plan, which MemoryPlans keeps here, as SQLite keeps Users and Plans in one
     database."""
+
+    def sign_in_credentials(self, email: str | None) -> SignInCredentials | None:
+        user = self.without_email() if email is None else self.by_email(email)
+        if user is None:
+            return None
+        return SignInCredentials(
+            user,
+            CredentialSnapshot(user.id, self.revisions[user.id], self.hashes[user.id], user.email),
+        )
 
     def count(self) -> int:
         return len(self.users)
@@ -194,12 +204,16 @@ class MemorySessions:
     sessions: dict[str, UserId] = field(default_factory=dict)
     started: int = 0
 
-    def start(self, user_id: UserId, password_hash: str) -> Session | None:
+    def start(
+        self, user_id: UserId, password_hash: str, email: str | None, revision: int
+    ) -> Session | None:
         user = self.users.get(user_id)
         if (
             user is None
             or user.state is not UserState.ACTIVE
             or self.users.password_hash(user_id) != password_hash
+            or user.email != email
+            or self.users.revisions[user_id] != revision
         ):
             return None
         self.started += 1
@@ -209,7 +223,14 @@ class MemorySessions:
 
     def signed_in(self, user_id: UserId) -> Session:
         """A session of `user_id`, as signing in with their current password gives."""
-        session = self.start(user_id, self.users.password_hash(user_id) or "")
+        facts = self.users.sign_in_credentials(self.users.users[user_id].email)
+        assert facts is not None
+        session = self.start(
+            user_id,
+            facts.credential.password_hash,
+            facts.credential.email,
+            facts.credential.revision,
+        )
         assert session is not None
         return session
 
@@ -426,7 +447,7 @@ class MemoryCredentialChanges:
         if user is None or user.state is not UserState.ACTIVE:
             return None
         return CredentialSnapshot(
-            user_id, self.users.revisions[user_id], self.users.hashes[user_id]
+            user_id, self.users.revisions[user_id], self.users.hashes[user_id], user.email
         )
 
     def change_password(self, expected: CredentialSnapshot, hashed: str, keep: str | None) -> bool:
