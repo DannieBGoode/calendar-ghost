@@ -24,6 +24,7 @@ from calendar_sync.domain.access import (
 from calendar_sync.domain.registration import (
     RegistrationProof,
     may_finish_registration,
+    may_request_registration,
     registration_expiry,
 )
 from calendar_sync.infrastructure.persistence.registration import _policy, _registration_transaction
@@ -96,12 +97,16 @@ class SqliteRegistrationProofs:
         with _registration_transaction(self._database) as connection:
             connection.execute("BEGIN IMMEDIATE")
             now = self._clock.now()
+            if not may_request_registration(
+                _policy(connection), readiness_status(connection, fingerprint).available
+            ):
+                return None
             invitation = (
                 _invitation(connection, invitation_token, now) if invitation_token else None
             )
             if invitation_token is not None and invitation is None:
                 return None
-            if not _admissible(connection, invitation is not None, fingerprint):
+            if connection.execute("SELECT 1 FROM users LIMIT 1").fetchone() is None:
                 return None
             if connection.execute("SELECT 1 FROM users WHERE email = ?", (normalized,)).fetchone():
                 return None

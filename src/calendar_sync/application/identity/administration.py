@@ -250,8 +250,12 @@ class AcceptInvitation:
         )
         if not usable:
             raise LinkUnusable("this invitation was already used, revoked, or has expired")
-        if not may_accept_invitation_directly(self.settings.policy()):
-            raise InvitationVerificationRequired("verify your email before joining under Open")
+        policy = self.settings.policy()
+        if not may_accept_invitation_directly(policy):
+            if may_issue_invitation(policy):
+                raise InvitationVerificationRequired("verify your email before joining under Open")
+            self.attempts.failed(client)
+            raise LinkUnusable("this invitation was already used, revoked, or has expired")
         hashed = self.passwords.hash(password)
         try:
             user = self.invitations.accept(token, normalized, hashed)

@@ -643,3 +643,26 @@ def test_direct_invitation_expiry_is_rechecked_after_hashing() -> None:
         )
     assert installation.users.count() == 1
     assert installation.sessions.sessions == {}
+
+
+def test_only_me_after_usability_check_is_unusable_before_hashing() -> None:
+    installation = _installation()
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    link = installation.invite().execute(ADMIN.id)
+    passwords = CountingPasswords()
+    throttle = CountingThrottle()
+    installation.attempts = LinkAttempts(throttle)
+    usable = installation.invitations.usable
+
+    def closed_after_check(token: str, at: datetime) -> bool:
+        result = usable(token, at)
+        installation.registration.current = RegistrationPolicy.ONLY_ME
+        return result
+
+    installation.invitations.usable = closed_after_check  # type: ignore[method-assign]
+    with pytest.raises(LinkUnusable):
+        installation.accept(passwords).execute(link.token, "new@example.test", PASSWORD, CLIENT)
+    assert passwords.hashed == 0
+    assert installation.users.count() == 1
+    assert installation.sessions.sessions == {}
+    assert throttle.failures == {f"client:{CLIENT}": 1}

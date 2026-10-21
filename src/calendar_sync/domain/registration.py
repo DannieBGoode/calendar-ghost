@@ -33,6 +33,10 @@ def may_accept_invitation_directly(policy: RegistrationPolicy) -> bool:
     return policy is RegistrationPolicy.INVITATION_ONLY
 
 
+def may_request_registration(policy: RegistrationPolicy, operational: bool) -> bool:
+    return policy is RegistrationPolicy.OPEN and operational
+
+
 def may_finish_registration(
     policy: RegistrationPolicy, invitation_bound: bool, operational: bool
 ) -> bool:

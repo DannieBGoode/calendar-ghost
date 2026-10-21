@@ -12,6 +12,7 @@ from calendar_sync.domain.registration import (
     may_accept_invitation_directly,
     may_finish_registration,
     may_issue_invitation,
+    may_request_registration,
     registration_expiry,
 )
 from tests.helpers import NOW
@@ -19,6 +20,9 @@ from tests.helpers import NOW
 
 def test_registration_policy_decisions() -> None:
     for policy, bound, operational in product(RegistrationPolicy, (False, True), (False, True)):
+        assert may_request_registration(policy, operational) == (
+            policy is RegistrationPolicy.OPEN and operational
+        )
         assert may_issue_invitation(policy) == (policy is not RegistrationPolicy.ONLY_ME)
         assert may_accept_invitation_directly(policy) == (
             policy is RegistrationPolicy.INVITATION_ONLY

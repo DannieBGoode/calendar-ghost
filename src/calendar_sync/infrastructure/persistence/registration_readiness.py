@@ -9,6 +9,7 @@ from calendar_sync.application.identity.registration_ports import (
     RegistrationStorageUnavailable,
 )
 from calendar_sync.domain.access import RegistrationPolicy
+from calendar_sync.domain.registration import may_request_registration
 from calendar_sync.infrastructure.persistence.connections import transaction
 
 
@@ -48,8 +49,10 @@ class SqliteRegistrationReadiness:
                 ).fetchone()
                 return bool(
                     row is not None
-                    and row[0] == RegistrationPolicy.OPEN.value
-                    and readiness_status(connection, self._setup.fingerprint).available
+                    and may_request_registration(
+                        RegistrationPolicy(str(row[0])),
+                        readiness_status(connection, self._setup.fingerprint).available,
+                    )
                 )
         except (sqlite3.Error, RegistrationStorageUnavailable):
             return False

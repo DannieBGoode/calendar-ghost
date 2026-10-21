@@ -297,3 +297,28 @@ def test_cross_purpose_and_empty_installation_never_admit(tmp_path: Path) -> Non
     assert proofs.complete(pending.link.token, "hash", "current") is None
     assert proofs.issue("another@example.test", None, "current") is None
     assert unchanged(database) == (0, 0)
+
+
+@pytest.mark.parametrize("fingerprint", ["current", "stale"])
+def test_queued_invitation_request_cannot_issue_after_open_closes(
+    tmp_path: Path, fingerprint: str
+) -> None:
+    database, clock, _, settings, proofs = registration(tmp_path)
+    invitations = SqliteInvitations(database, RandomIds(), clock)
+    invitation = invitations.issue(FIRST.id, NOW)
+    assert invitation
+    # The worker receives this queued request only after the administrator closes Open.
+    queued_email, queued_invitation = "new@example.test", invitation.token
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY, actor=FIRST.id, fingerprint=None)
+    with transaction(database) as connection:
+        before = {
+            table: [tuple(row) for row in connection.execute(f"SELECT * FROM {table}")]
+            for table in ("registration_proofs", "invitations", "users", "user_sessions")
+        }
+    assert proofs.issue(queued_email, queued_invitation, fingerprint) is None
+    with transaction(database) as connection:
+        after = {
+            table: [tuple(row) for row in connection.execute(f"SELECT * FROM {table}")]
+            for table in before
+        }
+    assert after == before
