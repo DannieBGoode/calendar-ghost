@@ -223,7 +223,7 @@ export type IntegrationScope = IntegrationToken["scopes"][number]
 
 /** Who may become a User: Only Me, the default, or Invitation Only. */
 export type Registration = Schemas["RegistrationResponse"]
-export type RegistrationPolicy = Registration["policy"]
+export type RegistrationPolicy = Schemas["RegistrationRequest"]["policy"]
 /** Every Plan, whether Plans limit people, the Default Plan, and the sync intervals offered now. */
 export type PlansOverview = Schemas["PlansResponse"]
 /** One Plan as an administrator manages it: its limits, and who has it. */

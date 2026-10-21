@@ -30,7 +30,6 @@ SUPPRESSION = re.compile(
 # Dataclass use cases and services that take more constructor arguments than Ruff's max-args.
 # This is debt that may only shrink: split a class to remove its entry, and never add one.
 WIDE_DATACLASSES = {
-    "calendar_sync.application.identity.administration.AcceptInvitation",
     "calendar_sync.application.sync.reconciliation.ReconcileSyncRule",
     "calendar_sync.application.sync.removal.RemoveSyncRule",
     "calendar_sync.application.sync.sync_run.SyncRunContext",

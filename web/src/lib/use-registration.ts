@@ -18,9 +18,9 @@ export function useRegistration() {
   const [message, setMessage] = useState("")
   const change = useMutation({
     mutationFn: (policy: RegistrationPolicy) => api.setRegistrationPolicy(policy),
-    onSuccess: (result) => {
+    onSuccess: (result, policy) => {
       queryClient.setQueryData(["registration"], result)
-      setMessage(t(SAVED[result.policy]))
+      setMessage(t(SAVED[policy]))
     },
   })
   return { registration, change, message }

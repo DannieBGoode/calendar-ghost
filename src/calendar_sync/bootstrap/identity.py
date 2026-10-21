@@ -119,13 +119,15 @@ def _administration(
     attempts = LinkAttempts(adapters.link_throttle)
     return AdministrationServices(
         show_registration=ShowRegistration(users, settings),
-        set_registration_policy=SetRegistrationPolicy(users, settings),
+        set_registration_policy=SetRegistrationPolicy(
+            users, settings, adapters.identity_email.setup.fingerprint
+        ),
         invite_user=InviteUser(users, settings, invitations, clock),
         list_invitations=ListInvitations(users, invitations, clock),
         revoke_invitation=RevokeInvitation(users, invitations, clock),
         check_invitation=CheckInvitation(settings, invitations, clock, attempts),
         accept_invitation=AcceptInvitation(
-            users, settings, invitations, passwords, sessions, adapters.ids, clock, attempts
+            users, settings, invitations, passwords, sessions, clock, attempts
         ),
         issue_password_reset=IssuePasswordReset(users, resets, clock),
         check_password_reset=CheckPasswordReset(resets, clock, adapters.reset_admission),

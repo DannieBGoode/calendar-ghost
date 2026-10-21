@@ -13,48 +13,85 @@ from calendar_sync.application.identity.administration import AdministratorRequi
 from calendar_sync.application.identity.errors import ResetStorageUnavailable, UserDisabled
 from calendar_sync.application.identity.password_reset import PreparedPasswordReset
 from calendar_sync.application.identity.ports import IssuedLink, PendingInvitation
+from calendar_sync.application.identity.registration_ports import (
+    InvitationVerificationRequired,
+    OpenRegistrationUnavailable,
+    RegistrationStorageUnavailable,
+)
 from calendar_sync.application.shared.ports import Clock, IdGenerator
 from calendar_sync.domain.access import (
     RegistrationPolicy,
+    Role,
     User,
     UserId,
+    UserState,
+    email_address,
     link_expiry,
     require_registration_change,
 )
+from calendar_sync.domain.registration import may_accept_invitation_directly, may_issue_invitation
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.credentials import revoke_resets
 from calendar_sync.infrastructure.persistence.email_change_records import revoke_email_changes
+from calendar_sync.infrastructure.persistence.registration_readiness import readiness_status
 from calendar_sync.infrastructure.persistence.users import insert_user
 from calendar_sync.infrastructure.security import token_hash
 
 _INVITATION_USABLE = "accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ?"
 
 
+@contextmanager
+def _registration_transaction(database: Path) -> Iterator[sqlite3.Connection]:
+    try:
+        with transaction(database, timeout=0.1) as connection:
+            yield connection
+    except sqlite3.Error:
+        raise RegistrationStorageUnavailable from None
+
+
 class SqliteRegistrationSettings:
-    def __init__(self, database_path: Path) -> None:
+    def __init__(self, database_path: Path, clock: Clock) -> None:
         self._database_path = database_path
+        self._clock = clock
 
     def policy(self) -> RegistrationPolicy:
         with transaction(self._database_path) as connection:
             return _policy(connection)
 
-    def set_policy(self, policy: RegistrationPolicy) -> None:
-        with transaction(self._database_path) as connection:
-            # Held from the count to the change, so an invitation accepted meanwhile is counted.
-            connection.execute("BEGIN IMMEDIATE")
-            users = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-            require_registration_change(policy, int(users))
-            # Migration 22 creates the one row.
-            connection.execute(
-                "UPDATE installation_settings SET registration_policy = ? WHERE singleton = 1",
-                (policy.value,),
-            )
+    def set_policy(
+        self, policy: RegistrationPolicy, *, actor: UserId, fingerprint: str | None
+    ) -> None:
+        try:
+            with transaction(self._database_path, timeout=0.1) as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                administrator = connection.execute(
+                    "SELECT 1 FROM users WHERE id = ? AND role = 'installation_administrator' "
+                    "AND state = 'active'",
+                    (actor.value,),
+                ).fetchone()
+                if administrator is None:
+                    raise AdministratorRequired("an active Installation Administrator is required")
+                users = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+                require_registration_change(policy, int(users))
+                if policy is RegistrationPolicy.OPEN:
+                    status = readiness_status(connection, fingerprint)
+                    if status.reason is not None:
+                        raise OpenRegistrationUnavailable(status.reason)
+                connection.execute(
+                    "UPDATE installation_settings SET registration_policy = ? WHERE singleton = 1",
+                    (policy.value,),
+                )
+                _revoke_registration(connection, policy, self._clock.now())
+        except sqlite3.Error:
+            raise RegistrationStorageUnavailable from None
 
     def return_to_setup(self, at: datetime) -> None:
         with transaction(self._database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
+            at = self._clock.now()
             users = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
             require_registration_change(RegistrationPolicy.ONLY_ME, int(users))
+            _revoke_registration(connection, RegistrationPolicy.ONLY_ME, at)
             connection.execute(
                 "UPDATE identity_email_readiness SET fingerprint = NULL, tested_at = NULL, "
                 "generation = generation + 1 WHERE singleton = 1"
@@ -73,6 +110,18 @@ class SqliteRegistrationSettings:
             )
 
 
+def _revoke_registration(
+    connection: sqlite3.Connection, policy: RegistrationPolicy, at: datetime
+) -> None:
+    if policy is RegistrationPolicy.OPEN:
+        return
+    connection.execute(
+        "UPDATE registration_proofs SET revoked_at = ? WHERE used_at IS NULL "
+        "AND revoked_at IS NULL AND (? = 'only_me' OR invitation_id IS NULL)",
+        (at.isoformat(), policy.value),
+    )
+
+
 def _policy(connection: sqlite3.Connection) -> RegistrationPolicy:
     row = connection.execute(
         "SELECT registration_policy FROM installation_settings WHERE singleton = 1"
@@ -81,9 +130,10 @@ def _policy(connection: sqlite3.Connection) -> RegistrationPolicy:
 
 
 class SqliteInvitations:
-    def __init__(self, database_path: Path, ids: IdGenerator) -> None:
+    def __init__(self, database_path: Path, ids: IdGenerator, clock: Clock) -> None:
         self._database_path = database_path
         self._ids = ids
+        self._clock = clock
 
     def issue(self, created_by: UserId, at: datetime) -> IssuedLink | None:
         link = IssuedLink(self._ids.new(), secrets.token_urlsafe(32), link_expiry(at))
@@ -98,7 +148,7 @@ class SqliteInvitations:
                 """,
                 (created_by.value,),
             ).fetchone()
-            if administrator is None or not _policy(connection).lets_people_join:
+            if administrator is None or not may_issue_invitation(_policy(connection)):
                 return None
             connection.execute(
                 """
@@ -137,39 +187,50 @@ class SqliteInvitations:
                 f"UPDATE invitations SET revoked_at = ? WHERE id = ? AND {_INVITATION_USABLE}",  # noqa: S608
                 (at.isoformat(), invitation_id, at.isoformat()),
             )
+            if cursor.rowcount:
+                connection.execute(
+                    "UPDATE registration_proofs SET revoked_at = ? WHERE invitation_id = ? "
+                    "AND used_at IS NULL AND revoked_at IS NULL",
+                    (at.isoformat(), invitation_id),
+                )
         return cursor.rowcount == 1
 
     def usable(self, token: str, at: datetime) -> bool:
-        with transaction(self._database_path) as connection:
+        with _registration_transaction(self._database_path) as connection:
             row = connection.execute(
                 f"SELECT 1 FROM invitations WHERE token_hash = ? AND {_INVITATION_USABLE}",  # noqa: S608
                 (token_hash(token), at.isoformat()),
             ).fetchone()
         return row is not None
 
-    def accept(self, token: str, user: User, password_hash: str, at: datetime) -> bool:
-        with transaction(self._database_path) as connection:
-            # Held from the check to the use, so two people cannot both use the link. An
-            # unusable link is refused before the email is looked at, so it reveals nothing.
+    def accept(self, token: str, email: str, password_hash: str) -> User | None:
+        with _registration_transaction(self._database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
+            at = self._clock.now()
             usable = connection.execute(
                 f"SELECT 1 FROM invitations WHERE token_hash = ? AND {_INVITATION_USABLE}",  # noqa: S608
                 (token_hash(token), at.isoformat()),
             ).fetchone()
             if usable is None:
-                return False
-            # Read under the same lock as Only Me is chosen, so a person cannot join after it,
-            # nor after the last User left and the installation returned to setup.
-            anyone = connection.execute("SELECT 1 FROM users LIMIT 1").fetchone()
-            if not _policy(connection).lets_people_join or anyone is None:
-                return False
-            # EmailTaken rolls the transaction back, so the invitation stays usable.
+                return None
+            policy = _policy(connection)
+            if not may_accept_invitation_directly(policy):
+                if may_issue_invitation(policy):
+                    raise InvitationVerificationRequired(
+                        "verify your email before joining under Open"
+                    )
+                return None
+            if connection.execute("SELECT 1 FROM users LIMIT 1").fetchone() is None:
+                return None
+            user = User(
+                UserId(self._ids.new()), email_address(email), Role.USER, UserState.ACTIVE, at
+            )
             insert_user(connection, user, password_hash)
             connection.execute(
                 "UPDATE invitations SET accepted_at = ?, accepted_by = ? WHERE token_hash = ?",
                 (at.isoformat(), user.id.value, token_hash(token)),
             )
-        return True
+        return user
 
 
 @contextmanager

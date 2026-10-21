@@ -20,7 +20,7 @@ from calendar_sync.infrastructure.persistence.identity_email import SqliteIdenti
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.registration import SqliteRegistrationSettings
 from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
-from tests.adapters.test_users_store import FIRST, NOW, SECOND
+from tests.adapters.test_users_store import FIRST, NOW, SECOND, MovableClock
 from tests.identity_email_fakes import MemoryIdentityEmailTests
 
 
@@ -66,7 +66,7 @@ def test_attempts_are_not_refunded_by_failed_delivery_or_setup_reset(tmp_path: P
     database, tests = store(tmp_path)
     for _ in range(3):
         tests.admit(FIRST.id, "f", NOW)
-    SqliteRegistrationSettings(database).return_to_setup(NOW)
+    SqliteRegistrationSettings(database, MovableClock(NOW)).return_to_setup(NOW)
     with pytest.raises(IdentityEmailTestThrottled):
         tests.admit(FIRST.id, "f", NOW)
 
@@ -83,7 +83,7 @@ def test_clock_rollback_does_not_refund_future_attempts(tmp_path: Path) -> None:
 def test_setup_reset_rejects_inflight_success(tmp_path: Path) -> None:
     database, tests = store(tmp_path)
     test = tests.admit(FIRST.id, "f", NOW)
-    SqliteRegistrationSettings(database).return_to_setup(NOW)
+    SqliteRegistrationSettings(database, MovableClock(NOW)).return_to_setup(NOW)
     assert not tests.record_success(test, FIRST.email or "", NOW)
     assert tests.tested_at("f") is None
 
@@ -94,7 +94,7 @@ def test_refused_setup_reset_preserves_readiness(tmp_path: Path) -> None:
     assert tests.record_success(test, FIRST.email or "", NOW)
     SqliteUserDirectory(database).add(SECOND, "synthetic")
     with pytest.raises(OnlyMeNeedsOneUser):
-        SqliteRegistrationSettings(database).return_to_setup(NOW)
+        SqliteRegistrationSettings(database, MovableClock(NOW)).return_to_setup(NOW)
     assert tests.record_success(test, FIRST.email or "", NOW)
     assert tests.tested_at("f") == NOW
 
@@ -200,7 +200,7 @@ def test_identity_email_migration_fresh_upgrade_and_restart(tmp_path: Path, vers
             None,
             0,
         )
-        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 37
+        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 38
 
 
 def test_identity_email_migration_rolls_back_on_fault(tmp_path: Path) -> None:

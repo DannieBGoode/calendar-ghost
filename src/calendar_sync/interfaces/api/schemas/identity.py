@@ -96,7 +96,7 @@ class IssueIntegrationTokenRequest(BaseModel):
 
 
 class RegistrationResponse(ApiResponse):
-    policy: Literal["only_me", "invitation_only"]
+    policy: Literal["only_me", "invitation_only", "open"]
     only_me_available: bool
     """Whether Only Me may be chosen now: only while no other User exists."""
 

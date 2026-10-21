@@ -13,7 +13,7 @@ from calendar_sync.infrastructure.persistence.credentials import SqliteCredentia
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.registration import SqlitePasswordResetLinks
 from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
-from tests.adapters.test_users_store import FIRST, SECOND, SequentialIds
+from tests.adapters.test_users_store import FIRST, SECOND, MovableClock, SequentialIds
 from tests.contracts.persistence import CredentialPersistenceContract, CredentialPersistenceHarness
 from tests.helpers import NOW
 from tests.identity_fakes import (
@@ -190,8 +190,10 @@ def test_invitation_tokens_never_reset_credentials(tmp_path: Path) -> None:
     )
 
     path, clock, h = _sqlite_identity(tmp_path)
-    SqliteRegistrationSettings(path).set_policy(RegistrationPolicy.INVITATION_ONLY)
-    invitation = SqliteInvitations(path, SequentialIds()).issue(FIRST.id, NOW)
+    SqliteRegistrationSettings(path, MovableClock(NOW)).set_policy(
+        RegistrationPolicy.INVITATION_ONLY, actor=FIRST.id, fingerprint=None
+    )
+    invitation = SqliteInvitations(path, SequentialIds(), MovableClock(NOW)).issue(FIRST.id, NOW)
     assert invitation is not None
     before = h.changes.current(FIRST.id)
     assert h.links.owner(invitation.token, clock.now()) is None
@@ -236,7 +238,7 @@ def test_reset_migration_fresh_upgrade_restart_and_legacy_revocation(
     initialize_database(path)
     initialize_database(path)
     with transaction(path) as connection:
-        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 37
+        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 38
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         if version:
             assert connection.execute("SELECT credential_revision FROM users").fetchone()[0] == 0

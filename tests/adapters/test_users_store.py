@@ -385,10 +385,12 @@ class SequentialIds:
 
 
 def test_new_installations_start_with_only_me_and_keep_the_chosen_policy(tmp_path: Path) -> None:
-    settings = SqliteRegistrationSettings(_database(tmp_path))
+    database = _database(tmp_path)
+    SqliteUserDirectory(database).add(FIRST, "hash-1")
+    settings = SqliteRegistrationSettings(database, MovableClock(NOW))
     assert settings.policy() is RegistrationPolicy.ONLY_ME
 
-    settings.set_policy(RegistrationPolicy.INVITATION_ONLY)
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY, actor=FIRST.id, fingerprint=None)
 
     assert settings.policy() is RegistrationPolicy.INVITATION_ONLY
 
@@ -400,15 +402,15 @@ def test_only_me_is_refused_in_one_step_with_the_change_while_another_user_exist
     database = _database(tmp_path)
     users = SqliteUserDirectory(database)
     users.add(FIRST, "hash-1")
-    settings = SqliteRegistrationSettings(database)
-    settings.set_policy(RegistrationPolicy.INVITATION_ONLY)
+    settings = SqliteRegistrationSettings(database, MovableClock(NOW))
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY, actor=FIRST.id, fingerprint=None)
     users.add(SECOND, "hash-2")
 
     with pytest.raises(OnlyMeNeedsOneUser):
-        settings.set_policy(RegistrationPolicy.ONLY_ME)
+        settings.set_policy(RegistrationPolicy.ONLY_ME, actor=FIRST.id, fingerprint=None)
     assert settings.policy() is RegistrationPolicy.INVITATION_ONLY
     users.delete(SECOND.id)
-    settings.set_policy(RegistrationPolicy.ONLY_ME)
+    settings.set_policy(RegistrationPolicy.ONLY_ME, actor=FIRST.id, fingerprint=None)
     assert settings.policy() is RegistrationPolicy.ONLY_ME
 
 
@@ -421,11 +423,11 @@ def test_no_invitation_is_issued_once_nobody_may_join_or_its_creator_left(
     users = SqliteUserDirectory(database)
     users.add(FIRST, "hash-1")
     users.add(SECOND, "hash-2")
-    settings = SqliteRegistrationSettings(database)
-    invitations = SqliteInvitations(database, SequentialIds())
+    settings = SqliteRegistrationSettings(database, MovableClock(NOW))
+    invitations = SqliteInvitations(database, SequentialIds(), MovableClock(NOW))
 
     closed = invitations.issue(FIRST.id, NOW)
-    settings.set_policy(RegistrationPolicy.INVITATION_ONLY)
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY, actor=FIRST.id, fingerprint=None)
     not_an_administrator = invitations.issue(SECOND.id, NOW)
     users.delete(SECOND.id)
     gone = invitations.issue(SECOND.id, NOW)
@@ -440,13 +442,13 @@ def test_an_invitation_is_refused_once_nobody_may_join(tmp_path: Path) -> None:
     database = _database(tmp_path)
     users = SqliteUserDirectory(database)
     users.add(FIRST, "hash-1")
-    settings = SqliteRegistrationSettings(database)
-    settings.set_policy(RegistrationPolicy.INVITATION_ONLY)
-    invitations = SqliteInvitations(database, SequentialIds())
+    settings = SqliteRegistrationSettings(database, MovableClock(NOW))
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY, actor=FIRST.id, fingerprint=None)
+    invitations = SqliteInvitations(database, SequentialIds(), MovableClock(NOW))
     link = _issued(invitations, FIRST.id, NOW)
-    settings.set_policy(RegistrationPolicy.ONLY_ME)
+    settings.set_policy(RegistrationPolicy.ONLY_ME, actor=FIRST.id, fingerprint=None)
 
-    assert not invitations.accept(link.token, SECOND, "hash-2", NOW)
+    assert not invitations.accept(link.token, SECOND.email or "", "hash-2")
     assert users.get(SECOND.id) is None
 
 
@@ -455,12 +457,14 @@ def test_an_invitation_is_refused_once_everyone_left(tmp_path: Path) -> None:
     database = _database(tmp_path)
     users = SqliteUserDirectory(database)
     users.add(FIRST, "hash-1")
-    SqliteRegistrationSettings(database).set_policy(RegistrationPolicy.INVITATION_ONLY)
-    invitations = SqliteInvitations(database, SequentialIds())
+    SqliteRegistrationSettings(database, MovableClock(NOW)).set_policy(
+        RegistrationPolicy.INVITATION_ONLY, actor=FIRST.id, fingerprint=None
+    )
+    invitations = SqliteInvitations(database, SequentialIds(), MovableClock(NOW))
     link = _issued(invitations, FIRST.id, NOW)
     users.delete(FIRST.id)
 
-    assert not invitations.accept(link.token, SECOND, "hash-2", NOW)
+    assert not invitations.accept(link.token, SECOND.email or "", "hash-2")
     assert users.count() == 0
 
 
@@ -468,20 +472,24 @@ def test_an_invitation_adds_one_user_once_and_only_its_hash_is_stored(tmp_path: 
     database = _database(tmp_path)
     users = SqliteUserDirectory(database)
     users.add(FIRST, "hash-1")
-    SqliteRegistrationSettings(database).set_policy(RegistrationPolicy.INVITATION_ONLY)
-    invitations = SqliteInvitations(database, SequentialIds())
+    SqliteRegistrationSettings(database, MovableClock(NOW)).set_policy(
+        RegistrationPolicy.INVITATION_ONLY, actor=FIRST.id, fingerprint=None
+    )
+    invitations = SqliteInvitations(database, SequentialIds(), MovableClock(NOW))
     link = _issued(invitations, FIRST.id, NOW)
 
     assert invitations.usable(link.token, NOW)
     with pytest.raises(EmailTaken):
-        invitations.accept(link.token, replace(SECOND, email=FIRST.email), "hash-2", NOW)
+        invitations.accept(link.token, FIRST.email or "", "hash-2")
     assert invitations.usable(link.token, NOW)
-    assert invitations.accept(link.token, SECOND, "hash-2", NOW)
+    joined = invitations.accept(link.token, SECOND.email or "", "hash-2")
+    assert joined is not None
     third = replace(SECOND, id=UserId("third"), email="third@example.test")
-    assert not invitations.accept(link.token, third, "hash-3", NOW)
+    assert not invitations.accept(link.token, third.email or "", "hash-3")
     assert users.get(third.id) is None
 
-    assert users.get(SECOND.id) == SECOND
+    assert users.get(joined.id) == joined
+    assert joined.email == SECOND.email
     assert invitations.pending(NOW) == ()
     with sqlite3.connect(database) as connection:
         assert link.token not in repr(connection.execute("SELECT * FROM invitations").fetchall())
@@ -490,8 +498,10 @@ def test_an_invitation_adds_one_user_once_and_only_its_hash_is_stored(tmp_path: 
 def test_invitations_expire_after_seven_days_and_can_be_revoked(tmp_path: Path) -> None:
     database = _database(tmp_path)
     SqliteUserDirectory(database).add(FIRST, "hash-1")
-    SqliteRegistrationSettings(database).set_policy(RegistrationPolicy.INVITATION_ONLY)
-    invitations = SqliteInvitations(database, SequentialIds())
+    SqliteRegistrationSettings(database, MovableClock(NOW)).set_policy(
+        RegistrationPolicy.INVITATION_ONLY, actor=FIRST.id, fingerprint=None
+    )
+    invitations = SqliteInvitations(database, SequentialIds(), MovableClock(NOW))
     first = _issued(invitations, FIRST.id, NOW)
     second = _issued(invitations, FIRST.id, NOW + timedelta(days=1))
 
@@ -508,9 +518,9 @@ def test_returning_to_setup_chooses_only_me_and_revokes_every_invitation_in_one_
     database = _database(tmp_path)
     users = SqliteUserDirectory(database)
     users.add(FIRST, "hash-1")
-    settings = SqliteRegistrationSettings(database)
-    settings.set_policy(RegistrationPolicy.INVITATION_ONLY)
-    invitations = SqliteInvitations(database, SequentialIds())
+    settings = SqliteRegistrationSettings(database, MovableClock(NOW))
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY, actor=FIRST.id, fingerprint=None)
+    invitations = SqliteInvitations(database, SequentialIds(), MovableClock(NOW))
     first = _issued(invitations, FIRST.id, NOW)
     second = _issued(invitations, FIRST.id, NOW)
     later = NOW + timedelta(hours=1)
@@ -541,7 +551,7 @@ def _setup_with_plans(
     database = _database(tmp_path)
     return (
         SqliteUserDirectory(database),
-        SqliteRegistrationSettings(database),
+        SqliteRegistrationSettings(database, MovableClock(NOW)),
         SqlitePlans(database),
     )
 
@@ -635,3 +645,18 @@ def test_deleting_a_user_removes_every_record_they_own(tmp_path: Path) -> None:
             assert rows == (0,), table
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     assert users.list() == (OTHER_ADMIN,)
+
+
+def test_direct_invitation_acceptance_uses_the_current_clock(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    users = SqliteUserDirectory(database)
+    users.add(FIRST, "hash-1")
+    clock = MovableClock(NOW)
+    settings = SqliteRegistrationSettings(database, clock)
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY, actor=FIRST.id, fingerprint=None)
+    invitations = SqliteInvitations(database, SequentialIds(), clock)
+    link = _issued(invitations, FIRST.id, NOW)
+    assert invitations.usable(link.token, NOW)
+    clock.moment = link.expires_at
+    assert invitations.accept(link.token, "new@example.test", "hash-2") is None
+    assert users.count() == 1

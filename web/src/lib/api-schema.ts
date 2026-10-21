@@ -2341,7 +2341,7 @@ export interface components {
              * Policy
              * @enum {string}
              */
-            policy: "only_me" | "invitation_only";
+            policy: "only_me" | "invitation_only" | "open";
         };
         /** RemovalResponse */
         RemovalResponse: {
