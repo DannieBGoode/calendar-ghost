@@ -30,6 +30,11 @@ from calendar_sync.application.identity.password_reset import (
     SelfServicePasswordResets,
 )
 from calendar_sync.application.identity.ports import PasswordHasher, UserDirectory
+from calendar_sync.application.identity.registration import DeliverRegistration
+from calendar_sync.application.identity.registration_ports import (
+    IdentityRegistrationSender,
+    RegistrationEmailRequest,
+)
 from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.shared.ports import Clock, IdGenerator
 from calendar_sync.bootstrap.config import Settings
@@ -38,6 +43,7 @@ from calendar_sync.bootstrap.identity_email_changes import (
     build_email_changes,
     compose_email_changes,
 )
+from calendar_sync.bootstrap.registration import RegistrationAdapters, build_registration
 from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.identity_email import (
     IdentitySmtp,
@@ -51,6 +57,7 @@ from calendar_sync.infrastructure.identity_email_changes import (
 )
 from calendar_sync.infrastructure.identity_front_gate import MemoryIdentityFrontGate
 from calendar_sync.infrastructure.identity_mail_worker import IdentityMailWorker
+from calendar_sync.infrastructure.identity_registration import RegistrationMaintenance
 from calendar_sync.infrastructure.persistence.identity_email import SqliteIdentityEmailTests
 from calendar_sync.infrastructure.persistence.reset_admission import SqliteResetAdmission
 from calendar_sync.infrastructure.security import identity_email_fingerprint
@@ -98,7 +105,13 @@ def _reason(settings: Settings) -> IdentityEmailReason | None:
     return None
 
 
-class IdentitySender(IdentityTestSender, IdentityResetSender, IdentityChangeSender, Protocol):
+class IdentitySender(
+    IdentityTestSender,
+    IdentityResetSender,
+    IdentityChangeSender,
+    IdentityRegistrationSender,
+    Protocol,
+):
     """Security-email operations sharing one verified transport."""
 
 
@@ -108,6 +121,7 @@ class IdentityEmailAdapters:
     tests: IdentityEmailTests
     sender: IdentitySender | None
     email_changes: EmailChangeAdapters
+    registrations: RegistrationAdapters
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +167,7 @@ def build_identity_email(
         SqliteIdentityEmailTests(settings.database_path, ids),
         sender,
         build_email_changes(settings, ids, clock, setup),
+        build_registration(settings, ids, clock, setup),
     )
 
 
@@ -183,6 +198,13 @@ def compose_identity_email(
                 adapters.email_changes.proofs,
                 adapters.email_changes.admission,
             ),
+            registrations=RegistrationMaintenance(
+                DeliverRegistration(adapters.registrations.proofs, adapters.setup, adapters.sender)
+                if adapters.sender is not None
+                else None,
+                adapters.registrations.proofs,
+                adapters.registrations.admission,
+            ),
         )
         if adapters.sender is not None or admission.attempts is not None
         else None
@@ -206,6 +228,9 @@ class _UnavailableQueue:
         return EmailTestState.IDLE
 
     def submit_reset(self, _request: ResetEmailRequest) -> bool:
+        return False
+
+    def submit_registration(self, _request: RegistrationEmailRequest) -> bool:
         return False
 
     def submit_change(self, _request: EmailChangeMailRequest) -> bool:

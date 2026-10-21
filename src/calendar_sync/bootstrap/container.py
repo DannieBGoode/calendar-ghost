@@ -87,6 +87,7 @@ from calendar_sync.bootstrap.identity import (
 from calendar_sync.bootstrap.identity_email import (
     IdentityEmailAdapters,
     IdentityEmailServices,
+    _UnavailableQueue,
     build_identity_email,
     build_reset_admission,
     compose_identity_mail,
@@ -102,6 +103,7 @@ from calendar_sync.bootstrap.operations import (
     _plan_services,
     _scheduled_services,
 )
+from calendar_sync.bootstrap.registration import RegistrationServices, compose_registration
 from calendar_sync.bootstrap.shared import (
     UserServices,
     _mail_server,
@@ -173,6 +175,7 @@ class Container:
     """Every calendar provider this release knows, and how Users connect the configured ones."""
     identity: IdentityServices
     identity_email: IdentityEmailServices
+    registrations: RegistrationServices
     identity_mail_worker: IdentityMailWorker | None
     reset_admission: ResetAdmission
     reset_client_network: Callable[[str], str]
@@ -434,6 +437,14 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
     identity_email, identity_mail_worker = compose_identity_mail(adapters)
     return Container(
         identity_email=identity_email,
+        registrations=compose_registration(
+            adapters.identity_email.registrations,
+            adapters.users,
+            adapters.passwords,
+            adapters.sessions,
+            adapters.clock,
+            identity_mail_worker or _UnavailableQueue(),
+        ),
         identity_mail_worker=identity_mail_worker,
         reset_admission=adapters.reset_admission,
         reset_client_network=client_network,

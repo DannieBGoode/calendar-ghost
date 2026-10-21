@@ -23,6 +23,21 @@ class PreparedRegistration:
 
 
 @dataclass(frozen=True, slots=True)
+class RegistrationEmailRequest:
+    email: str = field(repr=False)
+    fingerprint: str
+    invitation_token: str | None = field(default=None, repr=False)
+
+
+class RegistrationEmailQueue(Protocol):
+    def submit_registration(self, request: RegistrationEmailRequest) -> bool: ...
+
+
+class IdentityRegistrationSender(Protocol):
+    def send_registration(self, recipient: str, token: str) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
 class OpenRegistrationStatus:
     available: bool
     reason: ReadinessReason | None

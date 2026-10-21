@@ -170,16 +170,20 @@ class SqliteRegistrationProofs:
             return None
 
     def purge(self, before: datetime, limit: int) -> int:
-        if limit <= 0:
-            return 0
-        with _registration_transaction(self._database) as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            cutoff = min(before, self._clock.now()).isoformat()
-            return connection.execute(
-                "DELETE FROM registration_proofs WHERE token_hash IN ("
-                "SELECT token_hash FROM registration_proofs "
-                "WHERE julianday(expires_at) <= julianday(?) "
-                "OR julianday(used_at) <= julianday(?) OR julianday(revoked_at) <= julianday(?) "
-                "ORDER BY created_at, token_hash LIMIT ?)",
-                (cutoff, cutoff, cutoff, min(limit, 500)),
-            ).rowcount
+        return purge_registration_proofs(self._database, self._clock, before, limit)
+
+
+def purge_registration_proofs(database: Path, clock: Clock, before: datetime, limit: int) -> int:
+    if limit <= 0:
+        return 0
+    with _registration_transaction(database) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        cutoff = min(before, clock.now()).isoformat()
+        return connection.execute(
+            "DELETE FROM registration_proofs WHERE token_hash IN ("
+            "SELECT token_hash FROM registration_proofs "
+            "WHERE julianday(expires_at) <= julianday(?) "
+            "OR julianday(used_at) <= julianday(?) OR julianday(revoked_at) <= julianday(?) "
+            "ORDER BY created_at, token_hash LIMIT ?)",
+            (cutoff, cutoff, cutoff, min(limit, 500)),
+        ).rowcount
