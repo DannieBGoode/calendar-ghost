@@ -64,6 +64,13 @@ class EmailChangeUnavailable(ApplicationError):
         super().__init__("Email change unavailable")
 
 
+class EmailChangeProofUnusable(ApplicationError):
+    """No usable proof belongs to this signed-in User."""
+
+    def __init__(self) -> None:
+        super().__init__("Email change proof is no longer usable")
+
+
 class EmailChangeConfigurationRequired(ApplicationError):
     """Identity email setup is incomplete or unsafe for an emailed proof."""
 
@@ -222,11 +229,11 @@ class ConfirmEmailChange:
     ) -> None:
         self.admission.admit_completion(network)
         if not self.admission.check_token(network, lambda: self.proofs.check(user_id, token)):
-            raise EmailChangeUnavailable
+            raise EmailChangeProofUnusable
         expected = confirmed_credential(self.credentials, self.passwords, user_id, password)
         result = self.proofs.confirm(expected, token, session)
         if result is None:
-            raise EmailChangeUnavailable
+            raise EmailChangeProofUnusable
         # Notice failure must never turn a successful credential commit into an error.
         with suppress(Exception):
             self.queue.submit_notice(EmailChangedNotice(result.previous_email))

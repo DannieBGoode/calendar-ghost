@@ -64,6 +64,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/email-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show Email Change */
+        get: operations["show_email_change_api_v1_account_email_change_get"];
+        put?: never;
+        /** Request Email Change */
+        post: operations["request_email_change_api_v1_account_email_change_post"];
+        /** Cancel Email Change */
+        delete: operations["cancel_email_change_api_v1_account_email_change_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/email-change/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Email Change */
+        post: operations["check_email_change_api_v1_account_email_change_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/email-change/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Email Change */
+        post: operations["confirm_email_change_api_v1_account_email_change_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/instant-sync": {
         parameters: {
             query?: never;
@@ -1293,6 +1346,13 @@ export interface components {
             /** Removed */
             removed: number;
         };
+        /** ConfirmEmailChangeRequest */
+        ConfirmEmailChangeRequest: {
+            /** Password */
+            password: string;
+            /** Token */
+            token: string;
+        };
         /** ConnectedAccountResponse */
         ConnectedAccountResponse: {
             /** Authorization Lapsed At */
@@ -1417,6 +1477,13 @@ export interface components {
              */
             projections: "delete" | "detach";
         };
+        /** DirectEmailChangeRequest */
+        DirectEmailChangeRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password?: string | null;
+        };
         /** DiscoveredCalendarResponse */
         DiscoveredCalendarResponse: {
             /** Access Role */
@@ -1436,6 +1503,36 @@ export interface components {
             detail: string;
             /** Kind */
             kind: string;
+        };
+        /** EmailChangeAcceptedResponse */
+        EmailChangeAcceptedResponse: {
+            /**
+             * Accepted
+             * @default true
+             * @constant
+             */
+            accepted: true;
+        };
+        /** EmailChangeCheckResponse */
+        EmailChangeCheckResponse: {
+            /** Usable */
+            usable: boolean;
+        };
+        /**
+         * EmailChangeMode
+         * @enum {string}
+         */
+        EmailChangeMode: "direct" | "verified" | "unavailable";
+        /** EmailChangeStatusResponse */
+        EmailChangeStatusResponse: {
+            mode: components["schemas"]["EmailChangeMode"];
+            pending: components["schemas"]["PendingEmailChangeResponse"] | null;
+            reason: components["schemas"]["IdentityEmailReason"] | null;
+        };
+        /** EmailChangeTokenRequest */
+        EmailChangeTokenRequest: {
+            /** Token */
+            token: string;
         };
         /** EventSnapshotResponse */
         EventSnapshotResponse: {
@@ -1494,6 +1591,11 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * IdentityEmailReason
+         * @enum {string}
+         */
+        IdentityEmailReason: "smtp_missing" | "smtp_security" | "origin_missing" | "origin_invalid" | "origin_insecure" | "master_key_missing";
         /** IdentityEmailResponse */
         IdentityEmailResponse: {
             /** Configured */
@@ -1779,6 +1881,18 @@ export interface components {
         PasswordResetLinkRequest: {
             /** Token */
             token: string;
+        };
+        /** PendingEmailChangeResponse */
+        PendingEmailChangeResponse: {
+            /** Email */
+            email: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Id */
+            id: string;
         };
         /** PendingInvitationResponse */
         PendingInvitationResponse: {
@@ -2248,6 +2362,13 @@ export interface components {
             projections: "delete" | "detach";
             source: components["schemas"]["CalendarEndpointPayload"];
         };
+        /** RequestEmailChangeRequest */
+        RequestEmailChangeRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+        };
         /** RequestPasswordResetRequest */
         RequestPasswordResetRequest: {
             /** Email */
@@ -2498,13 +2619,6 @@ export interface components {
              */
             installation_sends_email: boolean;
             user: components["schemas"]["SignedInUserResponse"] | null;
-        };
-        /** SetEmailRequest */
-        SetEmailRequest: {
-            /** Email */
-            email: string;
-            /** Password */
-            password?: string | null;
         };
         /** SetupRequest */
         SetupRequest: {
@@ -2875,7 +2989,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SetEmailRequest"];
+                "application/json": components["schemas"]["DirectEmailChangeRequest"];
             };
         };
         responses: {
@@ -2887,6 +3001,171 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SignedInUserResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    show_email_change_api_v1_account_email_change_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_email_change_api_v1_account_email_change_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestEmailChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeAcceptedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_email_change_api_v1_account_email_change_delete: {
+        parameters: {
+            query: {
+                request_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_email_change_api_v1_account_email_change_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailChangeTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChangeCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_email_change_api_v1_account_email_change_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmEmailChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

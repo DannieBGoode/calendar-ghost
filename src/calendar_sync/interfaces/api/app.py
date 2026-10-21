@@ -26,6 +26,7 @@ from calendar_sync.interfaces.api.routes import (
     accounts,
     activity,
     compatibility,
+    email_changes,
     health,
     identity_email,
     incidents,
@@ -81,7 +82,11 @@ class ApiAdministration(
 
 
 class ApiIdentityEmail(
-    identity_email.IdentityEmail, setup.ResetAvailability, password_reset.ResetRequests, Protocol
+    identity_email.IdentityEmail,
+    email_changes.IdentityEmail,
+    setup.ResetAvailability,
+    password_reset.ResetRequests,
+    Protocol,
 ):
     """Administrator readiness and configuration-only anonymous recovery."""
 
@@ -97,6 +102,7 @@ class ApiServices(
     plans.PlansApiServices,
     storage.StorageServices,
     identity_email.IdentityEmailApiServices,
+    email_changes.EmailChangeApiServices,
     watch_notices.NoticeServices,
     McpServices,
     Protocol,
@@ -160,6 +166,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         setup,
         session,
         account,
+        email_changes,
         activity,
         accounts,
         compatibility,

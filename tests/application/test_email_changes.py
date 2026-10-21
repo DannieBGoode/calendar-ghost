@@ -10,6 +10,7 @@ import pytest
 from calendar_sync.application.identity.email_changes import (
     EmailChangeConfigurationRequired,
     EmailChangedNotice,
+    EmailChangeProofUnusable,
     EmailChangeServices,
     EmailChangeUnavailable,
     EmailChangeVerificationRequired,
@@ -258,7 +259,7 @@ def test_request_queue_exception_preserves_pending_and_old_email(tmp_path: Path)
 
 def test_confirm_rejects_unusable_proof_before_password_verification(tmp_path: Path) -> None:
     changes, _, h, _, session, passwords = services(tmp_path)
-    with pytest.raises(EmailChangeUnavailable):
+    with pytest.raises(EmailChangeProofUnusable):
         changes.confirm.execute(SECOND.id, "unknown-token", "correct", session.token, "192.0.2.1")
     passwords.verify.assert_not_called()
     assert h.users.get(SECOND.id) == SECOND
