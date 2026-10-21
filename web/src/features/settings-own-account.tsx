@@ -41,7 +41,7 @@ export function OwnAccountSection({
         </div>
       </div>
       <div className="settings-list">
-        <OwnEmailItem email={user.email} onDone={setMessage} />
+        <OwnEmailItem key={user.id} email={user.email} />
         <PasswordItem onDone={setMessage} />
         <EmailNotificationsItem user={user} sendsEmail={sendsEmail} onDone={setMessage} />
         <InstantSyncItem user={user} onDone={setMessage} />

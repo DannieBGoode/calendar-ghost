@@ -234,3 +234,16 @@ it.each(["token", "User"])("ignores a late pending target after a %s switch", as
   expect(container.textContent).not.toContain("stale@example.test")
   expect(container.querySelector("input[type=password]")).toBeNull()
 })
+
+it("offers quiet account navigation beside a usable proof without cancelling its pending change", async () => {
+  await render()
+  const link = container.querySelector<HTMLAnchorElement>("a[href='/settings/account']")
+  expect(link).not.toBeNull()
+  expect(link?.textContent).toBe("Your account")
+  expect(link?.classList.contains("text-link")).toBe(true)
+  expect(container.querySelector("form")?.contains(link)).toBe(false)
+  const before = calls.length
+  act(() => { link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })) })
+  await settle()
+  expect(calls.slice(before).filter((call) => call.method !== "GET")).toEqual([])
+})

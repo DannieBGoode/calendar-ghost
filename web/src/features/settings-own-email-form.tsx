@@ -37,6 +37,7 @@ export function OwnEmailForm({ mode, available, first, current, onClose, onDone,
       return { verified, email }
     },
     retry: false, gcTime: 0,
+    onMutate: () => onDone(""),
     onSuccess: async (result) => {
       if (!current()) return
       onClose()

@@ -194,7 +194,7 @@ function instantSync(): HTMLElement {
 }
 
 function status(): string | null | undefined {
-  return container.querySelector("[role='status']")?.textContent
+  return [...container.querySelectorAll("[role='status']")].find((item) => item.textContent)?.textContent
 }
 
 describe("OwnAccountSection", () => {
@@ -242,6 +242,7 @@ describe("OwnAccountSection", () => {
       password: "a very long password",
     })
     expect(status()).toBe("You now sign in with robin@home.example.test.")
+    expect(container.querySelector("#own-email-toggle")?.closest(".setting-item")?.querySelector("[role=status]")?.textContent).toBe(status())
   })
 
   it("keeps the current email beside the pending address and deadline, and cancels the exact request", async () => {
@@ -252,7 +253,16 @@ describe("OwnAccountSection", () => {
     expect(container.textContent).toContain(user.email)
     expect(container.textContent).toContain("new@example.test")
     expect(container.querySelector("time")?.dateTime).toBe("2026-10-22T12:00:00Z")
+    const emailItem = container.querySelector("#own-email-toggle")!.closest(".setting-item")!
+    const liveRegion = emailItem.querySelector("[role=status]")
+    expect(liveRegion).not.toBeNull()
+    expect(liveRegion?.textContent).toBe("")
     await click(button("Cancel email change"))
+    expect(emailItem.querySelector("[role=status]")).toBe(liveRegion)
+    expect(liveRegion?.textContent).toBe("The pending email change was cancelled.")
+    expect([...container.querySelectorAll("[role=status]")].filter((item) => item.textContent)).toHaveLength(1)
+    await click(button("Change email"))
+    expect(liveRegion?.textContent).toBe("")
     expect(calls.some((call) => call.method === "DELETE" && call.path.endsWith("request_id=pending-one"))).toBe(true)
     expect(calls.filter((call) => call.method === "GET" && call.path.endsWith("email-change")).length).toBeGreaterThan(1)
   })
@@ -271,7 +281,9 @@ describe("OwnAccountSection", () => {
     expect(sent("POST", "/api/v1/account/email-change")).toEqual({ email: "new@example.test", password: "a very long password" })
     expect(sent("PUT", "/api/v1/account/email")).toBeUndefined()
     expect(container.textContent).toContain(user.email)
-    expect(container.textContent).toContain("If the address can be used")
+    const emailItem = container.querySelector("#own-email-toggle")!.closest(".setting-item")!
+    expect(emailItem.querySelector("[role=status]")?.textContent).toContain("If the address can be used")
+    expect([...container.querySelectorAll("[role=status]")].filter((item) => item.textContent)).toHaveLength(1)
     expect(container.querySelector("#own-email-password")).toBeNull()
   })
 

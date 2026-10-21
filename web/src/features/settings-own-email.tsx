@@ -13,11 +13,12 @@ import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
 type EmailStatus = Awaited<ReturnType<typeof api.ownEmailChange>>
 
 /** The current sign-in stays visible until verification completes. */
-export function OwnEmailItem({ email, onDone }: { email: string | null; onDone: (message: string) => void }) {
+export function OwnEmailItem({ email }: { email: string | null }) {
   const i18n = useI18n()
   const { t } = i18n
   const { status, current, refresh } = useEmailStatus()
   const [open, setOpen] = useState(false)
+  const [message, setMessage] = useState("")
   const toggle = useRef<HTMLButtonElement>(null)
   const first = useRef<HTMLInputElement>(null)
   useDisclosureFocus(open, first, toggle)
@@ -30,10 +31,11 @@ export function OwnEmailItem({ email, onDone }: { email: string | null; onDone: 
           <h3>{t("settings.ownAccount.email.title")}</h3>
           <p>{email ?? t("settings.ownAccount.email.none")}</p>
         </div>
-        {!open && <Button ref={toggle} id="own-email-toggle" type="button" variant="outline" disabled={!available} onClick={() => setOpen(true)}>{t("settings.ownAccount.email.change")}</Button>}
+        {!open && <Button ref={toggle} id="own-email-toggle" type="button" variant="outline" disabled={!available} onClick={() => { setMessage(""); setOpen(true) }}>{t("settings.ownAccount.email.change")}</Button>}
       </div>
-      <EmailStatusNote status={status} current={current} refresh={refresh} onDone={onDone} toggle={open ? first : toggle} />
-      {open && data && <OwnEmailForm key={email} mode={data.mode} available={available} first={first} current={current} onClose={() => setOpen(false)} onDone={onDone} onRefresh={refresh} />}
+      <EmailStatusNote status={status} current={current} refresh={refresh} onDone={setMessage} toggle={open ? first : toggle} />
+      {open && data && <OwnEmailForm key={email} mode={data.mode} available={available} first={first} current={current} onClose={() => setOpen(false)} onDone={setMessage} onRefresh={refresh} />}
+      <p role="status" className={message ? "mt-4 text-sm" : "sr-only"}>{message}</p>
     </div>
   )
 }
@@ -69,6 +71,7 @@ function EmailStatusNote({ status, current, refresh, onDone, toggle }: ReturnTyp
   const client = useQueryClient()
   const cancel = useMutation({
     mutationFn: (id: string) => api.cancelEmailChange(id), retry: false,
+    onMutate: () => onDone(""),
     onSuccess: (_, id) => {
       if (!current()) return
       const latest = client.getQueriesData<EmailStatus>({ queryKey: ["own-email-change"] })

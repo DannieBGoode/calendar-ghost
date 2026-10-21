@@ -74,14 +74,15 @@ function CheckedEmail({ email, check, form }: { email: string | null; check: Ret
     <p className="field-hint [overflow-wrap:anywhere]">{t("auth.emailChange.signedIn", { email: email ?? "" })}</p>
     {check.isPending && <p role="status">{t("auth.emailChange.loading")}</p>}
     {check.error && <div className="auth-form"><p className="inline-error" role="alert">{apiErrorMessage(i18n, check.error)}</p><Button onClick={() => void check.refetch()}>{t("common.loadFailure.retry")}</Button></div>}
-    {check.data?.usable && !check.error && <><p className="font-medium [overflow-wrap:anywhere]">{t("auth.emailChange.target", { email: check.data.pending?.email ?? "" })}</p>{form}</>}
+    {check.data?.usable && !check.error && <><p className="font-medium [overflow-wrap:anywhere]">{t("auth.emailChange.target", { email: check.data.pending?.email ?? "" })}</p>{form}<AccountLink quiet /></>}
   </>
 }
 
-function AccountLink({ focus = false }: { focus?: boolean }) {
+function AccountLink({ focus = false, quiet = false }: { focus?: boolean; quiet?: boolean }) {
   const { t } = useI18n()
   const link = useRef<HTMLAnchorElement>(null)
   useEffect(() => { if (focus) link.current?.focus() }, [focus])
+  if (quiet) return <a className="text-link mt-4 inline-flex" href="/settings/account">{t("settings.tabs.account")}</a>
   return <Button asChild size="lg"><a ref={link} href="/settings/account">{t("settings.tabs.account")}</a></Button>
 }
 

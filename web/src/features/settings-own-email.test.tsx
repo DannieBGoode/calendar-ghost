@@ -14,13 +14,11 @@ const pending = (id: string, email = `${id}@example.test`) => ({ mode: "verified
 let container: HTMLDivElement
 let root: Root
 let client: QueryClient
-let announced: ReturnType<typeof vi.fn<(message: string) => void>>
 let status = pending("one")
 let finishCancel: (value: Response) => void
 beforeEach(() => {
   container = document.createElement("div"); document.body.append(container)
   status = pending("one")
-  announced = vi.fn()
   vi.stubGlobal("fetch", vi.fn((input: string | URL, init?: RequestInit) => {
     if (init?.method === "DELETE") return new Promise<Response>((resolve) => { finishCancel = resolve })
     return Promise.resolve(response(status))
@@ -34,7 +32,7 @@ async function render() {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(["session"], { authenticated: true, user: { id: "owner" } })
   root = createRoot(container)
-  act(() => root.render(<StaticI18nProvider i18n={testI18n()}><QueryClientProvider client={client}><OwnEmailItem email="current@example.test" onDone={announced} /></QueryClientProvider></StaticI18nProvider>))
+  act(() => root.render(<StaticI18nProvider i18n={testI18n()}><QueryClientProvider client={client}><OwnEmailItem email="current@example.test" /></QueryClientProvider></StaticI18nProvider>))
   await settle()
 }
 function button(text: string) { return [...container.querySelectorAll("button")].find((b) => b.textContent === text)! }
@@ -49,7 +47,7 @@ it("keeps a newer pending request when an older cancellation finishes, without a
   await settle()
   expect(container.textContent).toContain("two@example.test")
   expect(container.textContent).not.toContain("one@example.test")
-  expect(announced).not.toHaveBeenCalled()
+  expect(container.querySelector("[role=status]")?.textContent).toBe("")
   expect(vi.mocked(fetch).mock.calls.some(([url, init]) => (typeof url === "string" && url.endsWith("request_id=one")) && init?.method === "DELETE")).toBe(true)
 })
 
@@ -74,4 +72,20 @@ it("keeps cancellation available when SMTP is removed and requires clearing the 
   expect(button("Change email").disabled).toBe(true)
   expect(button("Cancel email change").disabled).toBe(false)
   expect(container.textContent).toContain("Cancel the pending change")
+})
+
+it("clears the previous local result as a new cancellation starts", async () => {
+  await render()
+  const region = container.querySelector("[role=status]")
+  act(() => button("Cancel email change").click())
+  await settle()
+  act(() => finishCancel(response(null, 204)))
+  await settle()
+  expect(region?.textContent).toBe("The pending email change was cancelled.")
+  act(() => button("Cancel email change").click())
+  await settle()
+  expect(container.querySelector("[role=status]")).toBe(region)
+  expect(region?.textContent).toBe("")
+  act(() => finishCancel(response(null, 204)))
+  await settle()
 })
