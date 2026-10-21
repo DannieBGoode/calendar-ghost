@@ -486,8 +486,9 @@ the Installation Administrator enables it. A provider identity is its issuer plu
 its email. Linking is initiated from Your account while signed in. Sign-in may auto-link only
 when the provider states that the email is verified.
 
-Only Me and Invitation Only admit only existing people or an invited person whose verified email
-matches. Open may create an ordinary User following the Default Plan. Provider sign-in must obey
+Only Me and Invitation Only admit only existing people or a person presenting a live Invitation
+whose provider-verified email matches the normalized email they entered. Open may create an
+ordinary User following the Default Plan. Provider sign-in must obey
 Registration Policy at the final admission write. This is a separate admission decision from
 password-based Invitation acceptance; it does not open public joining under Only Me. Choosing
 Only Me still requires the sole User, cancels all registration proofs, and keeps live Invitations.
@@ -495,6 +496,12 @@ A later provider admission may consume one with matching provider-verified email
 the selected policy. Ordinary Invitation issuance and password acceptance remain forbidden there.
 People and its existing management controls stay accessible when other Users exist. This narrow
 exception amends the earlier blanket Only Me wording; returning to setup still revokes Invitations.
+
+Existing Invitations are unaddressed bearer links: the administrator chooses no recipient email
+when issuing one. The provider flow binds the Invitation token hash and the normalized email
+entered by its bearer. Final admission requires that Invitation to remain live and the
+provider-verified email to equal the bound address. This proves possession of the Invitation and
+ownership of the entered email, not that the person is an administrator-selected recipient.
 
 Reuse the installation's Google and Microsoft OAuth clients with sign-in scopes only:
 `openid email profile`. Calendar consent remains a separate step under Connections; a Provider
