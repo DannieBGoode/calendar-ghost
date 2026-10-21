@@ -621,13 +621,16 @@ No plaintext counter addresses, networks, passwords, or mail bodies persist. Que
 delivery tokens live only in process memory. Auth diagnostics never include addresses, tokens,
 passwords, request bodies, or provider exception text. The application sends no telemetry.
 
-With a Master Key, allowances survive restart even without usable identity email. The worker
-continues maintenance even without SMTP or a Master Key, refusing mail lanes without delivery.
-Admitted requests, completion attempts, and hourly worker maintenance remove obsolete counters and expired, consumed, or revoked proofs
-in batches of at most 500; normal running maintenance aims to remove them within 24 hours. Token
-checks do not remove proofs; invalid checks may remove obsolete counters only. A stopped service
-or storage failure can delay cleanup. Backups retain records until their own retention expires. Without a Master Key, public recovery is unavailable
-and administrator token/completion limits use bounded memory only, forgotten on restart.
+With a Master Key, allowances survive restart even without usable identity email, and the durable
+reset admission adapter enables reset cleanup. Admitted requests, completion attempts, and hourly
+worker maintenance then remove obsolete reset counters and expired, consumed, or revoked reset
+proofs in batches of at most 500, aiming for removal within 24 hours while running. Token checks
+do not remove proofs; invalid checks may remove obsolete counters only. The worker still runs
+without SMTP or a Master Key for registration cleanup, which retains its 24-hour running target.
+Without a Master Key, reset cleanup and public recovery are unavailable; reset records may remain
+until the key is restored, and administrator token/completion limits use bounded memory only,
+forgotten on restart. A stopped service or storage failure can delay cleanup. Backups retain
+records until their own retention expires.
 After an admission commits, a cleanup storage failure leaves that admitted request or completion
 free to proceed. Cleanup retries during later admitted work or hourly maintenance; admission
 decision failures still refuse work before queueing, proof lookup, or password hashing.

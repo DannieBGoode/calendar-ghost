@@ -508,12 +508,15 @@ origin, never Host or forwarded headers. Uvicorn resolves client addresses only 
 
 The bounded memory gate precedes SQLite. With a Master Key, admitted counters persist as
 purpose-separated HMAC digests derived with HKDF, so restart keeps allowances without retaining
-plaintext addresses or client networks. The worker starts for maintenance even without identity
-SMTP or a Master Key; all mail lanes refuse admission when delivery is unavailable. Without a
-Master Key there is no durable keyed admission, and token/completion limits use bounded memory only.
-Admitted requests, completion attempts, and hourly worker maintenance clean obsolete counters and
-expired, used, or revoked reset proofs in batches of at most 500. Token checks never purge proofs;
-recording an invalid token may purge only obsolete counters. See
+plaintext addresses or client networks. The worker starts even without identity SMTP or a Master
+Key, so registration cleanup continues; mail lanes refuse admission when delivery is unavailable.
+Reset cleanup requires the durable reset admission adapter, composed only with a Master Key.
+With that adapter, admitted requests, completion attempts, and hourly worker maintenance clean
+obsolete reset counters and expired, used, or revoked reset proofs in batches of at most 500.
+Without a Master Key, reset cleanup is unavailable and token/completion limits use bounded memory
+only. Registration cleanup still runs without a key, aiming for removal within 24 hours while
+running. Token checks never purge proofs; recording an invalid token may purge only obsolete
+counters. See
 [retention and rotation](deployment.md#recovery-retention-and-master-key-rotation).
 
 Both reset kinds share atomic credential completion: the final SQLite write lock rechecks current
