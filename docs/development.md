@@ -37,8 +37,10 @@ Reset passwords accept 12 to 1,024 characters; sign-in and all current-password 
 accept up to 1,024. Setup, Invitation, and ordinary new-password creation retain their 256-character
 maximum. Verified email changes are available when identity email configuration is usable. Exercise them
 with the synthetic SMTP capture and a disposable SQLite database; the request keeps the old
-address until the signed-in owner completes the link with their current password. Open
-registration and offline recovery tooling remain planned.
+address until the signed-in owner completes the link with their current password. Open registration
+also requires a matching successful administrator email test and explicit Open selection.
+Verified-registration passwords accept 12 to 1,024 characters. Provider sign-in and offline recovery
+tooling remain planned. See [registration boundaries](architecture.md#verified-registration-boundary).
 
 ## Corresponding source link
 
@@ -106,6 +108,31 @@ Sam across three context-specific identities (`sam@personal.example` and `sam@fa
 Google accounts, and `sam@work.example` is a Microsoft account), keeping the screenshots
 recognizable while making each calendar's story clear. Rules between Personal or Family and Work
 cross providers. Robin's Personal account is Google's and their Work account is Microsoft's.
+
+### Registration preview
+
+Run the same isolated preview with a synthetic registration fixture:
+
+```sh
+.venv/bin/python scripts/dev_preview.py --scenario healthy --registration readyOpen
+```
+
+`--registration readyOpen` selects Open with matching synthetic readiness. `unavailable` keeps
+Open selected without usable readiness, and `invitationOnly` exercises direct Invitations.
+Omitting `--registration` keeps the normal preview unchanged. These fixtures use no SMTP,
+environment settings, or public production fixture routes. Requests for synthetic addresses
+exercise generic sent/resend states without sending mail or creating new proofs.
+
+Open `http://127.0.0.1:8001/verify-email#preview-verification-proof` for a fixed 24-hour proof
+bound to `new-user@example.test`. Completion with a synthetic password creates a real ordinary
+User in the preview's SQLite database and signs in; the proof then becomes unusable. Restart
+resets the fixture. `http://127.0.0.1:8001/invitation#preview-invitation` is a fixed seven-day
+Invitation: verification under Open, direct joining under Invitation Only. Requests do not
+consume the Invitation. The public proof is unusable under Invitation Only and temporarily
+unavailable with the unavailable Open fixture.
+
+The synthetic before/after registration screenshots in `docs/assets/reviews/open-registration/`
+show sign-in, email-first joining, verification, and Administration at desktop and narrow widths.
 
 ## Landing page
 

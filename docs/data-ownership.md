@@ -30,6 +30,14 @@ rules, or events ([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
   Administrator links are shown once; self-service links are delivered by email. Plaintext links
   are never stored, and an administrator never sees or sets anyone's password. Self-service links
   last one hour and administrator reset links seven days.
+- Pending Registrations: normalized email, optional Invitation reference, a SHA-256 token hash,
+  and creation, expiry, use, and revocation times. No User exists until verification completion;
+  there is no pending password, Plan assignment, session, calendar access, or reserved email.
+  Registration counters store times and purpose-separated HKDF/HMAC digests of email, client
+  network, and pair, separately from reset; no plaintext counter keys or mail bodies persist.
+  Email Verification Links last 24 hours, capped by the original Invitation expiry when bound.
+  Completion consumes sibling registration proofs for the email. No sign-up history is retained
+  beyond bounded expiry/cleanup, apart from the completed User's ordinary records.
 - Reset admission counters: times and purpose-separated HMAC digests of normalized email,
   client network (IPv6 grouped by /64), and their pair, derived with HKDF from the Master Key.
   They contain no plaintext address, network, or mail body and persist through restart when a
@@ -137,7 +145,11 @@ The installation communicates with:
    owners can reset those accounts. Verified email changes send a proof to the new address and,
    after confirmation, a security notice to the old address. The old mailbox remains a recovery
    address until that confirmation. These identity messages ignore incident preferences and the
-   operator's SMTP recipient. Queues are volatile and messages have no automatic retry. See
+   operator's SMTP recipient. Open registration sends Email Verification Links only after the
+   worker checks eligibility, using the configured origin. Requests reveal no account status and
+   existing/disabled Users receive no registration mail. Invitations under Open also require
+   verification; Invitation Only still works without SMTP. Queues are volatile and messages have
+   no automatic retry. See [verified joining](deployment.md#verified-registration),
    [password recovery](deployment.md#password-recovery) and
    [identity email setup](deployment.md#identity-email-test-readiness) and
    [verified email changes](deployment.md#verified-email-changes).
@@ -182,17 +194,30 @@ Migration 36 preserves passwords, sessions, and User data but revokes legacy res
 administrator must reissue. Before upgrading, stop the service and take a complete backup with its
 matching key and previous image. For rollback restore the pre-upgrade database and image together,
 losing later writes; do not run an old image against the upgraded schema or remove migration records.
+Migration 38 preserves the selected Registration Policy and Plans/default settings and adds
+registration proofs and independent counters. It never selects Open during upgrade. There is no
+down migration: close public registration, stop the service, and restore the matching pre-upgrade
+backup, key, and image together, losing later writes. Never run an old image against stored Open
+or the upgraded schema. See [migration 38](deployment.md#migration-38-open-registration).
 The planned offline recovery tooling and continuous-backup runbook are unshipped. A backup
 can revive sessions and credentials that were revoked after it was taken; recovering the matching
 database alone cannot prove that restored access remains authorized.
 
 ## Deletion and retention
 
+- Registration proofs and counters are removed without the scheduler, aiming for removal within
+  24 hours while running. Each batch reserves at most 250 proofs and 250 counters independently,
+  with fair mail turns between full batches. Read-only checks never purge proofs. Stopped service,
+  storage failure, or missing-key maintenance can delay cleanup, and backups retain records until
+  their own retention expires. Closing Open to Invitation Only cancels public proofs; Only Me
+  cancels all registration proofs. Reopening never revives them. People has no pending list or
+  approval queue. [Registration limits](deployment.md#registration-limits-mail-loss-and-retention)
+  explains targeted/global suppression, separate reset allowances, and administrator fallback.
 - Reset counters and expired, consumed, or revoked proofs are cleaned in batches of at most 500
   during admitted requests, completion attempts, and hourly keyed-worker maintenance. Normal
   running maintenance aims to remove them within 24 hours; stopped services or storage failures
   delay cleanup. Token checks never purge proofs; invalid checks may purge obsolete counters only.
-  A keyed installation without SMTP still runs maintenance, refusing both mail lanes. Backups
+  A keyed installation without SMTP still runs maintenance, refusing all mail lanes. Backups
   retain records until their own retention expires. See
   [Master Key maintenance](deployment.md#recovery-retention-and-master-key-rotation) before changing
   the key, which changes address-specific counter digests as well as encrypted-data access.

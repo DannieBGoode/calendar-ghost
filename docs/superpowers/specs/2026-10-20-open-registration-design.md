@@ -6,8 +6,12 @@ code is authorized until that plan is reviewed. The second Claude review complet
 with clarifications below. The owner delegated PR 2 plan review to Claude and authorized execution.
 
 Delivery status on 2026-10-21: PR #129 identity email readiness and PR #130 self-service
-password recovery are merged, including migrations 35 and 36. The five remaining PRs below
-replace the original eight-slice sequence. Only Me is still the default and Open is unavailable.
+password recovery are merged, including migrations 35 and 36. Verified email changes (migration
+37) and all four context splits are complete. Open sign-up end to end (migration 38) is implemented
+on the delivery branch under its approved plan; final security/outside review, complete gates,
+PR publication, and CI remain pending. Only Me remains the default; choosing Open explicitly
+requires matching tested identity email. Provider sign-in and hosted backup/restore, including
+offline recovery tooling, remain deferred. The delivery sequence below records the approved scope.
 
 Builds on [the multi-user delivery order](2026-10-09-multi-user-design.md),
 [ADR 0029](../../adr/0029-isolate-users-in-one-sqlite-database.md),

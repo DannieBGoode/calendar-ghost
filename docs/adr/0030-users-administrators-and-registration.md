@@ -33,10 +33,11 @@ by a password alone.
   Invitations, Plans, and the Operator Overview. An Installation Administrator may switch to
   Invitation Only or Open at any time, but back to Only Me only while no other User exists. Data
   is always User-scoped whatever the policy; the policy only decides who may join and what the Web
-  UI shows. Open requires the installation to send email for verification and password reset, and
-  is aimed at the Hosted Service, so it arrives with sign-up in a later phase; self-hosted
-  installations add people by invitation. Invitations and Password Reset Links are single-use,
-  expire after 7 days, and never let an administrator see or set a password.
+  UI shows. Open is available to any installation whose administrator explicitly chooses it
+  after a matching successful identity email test (ADR 0040). Invitations under Open require
+  email verification; Invitation Only works directly without SMTP. Invitations and
+  administrator-issued Password Reset Links are single-use and expire after 7 days; self-service
+  reset links last 1 hour. None lets an administrator see or set a password.
 - **Users sign in with email and password.** Under Invitation Only, an email is not verified,
   because the administrator vouched for the person and the installation may not send email.
 - **Upgrading** turns the existing administrator into the first User, with the role and every
@@ -148,19 +149,19 @@ tokens, whose names can say what a person runs.
 - **Usernames instead of email.** Friendlier for children, but Open registration needs email anyway,
   which would leave two identifiers.
 
-## Amendment: planned Open registration (2026-10-20)
+## Amendment: Open registration (2026-10-20, implemented 2026-10-21)
 
 [ADR 0040](0040-open-registration-and-email-ownership.md) and
 [the open-registration design](../superpowers/specs/2026-10-20-open-registration-design.md)
-record the approved design for the next phase. Implementation still requires each PR's approved
-plan; the decisions above continue to describe shipped behavior until those slices land.
+record verified registration, recovery, and email ownership. The end-to-end Open implementation
+is complete on the delivery branch; final review and publication are tracked in its plan.
 
-The proposal makes Open available to any installation whose administrator chooses it after a
+Open is available to any installation whose administrator chooses it after a
 successful SMTP test. Public registration and Invitations redeemed under Open require email
 verification before a User is created. Existing Users retain access. Returning to Invitation Only
 cancels pending public sign-ups, while keeping existing Users and Invitations.
 
-It also adds self-service password reset under every Registration Policy when identity email is
+Self-service password reset is available under every Registration Policy when identity email is
 configured, with a generic response and 1-hour single-use links. Administrator-issued Invitations
 and Password Reset Links retain 7 days. Email changes require proof of the new address whenever
 SMTP is configured, retaining the current address until confirmation. Security email does not
@@ -168,8 +169,13 @@ depend on the User's Email notifications preference. Identity email links requir
 HTTP loopback allowed for development. SMTP with an HTTP LAN address does not enable email
 recovery or verified email changes, and keeps existing sign-in access. The upgraded first User's
 one initial add-email step remains direct so email configuration cannot block their upgrade.
-Hosted Service continuous backup guidance
-remains optional for self-hosted installations.
+Pending Registration is not a User and reserves nothing. Completion creates an ordinary User
+following the Default Plan, with no administrator approval step. Only Me cancels all pending
+registration proofs; reopening cannot revive cancelled links. Lost email readiness keeps Open
+selected but temporarily refuses joining there. Invitation-bound proofs can finish under
+Invitation Only without current SMTP/readiness. Existing sign-in and synchronization continue.
+Hosted Service continuous backup guidance and offline recovery tooling remain planned and optional
+for self-hosted installations.
 
 ## Amendment: provider sign-in and revised delivery order (2026-10-21)
 
@@ -177,7 +183,10 @@ remains optional for self-hosted installations.
 replaces the earlier deferral of OIDC beyond password sign-in with a planned Google and Microsoft
 sign-in PR. After merged PR #129 and PR #130, the remaining order is verified email changes;
 context module splits with no behavior change; Open sign-up end to end; Google/Microsoft sign-in
-and sign-up; and hosted backup/restore before hosted launch. Each requires its own approved plan.
+and sign-up; and hosted backup/restore before hosted launch. Verified email changes and context
+splits are complete, and Open sign-up is implemented on the delivery branch with final review and
+publication pending. Provider sign-in and hosted backup/restore remain planned, each requiring its
+own approved plan.
 
 Provider identities are issuer plus `sub`, never email. Linking starts from Your account while
 signed in. Auto-link at sign-in requires the provider to assert a verified email. Only Me and

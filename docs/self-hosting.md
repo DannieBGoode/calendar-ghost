@@ -2,8 +2,9 @@
 
 This guide deploys the Calendar Ghost Community Edition on infrastructure you control. The
 Community Edition is one service: one SQLite database, one scheduler, and one application process,
-for you alone or for the people you invite, each with private calendars and rules. It does not
-require a Calendar Ghost account, hosted coordinator, telemetry, or subscription.
+for you alone, for people you invite, or for people who verify their email when you choose Open,
+each with private calendars and rules. It does not require a Calendar Ghost account, hosted
+coordinator, telemetry, or subscription.
 
 For the data inventory and deletion rules, read [Data ownership and privacy](data-ownership.md).
 For deployment details and the LAN redirect options, read [Deployment](deployment.md).
@@ -311,6 +312,47 @@ says what to do when someone is over a limit, and
 [A plan cannot be removed](troubleshooting.md#a-plan-cannot-be-removed-or-its-name-is-refused)
 explains **Remove**.
 
+### Let people join with verified email
+
+Keep **Only me** for your own installation or **Invitation only** for hand-delivered Invitations
+without SMTP. To let people join by email:
+
+1. Configure secure identity SMTP, the Master Key, and an HTTPS root `CALENDAR_SYNC_PUBLIC_URL`.
+   Follow [Test identity email](#test-identity-email), check your inbox, and send a successful test
+   for the current settings. SMTP acceptance alone does not prove inbox delivery.
+2. Review [trusted proxy headers](deployment.md#trusted-proxy-headers), then choose **Open** under
+   **Settings → Administration → Who can join**. This is an explicit choice; a test never changes
+   the policy. Plans stay independent and off unless you turn them on.
+3. Share the installation's sign-in address. **Create account** asks for an email and always says,
+   "If this address can join, we will send a verification link." The link opens a password form
+   for that address. It lasts 24 hours and works once. Completion creates an ordinary User,
+   follows the Default Plan when Plans are on, and signs them in. If admission succeeds but the
+   browser cannot sign in, use ordinary sign-in with the password just chosen.
+
+There is no pending-person approval queue: People lists completed Users, whom you can disable or
+delete. Existing Users need no retroactive verification. Existing or disabled addresses receive
+no sign-up mail and are not changed; use **Sign in** or **Forgot password?** if appropriate.
+
+Invitations keep their original seven-day expiry. Under Open, the person requests a verification
+link first; it cannot outlive that expiry, and the Invitation is consumed only when joining
+finishes. Under Invitation Only the email/password form still joins directly without SMTP.
+A verification link already bound to an Invitation can finish there without current SMTP readiness.
+Only Me refuses both routes. Revoking an Invitation also makes its verification links unusable.
+
+If no link arrives, check spam, ask the administrator to check identity email, and resend within
+the limits. Earlier delivered links stay valid until one completes; there is no automatic retry
+or persistent outbox. Restart, a full queue, or SMTP failure can lose mail without changing the
+generic acceptance message. A changed SMTP configuration or lost readiness keeps Open selected
+but temporarily stops public joining and verification under Open. Test the current settings again;
+existing sign-in and synchronization keep working.
+
+Returning to **Invitation only** cancels unfinished public sign-ups, while keeping Users and
+Invitations. Choosing **Only me**, possible only while you are the sole User, cancels every
+registration proof. Reopening never revives cancelled links; request new ones. Returning to setup
+also revokes Invitations and clears email readiness.
+See [exact limits and retention](deployment.md#verified-registration) and
+[migration 38 rollback](deployment.md#migration-38-open-registration).
+
 ## 5. Use a LAN host or HTTPS
 
 Google and Microsoft accept plain HTTP OAuth redirects for `localhost`, but not for a private LAN
@@ -578,6 +620,14 @@ Do not run `docker compose down -v` as an upgrade step: removing the named volum
 database, mappings, and connected-account state. The full backup and restore procedure is in
 [Data ownership and privacy](data-ownership.md#backups-and-recovery).
 
+Migration 38 adds verified Open registration while preserving the selected policy, Plans setting,
+and Default Plan. It never turns Open on during upgrade. Stop the service and back up the complete
+data directory with its matching Master Key and previous image before upgrading. There is no down
+migration. To roll back, close public registration first, stop the service, and restore the matching
+pre-upgrade database and image together, losing all later writes. Never run an old image against
+stored Open or remove migration records manually. See
+[the migration procedure](deployment.md#migration-38-open-registration).
+
 ## 8. Troubleshooting
 
 Inspect service status and logs without exposing secrets:
@@ -627,9 +677,9 @@ The mail server accepting a test does not prove inbox delivery. Check your inbox
 The last verified time applies only to the current configuration and is separate from the latest
 attempt. Tests ignore your incident Email notifications preference and the installation's SMTP
 recipient. They are limited to three requests per administrator per rolling hour and use a bounded,
-in-memory worker with no retries, so a restart can lose queued work. Registration still offers
-Only me or Invitation only. Usable identity mail enables verified email changes independently of
-whether the test succeeded.
+in-memory worker with no retries, so a restart can lose queued work. A matching successful test
+lets you explicitly choose Open under Who can join; Only me remains the default. Usable identity
+mail enables verified email changes independently of whether the test succeeded.
 
 For exact settings and the additive migration 35 upgrade/rollback procedure, see
 [Identity email test readiness](deployment.md#identity-email-test-readiness). Stop the service and
@@ -639,7 +689,7 @@ together. A later upgrade from that backup starts without restored email readine
 ## Recover a password
 
 When identity SMTP, the Master Key, and a trusted HTTPS root `CALENDAR_SYNC_PUBLIC_URL` are
-configured, sign-in offers **Forgot password?** under Only me and Invitation only. A successful
+configured, sign-in offers **Forgot password?** under every Registration Policy. A successful
 test is useful to diagnose mail, but is not required for recovery. The form always answers,
 "If this address can receive a reset link, we will send one." Active Users receive a single-use
 link lasting one hour; unknown and disabled addresses receive no mail. Reset ends existing
@@ -648,9 +698,8 @@ Reset retains Integration Tokens: review them in Settings after recovery and rev
 
 Check your account email before relying on recovery. Existing and invited Users' addresses remain
 trusted without retroactive verification. While an email change is pending, the old address stays
-the recovery address, so whoever owns that mailbox can still request a reset link. Open
-registration is not shipped. Remote identity SMTP
-requires verified STARTTLS; emailed links require HTTPS, except localhost or literal loopback
+the recovery address, so whoever owns that mailbox can still request a reset link. Remote identity
+SMTP requires verified STARTTLS; emailed links require HTTPS, except localhost or literal loopback
 development. An HTTP LAN installation can still use an administrator's hand-delivered seven-day
 link without email. Reset never enables a disabled User.
 

@@ -19,8 +19,8 @@ coordinator.
 ## Editions and license
 
 This repository contains the Calendar Ghost Community Edition. It is one deployment designed for
-self-hosting on a personal server, home lab, or small machine, for you alone or for the people you
-invite, each with private calendars and rules. It uses one SQLite database and does not require a
+self-hosting on a personal server, home lab, or small machine, for you alone, for people you invite,
+or for people who verify their email when you choose Open, each with private calendars and rules. It uses one SQLite database and does not require a
 Calendar Ghost account or hosted coordinator. There is no Community Edition subscription or license server; the operator provides
 the infrastructure and remains responsible for any hosting or provider costs.
 
@@ -104,7 +104,7 @@ machine and creates only the destination representation selected by each rule.
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |
 | Incidents | Each person's Activity view, deduplication, optional email to each person, and the installation's SMTP recipient and webhook for installation incidents |
 | Monitoring | Each person's Installation Status for monitors, homelab dashboards, and AI agents through `GET /api/v1/status` and an MCP server at `/mcp`, and Installation Health for administrators, authorized with Integration Tokens issued in Settings |
-| Access | People sign in with email and password; Only me by default, or Invitation only; verified email changes and email password recovery when configured, administrator-issued reset links, single-use invitations, an administrator role, and encrypted OAuth credentials |
+| Access | People sign in with email and password; Only me by default, Invitation only, or administrator-chosen Open with verified joining; verified email changes and email password recovery when configured, administrator-issued reset links, single-use invitations, an administrator role, and encrypted OAuth credentials |
 | Operator Overview | Administrators see on **People** whether each person's synchronization works and why not, with calendars only as "Calendar 1", "Calendar 2", and each person's rules, accounts, Activity, and provider calls counted; each person sees the same about themself in Settings |
 | Storage | Database and log usage in Settings, administrator-chosen Activity retention, and log download or purge |
 | Appearance | Device-aware light and dark themes with a browser-local override |
@@ -293,16 +293,26 @@ logs**, so an administrator can retrieve or clear them without SSH access to the
 
 Use **Settings → Administration → Identity email** to test identity SMTP to your own administrator
 address. Its last verified time applies to the current configuration; mail-server acceptance does
-not prove inbox delivery. This is separate from incident notifications and does not change the
-Only me or Invitation only registration choices. See [identity email test readiness](docs/deployment.md#identity-email-test-readiness)
+not prove inbox delivery. This is separate from incident notifications; a matching successful test
+lets an administrator choose **Open** under **Who can join**. Only me remains the default. See [identity email test readiness](docs/deployment.md#identity-email-test-readiness)
 for secure SMTP and trusted-origin requirements. When configured, **Forgot password?** on sign-in
 lets active Users request a single-use link lasting one hour; administrator-issued links retain
 seven days. Reset ends existing sessions and requires a fresh sign-in. No tested-email status is
 required, and incident email preferences do not control recovery. Existing account email addresses
 are trusted without retroactive verification: check yours, since its mailbox owner can reset your
 password. See [password recovery](docs/deployment.md#password-recovery) for limits, lost-mail retry,
-administrator fallback, and migration 36 backup/rollback guidance. Open registration is not
-available. In **Settings → Your account**, request an email change with your current password.
+administrator fallback, and migration 36 backup/rollback guidance.
+
+With **Open** chosen, sign-in offers **Create account**: request a link with your email, then
+choose a password after verification. Requests never reveal whether an account exists. Invitations
+also require verification under Open; Invitation only still works without email. Completed Users
+appear in People without administrator approval and follow the Default Plan when Plans are on.
+Lost readiness temporarily stops joining under Open while existing sign-in and sync continue.
+Returning to Invitation only cancels unfinished public sign-ups; reopening does not restore them.
+See [verified joining](docs/self-hosting.md#let-people-join-with-verified-email) and
+[migration 38 and rollback](docs/deployment.md#migration-38-open-registration).
+
+In **Settings → Your account**, request an email change with your current password.
 Your current address remains your sign-in and recovery address while a request is pending. Open
 the single-use Email Change Link sent to the new address within 24 hours, sign in to the
 requesting account if needed, and enter your current

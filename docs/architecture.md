@@ -474,8 +474,10 @@ SQLite readiness/admission store, and bounded in-memory worker. The transport ve
 certificates for remote SMTP; configuration accepts HTTPS root origins with only localhost or
 literal loopback HTTP exceptions. A Master Key is required to bind persisted readiness to current
 settings without storing SMTP secrets. SQLite connections use the shared connection factory;
-new email-change proof and admission writes wait at most 0.1 seconds for a SQLite lock, while
-existing User, Session, and credential writers retain their five-second wait. SMTP runs outside
+email-change proof and admission writes and all new anonymous registration storage phases wait
+at most 0.1 seconds for a SQLite lock. Registration uses dedicated session and last-sign-in
+adapters with the same short wait after admission commits. Ordinary User, Session, and credential
+writers retain their five-second wait. SMTP runs outside
 database transactions and the event loop, in one sending thread. One worker holds at most ten
 waiting tests, carries no queued passwords, and performs no retries. The worker's latest attempt
 state belongs to the requesting administrator; installation-wide matching readiness survives
@@ -497,17 +499,17 @@ Unknown, disabled, and eligible addresses have the same accepted response, inclu
 and delivery failure. Malformed input is rejected independently of accounts. This does not promise
 constant delivery latency: aggregate SMTP timing remains observable to mailbox owners.
 
-The existing worker reserves a shared lane for ten waiting administrator tests, email changes,
-and old-address notices, and a separate lane for fifty waiting reset requests. It alternates
-work on one SMTP thread. Queued addresses and transient proofs remain in memory, with no
-plaintext-token outbox or retries. Identity mail always uses the validated configured
+The worker reserves a shared lane for ten waiting administrator tests, email changes,
+and old-address notices, plus separate lanes for fifty waiting reset requests and fifty waiting
+registration requests. Nonempty lanes take fair turns on one SMTP thread. Queued addresses and
+transient proofs remain in memory, with no plaintext-token outbox or retries. Identity mail always uses the validated configured
 origin, never Host or forwarded headers. Uvicorn resolves client addresses only through explicit
 `FORWARDED_ALLOW_IPS` trust; reset admission groups IPv6 by /64.
 
 The bounded memory gate precedes SQLite. With a Master Key, admitted counters persist as
 purpose-separated HMAC digests derived with HKDF, so restart keeps allowances without retaining
 plaintext addresses or client networks. Without identity SMTP, a keyed installation still starts
-the worker for maintenance only; both mail lanes refuse admission. Without a Master Key there is
+the worker for maintenance only; all mail lanes refuse admission. Without a Master Key there is
 no worker or durable reset admission, and administrator token/completion limits use memory only.
 Admitted requests, completion attempts, and hourly worker maintenance clean obsolete counters and
 expired, used, or revoked reset proofs in batches of at most 500. Token checks never purge proofs;
@@ -538,3 +540,30 @@ Migration 37 adds owned proof and issuance rows plus separate anonymous network 
 Purpose-separated HMAC digests protect persisted admission keys when the Master Key is present.
 The keyed maintenance worker removes obsolete records in bounded batches even without SMTP.
 See [deployment](deployment.md#migration-37-email-change-proofs) for upgrade and restore steps.
+
+## Verified registration boundary
+
+Pure decisions in `domain/registration.py` separate issuing Invitations, accepting them directly,
+and completing verified registration. Narrow Identity ports in `registration_ports.py` coordinate
+request, check, and completion; `bootstrap/registration.py` composes their SQLite adapters. Public
+writers never receive `InstallationUnitOfWork`. Pending Registrations belong to no User and
+reserve no email or Invitation. `GET /api/v1/setup` adds account-independent public availability;
+a registration storage failure hides joining without hiding existing sign-in.
+
+The request admits its bounded memory gate, reads policy/readiness, records independent durable
+registration allowances, and queues volatile mail without awaiting account lookup or SMTP. The
+worker rechecks fingerprint, eligibility, policy, Invitation, and readiness while preparing a
+hash-only proof. A read-only check neither consumes nor purges proofs. Completion admits its
+password budget before lookup or hashing, hashes outside the write lock, then atomically rechecks
+fresh time, policy, readiness under Open, Invitation validity, and email uniqueness. It creates one
+ordinary User with no own Plan and consumes all registration siblings for that email, plus its
+Invitation if present. Only afterward does guarded session creation run; session/storage failure
+leaves the User committed and able to sign in normally. Replay creates no additional User.
+
+Migration 38 preserves installation settings and adds only registration proofs and independent
+purpose-separated admission counters. All registration SQLite phases, including reads, admission,
+proof completion, cleanup, and post-commit session/sign-in writes, use 100 ms waits. Ordinary
+identity writes keep five seconds. Identity mail uses the configured trusted origin, fragment
+tokens, and no-store/no-referrer pages and responses. No token, address, password, body, account
+eligibility, or provider exception text reaches logs. See
+[deployment](deployment.md#verified-registration) for limits, lossy queues, retention, and rollback.

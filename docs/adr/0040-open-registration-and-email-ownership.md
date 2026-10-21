@@ -1,15 +1,14 @@
 # Open registration and email ownership
 
-Status: accepted; verified email changes implemented on 2026-10-21, with later phases planned under
-[the design](../superpowers/specs/2026-10-20-open-registration-design.md).
-The owner approved the revised design for planning. This record distinguishes the implemented
-email-change slice from later Open registration, provider sign-in, and backup work.
+Status: accepted; verified email changes, context splits, and end-to-end Open registration
+implemented on 2026-10-21 under [the design](../superpowers/specs/2026-10-20-open-registration-design.md).
 
 Delivery status on 2026-10-21: PR #129 identity email readiness and PR #130 self-service
-password recovery are merged, including migrations 35 and 36. The verified email-change slice
-implements migration 37 and its signed-in request, proof, cancellation, and confirmation flow;
-delivery review remains in progress. Only Me and Invitation Only remain supported. The later
-PRs below remain planned until each ships.
+password recovery are merged, including migrations 35 and 36. Verified email changes (migration
+37) and context splits are complete. Open registration (migration 38) is implemented on the
+delivery branch; final security/outside review, complete gates, PR publication, and CI remain
+tracked in its implementation plan. Only Me remains the default. Provider sign-in and hosted
+backup/restore remain planned; no offline recovery tooling is claimed by this slice.
 
 Amends [ADR 0030](0030-users-administrators-and-registration.md), within the isolation boundary of
 [ADR 0029](0029-isolate-users-in-one-sqlite-database.md) and the optional switches of
@@ -112,11 +111,23 @@ without silently changing the administrator's chosen policy. Pending proof recor
 retention and no calendar access. A successful test means SMTP accepted a message, not a guarantee
 that a person's inbox received it.
 
-The policy change needs a forward migration because SQLite currently constrains Registration
-Policy to Only Me and Invitation Only. Allocate migration numbers per implementation PR after
-checking origin/main. Open is selectable only with administrator choice and ready identity email
-in the end-to-end PR. Rollback from active Open uses a matching backup and image; do not run an old binary against a policy it
-cannot read.
+Migration 38 rebuilds installation settings to admit Open while preserving the selected policy,
+Plans setting, and Default Plan; no upgrade selects Open. It adds registration proofs and separate
+purpose-keyed counters. Open is selectable only by an active administrator with matching ready
+identity email, checked atomically with the write. All new registration SQLite phases use 100 ms
+waits, including post-commit session/sign-in writes; ordinary identity writes retain five seconds.
+
+No down migration is provided. Before upgrade, stop and back up the complete database with its
+matching key and image. Rollback closes public joining, stops the service, and restores that
+matching pre-upgrade set, losing later writes. Never run an old binary against stored Open or the
+upgraded schema. See [migration 38](../deployment.md#migration-38-open-registration).
+Registration maintenance reserves 250 proofs and 250 counters per batch independently and yields
+to fair mail turns between full batches, aiming for deletion within 24 hours while running.
+Stopped services, storage faults, missing-key maintenance, and backups may retain records longer.
+Sign-up/reset allowances and 50-request lanes are independent, alongside ten security/test slots;
+queue loss stays generic. [Registration operations](../deployment.md#verified-registration)
+documents exact limits, resend, targeted/global suppression, and administrator fallback without
+claiming constant-time SMTP privacy or shipped offline recovery.
 
 Offline recovery is a deliberate maintenance operation on a stopped installation. It does not
 introduce another runtime receiver of InstallationUnitOfWork, a public maintenance route, a general
@@ -159,8 +170,9 @@ The owner replaced the original eight delivery slices after PR #129 and PR #130 
    modules stay in place. All four module splits are complete.
 3. **Open sign-up end to end.** Deliver the Open policy value and migration, verified joining,
    email-first sign-up, verified Invitations, administrator choice and readiness checks, and
-   screens together. Open stays unselectable until the administrator chooses it and identity
-   email is ready. Drop the temporary preparation guards required by the old split.
+   screens together. Implemented on the delivery branch with migration 38; final delivery checks
+   and publication remain pending. Open requires explicit administrator choice and matching ready
+   identity email. There is no separate preparation release.
 4. **Sign in and sign up with Google or Microsoft.** Follow the OIDC decisions below. This has
    its own plan and does not change calendar consent.
 5. **Hosted backup and restore.** Combine narrow offline inspection/preparation and their
