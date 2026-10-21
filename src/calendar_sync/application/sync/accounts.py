@@ -6,22 +6,22 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime
 
+from calendar_sync.application.sync.account_ports import (
+    AccountAccess,
+    AccountCalendars,
+    ConnectedAccountRepository,
+    DiscoveredCalendar,
+)
 from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     ConnectedAccountMustBeDisconnected,
     ConnectedAccountNotFound,
     ProviderFailure,
 )
+from calendar_sync.application.sync.health_ports import IncidentRepository
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import (
-    AccountAccess,
-    AccountCalendars,
-    ConnectedAccountRepository,
-    DiscoveredCalendar,
-    IncidentRepository,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState
 from calendar_sync.domain.causes import ADMINISTRATOR_CAUSES
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId

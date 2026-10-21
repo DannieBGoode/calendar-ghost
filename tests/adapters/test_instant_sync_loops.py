@@ -22,7 +22,7 @@ from calendar_sync.application.operations.scheduled_pass import (
     ScheduledPreparation,
     ScheduledRun,
 )
-from calendar_sync.application.sync.ports import ScheduledRule
+from calendar_sync.application.sync.run_ports import ScheduledRule
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_container, instant_sync_address
 from calendar_sync.domain.access import UserId

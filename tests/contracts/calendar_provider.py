@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from calendar_sync.application.sync.errors import ProjectionOwnershipMismatch, ProviderFailure
-from calendar_sync.application.sync.ports import CalendarProvider
+from calendar_sync.application.sync.provider_ports import CalendarProvider
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,

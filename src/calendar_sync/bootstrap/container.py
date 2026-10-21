@@ -92,6 +92,10 @@ from calendar_sync.application.operations.scheduled_pass import ScheduledPass, S
 from calendar_sync.application.operations.status import GetInstallationStatus
 from calendar_sync.application.operations.storage import StorageAdministration
 from calendar_sync.application.shared.ports import Clock, IdGenerator
+from calendar_sync.application.sync.account_ports import (
+    AccountCalendars,
+    ConnectedAccountRepository,
+)
 from calendar_sync.application.sync.accounts import (
     CheckAccountAccess,
     DeleteConnectedAccount,
@@ -101,6 +105,11 @@ from calendar_sync.application.sync.accounts import (
     RecheckAdministratorLapses,
 )
 from calendar_sync.application.sync.health import RuleHealth
+from calendar_sync.application.sync.health_ports import (
+    IncidentNotifications,
+    IncidentRepository,
+    RuleHealthRecords,
+)
 from calendar_sync.application.sync.instant_sync import (
     AccountBackoff,
     UpkeepWatches,
@@ -115,20 +124,11 @@ from calendar_sync.application.sync.plan_holds import (
     PlanNotices,
     SettleLocks,
 )
-from calendar_sync.application.sync.ports import (
-    AccountCalendars,
-    Allowances,
-    CalendarProvider,
-    ConnectedAccountRepository,
-    IncidentNotifications,
-    IncidentRepository,
-    ProviderCallStats,
-    RuleHealthRecords,
-    RunIdGenerator,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.plan_ports import Allowances
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.application.sync.preview import PreviewSyncRule
 from calendar_sync.application.sync.provider_descriptors import ProviderDirectory
+from calendar_sync.application.sync.provider_ports import CalendarProvider
 from calendar_sync.application.sync.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.rules import (
@@ -142,6 +142,7 @@ from calendar_sync.application.sync.rules import (
     ReplaceSyncRuleCalendars,
 )
 from calendar_sync.application.sync.run_log import UntalliedProviderCalls
+from calendar_sync.application.sync.run_ports import ProviderCallStats, RunIdGenerator
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncNow
 from calendar_sync.application.sync.watch_ports import (
     DeliveryEvidenceLog,

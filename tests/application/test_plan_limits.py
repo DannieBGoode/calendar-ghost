@@ -11,7 +11,7 @@ import pytest
 from calendar_sync.application.identity.plans import ChangePlan
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import Allowances
+from calendar_sync.application.sync.plan_ports import Allowances
 from calendar_sync.application.sync.rules import (
     ChangeSyncRulePolicy,
     EnableSyncRule,

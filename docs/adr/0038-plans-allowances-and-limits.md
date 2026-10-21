@@ -34,7 +34,7 @@ second slice runs each rule once per window of its Plan's interval
   Identity owns the administrator's use cases (`ShowPlans`, `DefinePlan`, `ChangePlan`,
   `RemovePlan`, and `SetPlansSetting`, in `application/identity/plans.py`) over the
   `PlanCatalog` and `PlanAssignments` ports. Synchronization declares `Allowances` (`of(user)` and
-  `of_users(users)`) in `application/sync/ports.py`, as it already declares `SyncCadencePolicy`,
+  `of_users(users)`) in `application/sync/plan_ports.py`, as it already declares `SyncCadencePolicy`,
   so it enforces limits without importing Identity. One `SqlitePlans`
   (`infrastructure/persistence/plans.py`) implements all three ports, and each client depends only
   on the one it uses. The lint-imports layers and the contexts of ADR 0032 do not change, and no

@@ -6,7 +6,7 @@ from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import UnsupportedProjection
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.planning import event_operation_key
-from calendar_sync.application.sync.ports import CalendarProvider
+from calendar_sync.application.sync.provider_ports import CalendarProvider
 from calendar_sync.application.sync.sync_run import SyncRunContext, record, require_unchanged
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.model import (

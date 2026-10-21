@@ -17,7 +17,7 @@ from calendar_sync.application.identity.integration_tokens import (
     token_name,
 )
 from calendar_sync.application.identity.ports import IntegrationTokenScope
-from calendar_sync.application.sync.ports import Allowances
+from calendar_sync.application.sync.plan_ports import Allowances
 from calendar_sync.domain.access import Role, UserId
 from calendar_sync.domain.plans import LimitedResource, Plan, PlanLimitReached
 from calendar_sync.infrastructure.clock import SystemClock

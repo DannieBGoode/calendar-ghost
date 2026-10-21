@@ -12,7 +12,7 @@ from datetime import timedelta
 from typing import Protocol
 
 from calendar_sync.application.shared.errors import ApplicationError
-from calendar_sync.application.sync.ports import Allowances
+from calendar_sync.application.sync.plan_ports import Allowances
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRuleId
 

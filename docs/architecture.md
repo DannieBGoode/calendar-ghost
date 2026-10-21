@@ -22,8 +22,8 @@ also off by default, follows in the phases of
 
 ## Bounded contexts
 
-Each context is one package of `application/`, with its own `ports.py` and `errors.py` for the
-ports and errors its modules share
+Each context is one package of `application/`, with shared ports in `ports.py` or focused
+`*_ports.py` siblings and shared errors in `errors.py`
 ([ADR 0032](adr/0032-bounded-contexts-as-application-packages.md)):
 
 - **Synchronization** (`application/sync`) owns Directional Sync Rules, transformation, mappings,
@@ -41,6 +41,11 @@ ports and errors its modules share
   across Users: watch upkeep, the dispatch of Instant Sync Requests, and the Watch Notice inbox.
 - **Shared** (`application/shared`) holds only what every context needs: the base application
   error, the clock, and identifiers.
+
+Synchronization keeps its single `UnitOfWork` and `UnitOfWorkFactory` in `application/sync/ports.py`.
+Its shared ports are grouped by responsibility in sibling `provider_ports.py`, `account_ports.py`,
+`record_ports.py`, `health_ports.py`, `plan_ports.py`, and `run_ports.py`; the existing Instant Sync
+ports stay in `watch_ports.py`. This module split does not split the unit of work.
 
 Calendar Integration (provider authorization, discovery, change cursors, rate limits, and payload
 translation) is the provider adapters in `infrastructure/google`, `infrastructure/microsoft`, and
@@ -214,7 +219,7 @@ from whether Plans are on, whether the User administers, their own Plan, and the
 Identity and Access owns the administrator's use cases in `application/identity/plans.py`, over
 the `PlanCatalog` and `PlanAssignments` ports; billing will set a User's Plan through
 `PlanAssignments` alone. Synchronization enforces the limits without importing Identity, through
-the `Allowances` port it declares in `application/sync/ports.py`: `EnableSyncRule` checks the rule
+the `Allowances` port it declares in `application/sync/plan_ports.py`: `EnableSyncRule` checks the rule
 limit, the Connected Account store checks the account limit when it saves a new address, and
 `IssueIntegrationToken` checks the token limit. `PlanCadence` in
 `application/sync/watch_ports.py` turns each User's Allowance into their Sync Cadence. One
@@ -236,8 +241,8 @@ under a test that proves they agree.
 
 ## Calendar provider roles
 
-`application/sync/ports.py` splits the calendar provider port by role, and each use case receives only
-the roles it calls:
+`application/sync/provider_ports.py` splits the calendar provider port by role, and each use case
+receives only the roles it calls:
 
 | Role | Operations | Received by |
 | --- | --- | --- |

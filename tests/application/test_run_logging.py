@@ -16,15 +16,15 @@ from calendar_sync.application.sync.errors import (
     RuleNotExecutable,
 )
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import (
+from calendar_sync.application.sync.provider_ports import (
     CreatedProjection,
     ProjectionDeleter,
-    ProviderCallTally,
     ProviderChangeSet,
 )
 from calendar_sync.application.sync.reconciliation import ReconcileSyncRule
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.run_log import UntalliedProviderCalls, duration
+from calendar_sync.application.sync.run_ports import ProviderCallTally
 from calendar_sync.application.sync.sync_run import SyncRunLog
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (

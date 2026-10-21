@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.account_ports import AccountAuthorizations
 from calendar_sync.application.sync.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
@@ -16,20 +17,15 @@ from calendar_sync.application.sync.errors import (
     RuleNotFound,
     UnsupportedProjection,
 )
+from calendar_sync.application.sync.health_ports import RemovalIncidents
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.sync.ports import (
-    AccountAuthorizations,
-    ProjectionDeleter,
-    ProviderCallStats,
-    ProviderCallTally,
-    RemovalIncidents,
-    UnitOfWork,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWork, UnitOfWorkFactory
+from calendar_sync.application.sync.provider_ports import ProjectionDeleter
 from calendar_sync.application.sync.resource_use import record_provider_calls
 from calendar_sync.application.sync.retry import with_retries
 from calendar_sync.application.sync.rule_insertion import insert_rule
 from calendar_sync.application.sync.run_log import UntalliedProviderCalls, call_summary, duration
+from calendar_sync.application.sync.run_ports import ProviderCallStats, ProviderCallTally
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import EventMapping, ProjectionHandling, SyncRule, SyncRuleId
 

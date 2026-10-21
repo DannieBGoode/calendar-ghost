@@ -34,13 +34,10 @@ from calendar_sync.application.operations.scheduled_plan_holds import ScheduledP
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.health import RuleHealth, RunHealth
+from calendar_sync.application.sync.health_ports import IncidentNotifications
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import (
-    IncidentNotifications,
-    ProviderCallCounts,
-    ScheduledRule,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
+from calendar_sync.application.sync.run_ports import ProviderCallCounts, ScheduledRule
 from calendar_sync.application.sync.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.access import UserId

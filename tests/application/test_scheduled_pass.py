@@ -27,7 +27,8 @@ from calendar_sync.application.operations.scheduled_pass import (
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.health import RunHealth
 from calendar_sync.application.sync.plan_holds import PlanHolds
-from calendar_sync.application.sync.ports import ScheduledRule, UnitOfWork
+from calendar_sync.application.sync.ports import UnitOfWork
+from calendar_sync.application.sync.run_ports import ScheduledRule
 from calendar_sync.application.sync.synchronization import SyncRunResult
 from calendar_sync.application.sync.watch_ports import SyncCadencePolicy
 from calendar_sync.domain.access import UserId

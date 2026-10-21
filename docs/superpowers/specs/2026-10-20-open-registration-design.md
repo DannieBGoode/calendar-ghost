@@ -432,7 +432,10 @@ callers required by the current PR.
 2. **Split growing files by context, with no behavior change.** Split `bootstrap/container.py`,
    `interfaces/api/schemas.py`, `infrastructure/persistence/sqlite.py`, and
    `application/sync/ports.py` into context-named modules. Preserve public names and the existing
-   import-linter contracts.
+   import-linter contracts. The Synchronization port split now keeps `UnitOfWork` and
+   `UnitOfWorkFactory` in `application/sync/ports.py`, with provider, account, record, health,
+   plan, and run ports in focused sibling `*_ports.py` modules; the other file splits remain
+   planned.
 3. **Open sign-up end to end.** Deliver the Open policy value and migration, verified joining,
    email-first sign-up, verified Invitations, administrator choice and readiness checks, and
    screens together. Open stays unselectable until the administrator chooses it and identity

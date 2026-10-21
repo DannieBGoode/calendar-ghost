@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from calendar_sync.application.sync.manual_runs import AdmitManualRun, ManualRunsThrottled
-from calendar_sync.application.sync.ports import Allowances
+from calendar_sync.application.sync.plan_ports import Allowances
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.domain.plans import UNLIMITED, Allowance, AllowanceBasis

@@ -8,15 +8,12 @@ from typing import Literal
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable, RuleNotFound
+from calendar_sync.application.sync.health_ports import RecoveryIncidents
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.sync.planning import EventPlanner, decided_before_its_occurrences
-from calendar_sync.application.sync.ports import (
-    CalendarReader,
-    RecoveryIncidents,
-    RulePreviewSummary,
-    UnitOfWork,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWork, UnitOfWorkFactory
+from calendar_sync.application.sync.provider_ports import CalendarReader
+from calendar_sync.application.sync.record_ports import RulePreviewSummary
 from calendar_sync.application.sync.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.model import (
     CalendarEvent,

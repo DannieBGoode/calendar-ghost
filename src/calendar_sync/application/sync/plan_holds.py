@@ -10,7 +10,8 @@ from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import RuleNotFound
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import Allowances, UnitOfWork, UnitOfWorkFactory
+from calendar_sync.application.sync.plan_ports import Allowances
+from calendar_sync.application.sync.ports import UnitOfWork, UnitOfWorkFactory
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.domain.plan_hold import (

@@ -17,12 +17,12 @@ from dataclasses import dataclass
 from threading import Lock
 
 from calendar_sync.application.identity.errors import UserDisabled
+from calendar_sync.application.sync.account_ports import AuthorizedAccount
 from calendar_sync.application.sync.errors import (
     AccountLimitReached,
     AuthorizationFailed,
     InvalidAuthorizationState,
 )
-from calendar_sync.application.sync.ports import AuthorizedAccount
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId

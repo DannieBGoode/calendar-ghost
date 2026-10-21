@@ -22,9 +22,9 @@ from calendar_sync.application.sync.errors import (
 )
 from calendar_sync.application.sync.locking import RuleWork
 from calendar_sync.application.sync.manual_runs import AdmitManualRun, ManualRunsThrottled
-from calendar_sync.application.sync.ports import RulePreviewSummary
 from calendar_sync.application.sync.preview import PreviewItem, PreviewSyncRule
 from calendar_sync.application.sync.reconciliation import ReconcileNow
+from calendar_sync.application.sync.record_ports import RulePreviewSummary
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.rules import (
     ChangeSyncRulePolicy,

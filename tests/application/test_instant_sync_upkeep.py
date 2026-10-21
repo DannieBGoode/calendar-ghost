@@ -25,7 +25,7 @@ from calendar_sync.application.sync.instant_sync import (
     UpkeepWatches,
     WatchProviders,
 )
-from calendar_sync.application.sync.ports import ProviderCallCounts, ProviderCallTally
+from calendar_sync.application.sync.run_ports import ProviderCallCounts, ProviderCallTally
 from calendar_sync.application.sync.watch_ports import (
     Receipt,
     WatchFailure,

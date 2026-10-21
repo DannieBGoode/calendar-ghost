@@ -94,8 +94,10 @@ web/ and interfaces/  ->  application/  ->  domain/
 - `src/calendar_sync/application/` coordinates use cases through protocols. It cannot import
   concrete Google, Microsoft, SQLite, scheduler, notification, or Web API adapters.
 - The application has one package per bounded context (ADR 0032): `sync`, `identity`, and
-  `operations`, with `shared` below them. Each context's `ports.py` and `errors.py` hold what its
-  modules share; a use-case module may declare ports and errors of its own beside its use cases,
+  `operations`, with `shared` below them. Shared ports live in each context's `ports.py` or
+  focused `*_ports.py` siblings; shared errors live in `errors.py`. Synchronization retains its
+  single unit of work in `sync/ports.py`, with provider, account, record, health, plan, and run
+  ports in focused siblings. A use-case module may declare ports and errors beside its use cases,
   and other modules import them from there. Contexts depend only downward, `operations` →
   `identity` → `sync` → `shared`, and `lint-imports` fails otherwise, or when an application
   module belongs to no context. Put a new use case in the context whose language it speaks; a

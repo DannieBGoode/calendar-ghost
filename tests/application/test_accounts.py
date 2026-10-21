@@ -7,6 +7,11 @@ from typing import cast
 
 import pytest
 
+from calendar_sync.application.sync.account_ports import (
+    AccountAccess,
+    CalendarAccess,
+    DiscoveredCalendar,
+)
 from calendar_sync.application.sync.accounts import (
     CheckAccountAccess,
     DeleteConnectedAccount,
@@ -19,15 +24,10 @@ from calendar_sync.application.sync.errors import (
     ConnectedAccountMustBeDisconnected,
     ConnectedAccountNotFound,
 )
+from calendar_sync.application.sync.health_ports import IncidentRepository
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import (
-    AccountAccess,
-    CalendarAccess,
-    DiscoveredCalendar,
-    IncidentRepository,
-    UnitOfWork,
-)
+from calendar_sync.application.sync.ports import UnitOfWork
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.causes import Cause

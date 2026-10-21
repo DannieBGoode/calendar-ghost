@@ -27,7 +27,9 @@ states will not hold while it grows.
   | `application/operations` | Activity, Installation Status, Installation Health and Installation Hints, the Operator Overview, and storage |
   | `application/shared` | The base application error and the clock and identifier ports, which every context uses |
 
-  Each context's `ports.py` and `errors.py` hold the ports and errors its modules share. A
+  Shared ports live in each context's `ports.py` or focused `*_ports.py` siblings, and shared
+  errors in `errors.py`. Synchronization groups provider, account, record, health, plan, and run
+  ports in focused siblings while keeping its single unit of work in `sync/ports.py`. A
   use-case module may also declare ports and errors of its own beside its use cases, such as the
   query protocols in `operations/activity.py` and the administration errors in
   `identity/administration.py`. Other modules, in the same context or one above it, import those
@@ -78,5 +80,6 @@ states will not hold while it grows.
 
 A use case's module path names its context, and an import across contexts in the wrong direction
 fails the build. Ports and errors grow inside their context instead of in one shared module. The
-`UnitOfWork` still holds every repository of a User, so `sync/ports.py` is the largest ports
-module; split it further when a context earns its own unit of work.
+`UnitOfWork` still holds every repository of a User in `sync/ports.py`. Shared ports may split
+into focused sibling modules without a new unit of work, as authorized by ADR 0040. The
+Synchronization port split keeps the transaction boundary and the context dependency direction.

@@ -8,15 +8,12 @@ from threading import Barrier, Thread
 import pytest
 
 from calendar_sync.application.operations.ports import CauseSighting
+from calendar_sync.application.sync.account_ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.application.sync.errors import (
     ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
 )
-from calendar_sync.application.sync.ports import (
-    CalendarAccess,
-    DiscoveredCalendar,
-    RulePreviewSummary,
-)
+from calendar_sync.application.sync.record_ports import RulePreviewSummary
 from calendar_sync.application.sync.rules import CreateSyncRule
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind

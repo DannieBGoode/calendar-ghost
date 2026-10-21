@@ -6,8 +6,9 @@ import pytest
 
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import CalendarReader, UnitOfWorkFactory
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.application.sync.preview import PreviewProjection, PreviewSyncRule
+from calendar_sync.application.sync.provider_ports import CalendarReader
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     ConnectedAccountId,

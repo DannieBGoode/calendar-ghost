@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import RedirectResponse
 
+from calendar_sync.application.sync.account_ports import AccountCalendars, CalendarAccess
 from calendar_sync.application.sync.accounts import (
     CheckAccountAccess,
     ConnectedAccountSummary,
@@ -27,7 +28,6 @@ from calendar_sync.application.sync.errors import (
     InvalidAuthorizationState,
 )
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
-from calendar_sync.application.sync.ports import AccountCalendars, CalendarAccess
 from calendar_sync.application.sync.provider_descriptors import (
     ProviderDescriptor,
     ProviderDirectory,

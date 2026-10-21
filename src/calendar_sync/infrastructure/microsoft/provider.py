@@ -26,7 +26,7 @@ from calendar_sync.application.sync.errors import (
     ProviderFailure,
     UnsupportedProjection,
 )
-from calendar_sync.application.sync.ports import CreatedProjection, ProviderChangeSet
+from calendar_sync.application.sync.provider_ports import CreatedProjection, ProviderChangeSet
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import (
     AllDayRange,

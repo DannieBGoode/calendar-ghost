@@ -14,11 +14,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from calendar_sync.application.sync.ports import (
-    AccountAuthorization,
-    AccountCalendars,
-    CalendarProvider,
-)
+from calendar_sync.application.sync.account_ports import AccountAuthorization, AccountCalendars
+from calendar_sync.application.sync.provider_ports import CalendarProvider
 from calendar_sync.application.sync.watch_ports import CalendarWatcher, NoticeReader
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause

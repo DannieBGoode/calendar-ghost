@@ -7,6 +7,7 @@ from threading import Thread
 
 import pytest
 
+from calendar_sync.application.sync.account_ports import AccountAuthorizations
 from calendar_sync.application.sync.errors import (
     ConnectedAccountDisconnected,
     ConnectedAccountRequired,
@@ -20,11 +21,8 @@ from calendar_sync.application.sync.errors import (
     ReplacementInterrupted,
 )
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import (
-    AccountAuthorizations,
-    ProjectionDeleter,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
+from calendar_sync.application.sync.provider_ports import ProjectionDeleter
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.rules import EnableSyncRule, ReplaceSyncRuleCalendars
 from calendar_sync.domain.access import Role, User, UserState

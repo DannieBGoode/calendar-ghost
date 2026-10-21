@@ -7,13 +7,9 @@ from datetime import datetime
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.application.sync.health_ports import IncidentNotifications, IncidentRepository
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import (
-    IncidentNotifications,
-    IncidentRepository,
-    UnitOfWork,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWork, UnitOfWorkFactory
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId

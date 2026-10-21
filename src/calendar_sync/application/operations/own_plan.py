@@ -10,11 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from calendar_sync.application.identity.ports import IntegrationTokens
-from calendar_sync.application.sync.ports import (
-    Allowances,
-    ConnectedAccountRepository,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.account_ports import ConnectedAccountRepository
+from calendar_sync.application.sync.plan_ports import Allowances
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.plans import Allowance, exceeds, has_room
 

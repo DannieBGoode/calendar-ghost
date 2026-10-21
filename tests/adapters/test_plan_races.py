@@ -30,7 +30,8 @@ from calendar_sync.application.sync.plan_holds import (
     PlanSettlementBusy,
     SettleLocks,
 )
-from calendar_sync.application.sync.ports import Allowances, UnitOfWorkFactory
+from calendar_sync.application.sync.plan_ports import Allowances
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.application.sync.rules import EnableSyncRule
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind

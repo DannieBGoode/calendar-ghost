@@ -10,21 +10,23 @@ from types import TracebackType
 from typing import Self
 
 from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.account_ports import (
+    CalendarNameRepository,
+    ConnectedAccountRecords,
+    DiscoveredCalendar,
+)
 from calendar_sync.application.sync.errors import (
     DuplicateDirectionalRelationship,
     IdentityCollision,
     MissingReference,
 )
-from calendar_sync.application.sync.ports import (
+from calendar_sync.application.sync.plan_ports import PlanGraceRecord
+from calendar_sync.application.sync.ports import UnitOfWork, UnitOfWorkFactory
+from calendar_sync.application.sync.record_ports import (
     AuditRepository,
-    CalendarNameRepository,
-    ConnectedAccountRecords,
-    DiscoveredCalendar,
     EventMappingRepository,
     ExceptionReplayRepository,
     OccurrenceMappingRepository,
-    PlanGraceRecord,
-    ProviderCallCounts,
     ProviderCallRepository,
     RulePreviewRepository,
     RulePreviewSummary,
@@ -32,9 +34,8 @@ from calendar_sync.application.sync.ports import (
     SourceObservationRepository,
     SyncCursorRepository,
     SyncRuleRepository,
-    UnitOfWork,
-    UnitOfWorkFactory,
 )
+from calendar_sync.application.sync.run_ports import ProviderCallCounts
 from calendar_sync.application.sync.watch_ports import (
     CalendarWatchRepository,
     InstantSyncRequestRepository,

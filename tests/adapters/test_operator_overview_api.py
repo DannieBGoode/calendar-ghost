@@ -16,12 +16,9 @@ from calendar_sync.application.operations.installation_health import (
     InstallationNotifications,
 )
 from calendar_sync.application.operations.ports import SchedulerProgress
+from calendar_sync.application.sync.account_ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.application.sync.errors import ProviderFailure
-from calendar_sync.application.sync.ports import (
-    CalendarAccess,
-    DiscoveredCalendar,
-    ProviderCallCounts,
-)
+from calendar_sync.application.sync.run_ports import ProviderCallCounts
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Container, build_adapters, compose
 from calendar_sync.domain.access import UserId

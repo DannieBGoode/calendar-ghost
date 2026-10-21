@@ -5,12 +5,9 @@ from datetime import timedelta
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork
-from calendar_sync.application.sync.ports import (
-    CalendarReader,
-    ProviderChangeSet,
-    RunIdGenerator,
-    UnitOfWork,
-)
+from calendar_sync.application.sync.ports import UnitOfWork
+from calendar_sync.application.sync.provider_ports import CalendarReader, ProviderChangeSet
+from calendar_sync.application.sync.run_ports import RunIdGenerator
 from calendar_sync.application.sync.sync_run import (
     SOURCE_CHANGE_RETENTION,
     SyncRunContext,

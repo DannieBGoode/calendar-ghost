@@ -17,13 +17,9 @@ import pytest
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.health import RuleHealth
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import (
-    CalendarProvider,
-    ProviderChangeSet,
-    UnitOfWork,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWork, UnitOfWorkFactory
 from calendar_sync.application.sync.preview import PreviewSyncRule
+from calendar_sync.application.sync.provider_ports import CalendarProvider, ProviderChangeSet
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.model import (

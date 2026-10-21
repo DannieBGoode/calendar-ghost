@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from calendar_sync.application.sync.ports import CalendarProvider
+from calendar_sync.application.sync.provider_ports import CalendarProvider
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import CalendarEvent, ConnectedAccountId, EventStatus
 from calendar_sync.infrastructure.providers.routing import RoutingCalendarProvider

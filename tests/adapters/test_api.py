@@ -13,6 +13,12 @@ from fastapi.testclient import TestClient
 
 from calendar_sync import __version__
 from calendar_sync.application.operations.status import GetInstallationStatus
+from calendar_sync.application.sync.account_ports import (
+    AccountAccess,
+    AuthorizedAccount,
+    CalendarAccess,
+    DiscoveredCalendar,
+)
 from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
@@ -22,19 +28,13 @@ from calendar_sync.application.sync.errors import (
     RemovalInterrupted,
 )
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.sync.ports import (
-    AccountAccess,
-    AuthorizedAccount,
-    CalendarAccess,
-    CalendarProvider,
-    DiscoveredCalendar,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.application.sync.preview import PreviewSyncRule
 from calendar_sync.application.sync.provider_descriptors import (
     ProviderDescriptor,
     ProviderDirectory,
 )
+from calendar_sync.application.sync.provider_ports import CalendarProvider
 from calendar_sync.application.sync.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncRunResult

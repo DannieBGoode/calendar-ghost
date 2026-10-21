@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 
 from calendar_sync.application.sync.errors import ProviderFailure
-from calendar_sync.application.sync.ports import ProviderCallCounts, ProviderCallTally
+from calendar_sync.application.sync.run_ports import ProviderCallCounts, ProviderCallTally
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ProjectionHandling
 from calendar_sync.domain.providers import ProviderFailureKind

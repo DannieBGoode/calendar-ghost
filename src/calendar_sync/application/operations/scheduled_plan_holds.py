@@ -8,7 +8,7 @@ from datetime import datetime
 from calendar_sync.application.operations.ports import UserPlanStanding
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.plan_holds import PlanHolds
-from calendar_sync.application.sync.ports import Allowances
+from calendar_sync.application.sync.plan_ports import Allowances
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.plan_hold import PlanNotice, settle
 

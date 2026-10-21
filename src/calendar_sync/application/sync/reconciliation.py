@@ -9,18 +9,17 @@ from datetime import datetime, timedelta
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable, RuleNotFound
+from calendar_sync.application.sync.health_ports import FullPassRecords, RecoveryIncidents
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.sync.ports import (
-    CalendarReader,
-    FullPassRecords,
-    ProviderCallStats,
-    ProviderCallTally,
-    RecoveryIncidents,
-    RunIdGenerator,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
+from calendar_sync.application.sync.provider_ports import CalendarReader
 from calendar_sync.application.sync.resource_use import record_provider_calls
 from calendar_sync.application.sync.run_log import UntalliedProviderCalls, call_summary, duration
+from calendar_sync.application.sync.run_ports import (
+    ProviderCallStats,
+    ProviderCallTally,
+    RunIdGenerator,
+)
 from calendar_sync.application.sync.synchronization import (
     ExecuteSyncRule,
     SyncRunResult,

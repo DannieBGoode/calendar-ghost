@@ -10,7 +10,7 @@ import traceback
 from contextlib import AbstractContextManager, nullcontext
 from datetime import timedelta
 
-from calendar_sync.application.sync.ports import ProviderCallTally
+from calendar_sync.application.sync.run_ports import ProviderCallTally
 
 
 class UntalliedProviderCalls:

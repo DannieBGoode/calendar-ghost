@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import CreatedProjection
+from calendar_sync.application.sync.provider_ports import CreatedProjection
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
     CalendarEndpoint,
