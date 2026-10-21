@@ -37,13 +37,7 @@ class EmailChangeAdapters:
 def build_email_changes(
     settings: Settings, ids: IdGenerator, clock: Clock, setup: IdentityEmailSetup
 ) -> EmailChangeAdapters:
-    present = bool(
-        settings.smtp_host
-        or settings.smtp_sender
-        or settings.smtp_username
-        or settings.smtp_password
-        or settings.smtp_recipient
-    )
+    present = bool(settings.smtp_host or settings.smtp_sender)
     return EmailChangeAdapters(
         setup,
         present,

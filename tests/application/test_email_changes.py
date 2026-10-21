@@ -260,3 +260,28 @@ def test_no_smtp_does_not_grant_arbitrary_missing_email_upgrade_access(tmp_path:
     with pytest.raises(EmailChangeUnavailable):
         direct.execute(SECOND.id, "new@example.test", None)
     passwords.verify.assert_not_called()
+
+
+def test_absent_smtp_host_and_sender_allow_direct_despite_other_mail_settings(
+    tmp_path: Path,
+) -> None:
+    changes, _, _, _, _, _ = services(
+        tmp_path,
+        smtp_host="",
+        smtp_sender="",
+        smtp_username="synthetic-user",
+        smtp_password="synthetic-password",
+        smtp_recipient="operator@example.test",
+    )
+    assert changes.show.execute(SECOND.id).mode is EmailChangeMode.DIRECT
+    assert (
+        changes.direct.execute(SECOND.id, "new@example.test", "correct").email == "new@example.test"
+    )
+
+
+@pytest.mark.parametrize("missing", ["smtp_host", "smtp_sender"])
+def test_partial_smtp_host_or_sender_requires_configuration(tmp_path: Path, missing: str) -> None:
+    changes, _, _, _, _, _ = services(tmp_path, **{missing: ""})
+    assert changes.show.execute(SECOND.id).mode is EmailChangeMode.UNAVAILABLE
+    with pytest.raises(EmailChangeConfigurationRequired):
+        changes.direct.execute(SECOND.id, "new@example.test", "correct")
