@@ -14,8 +14,9 @@
             "type": "string"
           },
           "token": {
-            "maxLength": 200,
+            "maxLength": 128,
             "minLength": 1,
+            "pattern": "^[\\x00-\\x7f]+$",
             "title": "Token",
             "type": "string"
           }
@@ -404,6 +405,30 @@
           "database"
         ],
         "title": "ClearedActivityResponse",
+        "type": "object"
+      },
+      "CompleteRegistrationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 1024,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[\\x00-\\x7f]+$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "CompleteRegistrationRequest",
         "type": "object"
       },
       "ConfirmEmailChangeRequest": {
@@ -1633,6 +1658,35 @@
         "title": "IntegrationTokenResponse",
         "type": "object"
       },
+      "InvitationStatusResponse": {
+        "properties": {
+          "acceptance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "direct",
+                  "verified"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acceptance"
+          },
+          "usable": {
+            "title": "Usable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "usable",
+          "acceptance"
+        ],
+        "title": "InvitationStatusResponse",
+        "type": "object"
+      },
       "IssueIntegrationTokenRequest": {
         "properties": {
           "name": {
@@ -1775,8 +1829,9 @@
       "LinkRequest": {
         "properties": {
           "token": {
-            "maxLength": 200,
+            "maxLength": 128,
             "minLength": 1,
+            "pattern": "^[\\x00-\\x7f]+$",
             "title": "Token",
             "type": "string"
           }
@@ -3407,12 +3462,55 @@
         "title": "RecordedTimeResponse",
         "type": "object"
       },
+      "RegistrationCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[\\x00-\\x7f]+$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "RegistrationCheckRequest",
+        "type": "object"
+      },
+      "RegistrationCheckResponse": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "usable": {
+            "title": "Usable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "usable",
+          "email"
+        ],
+        "title": "RegistrationCheckResponse",
+        "type": "object"
+      },
       "RegistrationRequest": {
         "properties": {
           "policy": {
             "enum": [
               "only_me",
-              "invitation_only"
+              "invitation_only",
+              "open"
             ],
             "title": "Policy",
             "type": "string"
@@ -3430,10 +3528,31 @@
             "title": "Only Me Available",
             "type": "boolean"
           },
+          "open_available": {
+            "default": false,
+            "title": "Open Available",
+            "type": "boolean"
+          },
+          "open_unavailable_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "identity_email_not_configured",
+                  "identity_email_not_tested"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open Unavailable Reason"
+          },
           "policy": {
             "enum": [
               "only_me",
-              "invitation_only"
+              "invitation_only",
+              "open"
             ],
             "title": "Policy",
             "type": "string"
@@ -3441,7 +3560,9 @@
         },
         "required": [
           "policy",
-          "only_me_available"
+          "only_me_available",
+          "open_available",
+          "open_unavailable_reason"
         ],
         "title": "RegistrationResponse",
         "type": "object"
@@ -4308,11 +4429,17 @@
             "default": false,
             "title": "Password Reset Available",
             "type": "boolean"
+          },
+          "public_registration_available": {
+            "default": false,
+            "title": "Public Registration Available",
+            "type": "boolean"
           }
         },
         "required": [
           "administrator_configured",
           "password_reset_available",
+          "public_registration_available",
           "password_only_sign_in"
         ],
         "title": "SetupStatusResponse",
@@ -4343,6 +4470,49 @@
           "password"
         ],
         "title": "SignInRequest",
+        "type": "object"
+      },
+      "SignUpAcceptedResponse": {
+        "properties": {
+          "accepted": {
+            "const": true,
+            "default": true,
+            "title": "Accepted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "title": "SignUpAcceptedResponse",
+        "type": "object"
+      },
+      "SignUpRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "invitation_token": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[\\x00-\\x7f]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invitation Token"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "SignUpRequest",
         "type": "object"
       },
       "SignedInUserResponse": {
@@ -6980,7 +7150,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LinkStatusResponse"
+                  "$ref": "#/components/schemas/InvitationStatusResponse"
                 }
               }
             },
@@ -7765,6 +7935,120 @@
           }
         },
         "summary": "Set Registration"
+      }
+    },
+    "/api/v1/registrations": {
+      "post": {
+        "operationId": "complete_registration_api_v1_registrations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteRegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Registration"
+      }
+    },
+    "/api/v1/registrations/check": {
+      "post": {
+        "operationId": "check_registration_api_v1_registrations_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrationCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationCheckResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Registration"
+      }
+    },
+    "/api/v1/registrations/request": {
+      "post": {
+        "operationId": "request_registration_api_v1_registrations_request_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignUpAcceptedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Registration"
       }
     },
     "/api/v1/rules": {

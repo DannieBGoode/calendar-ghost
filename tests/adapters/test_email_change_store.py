@@ -355,7 +355,7 @@ def test_email_change_migration_upgrade_restart_and_preservation(
     initialize_database(path)
     initialize_database(path)
     with transaction(path) as connection:
-        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 37
+        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 38
         assert not connection.execute("PRAGMA foreign_key_check").fetchall()
         assert not connection.execute("SELECT * FROM email_change_proofs").fetchall()
     if version:

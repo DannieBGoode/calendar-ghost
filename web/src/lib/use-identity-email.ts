@@ -1,3 +1,5 @@
+import { useEffect } from "react"
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { api } from "@/lib/api"
@@ -15,6 +17,13 @@ export function useIdentityEmail() {
       return state === "queued" || state === "sending" ? 1000 : false
     },
   })
+  const testedAt = readiness.data?.tested_at
+  const accepted = readiness.data?.test_state === "accepted"
+  useEffect(() => {
+    if (!accepted || !testedAt) return
+    void client.invalidateQueries({ queryKey: ["registration"] })
+    void client.invalidateQueries({ queryKey: ["setup"] })
+  }, [accepted, testedAt, client])
   const test = useMutation({
     mutationFn: api.testIdentityEmail,
     onSuccess: () => client.invalidateQueries({ queryKey: KEY }),

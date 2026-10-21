@@ -140,8 +140,25 @@
     "invitationOnlyHint": "People join with a link you create. Each link works once and expires after 7 days.",
     "saved": {
       "onlyMe": "Only you can use this Calendar Ghost now.",
-      "invitationOnly": "People can now join with an invitation link."
-    }
+      "invitationOnly": "People can now join with an invitation link.",
+      "open": "People can now join after verifying their email."
+    },
+    "open": "Open",
+    "openHint": "Anyone can join after verifying their email. Invitations also require email verification.",
+    "notConfigured": "Configure Identity email before choosing Open.",
+    "notTested": "Send a successful Identity email test for the current configuration before choosing Open.",
+    "identityEmail": "Review Identity email",
+    "proxyGuide": "Read the trusted-proxy guide",
+    "plansOff": "With Plans off, everyone has every feature without limits. Open does not turn Plans on.",
+    "closeOnlyMeWarning": "Switch to Only me? This cancels all unfinished sign-ups, including sign-ups linked to invitations. Existing people and invitations stay, but nobody can join while Only me is selected.",
+    "closeOnlyMeConfirm": "Switch to Only me",
+    "closeWarning": "Switch to Invitation only? This cancels unfinished public sign-ups. Sign-ups already linked to invitations can still finish. Existing people and invitations stay.",
+    "closeConfirm": "Switch to Invitation only",
+    "keepOpen": "Keep Open",
+    "openInterrupted": "Open remains selected. New people cannot join until Identity email is ready again.",
+    "openPausedHint": "New joining is temporarily unavailable.",
+    "restoreConfigured": "Configure Identity email to restore joining.",
+    "restoreTested": "Send a successful test of the current Identity email configuration to restore joining."
   },
   "links": {
     "copy": "Copy link",

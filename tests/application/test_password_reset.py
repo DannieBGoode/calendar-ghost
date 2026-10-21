@@ -38,7 +38,7 @@ def test_actual_composition_always_persists_limits_when_key_exists(
     container = compose(settings, adapters)
     assert (container.reset_admission.attempts is not None) is key
     assert container.identity_email.configured is (configured and key)
-    assert (container.identity_mail_worker is not None) is key
+    assert container.identity_mail_worker is not None
     assert container.identity_email.request_reset.admission is container.reset_admission
 
 

@@ -30,6 +30,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
+from calendar_sync.application.identity.identity_email import (
+    EmailTest,
+    EmailTestState,
+    IdentityEmailReason,
+    IdentityEmailSetup,
+    IdentityEmailTests,
+)
+from calendar_sync.application.identity.registration_ports import RegistrationEmailRequest
 from calendar_sync.application.identity.sign_in import SetUpInstallation
 from calendar_sync.application.operations.activity import InspectActivityEvent
 from calendar_sync.application.operations.installation_health import (
@@ -98,8 +106,14 @@ from calendar_sync.domain.services import (
 from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteActivityQueries
+from calendar_sync.infrastructure.persistence.registration_admission import (
+    SqliteRegistrationAdmission,
+)
+from calendar_sync.infrastructure.persistence.registration_readiness import (
+    SqliteRegistrationReadiness,
+)
 from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
-from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
+from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher, token_hash
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 PREVIEW_DATABASE = REPOSITORY / "dev-preview.db"
@@ -110,6 +124,123 @@ ROBIN_EMAIL = "robin@example.test"
 """A second, ordinary User in every scenario but setup: healthy, unless one of their accounts lapsed
 for the Cause Sam's did."""
 MARKER_TABLE = "dev_preview_marker"
+
+PROOF_TOKEN = "preview-verification-proof"  # noqa: S105
+INVITATION_TOKEN = "preview-invitation"  # noqa: S105
+FINGERPRINT = "development-preview-only"
+
+
+class RegistrationFixture(StrEnum):
+    READY_OPEN = "readyOpen"
+    UNAVAILABLE = "unavailable"
+    INVITATION_ONLY = "invitationOnly"
+
+
+@dataclass(frozen=True, slots=True)
+class _SyntheticQueue:
+    tests: IdentityEmailTests
+    clock: Clock
+    database: Path
+
+    def submit_registration(self, _request: RegistrationEmailRequest) -> bool:
+        """Accept generically without retaining an address or sending mail."""
+        return True
+
+    def submit(self, test: EmailTest) -> bool:
+        self.tests.record_success(test, "preview@preview.test", self.clock.now())
+        return True
+
+    def state(self, _actor: UserId) -> EmailTestState:
+        return EmailTestState.ACCEPTED
+
+
+def registration_fixture(
+    container: Container, path: Path, clock: Clock, fixture: RegistrationFixture
+) -> Container:
+    """Exercise real admission/completion against a fixed proof in the marked preview database."""
+    now = clock.now()
+    unavailable = fixture is RegistrationFixture.UNAVAILABLE
+    setup = IdentityEmailSetup(
+        None if unavailable else FINGERPRINT,
+        IdentityEmailReason.SMTP_MISSING if unavailable else None,
+    )
+    readiness = SqliteRegistrationReadiness(path, setup)
+    queue = _SyntheticQueue(container.identity_email.show.tests, clock, path)
+    with closing(sqlite3.connect(path)) as connection, connection:
+        policy = "invitation_only" if fixture is RegistrationFixture.INVITATION_ONLY else "open"
+        connection.execute(
+            "UPDATE installation_settings SET registration_policy = ? WHERE singleton = 1",
+            (policy,),
+        )
+        connection.execute(
+            "UPDATE identity_email_readiness SET fingerprint = ?, tested_at = ? "
+            "WHERE singleton = 1",
+            (FINGERPRINT, now.isoformat()),
+        )
+        connection.execute(
+            "INSERT INTO registration_proofs (token_hash, email, created_at, expires_at) "
+            "VALUES (?, ?, ?, ?)",
+            (
+                token_hash(PROOF_TOKEN),
+                "new-user@example.test",
+                now.isoformat(),
+                (now + timedelta(hours=24)).isoformat(),
+            ),
+        )
+        connection.execute(
+            "INSERT INTO invitations (id, token_hash, created_by, created_at, expires_at) "
+            "VALUES (?, ?, (SELECT id FROM users WHERE email = ?), ?, ?)",
+            (
+                "preview-invitation",
+                token_hash(INVITATION_TOKEN),
+                "preview@preview.test",
+                now.isoformat(),
+                (now + timedelta(days=7)).isoformat(),
+            ),
+        )
+    return _with_fixture_services(container, setup, readiness, queue)
+
+
+def _with_fixture_services(
+    container: Container,
+    setup: IdentityEmailSetup,
+    readiness: SqliteRegistrationReadiness,
+    queue: _SyntheticQueue,
+) -> Container:
+    registrations = container.registrations
+    admission = SqliteRegistrationAdmission(
+        queue.database, CredentialCipher.generate_key(), queue.clock
+    )
+    identity_email = container.identity_email
+    return replace(
+        container,
+        registrations=replace(
+            registrations,
+            readiness=readiness,
+            request=replace(
+                registrations.request,
+                readiness=readiness,
+                fingerprint=setup.fingerprint,
+                queue=queue,
+                admission=admission,
+            ),
+            check=replace(registrations.check, fingerprint=setup.fingerprint, admission=admission),
+            complete=replace(
+                registrations.complete, fingerprint=setup.fingerprint, admission=admission
+            ),
+        ),
+        identity_email=replace(
+            identity_email,
+            show=replace(identity_email.show, setup=setup, queue=queue),
+            request_test=replace(identity_email.request_test, setup=setup, queue=queue),
+        ),
+        administration=replace(
+            container.administration,
+            set_registration_policy=replace(
+                container.administration.set_registration_policy, fingerprint=setup.fingerprint
+            ),
+        ),
+    )
 
 
 class NotAPreviewDatabase(RuntimeError):
@@ -456,6 +587,7 @@ def build_preview_container(
     now: datetime | None = None,
     *,
     scenario: Scenario = Scenario.REVIEW,
+    registration: RegistrationFixture | None = None,
 ) -> Container:
     reset_preview_database(path)
     # Explicit settings: nothing is read from the environment or .env.
@@ -583,6 +715,8 @@ def build_preview_container(
     # A new installation has only its first User.
     if scenario is not Scenario.SETUP:
         _seed_robin(adapters, path, moment, scenario)
+    if registration is not None:
+        container = registration_fixture(container, path, adapters.clock, registration)
     return container
 
 
@@ -1113,9 +1247,17 @@ def main() -> None:
         default=Scenario.REVIEW,
         help="the Overview state to start in (default: review)",
     )
+    parser.add_argument(
+        "--registration",
+        type=RegistrationFixture,
+        choices=list(RegistrationFixture),
+        help="optional synthetic joining fixture; sends no email",
+    )
     arguments = parser.parse_args()
     port = arguments.port
-    container = build_preview_container(scenario=arguments.scenario)
+    container = build_preview_container(
+        scenario=arguments.scenario, registration=arguments.registration
+    )
 
     import uvicorn
 

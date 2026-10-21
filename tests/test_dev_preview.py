@@ -349,3 +349,48 @@ def test_your_plan_counts_each_preview_users_calendar_accounts(tmp_path: Path) -
     assert sams["connected_accounts"] == 3
     assert robins["connected_accounts"] == listed == 2
     assert robins["may_connect_account"] is False
+
+
+def test_preview_registration_fixture_uses_synthetic_proofs_without_mail(tmp_path: Path) -> None:
+    from scripts.dev_preview import PROOF_TOKEN, RegistrationFixture
+
+    database = tmp_path / "dev-preview.db"
+    container = build_preview_container(database, NOW, registration=RegistrationFixture.READY_OPEN)
+    assert container.identity_mail_worker is not None
+    with TestClient(create_app(container)) as client:
+        assert client.get("/api/v1/setup").json()["public_registration_available"] is True
+        assert (
+            client.post(
+                "/api/v1/registrations/request", json={"email": "new@example.test"}
+            ).status_code
+            == 202
+        )
+        checked = client.post("/api/v1/registrations/check", json={"token": PROOF_TOKEN})
+        assert checked.json() == {"usable": True, "email": "new-user@example.test"}
+        completed = client.post(
+            "/api/v1/registrations", json={"token": PROOF_TOKEN, "password": PREVIEW_PASSWORD}
+        )
+        assert completed.status_code == 200
+        assert completed.json()["user"]["email"] == "new-user@example.test"
+        assert (
+            client.post("/api/v1/registrations/check", json={"token": PROOF_TOKEN}).json()["usable"]
+            is False
+        )
+
+
+def test_preview_registration_unavailable_keeps_open_and_the_proof(tmp_path: Path) -> None:
+    from scripts.dev_preview import PROOF_TOKEN, RegistrationFixture
+
+    container = build_preview_container(
+        tmp_path / "dev-preview.db", NOW, registration=RegistrationFixture.UNAVAILABLE
+    )
+    with TestClient(create_app(container)) as client:
+        assert client.get("/api/v1/setup").json()["public_registration_available"] is False
+        assert (
+            client.post("/api/v1/registrations/check", json={"token": PROOF_TOKEN}).status_code
+            == 503
+        )
+        client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
+        registration = client.get("/api/v1/registration").json()
+        assert registration["policy"] == "open"
+        assert registration["open_unavailable_reason"] == "identity_email_not_configured"

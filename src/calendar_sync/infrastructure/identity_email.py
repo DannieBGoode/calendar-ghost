@@ -93,6 +93,22 @@ class IdentitySmtp:
         except Exception:
             raise IdentityEmailDeliveryFailed() from None
 
+    def send_registration(self, recipient: str, token: str) -> None:
+        try:
+            origin = self._origin()
+            if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", token) is None:
+                raise IdentityEmailDeliveryFailed()
+            self._send(
+                recipient,
+                "Calendar Ghost: verify your email",
+                "A request was made to join Calendar Ghost with this email address.\n\n"
+                f"Verify your email: {origin}/verify-email#{token}\n\n"
+                "Use this link within 24 hours, before any Invitation expires. "
+                "If you did not request it, ignore this email.",
+            )
+        except Exception:
+            raise IdentityEmailDeliveryFailed() from None
+
     def send_email_change(self, recipient: str, token: str) -> None:
         try:
             origin = self._origin()

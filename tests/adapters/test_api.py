@@ -144,6 +144,7 @@ def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
             "administrator_configured": False,
             "password_only_sign_in": False,
             "password_reset_available": False,
+            "public_registration_available": False,
         }
         assert client.get("/api/v1/dashboard").status_code == 401
 

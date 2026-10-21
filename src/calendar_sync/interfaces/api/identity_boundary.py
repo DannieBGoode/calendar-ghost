@@ -19,11 +19,26 @@ def email_change_api(path: str) -> bool:
     )
 
 
+def joining_api(path: str) -> bool:
+    return path == "/api/v1/registrations" or path.startswith(
+        ("/api/v1/registrations/", "/api/v1/invitations/")
+    )
+
+
 def _private(path: str) -> bool:
     return (
         reset_api(path)
         or email_change_api(path)
-        or path in {"/password-reset", "/forgot-password", "/email-change"}
+        or joining_api(path)
+        or path
+        in {
+            "/password-reset",
+            "/forgot-password",
+            "/email-change",
+            "/sign-up",
+            "/verify-email",
+            "/invitation",
+        }
         or (path.startswith("/api/v1/users/") and path.endswith("/password-reset-links"))
     )
 
@@ -48,7 +63,7 @@ class IdentityBoundary:
             await send(message)
 
         path = scope["path"].rstrip("/")
-        bounded = (scope["method"] == "POST" and reset_api(path)) or (
+        bounded = (scope["method"] == "POST" and (reset_api(path) or joining_api(path))) or (
             scope["method"] in {"POST", "PUT"} and email_change_api(path)
         )
         if bounded:

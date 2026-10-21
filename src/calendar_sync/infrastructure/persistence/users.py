@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 import secrets
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from calendar_sync.application.identity.credentials import CredentialSnapshot
-from calendar_sync.application.identity.errors import EmailTaken
+from calendar_sync.application.identity.errors import EmailTaken, SignInStorageUnavailable
 from calendar_sync.application.identity.ports import (
     Session,
     SignInCredentials,
@@ -22,7 +23,7 @@ from calendar_sync.application.identity.ports import (
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import Role, User, UserId, UserState, require_administrator_remains
 from calendar_sync.domain.plans import InvalidPlan, PlanKey
-from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.connections import BUSY_TIMEOUT_SECONDS, transaction
 from calendar_sync.infrastructure.persistence.email_change_records import revoke_email_changes
 from calendar_sync.infrastructure.security import token_hash
 
@@ -40,9 +41,26 @@ _SORT_COLUMNS = {
 }
 
 
+@contextmanager
+def _sign_in_transaction(database: Path, *, timeout: float) -> Iterator[sqlite3.Connection]:
+    try:
+        with transaction(database, timeout=timeout) as connection:
+            yield connection
+    except sqlite3.Error:
+        raise SignInStorageUnavailable from None
+
+
 class SqliteUserDirectory:
-    def __init__(self, database_path: Path) -> None:
+    def __init__(
+        self,
+        database_path: Path,
+        *,
+        sign_in_timeout: float = BUSY_TIMEOUT_SECONDS,
+        read_timeout: float = BUSY_TIMEOUT_SECONDS,
+    ) -> None:
         self._database_path = database_path
+        self._sign_in_timeout = sign_in_timeout
+        self._read_timeout = read_timeout
 
     def sign_in_credentials(self, email: str | None) -> SignInCredentials | None:
         with transaction(self._database_path) as connection:
@@ -157,7 +175,7 @@ class SqliteUserDirectory:
             revoke_email_changes(connection, user_id, datetime.now(UTC).isoformat())
 
     def record_sign_in(self, user_id: UserId, at: datetime) -> None:
-        with transaction(self._database_path) as connection:
+        with _sign_in_transaction(self._database_path, timeout=self._sign_in_timeout) as connection:
             connection.execute(
                 "UPDATE users SET last_sign_in_at = ? WHERE id = ?",
                 (at.isoformat(), user_id.value),
@@ -223,7 +241,7 @@ class SqliteUserDirectory:
                 revoke_email_changes(connection, user_id, datetime.now(UTC).isoformat())
 
     def _one(self, condition: str, *values: object) -> User | None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=self._read_timeout) as connection:
             # Interpolates only the constant columns and one of this class's own conditions.
             row = connection.execute(
                 f"SELECT {_COLUMNS} FROM users WHERE {condition}",  # noqa: S608
@@ -323,15 +341,18 @@ def _own_plan(user_id: UserId, stored: object) -> PlanKey | None:
 class SqliteSessions:
     """Sessions of seven days; only each token's hash is stored."""
 
-    def __init__(self, database_path: Path, clock: Clock) -> None:
+    def __init__(
+        self, database_path: Path, clock: Clock, *, sign_in_timeout: float = BUSY_TIMEOUT_SECONDS
+    ) -> None:
         self._database_path = database_path
         self._clock = clock
+        self._sign_in_timeout = sign_in_timeout
 
     def start(
         self, user_id: UserId, password_hash: str, email: str | None, revision: int
     ) -> Session | None:
         token = secrets.token_urlsafe(32)
-        with transaction(self._database_path) as connection:
+        with _sign_in_transaction(self._database_path, timeout=self._sign_in_timeout) as connection:
             connection.execute("BEGIN IMMEDIATE")
             now = self._clock.now()
             expires = now + SESSION_LIFETIME

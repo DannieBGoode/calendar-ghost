@@ -296,7 +296,8 @@ Behind a reverse proxy, set `FORWARDED_ALLOW_IPS` to a comma-separated list of i
 or narrowly scoped networks, for example `192.0.2.10` or a dedicated proxy subnet. Never use `*`.
 Use the addresses the application sees inside Docker, which may differ from host addresses. Restart
 after changing the setting and verify separate clients receive separate allowances. IPv6 reset
-clients within one /64 intentionally share their allowance; another /64 has its own.
+and registration clients within one /64 intentionally share their purpose's allowance; another
+/64 has its own.
 
 The edge proxy must overwrite client-supplied forwarded headers with values derived from the
 connection, including `X-Forwarded-For` and `X-Forwarded-Proto`; strip or overwrite unused
@@ -460,10 +461,10 @@ tracebacks. Normal stale eligibility and cancellation emit no failure warning.
 ### Migration 35 identity email readiness
 
 Migration 35 adds an installation-wide readiness record and per-administrator test admission
-counters. Existing accounts, registration policies, and ordinary email changes keep their behavior;
-Only me and Invitation only remain the two registration choices. No new account-registration
-or email-change email flow is enabled by this test. Password recovery is independently available
-with usable configuration, without requiring a successful test.
+counters. It preserves existing accounts, registration policies, and ordinary email changes. That
+migration alone enabled no new registration or email-change flow; migration 38 adds Open. A
+successful test never changes the selected Registration Policy. Password recovery is independently
+available with usable configuration, without requiring a successful test.
 
 Before upgrading, stop the service and back up the complete database and its matching Master Key,
 keeping the previous image version. Migrations run at startup. For rollback, stop the service and
@@ -588,8 +589,8 @@ Identity security mail ignores **Email notifications** and the installation's in
 It goes to the User's current account email. Existing and Invitation Only addresses, including
 direct email changes, remain eligible without retroactive verification. Check these addresses:
 a typo or an address belonging to somebody else gives that mailbox owner password recovery access.
-Only me remains the default; Open registration, offline recovery tooling, and the hosted backup
-runbook remain planned. Plans are independent.
+Only me remains the default. Open requires explicit administrator choice and tested identity email;
+offline recovery tooling and the hosted backup runbook remain planned. Plans are independent.
 
 ### Recovery allowances and fallback
 
@@ -620,14 +621,16 @@ No plaintext counter addresses, networks, passwords, or mail bodies persist. Que
 delivery tokens live only in process memory. Auth diagnostics never include addresses, tokens,
 passwords, request bodies, or provider exception text. The application sends no telemetry.
 
-With a Master Key, allowances survive restart even without usable identity email. A maintenance-only
-worker then refuses both mail lanes but continues cleanup. Admitted requests, completion attempts,
-and hourly worker maintenance remove obsolete counters and expired, consumed, or revoked proofs
-in batches of at most 500; normal running maintenance aims to remove them within 24 hours. Token
-checks do not remove proofs; invalid checks may remove obsolete counters only. A stopped service,
-storage failure, or keyless installation cannot promise that cleanup deadline. Backups retain these
-records until their own retention expires. Without a Master Key, public recovery is unavailable
-and administrator token/completion limits use bounded memory only, forgotten on restart.
+With a Master Key, allowances survive restart even without usable identity email, and the durable
+reset admission adapter enables reset cleanup. Admitted requests, completion attempts, and hourly
+worker maintenance then remove obsolete reset counters and expired, consumed, or revoked reset
+proofs in batches of at most 500, aiming for removal within 24 hours while running. Token checks
+do not remove proofs; invalid checks may remove obsolete counters only. The worker still runs
+without SMTP or a Master Key for registration cleanup, which retains its 24-hour running target.
+Without a Master Key, reset cleanup and public recovery are unavailable; reset records may remain
+until the key is restored, and administrator token/completion limits use bounded memory only,
+forgotten on restart. A stopped service or storage failure can delay cleanup. Backups retain
+records until their own retention expires.
 After an admission commits, a cleanup storage failure leaves that admitted request or completion
 free to proceed. Cleanup retries during later admitted work or hourly maintenance; admission
 decision failures still refuse work before queueing, proof lookup, or password hashing.
@@ -639,6 +642,128 @@ after its last identity admission before restarting, so all previous allowances 
 Back up the matching key and database first. There is no supported in-place key rotation tool:
 replacing the key also makes stored provider credentials and sealed history unreadable and clears
 matching email readiness. A reset proof remains hash-bound, not encrypted with that digest key.
+
+## Migration 38 Open registration
+
+Migration 38 rebuilds `installation_settings` to accept `open`, preserving the selected
+Registration Policy, `plans_enabled`, and `default_plan_key`. Fresh installations still start
+Only Me; upgraded installations keep their existing policy. No upgrade selects Open or turns Plans
+on. It adds `registration_proofs` and `registration_request_attempts` with expiry indexes and
+independent admission keys; existing Users, passwords, sessions, calendar records, Invitations,
+reset/email-change proofs, and Plans are preserved. Startup applies the migration atomically.
+
+Before upgrading, stop the service, take a complete database/data-directory backup with its matching
+Master Key, and retain the previous image version. There is no down migration. For rollback:
+
+1. Close public registration by choosing Invitation Only before stopping the upgraded service.
+   This cancels unfinished public proofs. If the service cannot operate, close ingress instead.
+2. Stop the service and restore the matching pre-upgrade data directory, Master Key, and image
+   together. All writes after that backup are lost, including new Users and calendar state.
+3. Keep access closed while checking the restored policy and access. Do not start two writers.
+
+Never run an old image against stored Open or the upgraded schema, even after changing the policy
+back. Do not remove migration records or hand-edit the enum constraint. Restoring a backup can
+revive previously revoked access; see [backup risks](data-ownership.md#backups-and-recovery).
+The optional hosted backup runbook and offline recovery tooling remain unshipped.
+
+## Verified registration
+
+Only an Installation Administrator can choose Open, after usable identity email configuration and
+a successful test for that exact fingerprint. See [identity email](#identity-email-test-readiness).
+The policy write rechecks the actor's active administrator role and readiness atomically. Open
+requires neither Plans nor Commercial Mode; both stay off by default. Joining creates an ordinary
+User with no own Plan, so they follow the Default Plan, including later changes, when Plans are on.
+Existing Users retain access without retroactive verification.
+
+Sign-in shows **Create account** only while public joining is available. Requests ask for email
+first and always say, "If this address can join, we will send a verification link." No account
+lookup or SMTP is awaited by the handler. Existing and disabled addresses receive no sign-up mail
+and are never changed; no account-exists message is sent. Pending Registration is not a User,
+reserves nothing, and has no password or calendar access. People lists only completed Users with
+the existing disable/delete actions, without a pending list or approval step.
+
+A single-use Email Verification Link opens a password form bound to that address. It lasts 24
+hours from issuance; an Invitation-bound link cannot outlive the Invitation's original seven-day
+expiry. Checking the link consumes nothing. Completion rechecks current time, policy, readiness
+under Open, Invitation validity, and address uniqueness under the final write lock; it creates
+one User and consumes all registration proofs for the email atomically. The Invitation, if any,
+is consumed only then. Hashing, SMTP, and session creation run outside that lock. A stale direct
+Invitation form cannot bypass verification after switching to Open. If another operation takes
+the address or Invitation first, completion refuses neutrally without changing that User.
+
+Under Invitation Only, Invitations still join directly without SMTP. A previously issued
+Invitation-bound verification link may also finish there without current SMTP/readiness. Only Me
+refuses every join. Returning to Invitation Only atomically cancels pending public proofs; Only Me
+cancels all registration proofs and still requires the sole-User condition. Reopening never revives
+cancelled proofs. Returning to setup also revokes Invitations and clears readiness.
+
+Lost or changed SMTP configuration, trusted origin, or matching readiness keeps Open selected but
+makes public requests and completion under Open temporarily unavailable. Valid proofs are not
+revoked merely by readiness loss. Fix configuration, restart if changed, and test the current
+settings again. Existing sign-in and synchronization continue. A transient send failure does not
+change policy or erase a previous matching successful test.
+
+The normal session starts only after account creation commits, with the credential/state race
+guard. If that phase fails, the account and consumed proof remain committed: sign in with the
+password just chosen, rather than retrying registration. A replay cannot create another User.
+All registration storage phases use at most 100 ms SQLite waits, including reads, cleanup, and
+post-commit session creation, last-sign-in recording, and the User and Instant Sync reads needed
+to assemble the complete response. If those reads fail after the account commits, the response
+privately directs you to sign in; it sets no cookie. Plans reads still fail open. Ordinary identity
+and direct Invitation reads/writes retain their five-second wait. New bodies are capped at 8 KiB,
+normalized email at 254 characters, tokens at 128 ASCII characters, and verification passwords at 12 to 1,024 characters before storage or hashing.
+Setup, direct Invitation, and ordinary new-password bounds remain unchanged.
+
+### Registration limits, mail loss, and retention
+
+Registration and reset have separate memory gates, purpose-separated HKDF/HMAC digest keys,
+durable counters, and queue capacity. A sign-up flood cannot consume reset's reserved allowances
+or waiting lane. Registration uses these rolling limits, without refunds after success:
+
+| Boundary | Limit |
+| --- | --- |
+| Normalized email | 5 requests/hour, with a 60-second cooldown |
+| Email and client network together | 2 requests/hour |
+| Client network requests | 20/15 minutes |
+| Installation requests | 100/hour |
+| Invalid proof checks per client network | 20/15 minutes |
+| Password completions per client network, including usable proofs | 10/15 minutes |
+
+A network is one IPv4 address or IPv6 /64. The front gate holds at most 10,000 live networks and
+refuses new keys when full. Admitted requests count before eligibility lookup, including unknown
+and disabled addresses. Email/pair suppression keeps generic acceptance; network/global limits
+return 429 with `Retry-After`. Malformed input is account-independent, and configuration/storage
+failure returns temporary unavailability. Proofs are purpose-bound and cannot reset passwords or
+change email. Tokens use 32 random bytes with only SHA-256 hashes persisted, appear in fragments
+and bounded POST bodies, and never in query strings. Identity pages and responses, including
+errors, use no-store/no-referrer. Logs exclude addresses, tokens, passwords, request bodies,
+eligibility, and provider exception text.
+
+The mail worker gives fair turns to 50 waiting registrations, 50 resets, and 10 shared security/test
+messages on one SMTP thread, with the existing 10-second timeout. No passwords are queued. Queue
+rejection, SMTP failure, restart, or shutdown can lose mail and still return generic acceptance;
+there is no retry or durable outbox. Resend uses the same form and limits and preserves earlier
+delivered links until one completes. Check spam and identity email configuration before resending.
+Aggregate delivery latency and recent request activity may remain observable; this does not claim
+constant-time SMTP or resistance to distributed denial of service.
+
+Attackers can exhaust a person's email allowance or the installation allowance and delay joining.
+Wait for the window or have an administrator close Open and use Invitation Only. Sign-up itself
+gives existing Users no recovery access. For reset suppression, use an administrator-issued reset
+link or wait; token/completion network limits still apply. If no administrator can sign in, use
+the existing stopped-service backup recovery procedure. No offline recovery command is shipped.
+
+SQLite keeps the Pending Registration email, optional Invitation reference, hash, and lifecycle
+times, with no password, mail body, or plaintext token. Counters keep times and keyed digests,
+separate from reset. Allowances survive restart with the same Master Key; rotating it changes
+digest keys and invalidates matching email readiness, as well as making sealed data unreadable.
+Do not rotate a key to bypass a throttle; follow [Master Key maintenance](#recovery-retention-and-master-key-rotation).
+Maintenance and admitted traffic remove expired, consumed, or revoked proofs and obsolete counters
+without the scheduler, aiming for removal within 24 hours while running. Batches reserve at most
+250 deletions for proofs and 250 for counters, attempt both independently, and yield to mail between
+full batches. A cleanup failure after admission commits does not reverse admission. Read-only
+checks never purge proofs. Cleanup continues without SMTP or a Master Key. Stopped services and
+storage faults can delay cleanup; backups keep records until their own retention expires.
 
 ## Incident notifications
 

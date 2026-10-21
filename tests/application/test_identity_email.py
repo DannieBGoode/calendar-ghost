@@ -57,6 +57,9 @@ class Sender:
     def send_reset(self, recipient: str, token: str) -> None:
         self.recipients.append(recipient)
 
+    def send_registration(self, recipient: str, token: str) -> None:
+        self.recipients.append(recipient)
+
     def send_email_change(self, recipient: str, token: str) -> None:
         self.recipients.append(recipient)
 

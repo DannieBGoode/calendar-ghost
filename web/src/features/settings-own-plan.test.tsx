@@ -62,8 +62,8 @@ const plansOff: OwnPlan = {
 /** An Installation Administrator, whom no plan limits. */
 const administering: OwnPlan = { ...plansOff, basis: "administrator" }
 
-const onlyMe: Registration = { policy: "only_me", only_me_available: true }
-const invitationOnly: Registration = { policy: "invitation_only", only_me_available: false }
+const onlyMe: Registration = { policy: "only_me", only_me_available: true, open_available: false, open_unavailable_reason: "identity_email_not_configured" }
+const invitationOnly: Registration = { policy: "invitation_only", only_me_available: false, open_available: false, open_unavailable_reason: "identity_email_not_configured" }
 
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response

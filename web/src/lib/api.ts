@@ -223,7 +223,7 @@ export type IntegrationScope = IntegrationToken["scopes"][number]
 
 /** Who may become a User: Only Me, the default, or Invitation Only. */
 export type Registration = Schemas["RegistrationResponse"]
-export type RegistrationPolicy = Registration["policy"]
+export type RegistrationPolicy = Schemas["RegistrationRequest"]["policy"]
 /** Every Plan, whether Plans limit people, the Default Plan, and the sync intervals offered now. */
 export type PlansOverview = Schemas["PlansResponse"]
 /** One Plan as an administrator manages it: its limits, and who has it. */
@@ -368,6 +368,11 @@ export const api = {
   /** Creates the invited User and signs them in. */
   acceptInvitation: (token: string, email: string, password: string) =>
     call("/api/v1/invitations/accept", "post", { body: { token, email, password } }),
+  requestRegistration: (email: string, invitationToken: string | null = null) =>
+    call("/api/v1/registrations/request", "post", { body: { email, invitation_token: invitationToken } }),
+  checkRegistration: (token: string) => call("/api/v1/registrations/check", "post", { body: { token } }),
+  completeRegistration: (token: string, password: string) =>
+    call("/api/v1/registrations", "post", { body: { token, password } }),
   requestPasswordReset: (email: string) => call("/api/v1/password-resets/request", "post", { body: { email } }),
   checkPasswordReset: (token: string) => call("/api/v1/password-resets/check", "post", { body: { token } }),
   resetPassword: (token: string, password: string) =>

@@ -17,11 +17,12 @@ import { LICENSE_URL, PRODUCT_NAME, SOURCE_URL } from "@/lib/brand"
 type AuthScreenProps = {
   mode: "setup" | "login"
   passwordResetAvailable?: boolean
+  registrationAvailable?: boolean
   /** The upgraded first User has no email yet, so sign-in may leave it empty. */
   passwordOnly?: boolean
 }
 
-export function AuthScreen({ mode, passwordOnly = false, passwordResetAvailable = false }: AuthScreenProps) {
+export function AuthScreen({ mode, passwordOnly = false, passwordResetAvailable = false, registrationAvailable = false }: AuthScreenProps) {
   const i18n = useI18n()
   const { t } = i18n
   const passwordId = useId()
@@ -73,7 +74,7 @@ export function AuthScreen({ mode, passwordOnly = false, passwordResetAvailable 
           <Button type="submit" size="lg" disabled={!canSubmit || mutation.isPending}>
             {submitLabel(i18n, isSetup, mutation.isPending)}
           </Button>
-          {!isSetup && passwordResetAvailable && <Button variant="ghost" size="lg" asChild><a href="/forgot-password">{t("auth.forgotPassword.heading")}</a></Button>}
+          {!isSetup && <SignInLinks registrationAvailable={registrationAvailable} passwordResetAvailable={passwordResetAvailable} />}
         </form>
       </AuthFormPanel>
     </main>
@@ -214,4 +215,12 @@ function ConfirmationField({
 function submitLabel({ t }: I18n, isSetup: boolean, pending: boolean): string {
   if (pending) return t("auth.pleaseWait")
   return isSetup ? t("auth.createAdministrator") : t("auth.signIn")
+}
+
+function SignInLinks({ registrationAvailable, passwordResetAvailable }: { registrationAvailable: boolean; passwordResetAvailable: boolean }) {
+  const { t } = useI18n()
+  return <>
+    {registrationAvailable && <Button variant="outline" size="lg" asChild><a href="/sign-up">{t("auth.signUp.heading")}</a></Button>}
+    {passwordResetAvailable && <Button variant="ghost" size="lg" asChild><a href="/forgot-password">{t("auth.forgotPassword.heading")}</a></Button>}
+  </>
 }

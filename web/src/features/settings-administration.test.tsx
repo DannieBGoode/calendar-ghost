@@ -65,7 +65,7 @@ function serve({ role = "installation_administrator", registration, answers = {}
       logs: { bytes: 0, files: 0, oldest_at: null, newest_at: null },
       activity_ages: [30, 90, 180, 365],
     }),
-    "GET /api/v1/registration": jsonResponse(registration ?? { policy: "invitation_only", only_me_available: false }),
+    "GET /api/v1/registration": jsonResponse(registration ?? { policy: "invitation_only", only_me_available: false, open_available: false, open_unavailable_reason: "identity_email_not_configured" }),
   }
   const routes = { ...defaults, ...answers }
   calls = []
@@ -150,16 +150,63 @@ function requested(path: string): boolean {
 }
 
 describe("Administration", () => {
+  it("keeps trusted-proxy guidance visible before ready Open is selected", async () => {
+    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false, open_available: true, open_unavailable_reason: null } })
+    expect(container.querySelector<HTMLInputElement>("input[value=open]")!.disabled).toBe(false)
+    expect(container.querySelector("a[href$='#trusted-proxy-headers']")).not.toBeNull()
+  })
+
+  it.each([
+    ["identity_email_not_configured", "Configure Identity email to restore joining."],
+    ["identity_email_not_tested", "Send a successful test of the current Identity email configuration to restore joining."],
+  ] as const)("explains selected Open with interrupted joining: %s", async (reason, recovery) => {
+    await renderSettings(testI18n(), { registration: { policy: "open", only_me_available: false, open_available: false, open_unavailable_reason: reason } })
+    expect(container.querySelector<HTMLInputElement>("input[value=open]")!.checked).toBe(true)
+    expect(section("registration-title")?.textContent).toContain("Open remains selected. New people cannot join until Identity email is ready again.")
+    expect(section("registration-title")?.textContent).toContain(recovery)
+    expect(section("registration-title")?.textContent).not.toContain("before choosing Open")
+    expect(container.querySelector("a[href='#identity-email-title']")).not.toBeNull()
+    expect(container.querySelector("a[href$='#trusted-proxy-headers']")).not.toBeNull()
+  })
+
+  it.each([
+    ["identity_email_not_configured", "Configure Identity email"],
+    ["identity_email_not_tested", "successful Identity email test"],
+  ] as const)("disables Open with a specific readiness reason: %s", async (reason, explanation) => {
+    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false, open_available: false, open_unavailable_reason: reason } })
+    expect(container.querySelector<HTMLInputElement>("input[value=open]")!.disabled).toBe(true)
+    expect(section("registration-title")?.textContent).toContain(explanation)
+    expect(container.querySelector("a[href='#identity-email-title']")).not.toBeNull()
+    expect(container.querySelector("a[href$='#trusted-proxy-headers']")).not.toBeNull()
+  })
+
+  it("keeps selected Open visible after readiness loss and leaves Plans alone", async () => {
+    await renderSettings(testI18n(), { registration: { policy: "open", only_me_available: false, open_available: false, open_unavailable_reason: "identity_email_not_tested" } })
+    expect(container.querySelector<HTMLInputElement>("input[value=open]")!.checked).toBe(true)
+    expect(container.textContent).toContain("With Plans off, everyone has every feature without limits")
+    expect(requested("/api/v1/plan-settings")).toBe(false)
+  })
+
+  it("warns before Invitation only cancels unfinished public sign-ups", async () => {
+    await renderSettings(testI18n(), { registration: { policy: "open", only_me_available: false, open_available: true, open_unavailable_reason: null }, answers: { "PUT /api/v1/registration": jsonResponse({ policy: "invitation_only", only_me_available: false, open_available: true, open_unavailable_reason: null }) } })
+    await click(container.querySelector<HTMLInputElement>("input[value=invitation_only]")!)
+    expect(sent("PUT", "/api/v1/registration")).toBeUndefined()
+    expect(container.textContent).toContain("cancels unfinished public sign-ups")
+    await click([...container.querySelectorAll("button")].find((button) => button.textContent === "Switch to Invitation only")!)
+    expect(sent("PUT", "/api/v1/registration")?.body).toEqual({ policy: "invitation_only" })
+    expect(sent("PUT", "/api/v1/plan-settings")).toBeUndefined()
+  })
+
   it("has no untranslated text", async () => {
     await renderSettings(pseudoI18n())
     expect(untranslatedText(container, dateWords())).toEqual([])
   })
 
   it("holds who can join and storage, and leaves people, invitations, and plans to the People page", async () => {
-    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false } })
+    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false, open_available: false, open_unavailable_reason: "identity_email_not_configured" } })
     expect(section("identity-email-title")).not.toBeNull()
     expect(section("registration-title")).not.toBeNull()
-    expect(container.querySelectorAll("input[name=registration-policy]")).toHaveLength(2)
+    expect(container.querySelectorAll("input[name=registration-policy]")).toHaveLength(3)
     expect(section("identity-email-title")?.querySelector("input")).toBeNull()
     expect(section("storage-title")).not.toBeNull()
     expect(section("plans-title")).toBeNull()
@@ -172,18 +219,18 @@ describe("Administration", () => {
 
   it("switches to Invitation only", async () => {
     await renderSettings(testI18n(), {
-      registration: { policy: "only_me", only_me_available: true },
-      answers: { "PUT /api/v1/registration": jsonResponse({ policy: "invitation_only", only_me_available: true }) },
+      registration: { policy: "only_me", only_me_available: true, open_available: false, open_unavailable_reason: "identity_email_not_configured" },
+      answers: { "PUT /api/v1/registration": jsonResponse({ policy: "invitation_only", only_me_available: true, open_available: false, open_unavailable_reason: "identity_email_not_configured" }) },
     })
     await click(container.querySelector<HTMLInputElement>("input[value='invitation_only']")!)
     expect(sent("PUT", "/api/v1/registration")?.body).toEqual({ policy: "invitation_only" })
-    expect(section("registration-title")?.querySelector("[role='status']")?.textContent).toBe(
+    expect([...section("registration-title")!.querySelectorAll("[role='status']")].at(-1)?.textContent).toBe(
       "People can now join with an invitation link.",
     )
   })
 
   it("keeps Only me unavailable while other people are here, and says why", async () => {
-    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false } })
+    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false, open_available: false, open_unavailable_reason: "identity_email_not_configured" } })
     const onlyMe = container.querySelector<HTMLInputElement>("input[value='only_me']")!
     expect(onlyMe.disabled).toBe(true)
     expect(container.querySelector<HTMLInputElement>("input[value='invitation_only']")!.checked).toBe(true)
@@ -213,4 +260,14 @@ describe("Settings for someone who is not an administrator", () => {
     await renderSettings(testI18n(), { role: "user", tab: "account" })
     expect(section("own-account-title")).not.toBeNull()
   })
+})
+
+
+it("confirms Only me cancels public and Invitation-bound pending sign-ups", async () => {
+  await renderSettings(testI18n(), { registration: { policy: "open", only_me_available: true, open_available: true, open_unavailable_reason: null }, answers: { "PUT /api/v1/registration": jsonResponse({ policy: "only_me", only_me_available: true, open_available: true, open_unavailable_reason: null }) } })
+  await click(container.querySelector<HTMLInputElement>("input[value=only_me]")!)
+  expect(sent("PUT", "/api/v1/registration")).toBeUndefined()
+  expect(container.textContent).toContain("including sign-ups linked to invitations")
+  await click([...container.querySelectorAll("button")].find((button) => button.textContent === "Switch to Only me")!)
+  expect(sent("PUT", "/api/v1/registration")?.body).toEqual({ policy: "only_me" })
 })

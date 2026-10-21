@@ -28,7 +28,11 @@ from calendar_sync.domain.plans import (
     require_removable,
     require_unique_name,
 )
-from calendar_sync.infrastructure.persistence.connections import USERS_PER_QUERY, transaction
+from calendar_sync.infrastructure.persistence.connections import (
+    BUSY_TIMEOUT_SECONDS,
+    USERS_PER_QUERY,
+    transaction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +46,11 @@ class SqlitePlans:
     already holds it either sees the change or makes it wait.
     """
 
-    def __init__(self, database_path: Path) -> None:
+    def __init__(
+        self, database_path: Path, *, allowance_timeout: float = BUSY_TIMEOUT_SECONDS
+    ) -> None:
         self._database_path = database_path
+        self._allowance_timeout = allowance_timeout
 
     # Allowances
 
@@ -53,7 +60,7 @@ class SqlitePlans:
     def of_users(self, users: Collection[UserId]) -> Mapping[UserId, Allowance]:
         allowances = dict.fromkeys(users, UNLIMITED)
         ordered = sorted({user.value for user in users})
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=self._allowance_timeout) as connection:
             for start in range(0, len(ordered), USERS_PER_QUERY):
                 for row in _allowance_rows(connection, ordered[start : start + USERS_PER_QUERY]):
                     allowances[UserId(str(row["id"]))] = _allowance(row)

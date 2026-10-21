@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query"
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { api } from "@/lib/api"
+import { ApiError, api } from "@/lib/api"
 import { linkStatus, linkToken, type PublicPage } from "@/lib/public-links"
 
-const CHECKS: Record<PublicPage, (token: string) => Promise<{ usable: boolean }>> = {
-  invitation: (token) => api.checkInvitation(token),
-  "password-reset": (token) => api.checkPasswordReset(token),
+const CHECKS = {
+  registration: (token: string) => api.checkRegistration(token),
+  invitation: (token: string) => api.checkInvitation(token),
+  "password-reset": (token: string) => api.checkPasswordReset(token),
 }
 
 /**
@@ -37,12 +38,16 @@ export function useLinkToken() {
 }
 
 /** Whether the server will still accept a link's token. A link without one is refused without asking. */
-export function useLinkCheck(page: PublicPage, token: string) {
+export function useLinkCheck<P extends PublicPage>(page: P, token: string) {
   const check = useQuery({
     queryKey: ["link-check", page, token],
     queryFn: () => CHECKS[page](token),
     enabled: token !== "",
     staleTime: Infinity,
+    gcTime: 0,
   })
-  return { status: linkStatus(token, check), error: check.error }
+  // These check requests contain only a token. A validation refusal cannot be repaired
+  // by retrying the same fragment; form/password validation keeps its own handling.
+  const invalidToken = (page === "invitation" || page === "registration") && check.error instanceof ApiError && check.error.status === 422 && check.error.code === "invalid_request"
+  return { status: invalidToken ? "unusable" as const : linkStatus(token, check), data: check.data as Awaited<ReturnType<(typeof CHECKS)[P]>> | undefined, error: check.error, recheck: check.refetch }
 }

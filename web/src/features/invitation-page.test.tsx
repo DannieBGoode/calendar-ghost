@@ -113,6 +113,65 @@ function fillForm(email: string, password: string, confirmation = password) {
 }
 
 describe("InvitationPage", () => {
+  it.each(["direct", "verified"])("offers sign-in from a usable %s Invitation", async (acceptance) => {
+    serve({ "/api/v1/invitations/check": jsonResponse({ usable: true, acceptance }) })
+    await renderPage(testI18n(), `#${TOKEN}`)
+    expect(container.querySelector("a[href='/']")).not.toBeNull()
+  })
+
+  it("states the unusable Invitation recovery instruction once", async () => {
+    serve({ "/api/v1/invitations/check": jsonResponse({ usable: false }) })
+    await renderPage(testI18n(), `#${TOKEN}`)
+    const text = container.textContent
+    expect(text.match(/Ask the person who invited you/g)).toHaveLength(1)
+  })
+
+  it("requests verified email under Open without accepting the invitation", async () => {
+    const calls = serve({ "/api/v1/invitations/check": jsonResponse({ usable: true, acceptance: "verified" }), "/api/v1/registrations/request": jsonResponse({ accepted: true }, 202) })
+    await renderPage(testI18n(), `#${TOKEN}`)
+    expect(container.querySelector("input[type=password]")).toBeNull()
+    type(container.querySelector<HTMLInputElement>("input[type=email]")!, "robin@example.test")
+    await submit()
+    expect(calls.find((call) => call.url === "/api/v1/registrations/request")?.body).toEqual({ email: "robin@example.test", invitation_token: TOKEN })
+    expect(calls.some((call) => call.url === "/api/v1/invitations/accept")).toBe(false)
+    expect(container.textContent).toContain("If this address can join")
+    expect(container.querySelector("a[href='/']")).not.toBeNull()
+    expect(window.location.hash).toBe(`#${TOKEN}`)
+  })
+
+  it("rechecks a direct submission that now needs verification and retains email", async () => {
+    serve({ "/api/v1/invitations/check": jsonResponse({ usable: true, acceptance: "direct" }) })
+    await renderPage(testI18n(), `#${TOKEN}`)
+    fillForm("robin@example.test", "a very long password")
+    const calls = serve({ "/api/v1/invitations/check": jsonResponse({ usable: true, acceptance: "verified" }), "/api/v1/invitations/accept": jsonResponse({ code: "invitation_verification_required" }, 409) })
+    await submit()
+    expect(calls.some((call) => call.url === "/api/v1/invitations/check")).toBe(true)
+    expect(container.querySelector("input[type=password]")).toBeNull()
+    expect(container.querySelector<HTMLInputElement>("input[type=email]")!.value).toBe("robin@example.test")
+  })
+
+  it.each(["direct", "verified"])("rechecks old Open form after 503 and preserves %s mode without expiring it", async (mode) => {
+    serve({ "/api/v1/invitations/check": jsonResponse({ usable: true, acceptance: "verified" }) })
+    await renderPage(testI18n(), `#${TOKEN}`)
+    type(container.querySelector<HTMLInputElement>("input[type=email]")!, "robin@example.test")
+    serve({ "/api/v1/invitations/check": jsonResponse({ usable: true, acceptance: mode }), "/api/v1/registrations/request": jsonResponse({ code: "registration_unavailable" }, 503) })
+    await submit()
+    expect(container.querySelector("input[type=password]") !== null).toBe(mode === "direct")
+    expect(container.querySelector<HTMLInputElement>("input[type=email]")!.value).toBe("robin@example.test")
+    expect(container.textContent).not.toContain("This invitation cannot be used")
+    if (mode === "verified") expect(container.querySelector('[role="alert"]')?.textContent).toContain("Joining is unavailable")
+    expect(container.querySelector("a[href='/']")).not.toBeNull()
+  })
+
+  it("does not submit a direct form after the fragment changes before hashchange", async () => {
+    const calls = serve({ "/api/v1/invitations/check": jsonResponse({ usable: true, acceptance: "direct" }) })
+    await renderPage(testI18n(), `#${TOKEN}`)
+    fillForm("robin@example.test", "a very long password")
+    page().happyDOM.setURL("http://localhost:8000/invitation#newer-proof")
+    await submit()
+    expect(calls.some((call) => call.url === "/api/v1/invitations/accept")).toBe(false)
+  })
+
   it("translates the form", async () => {
     serve({ "/api/v1/invitations/check": jsonResponse({ usable: true }) })
     await renderPage(pseudoI18n(), `#${TOKEN}`)
@@ -145,7 +204,7 @@ describe("InvitationPage", () => {
   it("refuses an address without a token without asking the server", async () => {
     const calls = serve({})
     await renderPage(testI18n(), "")
-    expect(calls).toEqual([])
+    expect(calls.some((call) => call.url === "/api/v1/invitations/check")).toBe(false)
     expect(container.querySelector("h2")?.textContent).toBe("This invitation cannot be used")
   })
 
@@ -246,4 +305,12 @@ describe("InvitationPage", () => {
     )
     expect(onSignedIn).not.toHaveBeenCalled()
   })
+})
+
+
+it.each(["%E0%A4%A", "x".repeat(129), "%C3%A9"])("offers unusable recovery for a rejected token: %s", async (token) => {
+  serve({ "/api/v1/invitations/check": jsonResponse({ code: "invalid_request", detail: "Request validation failed" }, 422), "/api/v1/setup": jsonResponse({ administrator_configured: true, public_registration_available: true }) })
+  await renderPage(testI18n(), `#${token}`)
+  expect(container.textContent).toContain("This invitation cannot be used")
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Check link again")).toBe(false)
 })

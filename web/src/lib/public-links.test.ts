@@ -7,6 +7,7 @@ describe("public links", () => {
     expect(publicPageAt("/invitation")).toBe("invitation")
     expect(publicPageAt("/invitation/")).toBe("invitation")
     expect(publicPageAt("/password-reset")).toBe("password-reset")
+    expect(publicPageAt("/verify-email/")).toBe("registration")
     expect(publicPageAt("/overview")).toBeNull()
     expect(publicPageAt("/")).toBeNull()
   })

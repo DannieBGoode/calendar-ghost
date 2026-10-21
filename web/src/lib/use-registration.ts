@@ -8,6 +8,7 @@ import { api, type RegistrationPolicy } from "@/lib/api"
 const SAVED: Record<RegistrationPolicy, MessageKey> = {
   only_me: "settings.registration.saved.onlyMe",
   invitation_only: "settings.registration.saved.invitationOnly",
+  open: "settings.registration.saved.open",
 }
 
 /** The Registration Policy and the command that changes it; for Installation Administrators only. */
@@ -18,9 +19,10 @@ export function useRegistration() {
   const [message, setMessage] = useState("")
   const change = useMutation({
     mutationFn: (policy: RegistrationPolicy) => api.setRegistrationPolicy(policy),
-    onSuccess: (result) => {
+    onSuccess: (result, policy) => {
       queryClient.setQueryData(["registration"], result)
-      setMessage(t(SAVED[result.policy]))
+      setMessage(t(SAVED[policy]))
+      void queryClient.invalidateQueries({ queryKey: ["setup"] })
     },
   })
   return { registration, change, message }

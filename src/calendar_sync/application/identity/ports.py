@@ -112,7 +112,9 @@ class UserDirectory(Protocol):
 
     def set_password_hash(self, user_id: UserId, password_hash: str) -> None: ...
 
-    def record_sign_in(self, user_id: UserId, at: datetime) -> None: ...
+    def record_sign_in(self, user_id: UserId, at: datetime) -> None:
+        """Record the most recent sign-in; raises SignInStorageUnavailable if writing fails."""
+        ...
 
     def set_role(self, user_id: UserId, role: Role) -> None:
         """Change only a User's role. Raises LastAdministrator, changing nothing, when that
@@ -149,9 +151,12 @@ class PendingInvitation:
 class RegistrationSettings(Protocol):
     def policy(self) -> RegistrationPolicy: ...
 
-    def set_policy(self, policy: RegistrationPolicy) -> None:
+    def set_policy(
+        self, policy: RegistrationPolicy, *, actor: UserId, fingerprint: str | None
+    ) -> None:
         """Choose who may join. Raises OnlyMeNeedsOneUser for Only Me while another User exists,
-        counted in one step with the change, so nobody joins between the count and the change."""
+        counted in one step with the change. Recheck the active administrator and Open's
+        matching identity email readiness atomically; closing admission revokes pending proofs."""
         ...
 
     def return_to_setup(self, at: datetime) -> None:
@@ -180,11 +185,11 @@ class Invitations(Protocol):
 
     def usable(self, token: str, at: datetime) -> bool: ...
 
-    def accept(self, token: str, user: User, password_hash: str, at: datetime) -> bool:
-        """Use the invitation and add `user` in one step; False, adding nobody, when it is no
-        longer usable, the Registration Policy lets nobody join, or no User is left (the
-        installation returned to setup), all read in that same step. Raises EmailTaken,
-        leaving the invitation usable."""
+    def accept(self, token: str, email: str, password_hash: str) -> User | None:
+        """Use the Invitation and add a User in one step; None, adding nobody, when it is no
+        longer usable, the policy is Only Me, or no User is left. Read fresh time under the
+        write lock; Open raises InvitationVerificationRequired. Raises EmailTaken, leaving the
+        Invitation usable. The adapter creates the identifier and returns only after commit."""
         ...
 
 
@@ -223,7 +228,8 @@ class Sessions(Protocol):
         """Start a session only while the User is active and `password_hash`, the hash their
         password was just checked against, email and revision still match; all in one step with
         the start.
-        None otherwise, such as after a password change or reset that landed meanwhile."""
+        None otherwise, such as after a password change or reset that landed meanwhile.
+        Raises SignInStorageUnavailable if persistence fails."""
         ...
 
     def user_of(self, token: str | None) -> UserId | None:

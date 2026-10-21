@@ -31,7 +31,10 @@ from calendar_sync.application.sync.watch_ports import (
 )
 from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.clock import SystemClock
-from calendar_sync.infrastructure.persistence.connections import open_connection
+from calendar_sync.infrastructure.persistence.connections import (
+    BUSY_TIMEOUT_SECONDS,
+    open_connection,
+)
 from calendar_sync.infrastructure.persistence.plan_grace import SqlitePlanGraceRecord
 from calendar_sync.infrastructure.persistence.refusals import refusals
 from calendar_sync.infrastructure.persistence.source_changes import (
@@ -89,15 +92,18 @@ class SqliteUnitOfWork:
         user_id: UserId,
         clock: Clock,
         history: HistoryCipher | None = None,
+        *,
+        timeout: float = BUSY_TIMEOUT_SECONDS,
     ) -> None:
         self._database_path = database_path
         self._user = user_id
         self._clock = clock
         self._history = history
+        self._timeout = timeout
         self._connection: sqlite3.Connection | None = None
 
     def __enter__(self) -> Self:
-        connection = open_connection(self._database_path)
+        connection = open_connection(self._database_path, timeout=self._timeout)
         self._connection = connection
         user = self._user
         self.accounts = SqliteConnectedAccountRecords(connection, user)
@@ -158,6 +164,7 @@ class SqliteUnitOfWorkFactory:
     database_path: Path
     clock: Clock = field(default_factory=SystemClock)
     history: HistoryCipher | None = None
+    timeout: float = BUSY_TIMEOUT_SECONDS
 
     def for_user(self, user_id: UserId) -> UnitOfWorkFactory:
         return _UserUnitsOfWork(self, user_id)
@@ -171,5 +178,9 @@ class _UserUnitsOfWork:
     def __call__(self) -> UnitOfWork:
         database = self.database
         return SqliteUnitOfWork(
-            database.database_path, self.user_id, database.clock, database.history
+            database.database_path,
+            self.user_id,
+            database.clock,
+            database.history,
+            timeout=database.timeout,
         )

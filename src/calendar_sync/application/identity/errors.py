@@ -17,6 +17,13 @@ class IncorrectCredentials(ApplicationError):
     """No User signs in with this email and password; which part was wrong is not said."""
 
 
+class SignInStorageUnavailable(InfrastructureFailure):
+    """Writing a session or recording its sign-in failed."""
+
+    def __init__(self) -> None:
+        super().__init__("Sign-in storage is temporarily unavailable")
+
+
 class IncorrectPassword(ApplicationError):
     """The signed-in User's current password, asked for to confirm a change, is wrong."""
 

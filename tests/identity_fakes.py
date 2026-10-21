@@ -27,6 +27,7 @@ from calendar_sync.application.identity.ports import (
     UserQuery,
     UserSort,
 )
+from calendar_sync.application.identity.registration_ports import InvitationVerificationRequired
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import (
     RegistrationPolicy,
@@ -281,7 +282,9 @@ class MemoryRegistration:
     def policy(self) -> RegistrationPolicy:
         return self.current
 
-    def set_policy(self, policy: RegistrationPolicy) -> None:
+    def set_policy(
+        self, policy: RegistrationPolicy, *, actor: UserId, fingerprint: str | None
+    ) -> None:
         require_registration_change(policy, self.users.count())
         self.current = policy
 
@@ -312,6 +315,7 @@ class _Link:
 class MemoryInvitations:
     users: MemoryUsers
     registration: MemoryRegistration
+    clock: Clock
 
     @property
     def links(self) -> list[_Link]:
@@ -347,14 +351,21 @@ class MemoryInvitations:
     def usable(self, token: str, at: datetime) -> bool:
         return any(link.token == token and link.usable(at) for link in self.links)
 
-    def accept(self, token: str, user: User, password_hash: str, at: datetime) -> bool:
+    def accept(self, token: str, email: str, password_hash: str) -> User | None:
+        at = self.clock.now()
         link = next((link for link in self.links if link.token == token and link.usable(at)), None)
-        joining = self.registration.policy().lets_people_join and self.users.count() > 0
-        if link is None or not joining:
-            return False
+        if link is None or self.users.count() == 0:
+            return None
+        if self.registration.policy() is RegistrationPolicy.OPEN:
+            raise InvitationVerificationRequired("verify your email before joining under Open")
+        if self.registration.policy() is not RegistrationPolicy.INVITATION_ONLY:
+            return None
+        user = User(
+            UserId(f"joined-{len(self.users.users)}"), email, Role.USER, UserState.ACTIVE, at
+        )
         self.users.add(user, password_hash)
         link.used_at = at
-        return True
+        return user
 
 
 @dataclass

@@ -423,19 +423,35 @@ _Avoid_: Account deletion, user removal
 
 **Registration Policy**:
 The installation setting that decides who may become a User: Only Me, the default, where nobody
-can join; Invitation Only; or the planned Open policy, where anyone may sign up after verification.
+can join; Invitation Only; or Open, where anyone may join after proving ownership of their email.
 Under Only Me the Web UI hides Users, Invitations, Plans, and the Operator Overview. An Installation
-Administrator may switch to Invitation Only, and back to Only Me only while no other User exists.
-Data is User-scoped under every policy; the policy decides only who may join and what the Web UI
-shows. Open requires tested identity email and arrives with verified sign-up for the Hosted Service;
-it remains unavailable until the planned Open registration work in ADR 0040 ships. Self-service
-password recovery is independent of Open and is available under the supported policies when
-identity email is configured.
+Administrator may choose Open after a successful identity email test for the current settings,
+or choose Invitation Only without email. Only Me is allowed only while no other User exists.
+Data is User-scoped under every policy. Plans are independent and off by default. Losing matching
+email readiness keeps Open selected but temporarily refuses joining under Open, without stopping
+existing sign-in or synchronization. Returning to Invitation Only cancels pending public proofs;
+Only Me cancels all registration proofs. Reopening never revives them. Invitation-bound proofs
+may finish under Invitation Only without current email readiness. Self-service password recovery
+is independent of Open and needs usable identity email configuration (ADR 0040).
 _Avoid_: Signup mode, public registration
 
 **Invitation**:
 A single-use, expiring link an Installation Administrator creates so one person can become a User and choose their own credentials. It works under Invitation Only and Open, never under Only Me, and expires after 7 days. A Password Reset Link is its counterpart for an existing User; neither lets the administrator see or set a password.
 _Avoid_: Invite code, admin-created account
+
+**Pending Registration**:
+An unfinished request to join, bound to a normalized email and optionally an Invitation. It is not
+a User and has no password, role, session, Plan assignment, or calendar access. It reserves neither
+the email nor the Invitation. People shows only completed Users, with no pending list or approval
+step. Completion creates one ordinary User with no own Plan, following the Default Plan.
+
+**Email Verification Link**:
+A single-use proof for a Pending Registration. It lasts 24 hours from issuance, capped by its
+Invitation's original expiry when bound to one. Opening or checking it consumes nothing. Completing
+it with a password atomically checks policy, readiness under Open, expiry, Invitation validity,
+and email uniqueness, creates the User, and consumes all registration proofs for that email.
+Resending keeps previously delivered links valid until one completes or policy cancels them.
+It cannot reset a password or change an existing User's email.
 
 **Password Reset Link**:
 A single-use proof allowing an existing active User to choose a new password. An Installation

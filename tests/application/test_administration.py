@@ -31,6 +31,7 @@ from calendar_sync.application.identity.administration import (
 )
 from calendar_sync.application.identity.errors import EmailTaken, IncorrectCredentials, UserDisabled
 from calendar_sync.application.identity.ports import IssuedLink
+from calendar_sync.application.identity.registration_ports import InvitationVerificationRequired
 from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.identity.sign_in import SignIn
 from calendar_sync.domain.access import (
@@ -96,7 +97,6 @@ class Installation:
             self.invitations,
             passwords or PlainPasswords(),
             self.sessions,
-            SequentialIds(),
             self.clock,
             self.attempts,
         )
@@ -133,7 +133,7 @@ def _installation(*others: User) -> Installation:
     return Installation(
         users,
         registration,
-        MemoryInvitations(users, registration),
+        MemoryInvitations(users, registration, clock),
         MemoryResetLinks(users, sessions, clock),
         sessions,
         clock,
@@ -173,10 +173,10 @@ def test_an_invitation_accepted_while_only_me_is_chosen_is_refused() -> None:
     set_policy = SetRegistrationPolicy(installation.users, installation.registration)
     use = installation.invitations.accept
 
-    def chosen_meanwhile(token: str, user: User, password_hash: str, at: datetime) -> bool:
+    def chosen_meanwhile(token: str, email: str, password_hash: str) -> User | None:
         # The administrator chooses Only Me after every check, just before the link is used.
         set_policy.execute(ADMIN.id, RegistrationPolicy.ONLY_ME)
-        return use(token, user, password_hash, at)
+        return use(token, email, password_hash)
 
     installation.invitations.accept = chosen_meanwhile  # type: ignore[method-assign]
 
@@ -192,11 +192,13 @@ def test_only_me_chosen_while_an_invitation_is_accepted_is_refused() -> None:
     accept = installation.accept()
     change = installation.registration.set_policy
 
-    def joined_meanwhile(policy: RegistrationPolicy) -> None:
+    def joined_meanwhile(
+        policy: RegistrationPolicy, *, actor: UserId, fingerprint: str | None
+    ) -> None:
         # The person joins after every check of the administrator's request, just before the
         # policy changes.
         accept.execute(link.token, "new@example.test", PASSWORD, CLIENT)
-        change(policy)
+        change(policy, actor=actor, fingerprint=fingerprint)
 
     installation.registration.set_policy = joined_meanwhile  # type: ignore[method-assign]
 
@@ -269,9 +271,10 @@ def test_a_password_reset_right_after_joining_leaves_no_session_for_the_chosen_p
     link = installation.invite().execute(ADMIN.id)
     accept = installation.invitations.accept
 
-    def accepted_then_reset(token: str, user: User, password_hash: str, at: datetime) -> bool:
-        used = accept(token, user, password_hash, at)
-        installation.users.set_password_hash(user.id, "hashed:reset meanwhile")
+    def accepted_then_reset(token: str, email: str, password_hash: str) -> User | None:
+        used = accept(token, email, password_hash)
+        assert used is not None
+        installation.users.set_password_hash(used.id, "hashed:reset meanwhile")
         return used
 
     installation.invitations.accept = accepted_then_reset  # type: ignore[method-assign]
@@ -600,3 +603,66 @@ def test_reset_checks_expiry_after_hash() -> None:
     assert installation.sessions.user_of(session.token) == MEMBER.id
     assert installation.resets.links[0].used_at is None
     assert installation.resets.links[0].revoked_at is None
+
+
+@pytest.mark.parametrize("during_hash", [False, True])
+def test_direct_invitation_checks_open_before_and_after_hashing(during_hash: bool) -> None:
+    installation = _installation()
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    link = installation.invite().execute(ADMIN.id)
+
+    class ChangingPasswords(CountingPasswords):
+        def hash(self, password: str) -> str:
+            installation.registration.current = RegistrationPolicy.OPEN
+            return super().hash(password)
+
+    passwords = ChangingPasswords()
+    if not during_hash:
+        installation.registration.current = RegistrationPolicy.OPEN
+    assert installation.check_invitation().execute(link.token, CLIENT)
+    with pytest.raises(InvitationVerificationRequired):
+        installation.accept(passwords).execute(link.token, "new@example.test", PASSWORD, CLIENT)
+    assert passwords.hashed == int(during_hash)
+    assert installation.users.count() == 1
+    assert installation.sessions.sessions == {}
+
+
+def test_direct_invitation_expiry_is_rechecked_after_hashing() -> None:
+    installation = _installation()
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    link = installation.invite().execute(ADMIN.id)
+
+    class SlowPasswords(PlainPasswords):
+        def hash(self, password: str) -> str:
+            installation.clock.moment = link.expires_at
+            return super().hash(password)
+
+    with pytest.raises(LinkUnusable):
+        installation.accept(SlowPasswords()).execute(
+            link.token, "new@example.test", PASSWORD, CLIENT
+        )
+    assert installation.users.count() == 1
+    assert installation.sessions.sessions == {}
+
+
+def test_only_me_after_usability_check_is_unusable_before_hashing() -> None:
+    installation = _installation()
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    link = installation.invite().execute(ADMIN.id)
+    passwords = CountingPasswords()
+    throttle = CountingThrottle()
+    installation.attempts = LinkAttempts(throttle)
+    usable = installation.invitations.usable
+
+    def closed_after_check(token: str, at: datetime) -> bool:
+        result = usable(token, at)
+        installation.registration.current = RegistrationPolicy.ONLY_ME
+        return result
+
+    installation.invitations.usable = closed_after_check  # type: ignore[method-assign]
+    with pytest.raises(LinkUnusable):
+        installation.accept(passwords).execute(link.token, "new@example.test", PASSWORD, CLIENT)
+    assert passwords.hashed == 0
+    assert installation.users.count() == 1
+    assert installation.sessions.sessions == {}
+    assert throttle.failures == {f"client:{CLIENT}": 1}

@@ -102,6 +102,7 @@ from calendar_sync.bootstrap.operations import (
     _plan_services,
     _scheduled_services,
 )
+from calendar_sync.bootstrap.registration import RegistrationServices, compose_registration
 from calendar_sync.bootstrap.shared import (
     UserServices,
     _mail_server,
@@ -173,6 +174,7 @@ class Container:
     """Every calendar provider this release knows, and how Users connect the configured ones."""
     identity: IdentityServices
     identity_email: IdentityEmailServices
+    registrations: RegistrationServices
     identity_mail_worker: IdentityMailWorker | None
     reset_admission: ResetAdmission
     reset_client_network: Callable[[str], str]
@@ -327,8 +329,8 @@ def build_adapters(settings: Settings) -> Adapters:
         sign_in_throttle=MemorySignInThrottle(clock),
         link_throttle=MemorySignInThrottle(clock),
         run_throttle=MemoryRunThrottle(clock),
-        registration=SqliteRegistrationSettings(database),
-        invitations=SqliteInvitations(database, ids),
+        registration=SqliteRegistrationSettings(database, clock),
+        invitations=SqliteInvitations(database, ids, clock),
         password_resets=resets,
         self_service_resets=resets,
         credential_changes=SqliteCredentialChanges(database, clock),
@@ -434,6 +436,14 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
     identity_email, identity_mail_worker = compose_identity_mail(adapters)
     return Container(
         identity_email=identity_email,
+        registrations=compose_registration(
+            adapters.identity_email.registrations,
+            adapters.passwords,
+            adapters.clock,
+            identity_mail_worker,
+            instant_status,
+            adapters.sends_email,
+        ),
         identity_mail_worker=identity_mail_worker,
         reset_admission=adapters.reset_admission,
         reset_client_network=client_network,

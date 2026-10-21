@@ -6,7 +6,7 @@ import type {
   PersonPlanOverview,
   PlanLimits,
   PlanSummary,
-  RegistrationPolicy,
+  Registration,
   RuleDetail,
   RuleSummary,
 } from "@/lib/api"
@@ -17,7 +17,7 @@ import type {
  * administers. Only an administrator can read the Registration Policy, so `policy` is undefined
  * for everyone else and while it loads.
  */
-export function ownPlanShown(plan: OwnPlan | undefined, policy: RegistrationPolicy | undefined): boolean {
+export function ownPlanShown(plan: OwnPlan | undefined, policy: Registration["policy"] | undefined): boolean {
   if (plan?.basis === "plan") return true
   if (plan?.basis === "administrator") return policy !== undefined && policy !== "only_me"
   return false

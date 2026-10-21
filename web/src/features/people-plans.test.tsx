@@ -94,7 +94,7 @@ function overview({
   }
 }
 
-const INVITATION_ONLY: Registration = { policy: "invitation_only", only_me_available: false }
+const INVITATION_ONLY: Registration = { policy: "invitation_only", only_me_available: false, open_available: false, open_unavailable_reason: "identity_email_not_configured" }
 
 /** Someone People lists, by email, as Remove names them. */
 function holder(email: string): PersonRow {
@@ -553,7 +553,7 @@ function assignCalls(): unknown[] {
 
 describe("People's Plans tab", () => {
   it("is hidden with People under Only me, where the only person administers, and never asks for plans", async () => {
-    await renderPlans(testI18n(), { registration: { policy: "only_me", only_me_available: true } })
+    await renderPlans(testI18n(), { registration: { policy: "only_me", only_me_available: true, open_available: false, open_unavailable_reason: "identity_email_not_configured" } })
     expect(container.querySelector("#plans-title")).toBeNull()
     expect(calls.some((call) => call.path === "/api/v1/plans")).toBe(false)
   })

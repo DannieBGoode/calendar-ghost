@@ -22,10 +22,12 @@ from calendar_sync.application.identity.password_reset import (
     DeliverPasswordReset,
     ResetEmailRequest,
 )
+from calendar_sync.application.identity.registration_ports import RegistrationEmailRequest
 from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.identity_email_changes import EmailChangeMaintenance
+from calendar_sync.infrastructure.identity_registration import RegistrationMaintenance
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,7 @@ class IdentityMailWorker:
         reset_delivery: DeliverPasswordReset | None = None,
         reset_admission: ResetAdmission | None = None,
         email_changes: EmailChangeMaintenance | None = None,
+        registrations: RegistrationMaintenance | None = None,
     ) -> None:
         self._delivery = delivery
         self._tests = tests
@@ -47,10 +50,12 @@ class IdentityMailWorker:
         self._reset_delivery = reset_delivery
         self._reset_admission = reset_admission
         self._email_changes = email_changes
+        self._registrations = registrations
         self._lock = threading.Lock()
         self._pending: deque[EmailTest | EmailChangeMailRequest | EmailChangedNotice] = deque()
         self._resets: deque[ResetEmailRequest] = deque()
-        self._reset_turn = False
+        self._registrations_pending: deque[RegistrationEmailRequest] = deque()
+        self._lane = 0
         self._generation = 0
         self._active: dict[UserId, EmailTestState] = {}
         self._finished: OrderedDict[UserId, tuple[EmailTestState, datetime]] = OrderedDict()
@@ -63,6 +68,7 @@ class IdentityMailWorker:
         self._reset_cleanup_at: datetime | None = None
         self._change_cleanup_at: datetime | None = None
         self._test_cleanup_at: datetime | None = None
+        self._registration_cleanup_at: datetime | None = None
 
     @property
     def running(self) -> bool:
@@ -104,6 +110,21 @@ class IdentityMailWorker:
             self._loop.call_soon_threadsafe(self._wake.set)
             return True
 
+    def submit_registration(self, request: RegistrationEmailRequest) -> bool:
+        with self._lock:
+            if (
+                not self._running
+                or self._registrations is None
+                or self._registrations.delivery is None
+                or len(self._registrations_pending) >= 50
+            ):
+                return False
+            self._registrations_pending.append(request)
+            assert self._loop is not None
+            assert self._wake is not None
+            self._loop.call_soon_threadsafe(self._wake.set)
+            return True
+
     def submit_change(self, request: EmailChangeMailRequest) -> bool:
         return self._submit_security(request)
 
@@ -132,6 +153,7 @@ class IdentityMailWorker:
             self._generation += 1
             self._pending.clear()
             self._resets.clear()
+            self._registrations_pending.clear()
             self._active.clear()
             self._finished.clear()
             if self._loop is not None and self._wake is not None:
@@ -161,6 +183,8 @@ class IdentityMailWorker:
                             await asyncio.wait_for(wake.wait(), timeout=3600)
                 elif isinstance(request, ResetEmailRequest):
                     await self._deliver_reset(request)
+                elif isinstance(request, RegistrationEmailRequest):
+                    await self._deliver_registration(request)
                 elif isinstance(request, EmailTest):
                     await self._deliver(request)
                 else:
@@ -173,19 +197,27 @@ class IdentityMailWorker:
 
     def _take(
         self, wake: asyncio.Event
-    ) -> EmailTest | ResetEmailRequest | EmailChangeMailRequest | EmailChangedNotice | None:
+    ) -> (
+        EmailTest
+        | ResetEmailRequest
+        | RegistrationEmailRequest
+        | EmailChangeMailRequest
+        | EmailChangedNotice
+        | None
+    ):
         with self._lock:
-            if not self._running or not (self._pending or self._resets):
-                wake.clear()
-                return None
-            if self._resets and (self._reset_turn or not self._pending):
-                self._reset_turn = False
-                return self._resets.popleft()
-            self._reset_turn = True
-            test = self._pending.popleft()
-            if isinstance(test, EmailTest):
-                self._active[test.actor] = EmailTestState.SENDING
-            return test
+            lanes = (self._pending, self._resets, self._registrations_pending)
+            if self._running:
+                for offset in range(3):
+                    lane = (self._lane + offset) % 3
+                    if lanes[lane]:
+                        self._lane = (lane + 1) % 3
+                        request = lanes[lane].popleft()
+                        if isinstance(request, EmailTest):
+                            self._active[request.actor] = EmailTestState.SENDING
+                        return request
+            wake.clear()
+            return None
 
     async def _deliver(self, test: EmailTest) -> None:
         assert self._delivery is not None
@@ -234,6 +266,30 @@ class IdentityMailWorker:
         if prepared is not None:
             self._reset_delivery.send(prepared)
 
+    async def _deliver_registration(self, request: RegistrationEmailRequest) -> None:
+        with self._lock:
+            if not self._running:
+                return
+            self._send = self._executor.submit(self._send_registration, request, self._generation)
+        try:
+            await asyncio.shield(asyncio.wrap_future(self._send))
+        except Exception:
+            logger.warning("Identity registration email failed")
+
+    def _send_registration(self, request: RegistrationEmailRequest, generation: int) -> None:
+        assert self._registrations is not None
+        assert self._registrations.delivery is not None
+        delivery = self._registrations.delivery
+        with self._lock:
+            if not self._running or self._generation != generation:
+                return
+        prepared = delivery.prepare(request)
+        with self._lock:
+            if not self._running or self._generation != generation:
+                return
+        if prepared is not None:
+            delivery.send(prepared)
+
     async def _deliver_change(self, request: EmailChangeMailRequest | EmailChangedNotice) -> None:
         with self._lock:
             if not self._running:
@@ -278,6 +334,7 @@ class IdentityMailWorker:
             self._last_purge = now
             self._reset_cleanup_at = now
             self._change_cleanup_at = now
+            self._registration_cleanup_at = now
             self._test_cleanup_at = now - timedelta(hours=1)
         cutoff = self._reset_cleanup_at
         # One bounded reset batch per fair mail turn; failures retry next hour.
@@ -289,9 +346,15 @@ class IdentityMailWorker:
                     self._reset_cleanup_at = cutoff
         await self._purge_changes()
         await self._purge_tests()
+        await self._purge_registrations()
         return any(
             at is not None
-            for at in (self._reset_cleanup_at, self._change_cleanup_at, self._test_cleanup_at)
+            for at in (
+                self._reset_cleanup_at,
+                self._change_cleanup_at,
+                self._test_cleanup_at,
+                self._registration_cleanup_at,
+            )
         )
 
     async def _purge_changes(self) -> None:
@@ -309,3 +372,11 @@ class IdentityMailWorker:
                 removed = await asyncio.to_thread(self._tests.purge, cutoff, 500)
                 if removed == 500:
                     self._test_cleanup_at = cutoff
+
+    async def _purge_registrations(self) -> None:
+        cutoff, self._registration_cleanup_at = self._registration_cleanup_at, None
+        if cutoff is not None and self._registrations is not None and self.running:
+            with suppress(Exception):
+                more = await asyncio.to_thread(self._registrations.purge, cutoff, 500)
+                if more:
+                    self._registration_cleanup_at = cutoff

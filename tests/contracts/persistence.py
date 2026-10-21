@@ -2576,6 +2576,21 @@ class MutableCredentialClock(Protocol):
 
 
 class CredentialPersistenceContract:
+    def test_recording_sign_in_preserves_credentials_and_the_session(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        _first, second = h.users.list()
+        facts = h.users.sign_in_credentials(second.email)
+        assert facts
+        session = h.sessions.start(second.id, "other-hash", second.email, 0)
+        assert session
+        h.users.record_sign_in(second.id, h.clock.now())
+        recorded = h.users.get(second.id)
+        assert recorded == replace(second, last_sign_in_at=h.clock.now())
+        assert h.changes.current(second.id) == facts.credential
+        assert h.sessions.user_of(session.token) == second.id
+
     def test_session_requires_current_email_and_revision(
         self, credentials: CredentialPersistenceHarness
     ) -> None:

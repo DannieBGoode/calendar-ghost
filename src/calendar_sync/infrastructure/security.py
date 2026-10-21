@@ -170,3 +170,21 @@ class EmailChangeAdmissionDigests:
             [1, category, values], ensure_ascii=True, separators=(",", ":")
         ).encode()
         return hmac.new(self._key, framed, hashlib.sha256).hexdigest()
+
+
+class RegistrationAdmissionDigests:
+    """Stable sign-up-only HMAC keys, independent of recovery and SMTP settings."""
+
+    def __init__(self, master_key: str) -> None:
+        self._key = HKDF(
+            algorithm=SHA256(),
+            length=32,
+            salt=None,
+            info=b"calendar-sync registration admission v1",
+        ).derive(_master_key_bytes(master_key))
+
+    def digest(self, category: str, *values: str) -> str:
+        framed = json.dumps(
+            [1, category, values], ensure_ascii=True, separators=(",", ":")
+        ).encode()
+        return hmac.new(self._key, framed, hashlib.sha256).hexdigest()

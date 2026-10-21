@@ -33,6 +33,7 @@ from calendar_sync.interfaces.api.routes import (
     integrations,
     password_reset,
     plans,
+    registration,
     rules,
     session,
     setup,
@@ -94,6 +95,7 @@ class ApiIdentityEmail(
 class ApiServices(
     session.SessionServices,
     users.AdministrationServices,
+    registration.RegistrationApiServices,
     password_reset.PasswordResetServices,
     setup.SetupServices,
     account.OwnAccountServices,
@@ -115,6 +117,8 @@ class ApiServices(
     def identity_email(self) -> ApiIdentityEmail: ...
     @property
     def administration(self) -> ApiAdministration: ...
+    @property
+    def registrations(self) -> registration.Registrations: ...
     def for_user(self, user_id: UserId) -> UserApiServices: ...
 
 
@@ -176,6 +180,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         integrations,
         users,
         password_reset,
+        registration,
         plans,
         watch_notices,
     ):

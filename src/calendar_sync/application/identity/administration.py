@@ -7,6 +7,7 @@ import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 from calendar_sync.application.identity.errors import (
     EmailTaken,
@@ -26,10 +27,11 @@ from calendar_sync.application.identity.ports import (
     SignInThrottle,
     UserDirectory,
 )
+from calendar_sync.application.identity.registration_ports import InvitationVerificationRequired
 from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.identity.sign_in import require_password, start_session
 from calendar_sync.application.shared.errors import ApplicationError
-from calendar_sync.application.shared.ports import Clock, IdGenerator
+from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import (
     RemovalInterrupted,
     RemovalRequiresAuthorization,
@@ -50,6 +52,7 @@ from calendar_sync.domain.access import (
     require_administrator_remains,
 )
 from calendar_sync.domain.model import ProjectionHandling, SyncRuleId
+from calendar_sync.domain.registration import may_accept_invitation_directly, may_issue_invitation
 
 logger = logging.getLogger(__name__)
 
@@ -152,11 +155,12 @@ class ShowRegistration:
 class SetRegistrationPolicy:
     users: UserDirectory
     settings: RegistrationSettings
+    fingerprint: str | None = None
 
     def execute(self, actor: UserId, policy: RegistrationPolicy) -> RegistrationStatus:
         require_administrator(self.users, actor)
         # Raises OnlyMeNeedsOneUser, counting Users in one step with the change.
-        self.settings.set_policy(policy)
+        self.settings.set_policy(policy, actor=actor, fingerprint=self.fingerprint)
         return RegistrationStatus(policy, self.users.count() == 1)
 
 
@@ -171,7 +175,7 @@ class InviteUser:
 
     def execute(self, actor: UserId) -> IssuedLink:
         require_administrator(self.users, actor)
-        if not self.settings.policy().lets_people_join:
+        if not may_issue_invitation(self.settings.policy()):
             raise RegistrationClosed("choose Invitation Only before inviting anyone")
         issued = self.invitations.issue(actor, self.clock.now())
         if issued is None:
@@ -206,7 +210,7 @@ class RevokeInvitation:
 def _invitation_usable(
     settings: RegistrationSettings, invitations: Invitations, token: str, at: datetime
 ) -> bool:
-    return settings.policy().lets_people_join and invitations.usable(token, at)
+    return may_issue_invitation(settings.policy()) and invitations.usable(token, at)
 
 
 @dataclass(slots=True)
@@ -219,10 +223,19 @@ class CheckInvitation:
     attempts: LinkAttempts
 
     def execute(self, token: str, client: str) -> bool:
+        return self.acceptance(token, client) is not None
+
+    def acceptance(self, token: str, client: str) -> Literal["direct", "verified"] | None:
         now = self.clock.now()
-        return self.attempts.usable(
+        usable = self.attempts.usable(
             client, lambda: _invitation_usable(self.settings, self.invitations, token, now)
         )
+        if not usable:
+            return None
+        policy = self.settings.policy()
+        if not may_issue_invitation(policy):
+            return None
+        return "direct" if may_accept_invitation_directly(policy) else "verified"
 
 
 @dataclass(slots=True)
@@ -234,13 +247,12 @@ class AcceptInvitation:
     invitations: Invitations
     passwords: PasswordHasher
     sessions: Sessions
-    ids: IdGenerator
     clock: Clock
     attempts: LinkAttempts
 
     def execute(self, token: str, email: str, password: str, client: str) -> Session:
         now = self.clock.now()
-        user = User(UserId(self.ids.new()), email_address(email), Role.USER, UserState.ACTIVE, now)
+        normalized = email_address(email)
         require_password(password)
         # Checked before hashing, which is slow on purpose; using it checks again.
         usable = self.attempts.usable(
@@ -248,10 +260,16 @@ class AcceptInvitation:
         )
         if not usable:
             raise LinkUnusable("this invitation was already used, revoked, or has expired")
+        policy = self.settings.policy()
+        if not may_accept_invitation_directly(policy):
+            if may_issue_invitation(policy):
+                raise InvitationVerificationRequired("verify your email before joining under Open")
+            self.attempts.failed(client)
+            raise LinkUnusable("this invitation was already used, revoked, or has expired")
         hashed = self.passwords.hash(password)
         try:
-            joining = self.settings.policy().lets_people_join
-            if not joining or not self.invitations.accept(token, user, hashed, now):
+            user = self.invitations.accept(token, normalized, hashed)
+            if user is None:
                 raise LinkUnusable("this invitation was already used, revoked, or has expired")
         except (LinkUnusable, EmailTaken):
             self.attempts.failed(client)

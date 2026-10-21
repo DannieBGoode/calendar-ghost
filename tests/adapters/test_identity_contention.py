@@ -5,12 +5,14 @@ from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 from threading import Event, Timer
 
 import pytest
 from fastapi.testclient import TestClient
 
+from calendar_sync.application.identity.errors import SignInStorageUnavailable
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_container
 from calendar_sync.infrastructure.persistence import credentials, users
@@ -119,3 +121,36 @@ def test_session_api_succeeds_after_brief_write_contention(
             assert client.delete("/api/v1/session").status_code == 204
             assert container.identity.sessions.user_of(original_token) is None
     assert client.get("/api/v1/session").json()["authenticated"] is (operation == "sign_in")
+
+
+@pytest.mark.parametrize("operation", ["start", "record_sign_in"])
+def test_composed_registration_writes_refuse_brief_contention(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    path = tmp_path / "identity.db"
+    container = build_container(Settings(path))
+    client = TestClient(create_app(container))
+    sign_in(client)
+    expected = container.identity.users.sign_in_credentials(ADMIN_EMAIL)
+    assert expected
+    completion = container.registrations.complete
+    write = (
+        partial(
+            completion.sessions.start,
+            expected.user.id,
+            expected.credential.password_hash,
+            expected.credential.email,
+            expected.credential.revision,
+        )
+        if operation == "start"
+        else partial(
+            completion.users.record_sign_in,
+            expected.user.id,
+            completion.clock.now() + timedelta(hours=1),
+        )
+    )
+    with _brief_write_contention(path, monkeypatch), pytest.raises(SignInStorageUnavailable):
+        write()
+    assert container.identity.users.get(expected.user.id) == expected.user
+    with transaction(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM user_sessions").fetchone()[0] == 1

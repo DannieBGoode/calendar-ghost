@@ -91,10 +91,11 @@ class User:
 
 
 class RegistrationPolicy(StrEnum):
-    """Who may become a User (ADR 0030). Open, for the Hosted Service, arrives with sign-up."""
+    """Who may become a User (ADR 0030, ADR 0040)."""
 
     ONLY_ME = "only_me"
     INVITATION_ONLY = "invitation_only"
+    OPEN = "open"
 
     @classmethod
     def default(cls) -> RegistrationPolicy:

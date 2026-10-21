@@ -57,6 +57,16 @@ from calendar_sync.application.identity.identity_email import (
     IdentityEmailStorageUnavailable,
     IdentityEmailTestThrottled,
 )
+from calendar_sync.application.identity.registration_admission import (
+    RegistrationGlobalThrottled,
+    RegistrationNetworkThrottled,
+)
+from calendar_sync.application.identity.registration_ports import (
+    InvitationVerificationRequired,
+    OpenRegistrationUnavailable,
+    RegistrationStorageUnavailable,
+    RegistrationUnavailable,
+)
 from calendar_sync.application.identity.reset_admission import (
     ResetAdmissionStorageUnavailable,
     ResetGlobalThrottled,
@@ -139,6 +149,12 @@ def problem(
 
 # Looked up along each exception's MRO, so a subclass inherits its parent's code.
 _CODES: dict[type[Exception], str] = {
+    RegistrationUnavailable: "registration_unavailable",
+    RegistrationStorageUnavailable: "registration_unavailable",
+    OpenRegistrationUnavailable: "open_registration_unavailable",
+    InvitationVerificationRequired: "invitation_verification_required",
+    RegistrationNetworkThrottled: "registration_network_throttled",
+    RegistrationGlobalThrottled: "registration_global_throttled",
     EmailChangeStorageUnavailable: "email_change_storage_unavailable",
     EmailChangeThrottled: "email_change_throttled",
     EmailChangeConfigurationRequired: "email_change_configuration_required",
@@ -257,6 +273,14 @@ def _params(error: Exception) -> dict[str, ParamValue]:
         return {"retry_after": error.retry_after, "count": math.ceil(error.retry_after / 60)}
     if isinstance(error, UserDeletionInterrupted):
         return {"removed": error.removed, "remaining": error.remaining}
+    return _registration_params(error)
+
+
+def _registration_params(error: Exception) -> dict[str, ParamValue]:
+    if isinstance(error, OpenRegistrationUnavailable):
+        return {"reason": error.reason}
+    if isinstance(error, (RegistrationNetworkThrottled, RegistrationGlobalThrottled)):
+        return {"retry_after": error.retry_after}
     return _plan_params(error)
 
 
@@ -339,6 +363,8 @@ async def _validation_problem(_request: Request, error: Exception) -> JSONRespon
     path = _request.url.path.rstrip("/")
     if (
         path.startswith("/api/v1/password-resets")
+        or path == "/api/v1/registrations"
+        or path.startswith(("/api/v1/registrations/", "/api/v1/invitations/"))
         or path in {"/api/v1/account/email", "/api/v1/account/email-change"}
         or path.startswith("/api/v1/account/email-change/")
     ):
@@ -347,6 +373,10 @@ async def _validation_problem(_request: Request, error: Exception) -> JSONRespon
             {key: value for key, value in item.items() if key in {"loc", "type", "msg"}}
             for item in errors
         ]
+        for item in errors:
+            # Extra object keys are also untrusted inputs; never return their names.
+            if item["type"] == "extra_forbidden":
+                item["loc"] = ("body",)
     params: dict[str, Any] = {}
     if errors:
         first = errors[0]

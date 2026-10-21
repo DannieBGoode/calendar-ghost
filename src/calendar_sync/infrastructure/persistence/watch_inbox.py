@@ -20,7 +20,7 @@ from calendar_sync.application.sync.watch_ports import NoticeKind, WatchNotice
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import SyncRuleState
 from calendar_sync.domain.watches import DeliveryEvidence, RegistrationState, token_hash
-from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.connections import BUSY_TIMEOUT_SECONDS, transaction
 from calendar_sync.infrastructure.persistence.watches import stored_time
 
 INBOX_LOCK_WAIT_SECONDS = 1.0
@@ -215,8 +215,9 @@ def _refresh_success(
 class SqliteDeliveryEvidenceLog:
     """Whether each provider reached each public address: installation data, no User's."""
 
-    def __init__(self, database_path: Path) -> None:
+    def __init__(self, database_path: Path, *, read_timeout: float = BUSY_TIMEOUT_SECONDS) -> None:
         self._database_path = database_path
+        self._read_timeout = read_timeout
 
     def succeeded(self, provider: ProviderKind, address: str, at: datetime) -> None:
         with transaction(self._database_path) as connection:
@@ -249,7 +250,7 @@ class SqliteDeliveryEvidenceLog:
             )
 
     def evidence(self, address: str) -> dict[ProviderKind, DeliveryEvidence]:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=self._read_timeout) as connection:
             rows = connection.execute(
                 """
                 SELECT provider, last_success_at, last_failure_at FROM delivery_evidence
