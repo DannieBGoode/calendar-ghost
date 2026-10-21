@@ -11,7 +11,7 @@ and old-address notices; SMTP and password verification stay outside write trans
 **Tech Stack:** Python 3.12, SQLite, FastAPI, React, TypeScript, existing identity SMTP and pnpm 12.
 
 **Spec:** `docs/superpowers/specs/2026-10-20-open-registration-design.md`, email-change scope;
-ADR 0040 and ADR 0030. Status: Tasks 1-5 and documentation implemented and reviewed. Final branch scan, Docker/CI build, UI scoped review, and delivery remain open.
+ADR 0040 and ADR 0030. Status: implementation, documentation, local gates, scans, and reviews are complete. PR [#131](https://github.com/DannieBGoode/calendar-ghost/pull/131) is open with CI running; CI verification and any review follow-up remain open.
 
 ## Global Constraints
 
@@ -195,12 +195,12 @@ The existing PUT `/api/v1/account/email` keeps its response and upgrade access, 
 ### Task 5: Pending email and session-aware confirmation UI
 
 **Files:** Create `web/src/features/settings-own-email.tsx`, `email-change-page.tsx` and their tests;
-modify `features/settings-own-account.tsx`, its tests, `app.tsx`, `lib/api.ts`, and
+modify `features/settings-own-account.tsx`, its tests, `App.tsx`, `lib/api.ts`, and
 `i18n/locales/en/{settings,auth,common}.json`; extend app routing tests. Keep add-email behavior.
 
 **Interfaces:** API methods `ownEmailChange()`, `requestEmailChange(email,password)`,
 `cancelEmailChange(requestId)`, `checkEmailChange(token)`, `confirmEmailChange(token,password)`
-use inferred generated types. `OwnEmailItem({email,onDone})` replaces extracted EmailItem.
+use inferred generated types. `OwnEmailItem({email})` replaces extracted EmailItem.
 `EmailChangePage` is live at `/email-change`, uses `useLinkToken` and a session-scoped check,
 AuthFrame and CurrentPasswordField; do not add it to the token-only public admission mapping.
 
@@ -220,10 +220,11 @@ AuthFrame and CurrentPasswordField; do not add it to the token-only public admis
 - [x] Document migration backup/upgrade and matching database/image rollback, loss of writes since backup, retention and Master Key counter effects. No down migration, old binary on new schema, secrets, or `.env` commits.
 - [x] Run every backend gate separately: `.venv/bin/ruff format --check .`, `.venv/bin/ruff check .`, `.venv/bin/mypy`, `.venv/bin/lint-imports`, `.venv/bin/pytest --cov --cov-report=term-missing --cov-fail-under=80`.
 - [x] Inside web run separately `pnpm audit --audit-level=high`, `pnpm run api:check`, `typecheck`, `lint`, `knip`, `doctor`, `test`, `build`. There is no package audit script. Site checks apply only if site changes. Never commit a SHA-only rebuild.
-- [ ] Run gitleaks 8.30.1 on history and branch: `gitleaks git .` and `gitleaks git . --log-opts=origin/main..HEAD`; run `docker compose build` or report its actual blocker. Inspect each exit code, never hide failures with tail.
+- [x] Run gitleaks 8.30.1 on history and branch: `gitleaks git .` and `gitleaks git . --log-opts=origin/main..HEAD`; run `docker compose build` or report its actual blocker. Inspect each exit code, never hide failures with tail. Full history and the final 14-commit branch scan were clean; Docker exited 127 because the CLI is unavailable, so CI owns image build verification.
 - [x] Review account takeover, enumeration, hash/purpose/expiry/single-use, request/confirmation throttles, old-address notice, reset/password/sign-in/session races, cancellation and queue generations. Run whole-branch review and one test-first fix wave; retain implementer/reviewer/fix evidence in `.superpowers/sdd/`.
 - [x] Obtain outside read-only Claude review of `git diff origin/main...HEAD`, excluding compiled static assets, `web/openapi.json`, `web/src/lib/api-schema.ts`. Fix every P1/P2 test-first and rerun affected and required gates; unavailable outside review remains unfinished.
-- [ ] Use the ship skill and `.github/PULL_REQUEST_TEMPLATE.md`, push/open against main, attach before/after screenshots, watch CI, verify and fix review comments test-first, then reply with fixing commits. Do not start the next PR before merge and owner approval of its plan.
+- [x] Use the ship skill and `.github/PULL_REQUEST_TEMPLATE.md`, push/open [PR #131](https://github.com/DannieBGoode/calendar-ghost/pull/131) against main, attach before/after screenshots, and begin watching CI.
+- [ ] Follow CI to completion and address any review comments test-first, then reply with fixing commits. Do not start the next PR before merge and owner approval of its plan.
 
 ## Plan self-review
 
@@ -232,5 +233,6 @@ No future identity tables, dormant screens, Plan Hold work or architecture-contr
 planned. Task reports 1-5 record implementation and focused review. The issued-proof expiry
 regression was fixed in `0e5064a9`; UI critique scored the baseline 33/40 and audit 18/20, with
 two P2 findings fixed in `b7775b94`. The backend gate passed 4,569 tests at 97.16% coverage;
-the frontend gate passed 1,516 tests and all eight checks. Final branch scan, Docker/CI build,
-UI scoped review, and delivery remain pending.
+the frontend gate passed 1,516 tests and all eight checks. The final full-history and branch scans
+were clean, and the UI scoped review was approved. Docker was unavailable locally (exit 127).
+PR #131 holds delivery evidence; CI is running, so its results and any review follow-up remain open.
