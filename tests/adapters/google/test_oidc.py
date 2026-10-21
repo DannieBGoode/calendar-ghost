@@ -27,6 +27,8 @@ def test_begin_and_exchange() -> None:
     fake = OidcFake()
     service = adapter(fake)
     query = parse_qs(urlsplit(service.begin("s" * 43, NONCE, VERIFIER)).query)
+    assert query["client_id"] == [CLIENT]
+    assert "secret" not in service.begin("s" * 43, NONCE, VERIFIER)
     assert query["scope"] == ["openid email profile"]
     assert query["code_challenge_method"] == ["S256"]
     assert query["code_challenge"] != [VERIFIER]
@@ -35,6 +37,8 @@ def test_begin_and_exchange() -> None:
     assert claims.key.issuer == "https://accounts.google.com"
     assert claims.email_verified
     form = parse_qs(next(call[2] or "" for call in fake.calls if call[0] == "POST"))
+    assert form["client_id"] == [CLIENT]
+    assert form["client_secret"] == ["secret"]
     assert form["code_verifier"] == [VERIFIER]
     assert form["redirect_uri"] == query["redirect_uri"]
     assert len(fake.calls) == 3

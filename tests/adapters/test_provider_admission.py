@@ -25,6 +25,7 @@ from calendar_sync.infrastructure.persistence.migrations import initialize_datab
 from calendar_sync.infrastructure.persistence.provider_admission import SqliteProviderAdmission
 from calendar_sync.infrastructure.persistence.provider_flows import SqliteProviderFlows
 from calendar_sync.infrastructure.security import CredentialCipher, token_hash
+from tests.application.test_provider_sign_in import enabled_settings
 from tests.fakes.oidc import NOW, FixedClock
 
 
@@ -470,7 +471,7 @@ def test_exchange_race_has_no_write_lock_and_cannot_resurrect_cancelled_flow(
 
     provider.exchange.side_effect = exchange
     complete = CompleteProviderSignIn(
-        {"google": provider}, admission.flows, Mock(), admission.admission
+        {"google": provider}, admission.flows, Mock(), enabled_settings(), admission.admission
     )
     callback = ProviderCallback("google", state, "code", browser)
     with ThreadPoolExecutor(1) as pool:

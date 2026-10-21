@@ -160,3 +160,35 @@ def test_uvicorns_access_log_never_names_a_watch_notices_registration(
     assert '"POST /api/v1/watch-notices/microsoft/… HTTP/1.1" 202' in validation.getMessage()
     assert registration not in notice.getMessage() + validation.getMessage()
     assert '"POST /api/v1/rules HTTP/1.1" 202' in other.getMessage()
+
+
+def test_provider_callback_query_is_never_in_access_log(service_logger: logging.Logger) -> None:
+    configure_logging("DEBUG")
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        "",
+        0,
+        '%s - "%s %s HTTP/%s" %d',
+        (
+            "client",
+            "GET",
+            "/api/v1/sign-in/google/callback?code=private-code&state=private-state",
+            "1.1",
+            303,
+        ),
+        None,
+    )
+    for installed in logging.getLogger("uvicorn.access").filters:
+        assert isinstance(installed, logging.Filter)
+        installed.filter(record)
+    assert "private-code" not in record.getMessage()
+    assert "private-state" not in record.getMessage()
+
+
+def test_auth_transport_debug_payloads_are_suppressed(service_logger: logging.Logger) -> None:
+    for name in ("authlib", "authlib.oauth2", "urllib3", "urllib3.connectionpool", "requests"):
+        logging.getLogger(name).setLevel(logging.DEBUG)
+    configure_logging("DEBUG")
+    for name in ("authlib", "authlib.oauth2", "urllib3", "urllib3.connectionpool", "requests"):
+        assert not logging.getLogger(name).isEnabledFor(logging.DEBUG)

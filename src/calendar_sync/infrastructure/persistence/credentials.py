@@ -28,12 +28,13 @@ def revoke_resets(connection: sqlite3.Connection, user_id: UserId, at: str) -> N
 
 
 class SqliteCredentialChanges:
-    def __init__(self, database_path: Path, clock: Clock) -> None:
+    def __init__(self, database_path: Path, clock: Clock, *, read_timeout: float = 5.0) -> None:
         self._database_path = database_path
         self._clock = clock
+        self._read_timeout = read_timeout
 
     def current(self, user_id: UserId) -> CredentialSnapshot | None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=self._read_timeout) as connection:
             row = connection.execute(
                 "SELECT credential_revision, password_hash, email FROM users "
                 "WHERE id = ? AND state = 'active'",

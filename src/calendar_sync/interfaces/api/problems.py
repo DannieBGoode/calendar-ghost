@@ -57,6 +57,12 @@ from calendar_sync.application.identity.identity_email import (
     IdentityEmailStorageUnavailable,
     IdentityEmailTestThrottled,
 )
+from calendar_sync.application.identity.provider_sign_in_ports import (
+    LastSignInMethod,
+    ProviderSignInRefused,
+    ProviderSignInThrottled,
+    ProviderSignInUnavailable,
+)
 from calendar_sync.application.identity.registration_admission import (
     RegistrationGlobalThrottled,
     RegistrationNetworkThrottled,
@@ -149,6 +155,10 @@ def problem(
 
 # Looked up along each exception's MRO, so a subclass inherits its parent's code.
 _CODES: dict[type[Exception], str] = {
+    ProviderSignInRefused: "provider_sign_in_refused",
+    ProviderSignInUnavailable: "provider_sign_in_unavailable",
+    ProviderSignInThrottled: "provider_sign_in_throttled",
+    LastSignInMethod: "last_sign_in_method",
     RegistrationUnavailable: "registration_unavailable",
     RegistrationStorageUnavailable: "registration_unavailable",
     OpenRegistrationUnavailable: "open_registration_unavailable",
@@ -362,7 +372,15 @@ async def _validation_problem(_request: Request, error: Exception) -> JSONRespon
     errors = list(error.errors())
     path = _request.url.path.rstrip("/")
     if (
-        path.startswith("/api/v1/password-resets")
+        path.startswith(
+            (
+                "/api/v1/sign-in/",
+                "/api/v1/account/sign-in-methods",
+                "/api/v1/settings/sign-in-providers",
+            )
+        )
+        or path in {"/api/v1/account/password", "/api/v1/session", "/api/v1/setup/admin"}
+        or path.startswith("/api/v1/password-resets")
         or path == "/api/v1/registrations"
         or path.startswith(("/api/v1/registrations/", "/api/v1/invitations/"))
         or path in {"/api/v1/account/email", "/api/v1/account/email-change"}

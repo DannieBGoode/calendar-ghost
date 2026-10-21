@@ -285,7 +285,7 @@ adapter's own tests cover what is particular to its provider
 
 ## Provider descriptors
 
-Each provider's package describes itself to bootstrap with one `ProviderDescriptor`
+Each provider's package describes itself to bootstrap with a calendar `ProviderDescriptor`
 (`application/sync/provider_descriptors.py`), and nothing outside that package knows anything else
 about the provider ([ADR 0022](adr/0022-route-calendar-requests-by-provider.md), amended):
 
@@ -303,6 +303,14 @@ about the provider ([ADR 0022](adr/0022-route-calendar-requests-by-provider.md),
 `ProviderDirectory`. Routing builds its adapter map from it, Installation Hints read the guides, and
 the Web API lists the connectable providers at `GET /api/v1/providers` and runs their flows. Without
 the installation master key, a descriptor offers only its guide.
+
+Provider sign-in has a separate `ProviderSignInDescriptor` in
+`application/identity/provider_sign_in_ports.py`. Each provider's `descriptor.py` exposes its
+sign-in factory beside its calendar factory; `bootstrap/provider_sign_in.py` composes these
+through the identity ports using the existing OAuth client settings. The calendar descriptor
+stays in Synchronization and cannot depend upward on Identity. Provider-specific issuer policy
+stays inside each provider package; neutral OIDC mechanics and route handlers do not branch on
+provider names. See the [identity descriptor amendment](adr/0022-route-calendar-requests-by-provider.md#amendment-identity-descriptors-2026-10-21).
 
 Only a Provider Kind names a provider in the domain, application, and interfaces, and no module
 outside a provider's package names a Provider Kind member: `tests/test_provider_neutrality.py`

@@ -93,8 +93,9 @@ class OidcAuthorization:
         for value in (state, nonce, verifier):
             _bounded_ascii(value, 128)
         client = OAuth2Client(
-            self._client.client_id,
-            self._client.client_secret,
+            session=None,
+            client_id=self._client.client_id,
+            client_secret=self._client.client_secret,
             scope="openid email profile",
             redirect_uri=self._client.redirect_uri,
             code_challenge_method="S256",

@@ -21,6 +21,7 @@ from calendar_sync.bootstrap.container import Container, service_container
 from calendar_sync.domain.access import UserId
 from calendar_sync.interfaces.api.identity_boundary import IdentityBoundary
 from calendar_sync.interfaces.api.problems import install_problem_handlers, problem
+from calendar_sync.interfaces.api.provider_boundary import ProviderApiServices
 from calendar_sync.interfaces.api.routes import (
     account,
     accounts,
@@ -33,10 +34,13 @@ from calendar_sync.interfaces.api.routes import (
     integrations,
     password_reset,
     plans,
+    provider_sign_in,
     registration,
     rules,
     session,
     setup,
+    sign_in_methods,
+    sign_in_provider_settings,
     storage,
     users,
     watch_notices,
@@ -93,6 +97,7 @@ class ApiIdentityEmail(
 
 
 class ApiServices(
+    ProviderApiServices,
     session.SessionServices,
     users.AdministrationServices,
     registration.RegistrationApiServices,
@@ -180,6 +185,9 @@ def create_app(container: Container | None = None) -> FastAPI:
         integrations,
         users,
         password_reset,
+        provider_sign_in,
+        sign_in_methods,
+        sign_in_provider_settings,
         registration,
         plans,
         watch_notices,

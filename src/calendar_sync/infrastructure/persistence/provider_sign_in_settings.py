@@ -37,7 +37,7 @@ class SqliteProviderSignInSettings:
         self._availability = {item.provider: item for item in availability}
 
     def list(self) -> tuple[ProviderSignInSetting, ...]:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             settings = {
                 str(row[0]): bool(row[1])
                 for row in connection.execute(
@@ -52,7 +52,7 @@ class SqliteProviderSignInSettings:
         )
 
     def set_enabled(self, actor: UserId, provider: str, enabled: bool) -> None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=0.1) as connection:
             connection.execute("BEGIN IMMEDIATE")
             if (
                 connection.execute(

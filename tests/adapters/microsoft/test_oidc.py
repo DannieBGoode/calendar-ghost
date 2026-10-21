@@ -1,4 +1,5 @@
 import json
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -111,3 +112,18 @@ def test_domain_tenant_cannot_use_a_template_issuer() -> None:
     fake.token = fake.signed(fake.claims() | {"tid": TENANT})
     with pytest.raises(ProviderSignInRefused):
         adapter(fake, "contoso.example").exchange("code", NONCE, VERIFIER)
+
+
+def test_client_credentials_stay_in_their_protocol_fields() -> None:
+    fake = OidcFake(issuer=f"https://login.microsoftonline.com/{TENANT}/v2.0")
+    fake.token = fake.signed(fake.claims() | {"tid": TENANT})
+    service = adapter(fake)
+    url = service.begin("s" * 43, NONCE, VERIFIER)
+    assert "secret" not in url
+    query = parse_qs(urlsplit(url).query)
+    assert query["client_id"] == [CLIENT]
+    service.exchange("code", NONCE, VERIFIER)
+    form = parse_qs(next(call[2] or "" for call in fake.calls if call[0] == "POST"))
+    assert form["client_id"] == [CLIENT]
+    assert form["client_secret"] == ["secret"]
+    assert form["redirect_uri"] == query["redirect_uri"]

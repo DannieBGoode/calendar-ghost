@@ -16,7 +16,12 @@ import pytest
 from calendar_sync.application.identity.credentials import CredentialChanges
 from calendar_sync.application.identity.errors import EmailTaken, UserDisabled
 from calendar_sync.application.identity.password_reset import SelfServicePasswordResets
-from calendar_sync.application.identity.ports import PasswordResetLinks, Sessions, UserDirectory
+from calendar_sync.application.identity.ports import (
+    PasswordResetLinks,
+    Sessions,
+    SignInBrowser,
+    UserDirectory,
+)
 from calendar_sync.application.operations.ports import (
     AccountStanding,
     CauseSighting,
@@ -2576,6 +2581,21 @@ class MutableCredentialClock(Protocol):
 
 
 class CredentialPersistenceContract:
+    def test_browser_replacement_happens_only_after_credential_checks(
+        self, credentials: CredentialPersistenceHarness
+    ) -> None:
+        h = credentials
+        first, second = h.users.list()
+        previous = h.sessions.start(first.id, "old-hash", first.email, 0)
+        assert previous
+        browser = SignInBrowser(previous.token, None)
+        assert h.sessions.start(second.id, "wrong-hash", second.email, 0, browser) is None
+        assert h.sessions.user_of(previous.token) == first.id
+        replacement = h.sessions.start(second.id, "other-hash", second.email, 0, browser)
+        assert replacement
+        assert h.sessions.user_of(previous.token) is None
+        assert h.sessions.user_of(replacement.token) == second.id
+
     def test_recording_sign_in_preserves_credentials_and_the_session(
         self, credentials: CredentialPersistenceHarness
     ) -> None:

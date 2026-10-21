@@ -14,13 +14,14 @@ from calendar_sync.application.identity.provider_sign_in_ports import (
     BrowserProof,
     ProviderCallback,
     ProviderSignInRefused,
+    ProviderSignInSetting,
 )
 
 
 def test_begin_derives_bound_secrets_and_returns_provider_url() -> None:
     authorization, flows, secrets = Mock(), Mock(), Mock()
     authorization.begin.return_value = "https://provider.test/authorize"
-    begin = BeginProviderSignIn({"google": authorization}, flows, secrets)
+    begin = BeginProviderSignIn({"google": authorization}, flows, secrets, enabled_settings())
     intent = BeginIntent("google", BrowserProof("browser"))
     assert begin.execute(intent) == "https://provider.test/authorize"
     state = flows.begin.call_args.args[1]
@@ -31,7 +32,9 @@ def test_begin_derives_bound_secrets_and_returns_provider_url() -> None:
 
 def test_exchange_only_after_flow_claim() -> None:
     authorization, flows, secrets, admission = Mock(), Mock(), Mock(), Mock()
-    complete = CompleteProviderSignIn({"google": authorization}, flows, secrets, admission)
+    complete = CompleteProviderSignIn(
+        {"google": authorization}, flows, secrets, enabled_settings(), admission
+    )
     callback = ProviderCallback("google", "state", "code", BrowserProof("browser"))
     flows.consume.return_value = None
     with pytest.raises(ProviderSignInRefused):
@@ -42,7 +45,9 @@ def test_exchange_only_after_flow_claim() -> None:
 
 def test_complete_passes_immutable_claimed_flow_to_final_writer() -> None:
     authorization, flows, secrets, admission = Mock(), Mock(), Mock(), Mock()
-    complete = CompleteProviderSignIn({"google": authorization}, flows, secrets, admission)
+    complete = CompleteProviderSignIn(
+        {"google": authorization}, flows, secrets, enabled_settings(), admission
+    )
     callback = ProviderCallback("google", "state", "code", BrowserProof("browser"))
     assert complete.execute(callback) == admission.complete.return_value
     admission.complete.assert_called_once_with(
@@ -79,3 +84,7 @@ def test_provider_maintenance_is_independent_and_bounded() -> None:
     assert cleanup.purge(NOW, 1000)
     for store in (proofs, admission, flows, limits):
         store.purge.assert_called_once_with(NOW, 250)
+
+
+def enabled_settings() -> Mock:
+    return Mock(list=Mock(return_value=(ProviderSignInSetting("google", True, True, None),)))

@@ -171,7 +171,8 @@ export interface paths {
          * @description Replace the password; every other session of the User ends.
          */
         put: operations["change_password_api_v1_account_password_put"];
-        post?: never;
+        /** Password */
+        post: operations["password_api_v1_account_password_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -193,6 +194,57 @@ export interface paths {
         get: operations["own_plan_api_v1_account_plan_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/sign-in-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Methods */
+        get: operations["methods_api_v1_account_sign_in_methods_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/sign-in-methods/{identity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unlink */
+        delete: operations["unlink_api_v1_account_sign_in_methods__identity_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/sign-in-methods/{slug}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start */
+        post: operations["start_api_v1_account_sign_in_methods__slug__start_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1018,6 +1070,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/sign-in-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Settings */
+        get: operations["settings_api_v1_settings_sign_in_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/sign-in-providers/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Enable */
+        put: operations["enable_api_v1_settings_sign_in_providers__slug__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/setup": {
         parameters: {
             query?: never;
@@ -1046,6 +1132,91 @@ export interface paths {
         put?: never;
         /** Set Up */
         post: operations["set_up_api_v1_setup_admin_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sign-in/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm */
+        post: operations["confirm_api_v1_sign_in_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sign-in/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pending */
+        get: operations["pending_api_v1_sign_in_pending_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sign-in/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Providers */
+        get: operations["providers_api_v1_sign_in_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sign-in/{slug}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Callback */
+        get: operations["callback_api_v1_sign_in__slug__callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sign-in/{slug}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start */
+        post: operations["start_api_v1_sign_in__slug__start_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1359,6 +1530,11 @@ export interface components {
             /** Source Event Id */
             source_event_id: string | null;
         };
+        /** AvailableProvidersResponse */
+        AvailableProvidersResponse: {
+            /** Providers */
+            providers: string[];
+        };
         /** CalendarEndpointPayload */
         CalendarEndpointPayload: {
             /** Calendar Id */
@@ -1410,6 +1586,13 @@ export interface components {
             password: string;
             /** Token */
             token: string;
+        };
+        /** ConfirmProviderRequest */
+        ConfirmProviderRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
         };
         /** ConnectedAccountResponse */
         ConnectedAccountResponse: {
@@ -1856,6 +2039,13 @@ export interface components {
             /** Usable */
             usable: boolean;
         };
+        /** LinkedIdentityResponse */
+        LinkedIdentityResponse: {
+            /** Id */
+            id: string;
+            /** Provider */
+            provider: string;
+        };
         /** LogUsageResponse */
         LogUsageResponse: {
             /** Bytes */
@@ -1967,6 +2157,11 @@ export interface components {
             expires_at: string;
             /** Id */
             id: string;
+        };
+        /** PendingProviderResponse */
+        PendingProviderResponse: {
+            /** Password Required */
+            password_required: boolean;
         };
         /**
          * PersonPlanOverviewResponse
@@ -2306,6 +2501,34 @@ export interface components {
             kind: string;
             /** Redirect Uri */
             redirect_uri: string;
+        };
+        /** ProviderSettingRequest */
+        ProviderSettingRequest: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** ProviderSettingResponse */
+        ProviderSettingResponse: {
+            /** Available */
+            available: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Provider */
+            provider: string;
+            /** Reason */
+            reason: string | null;
+        };
+        /** ProviderStartRequest */
+        ProviderStartRequest: {
+            /** Email */
+            email?: string | null;
+            /** Invitation Token */
+            invitation_token?: string | null;
+        };
+        /** ProviderStartResponse */
+        ProviderStartResponse: {
+            /** Authorization Url */
+            authorization_url: string;
         };
         /**
          * RecentChangeResponse
@@ -2704,6 +2927,11 @@ export interface components {
             installation_sends_email: boolean;
             user: components["schemas"]["SignedInUserResponse"] | null;
         };
+        /** SetPasswordRequest */
+        SetPasswordRequest: {
+            /** Password */
+            password: string;
+        };
         /** SetupRequest */
         SetupRequest: {
             /** Email */
@@ -2727,6 +2955,13 @@ export interface components {
              * @default false
              */
             public_registration_available: boolean;
+        };
+        /** SignInMethodsResponse */
+        SignInMethodsResponse: {
+            /** Has Password */
+            has_password: boolean;
+            /** Identities */
+            identities: components["schemas"]["LinkedIdentityResponse"][];
         };
         /** SignInRequest */
         SignInRequest: {
@@ -3386,6 +3621,39 @@ export interface operations {
             };
         };
     };
+    password_api_v1_account_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     own_plan_api_v1_account_plan_get: {
         parameters: {
             query?: never;
@@ -3404,6 +3672,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OwnPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    methods_api_v1_account_sign_in_methods_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignInMethodsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_api_v1_account_sign_in_methods__identity_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity_id: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_v1_account_sign_in_methods__slug__start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderStartResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5222,6 +5585,72 @@ export interface operations {
             };
         };
     };
+    settings_api_v1_settings_sign_in_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderSettingResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enable_api_v1_settings_sign_in_providers__slug__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderSettingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     setup_status_api_v1_setup_get: {
         parameters: {
             query?: never;
@@ -5262,6 +5691,143 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_api_v1_sign_in_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmProviderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pending_api_v1_sign_in_pending_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingProviderResponse"];
+                };
+            };
+        };
+    };
+    providers_api_v1_sign_in_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvailableProvidersResponse"];
+                };
+            };
+        };
+    };
+    callback_api_v1_sign_in__slug__callback_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_v1_sign_in__slug__start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProviderStartRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderStartResponse"];
                 };
             };
             /** @description Validation Error */

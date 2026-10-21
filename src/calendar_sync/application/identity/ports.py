@@ -221,9 +221,20 @@ class PasswordHasher(Protocol):
     def verify(self, password: str, hashed: str) -> bool: ...
 
 
+@dataclass(frozen=True, slots=True)
+class SignInBrowser:
+    previous_token: str | None = field(repr=False)
+    proof: str | None = field(repr=False)
+
+
 class Sessions(Protocol):
     def start(
-        self, user_id: UserId, password_hash: str, email: str | None, revision: int
+        self,
+        user_id: UserId,
+        password_hash: str,
+        email: str | None,
+        revision: int,
+        browser: SignInBrowser | None = None,
     ) -> Session | None:
         """Start a session only while the User is active and `password_hash`, the hash their
         password was just checked against, email and revision still match; all in one step with

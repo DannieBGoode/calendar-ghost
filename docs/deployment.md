@@ -829,7 +829,8 @@ in batches of 250; stopped services and backups may retain them longer. OIDC sto
 100 ms. Its independent admission budgets allow 20 begins and callbacks per network per 15 minutes,
 10 password confirmations per network per 15 minutes, and 100 begins per installation per hour.
 IPv6 networks use /64, and the front gate admits at most 10,000 live network keys. Denied requests
-add no durable counter. These adapters become active when the provider sign-in routes are composed.
+add no durable counter. The provider sign-in routes compose these adapters; every provider remains
+disabled until an Installation Administrator enables it.
 
 A callback claims its flow once before contacting the provider. The claimed record stays
 revocable until admission or a pending password proof replaces it; setup and another successful
@@ -840,8 +841,9 @@ ordinary User without an own Plan, proof consumption and a fresh seven-day sessi
 Provider sessions retain a hash of their anonymous browser binding for atomic cross-tab replacement;
 that binding is never itself a session token. Explicit owned linking keeps the current session,
 advances the credential revision and ends other sessions and proofs. Password checks, token
-hashing, sealing and provider calls happen before the final write lock. The provider storage and
-admission adapters remain inactive until their routes and ordinary sign-in integration are composed.
+hashing, sealing and provider calls happen before the final write lock. Ordinary password, setup,
+Invitation, and verified-registration session starts also cancel the previous cookie session and
+browser-bound provider work atomically with their replacement session.
 
 Before upgrading, stop the service, back up the complete database/data directory with its matching
 Master Key, and retain the previous image. Startup applies the migration and checks all foreign
@@ -858,3 +860,31 @@ and unlinking refuse to leave an active User without a password or an available,
 method. Disablement preserves identity bindings. An environment change can still remove provider
 availability: restore its configuration or have an active Installation Administrator issue a
 Password Reset Link. Reset can set a first password without enabling a disabled User.
+
+
+### Provider sign-in HTTP and proxy logs
+
+Provider sign-in uses the installed Google or Microsoft client ID and secret, a Master Key, and a
+trusted `CALENDAR_SYNC_PUBLIC_URL` (HTTPS except loopback development). Register the additional
+exact callbacks `/api/v1/sign-in/google/callback` and `/api/v1/sign-in/microsoft/callback` under
+that origin. Calendar authorization callbacks stay separate. Each provider starts disabled;
+only an Installation Administrator can change its enablement through
+`/api/v1/settings/sign-in-providers`. Missing environment configuration keeps it unavailable.
+
+Public availability lists only enabled, configured provider slugs. Public start and password
+confirmation refuse a signed-in browser; explicit linking starts through the owning account's
+route. Mutations require the exact configured Origin. Host-only HttpOnly SameSite=Lax browser
+proof and pending-proof cookies last ten minutes and are Secure on HTTPS. A success sets its
+session cookie only after bounded response reads succeed. Callbacks redirect only to `/overview`,
+`/settings/account`, `/provider-link`, or `/sign-in?provider_result=unavailable`. No requested return
+address or provider error is reflected. Provider exchanges and storage run in request workers,
+with password hashing and network calls outside SQLite write locks.
+
+OIDC authorization codes and states in callback queries are the protocol exception to email
+proofs' fragment-only URLs. Authentication responses and pages use `no-store` and `no-referrer`.
+The service removes sign-in queries from Uvicorn access logs and suppresses authentication
+transport debug output. Reverse proxies, ingress access logs, error logs, and request tracing must
+also omit query strings on `/api/v1/sign-in/*`; never record request bodies, cookies, Authorization
+headers, or provider replies. For Nginx use `$uri` instead of `$request_uri` or `$request` in the
+access-log format, and ensure error/debug logging or a tracing agent does not restore the query.
+Apply equivalent path-only logging at each upstream proxy before enabling provider sign-in.

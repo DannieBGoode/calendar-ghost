@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import Literal, Protocol
 
 from calendar_sync.application.identity.credentials import CredentialSnapshot
 from calendar_sync.application.identity.ports import Session
@@ -199,3 +199,15 @@ class ProviderAdmission(Protocol):
 
 class ProviderFlowMaintenance(Protocol):
     def purge(self, before: datetime, limit: int) -> int: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderSignInDescriptor:
+    availability: ProviderAvailability
+    authorization: ProviderAuthorization | None
+
+
+class ProviderSignInLimits(Protocol):
+    def admit(
+        self, client: str, boundary: Literal["begin", "callback", "confirmation"]
+    ) -> None: ...

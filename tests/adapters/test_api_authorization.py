@@ -43,6 +43,11 @@ from tests.users import (
 # token (ADR 0036), are public under /api/, beside the session status and sign-out, which reveal or
 # revoke nothing without a session.
 PUBLIC_API_ROUTES = {
+    ("GET", "/api/v1/sign-in/providers"),
+    ("POST", "/api/v1/sign-in/{slug}/start"),
+    ("GET", "/api/v1/sign-in/{slug}/callback"),
+    ("GET", "/api/v1/sign-in/pending"),
+    ("POST", "/api/v1/sign-in/confirm"),
     ("GET", "/api/v1/setup"),
     ("POST", "/api/v1/setup/admin"),
     ("GET", "/api/v1/session"),
@@ -60,6 +65,8 @@ PUBLIC_API_ROUTES = {
 }
 # Only an Installation Administrator may use these (ADR 0030), Plans among them (ADR 0038).
 ADMINISTRATOR_ROUTES = {
+    ("GET", "/api/v1/settings/sign-in-providers"),
+    ("PUT", "/api/v1/settings/sign-in-providers/{slug}"),
     ("GET", "/api/v1/identity-email"),
     ("POST", "/api/v1/identity-email/test"),
     ("GET", "/api/v1/registration"),
@@ -314,7 +321,9 @@ REQUESTS: dict[tuple[str, str], dict[str, Any]] = {
 def test_every_route_answers_another_users_record_as_not_found(tmp_path: Path) -> None:
     """ADR 0029: 404, never 403, so a record's existence is not revealed to another User."""
     database = tmp_path / "test.db"
-    settings = Settings(database, master_key=CredentialCipher.generate_key())
+    settings = Settings(
+        database, master_key=CredentialCipher.generate_key(), public_url="http://localhost:8000"
+    )
     adapters = build_adapters(settings)
     owner = administrator(adapters)
     with sqlite_units(database, user=owner)() as uow:
@@ -336,7 +345,13 @@ def test_every_route_answers_another_users_record_as_not_found(tmp_path: Path) -
             """,
             (owner.value, NOW.isoformat(), NOW.isoformat()),
         )
+        connection.execute(
+            "INSERT INTO provider_identities(id,user_id,provider,issuer,subject,created_at) "
+            "VALUES ('owned-provider-identity',?,'google','https://issuer.example.test','subject',?)",
+            (owner.value, NOW.isoformat()),
+        )
     records = {
+        "identity_id": "owned-provider-identity",
         "rule_id": rule().id.value,
         "account_id": "personal-account",
         "entry_id": entry,
@@ -349,7 +364,7 @@ def test_every_route_answers_another_users_record_as_not_found(tmp_path: Path) -
     app = create_app(replace(compose(settings, adapters), scheduler=None))
 
     answers = {}
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Origin": "http://localhost:8000"}) as client:
         client.cookies.set(SESSION_COOKIE, session_for(database, OTHER_USER))
         for route in app.routes:
             if (
