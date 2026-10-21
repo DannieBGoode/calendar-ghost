@@ -16,10 +16,16 @@ from tests.adapters.test_email_change_store import setup
 
 
 def test_issuance_limits_survive_cancel_restart_and_hour_boundary(tmp_path: Path) -> None:
-    _path, clock, _h, store, expected, session = setup(tmp_path)
+    path, clock, _h, _store, expected, session = setup(tmp_path)
+    from calendar_sync.infrastructure.persistence.email_changes import SqliteEmailChangeProofs
+    from tests.adapters.test_users_store import SequentialIds
+
+    key = CredentialCipher.generate_key()
+    store = SqliteEmailChangeProofs(path, SequentialIds(), clock, master_key=key)
     for index in range(5):
         pending = store.request(expected, f"target-{index}@example.test", session.token)
         store.cancel(expected.user_id, pending.id)
+    store = SqliteEmailChangeProofs(path, SequentialIds(), clock, master_key=key)
     with pytest.raises(EmailChangeThrottled) as error:
         store.request(expected, "sixth@example.test", session.token)
     assert error.value.retry_after == 3600

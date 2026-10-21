@@ -8,6 +8,10 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
 from datetime import datetime, timedelta
 
+from calendar_sync.application.identity.email_changes import (
+    EmailChangedNotice,
+    EmailChangeMailRequest,
+)
 from calendar_sync.application.identity.identity_email import (
     DeliverIdentityEmailTest,
     EmailTest,
@@ -21,6 +25,7 @@ from calendar_sync.application.identity.password_reset import (
 from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import UserId
+from calendar_sync.infrastructure.identity_email_changes import EmailChangeMaintenance
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +39,16 @@ class IdentityMailWorker:
         *,
         reset_delivery: DeliverPasswordReset | None = None,
         reset_admission: ResetAdmission | None = None,
+        email_changes: EmailChangeMaintenance | None = None,
     ) -> None:
         self._delivery = delivery
         self._tests = tests
         self._clock = clock
         self._reset_delivery = reset_delivery
         self._reset_admission = reset_admission
+        self._email_changes = email_changes
         self._lock = threading.Lock()
-        self._pending: deque[EmailTest] = deque()
+        self._pending: deque[EmailTest | EmailChangeMailRequest | EmailChangedNotice] = deque()
         self._resets: deque[ResetEmailRequest] = deque()
         self._reset_turn = False
         self._generation = 0
@@ -54,6 +61,8 @@ class IdentityMailWorker:
         self._running = False
         self._last_purge: datetime | None = None
         self._reset_cleanup_at: datetime | None = None
+        self._change_cleanup_at: datetime | None = None
+        self._test_cleanup_at: datetime | None = None
 
     @property
     def running(self) -> bool:
@@ -95,6 +104,27 @@ class IdentityMailWorker:
             self._loop.call_soon_threadsafe(self._wake.set)
             return True
 
+    def submit_change(self, request: EmailChangeMailRequest) -> bool:
+        return self._submit_security(request)
+
+    def submit_notice(self, notice: EmailChangedNotice) -> bool:
+        return self._submit_security(notice)
+
+    def _submit_security(self, request: EmailChangeMailRequest | EmailChangedNotice) -> bool:
+        with self._lock:
+            if (
+                not self._running
+                or self._email_changes is None
+                or self._email_changes.delivery is None
+                or len(self._pending) >= 10
+            ):
+                return False
+            self._pending.append(request)
+            assert self._loop is not None
+            assert self._wake is not None
+            self._loop.call_soon_threadsafe(self._wake.set)
+            return True
+
     def stop(self) -> None:
         """Close admission before cancellation; in-flight SMTP has no persistence authority."""
         with self._lock:
@@ -131,15 +161,19 @@ class IdentityMailWorker:
                             await asyncio.wait_for(wake.wait(), timeout=3600)
                 elif isinstance(request, ResetEmailRequest):
                     await self._deliver_reset(request)
-                else:
+                elif isinstance(request, EmailTest):
                     await self._deliver(request)
+                else:
+                    await self._deliver_change(request)
         finally:
             self.stop()
             with self._lock:
                 self._loop = None
                 self._wake = None
 
-    def _take(self, wake: asyncio.Event) -> EmailTest | ResetEmailRequest | None:
+    def _take(
+        self, wake: asyncio.Event
+    ) -> EmailTest | ResetEmailRequest | EmailChangeMailRequest | EmailChangedNotice | None:
         with self._lock:
             if not self._running or not (self._pending or self._resets):
                 wake.clear()
@@ -149,7 +183,8 @@ class IdentityMailWorker:
                 return self._resets.popleft()
             self._reset_turn = True
             test = self._pending.popleft()
-            self._active[test.actor] = EmailTestState.SENDING
+            if isinstance(test, EmailTest):
+                self._active[test.actor] = EmailTestState.SENDING
             return test
 
     async def _deliver(self, test: EmailTest) -> None:
@@ -199,6 +234,36 @@ class IdentityMailWorker:
         if prepared is not None:
             self._reset_delivery.send(prepared)
 
+    async def _deliver_change(self, request: EmailChangeMailRequest | EmailChangedNotice) -> None:
+        with self._lock:
+            if not self._running:
+                return
+            self._send = self._executor.submit(self._send_change, request, self._generation)
+        try:
+            await asyncio.shield(asyncio.wrap_future(self._send))
+        except Exception:
+            logger.warning("Identity email change delivery failed")
+
+    def _send_change(
+        self, request: EmailChangeMailRequest | EmailChangedNotice, generation: int
+    ) -> None:
+        assert self._email_changes is not None
+        assert self._email_changes.delivery is not None
+        delivery = self._email_changes.delivery
+        with self._lock:
+            if not self._running or self._generation != generation:
+                return
+        prepared = (
+            delivery.prepare(request) if isinstance(request, EmailChangeMailRequest) else None
+        )
+        with self._lock:
+            if not self._running or self._generation != generation:
+                return
+        if isinstance(request, EmailChangedNotice):
+            delivery.notice(request)
+        elif prepared is not None:
+            delivery.send(prepared)
+
     def _expire(self) -> None:
         before = self._clock.now() - timedelta(minutes=15)
         expired = [actor for actor, (_, at) in self._finished.items() if at <= before]
@@ -212,7 +277,8 @@ class IdentityMailWorker:
         if self._last_purge is None or now - self._last_purge >= timedelta(hours=1):
             self._last_purge = now
             self._reset_cleanup_at = now
-            await self._purge_tests(now)
+            self._change_cleanup_at = now
+            self._test_cleanup_at = now - timedelta(hours=1)
         cutoff = self._reset_cleanup_at
         # One bounded reset batch per fair mail turn; failures retry next hour.
         self._reset_cleanup_at = None
@@ -221,13 +287,25 @@ class IdentityMailWorker:
                 removed = await asyncio.to_thread(self._reset_admission.purge, cutoff, 500)
                 if removed == 500:
                     self._reset_cleanup_at = cutoff
-        return self._reset_cleanup_at is not None
+        await self._purge_changes()
+        await self._purge_tests()
+        return any(
+            at is not None
+            for at in (self._reset_cleanup_at, self._change_cleanup_at, self._test_cleanup_at)
+        )
 
-    async def _purge_tests(self, now: datetime) -> None:
-        # Maintenance failure never authorizes delivery or changes readiness.
-        with suppress(Exception):
-            while self.running:
-                removed = await asyncio.to_thread(self._tests.purge, now - timedelta(hours=1), 500)
-                await asyncio.sleep(0)
-                if removed < 500:
-                    break
+    async def _purge_changes(self) -> None:
+        cutoff, self._change_cleanup_at = self._change_cleanup_at, None
+        if cutoff is not None and self._email_changes is not None and self.running:
+            with suppress(Exception):
+                removed = await asyncio.to_thread(self._email_changes.purge, cutoff, 500)
+                if removed == 500:
+                    self._change_cleanup_at = cutoff
+
+    async def _purge_tests(self) -> None:
+        cutoff, self._test_cleanup_at = self._test_cleanup_at, None
+        if cutoff is not None and self.running:
+            with suppress(Exception):
+                removed = await asyncio.to_thread(self._tests.purge, cutoff, 500)
+                if removed == 500:
+                    self._test_cleanup_at = cutoff

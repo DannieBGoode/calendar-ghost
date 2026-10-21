@@ -275,11 +275,35 @@ def test_keyed_unconfigured_lifespan_purges_without_scheduler_or_smtp(tmp_path: 
     database = tmp_path / "maintenance.db"
     settings = Settings(database, master_key=CredentialCipher.generate_key())
     adapters = build_adapters(settings)
+    adapters.users.add(FIRST, "synthetic")
     with transaction(database) as connection:
         connection.executemany(
             "INSERT INTO reset_request_attempts(boundary, network_digest, admitted_at) "
             "VALUES ('completion', ?, 0)",
             [(f"synthetic-digest-{index}",) for index in range(1201)],
+        )
+        connection.executemany(
+            "INSERT INTO email_change_network_attempts(boundary, network_digest, admitted_at) "
+            "VALUES ('completion', ?, 0)",
+            [(f"synthetic-digest-{index}",) for index in range(1201)],
+        )
+        connection.executemany(
+            "INSERT INTO email_change_attempts(user_id, target_digest, admitted_at) "
+            "VALUES (?, ?, 0)",
+            [(FIRST.id.value, f"synthetic-digest-{index}") for index in range(1201)],
+        )
+        connection.executemany(
+            "INSERT INTO email_change_proofs(id, user_id, proposed_email, credential_revision, "
+            "created_at, expires_at) VALUES (?, ?, 'new@example.test', 0, ?, ?)",
+            [
+                (
+                    f"expired-{index}",
+                    FIRST.id.value,
+                    "2000-01-01T00:00:00+00:00",
+                    "2000-01-02T00:00:00+00:00",
+                )
+                for index in range(1201)
+            ],
         )
     container = replace(compose(settings, adapters), scheduler=None, scheduler_watch=None)
     worker = container.identity_mail_worker
@@ -287,8 +311,14 @@ def test_keyed_unconfigured_lifespan_purges_without_scheduler_or_smtp(tmp_path: 
 
     def remaining() -> int:
         with transaction(database) as connection:
-            return int(
-                connection.execute("SELECT COUNT(*) FROM reset_request_attempts").fetchone()[0]
+            return sum(
+                int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                for table in (
+                    "reset_request_attempts",
+                    "email_change_network_attempts",
+                    "email_change_attempts",
+                    "email_change_proofs",
+                )
             )
 
     with patch("calendar_sync.infrastructure.identity_email.smtplib.SMTP") as smtp:
@@ -740,5 +770,222 @@ def test_delivery_failures_log_only_a_safe_category(
         ):
             assert value is not None
             assert value not in fields
+
+    asyncio.run(run())
+
+
+def test_security_lane_is_bounded_and_fair(tmp_path: Path) -> None:
+    from unittest.mock import Mock
+
+    from calendar_sync.application.identity.email_changes import (
+        EmailChangedNotice,
+        EmailChangeMailRequest,
+        PreparedEmailChange,
+    )
+    from calendar_sync.infrastructure.identity_email_changes import (
+        EmailChangeDelivery,
+        EmailChangeMaintenance,
+    )
+
+    order: list[str] = []
+
+    class OrderedSender(BarrierSender):
+        def send_test(self, recipient: str) -> None:
+            super().send_test(recipient)
+            order.append("test")
+
+        def send_reset(self, recipient: str, token: str) -> None:
+            order.append("reset")
+
+        def send_email_change(self, recipient: str, token: str) -> None:
+            order.append("change")
+
+        def send_email_changed(self, recipient: str) -> None:
+            order.append("notice")
+
+    async def run() -> None:
+        users, tests, _, clock = services(tmp_path)
+        sender = OrderedSender()
+        proofs = Mock()
+        proofs.prepare.return_value = PreparedEmailChange("new@example.test", "synthetic-token")
+        worker = IdentityMailWorker(
+            DeliverIdentityEmailTest(
+                users, tests, IdentityEmailSetup("current", None), sender, clock
+            ),
+            tests,
+            clock,
+            reset_delivery=DeliverPasswordReset(
+                ResetStore(), IdentityEmailSetup("current", None), sender
+            ),
+            email_changes=EmailChangeMaintenance(
+                EmailChangeDelivery(proofs, IdentityEmailSetup("current", None), sender),
+                proofs,
+                Mock(),
+            ),
+        )
+        task = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: worker.running)
+        assert worker.submit(tests.admit(FIRST.id, "current", NOW))
+        await checkpoint(sender.started.is_set)
+        for index in range(5):
+            assert worker.submit_change(EmailChangeMailRequest(str(index), "current"))
+            assert worker.submit_notice(EmailChangedNotice("old@example.test"))
+        assert not worker.submit(EmailTest("full", UserId("full"), 0, "current"))
+        assert not worker.submit_change(EmailChangeMailRequest("full", "current"))
+        assert not worker.submit_notice(EmailChangedNotice("full@example.test"))
+        for index in range(50):
+            assert worker.submit_reset(ResetEmailRequest(f"{index}@example.test", "current"))
+        assert not worker.submit_reset(ResetEmailRequest("full@example.test", "current"))
+        sender.release.set()
+        await checkpoint(lambda: len(order) == 61)
+        assert order[:21] == [
+            "test",
+            *[kind for _ in range(5) for kind in ("reset", "change", "reset", "notice")],
+        ]
+        await stop(worker, task)
+        assert not worker.submit_change(EmailChangeMailRequest("stopped", "current"))
+        assert not worker.submit_notice(EmailChangedNotice("stopped@example.test"))
+
+    asyncio.run(run())
+
+
+def test_change_preparation_is_off_loop_and_stopped_generation_cannot_send(tmp_path: Path) -> None:
+    from unittest.mock import Mock
+
+    from calendar_sync.application.identity.email_changes import (
+        EmailChangeMailRequest,
+        PreparedEmailChange,
+    )
+    from calendar_sync.infrastructure.identity_email_changes import (
+        EmailChangeDelivery,
+        EmailChangeMaintenance,
+    )
+
+    started, release, finished = threading.Event(), threading.Event(), threading.Event()
+    sender = Mock()
+    proofs = Mock()
+
+    def prepare(request_id: str) -> PreparedEmailChange:
+        started.set()
+        assert release.wait(5)
+        finished.set()
+        return PreparedEmailChange("new@example.test", "synthetic-token")
+
+    proofs.prepare.side_effect = prepare
+    worker, _, _ = worker_services(tmp_path)
+    worker._email_changes = EmailChangeMaintenance(
+        EmailChangeDelivery(proofs, IdentityEmailSetup("current", None), sender), proofs, Mock()
+    )
+
+    async def run() -> None:
+        task = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: worker.running)
+        assert worker.submit_change(EmailChangeMailRequest("pending", "current"))
+        await checkpoint(started.is_set)
+        await asyncio.sleep(0)
+        await stop(worker, task)
+        restarted = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: worker.running)
+        release.set()
+        await checkpoint(finished.is_set)
+        await asyncio.sleep(0.02)
+        sender.send_email_change.assert_not_called()
+        await stop(worker, restarted)
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("kind", ["change", "notice", "prepare"])
+def test_email_change_failure_is_lossy_and_private(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, kind: str
+) -> None:
+    from unittest.mock import Mock
+
+    from calendar_sync.application.identity.email_changes import (
+        EmailChangedNotice,
+        EmailChangeMailRequest,
+        PreparedEmailChange,
+    )
+    from calendar_sync.infrastructure.identity_email_changes import (
+        EmailChangeDelivery,
+        EmailChangeMaintenance,
+    )
+
+    secret = "private@example.test synthetic-token synthetic-password provider-marker body"
+    sender, proofs = Mock(), Mock()
+    proofs.prepare.return_value = PreparedEmailChange("private@example.test", "synthetic-token")
+    if kind == "prepare":
+        proofs.prepare.side_effect = RuntimeError(secret)
+    sender.send_email_change.side_effect = RuntimeError(secret)
+    sender.send_email_changed.side_effect = RuntimeError(secret)
+    worker, _, _ = worker_services(tmp_path)
+    worker._email_changes = EmailChangeMaintenance(
+        EmailChangeDelivery(proofs, IdentityEmailSetup("current", None), sender), proofs, Mock()
+    )
+
+    async def run() -> None:
+        task = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: worker.running)
+        if kind in {"change", "prepare"}:
+            assert worker.submit_change(EmailChangeMailRequest("pending", "current"))
+        else:
+            assert worker.submit_notice(EmailChangedNotice("private@example.test"))
+        await checkpoint(lambda: len(caplog.records) == 1)
+        await asyncio.sleep(0.02)
+        assert sender.send_email_change.call_count == (kind == "change")
+        assert sender.send_email_changed.call_count == (kind == "notice")
+        assert all(value not in repr(vars(caplog.records[0])) for value in secret.split())
+        assert caplog.records[0].exc_info is None
+        await stop(worker, task)
+
+    asyncio.run(run())
+
+
+def test_email_change_cleanup_has_bounded_fair_turns_without_smtp(tmp_path: Path) -> None:
+    from unittest.mock import Mock
+
+    from calendar_sync.infrastructure.identity_email_changes import EmailChangeMaintenance
+
+    async def run() -> None:
+        _, tests, _, clock = services(tmp_path)
+        proofs, admission, reset = Mock(), Mock(), Mock()
+        proofs.purge.side_effect = [500, 500, 1, 0]
+        admission.purge.side_effect = [500, 0, 0, 0]
+        reset.purge.side_effect = [500, 0, 0]
+        calls: list[str] = []
+
+        def record(label: str, batches: list[int]) -> Callable[[datetime, int], int]:
+            def purge(before: datetime, limit: int) -> int:
+                assert limit == 500
+                calls.append(label)
+                return batches.pop(0)
+
+            return purge
+
+        proofs.purge.side_effect = record("proofs", [500, 500, 1])
+        admission.purge.side_effect = record("admission", [500, 0, 0])
+        reset.purge.side_effect = record("reset", [500, 0])
+        worker = IdentityMailWorker(
+            None,
+            tests,
+            clock,
+            reset_admission=reset,
+            email_changes=EmailChangeMaintenance(None, proofs, admission),
+        )
+        task = asyncio.create_task(worker.run_forever())
+        await checkpoint(lambda: proofs.purge.call_count == 3)
+        assert calls == [
+            "reset",
+            "proofs",
+            "admission",
+            "reset",
+            "proofs",
+            "admission",
+            "proofs",
+            "admission",
+        ]
+        assert proofs.purge.call_args.args == (clock.now(), 500)
+        assert not worker.submit(EmailTest("no-send", FIRST.id, 0, "current"))
+        await stop(worker, task)
 
     asyncio.run(run())
