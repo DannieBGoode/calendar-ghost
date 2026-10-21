@@ -35,7 +35,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function renderAuth(i18n: I18n, mode: "setup" | "login", passwordOnly = false, passwordResetAvailable = false) {
+async function renderAuth(i18n: I18n, mode: "setup" | "login", passwordOnly = false, availability: boolean | { passwordResetAvailable: boolean; registrationAvailable: boolean } = false) {
+  const { passwordResetAvailable, registrationAvailable } = typeof availability === "boolean" ? { passwordResetAvailable: availability, registrationAvailable: false } : availability
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   // A thenable callback makes act flush the first queries before it returns.
@@ -44,7 +45,7 @@ async function renderAuth(i18n: I18n, mode: "setup" | "login", passwordOnly = fa
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <AuthScreen mode={mode} passwordOnly={passwordOnly} passwordResetAvailable={passwordResetAvailable} />
+            <AuthScreen mode={mode} passwordOnly={passwordOnly} passwordResetAvailable={passwordResetAvailable} registrationAvailable={registrationAvailable} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -85,6 +86,11 @@ async function logInFailing(i18n: I18n, body: object): Promise<Element | null> {
 }
 
 describe("AuthScreen", () => {
+  it.each([["login", true, true], ["login", false, false], ["setup", true, false]] as const)("offers Create account only for available configured sign-in: %s %s", async (mode, available, shown) => {
+    await renderAuth(testI18n(), mode, false, { passwordResetAvailable: false, registrationAvailable: available })
+    expect(container.querySelector("a[href='/sign-up']") !== null).toBe(shown)
+  })
+
   it.each([
     ["login", true, true], ["login", false, false], ["setup", true, false],
   ] as const)("offers recovery only on configured login: %s %s", async (mode, available, shown) => {

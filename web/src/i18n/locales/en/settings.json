@@ -142,7 +142,17 @@
       "onlyMe": "Only you can use this Calendar Ghost now.",
       "invitationOnly": "People can now join with an invitation link.",
       "open": "People can now join after verifying their email."
-    }
+    },
+    "open": "Open",
+    "openHint": "Anyone can join after verifying their email. Invitations also require email verification.",
+    "notConfigured": "Configure Identity email before choosing Open.",
+    "notTested": "Send a successful Identity email test for the current configuration before choosing Open.",
+    "identityEmail": "Review Identity email",
+    "proxyGuide": "Read the trusted-proxy guide",
+    "plansOff": "With Plans off, everyone has every feature without limits. Open does not turn Plans on.",
+    "closeWarning": "Switch to Invitation only? This cancels unfinished public sign-ups. Existing people and invitations stay.",
+    "closeConfirm": "Switch to Invitation only",
+    "keepOpen": "Keep Open"
   },
   "links": {
     "copy": "Copy link",

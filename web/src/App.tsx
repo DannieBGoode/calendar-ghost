@@ -11,6 +11,8 @@ import { AuthScreen } from "@/features/auth-screen"
 import { EmailChangePage } from "@/features/email-change-page"
 import { Dashboard } from "@/features/dashboard"
 import { ForgotPasswordPage } from "@/features/forgot-password-page"
+import { RegistrationPage } from "@/features/registration-page"
+import { SignUpPage } from "@/features/sign-up-page"
 import { InvitationPage } from "@/features/invitation-page"
 import { PasswordResetPage } from "@/features/password-reset-page"
 import { rich } from "@/i18n/rich"
@@ -53,6 +55,8 @@ export default function App() {
   const [publicPage, setPublicPage] = useState(() => publicPageAt(window.location.pathname))
   if (window.location.pathname.replace(/\/+$/, "") === "/email-change") return <EmailChangePage />
   if (window.location.pathname.replace(/\/+$/, "") === "/forgot-password") return <ForgotPasswordPage />
+  if (window.location.pathname.replace(/\/+$/, "") === "/sign-up") return <SignUpPage />
+  if (publicPage === "registration") return <RegistrationPage onSignedIn={() => setPublicPage(null)} />
   if (publicPage === "invitation") return <InvitationPage onSignedIn={() => setPublicPage(null)} />
   if (publicPage === "password-reset") return <PasswordResetPage />
   return <SessionGate />
@@ -81,7 +85,7 @@ function SessionGate() {
 /** Setup, sign-in, or the add-email step, until a User with an email is signed in. */
 function SignInGate({ setup, session }: { setup: SetupStatus; session: SessionStatus | undefined }) {
   if (!setup.administrator_configured) return <AuthScreen mode="setup" />
-  if (!session?.authenticated) return <AuthScreen mode="login" passwordOnly={setup.password_only_sign_in} passwordResetAvailable={setup.password_reset_available} />
+  if (!session?.authenticated) return <AuthScreen mode="login" passwordOnly={setup.password_only_sign_in} passwordResetAvailable={setup.password_reset_available} registrationAvailable={setup.public_registration_available} />
   if (session.user?.email === null) return <AddEmailScreen />
   // Keyed by the User, so another User signing in drops everything shown or typed for the last
   // one: a revealed token, an open dialog, a copied link, every toast.

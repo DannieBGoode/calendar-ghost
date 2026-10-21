@@ -368,6 +368,11 @@ export const api = {
   /** Creates the invited User and signs them in. */
   acceptInvitation: (token: string, email: string, password: string) =>
     call("/api/v1/invitations/accept", "post", { body: { token, email, password } }),
+  requestRegistration: (email: string, invitationToken: string | null = null) =>
+    call("/api/v1/registrations/request", "post", { body: { email, invitation_token: invitationToken } }),
+  checkRegistration: (token: string) => call("/api/v1/registrations/check", "post", { body: { token } }),
+  completeRegistration: (token: string, password: string) =>
+    call("/api/v1/registrations", "post", { body: { token, password } }),
   requestPasswordReset: (email: string) => call("/api/v1/password-resets/request", "post", { body: { email } }),
   checkPasswordReset: (token: string) => call("/api/v1/password-resets/check", "post", { body: { token } }),
   resetPassword: (token: string, password: string) =>

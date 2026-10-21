@@ -150,6 +150,34 @@ function requested(path: string): boolean {
 }
 
 describe("Administration", () => {
+  it.each([
+    ["identity_email_not_configured", "Configure Identity email"],
+    ["identity_email_not_tested", "successful Identity email test"],
+  ] as const)("disables Open with a specific readiness reason: %s", async (reason, explanation) => {
+    await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false, open_available: false, open_unavailable_reason: reason } })
+    expect(container.querySelector<HTMLInputElement>("input[value=open]")!.disabled).toBe(true)
+    expect(section("registration-title")?.textContent).toContain(explanation)
+    expect(container.querySelector("a[href='#identity-email-title']")).not.toBeNull()
+    expect(container.querySelector("a[href$='#trusted-proxy-headers']")).not.toBeNull()
+  })
+
+  it("keeps selected Open visible after readiness loss and leaves Plans alone", async () => {
+    await renderSettings(testI18n(), { registration: { policy: "open", only_me_available: false, open_available: false, open_unavailable_reason: "identity_email_not_tested" } })
+    expect(container.querySelector<HTMLInputElement>("input[value=open]")!.checked).toBe(true)
+    expect(container.textContent).toContain("With Plans off, everyone has every feature without limits")
+    expect(requested("/api/v1/plan-settings")).toBe(false)
+  })
+
+  it("warns before Invitation only cancels unfinished public sign-ups", async () => {
+    await renderSettings(testI18n(), { registration: { policy: "open", only_me_available: false, open_available: true, open_unavailable_reason: null }, answers: { "PUT /api/v1/registration": jsonResponse({ policy: "invitation_only", only_me_available: false, open_available: true, open_unavailable_reason: null }) } })
+    await click(container.querySelector<HTMLInputElement>("input[value=invitation_only]")!)
+    expect(sent("PUT", "/api/v1/registration")).toBeUndefined()
+    expect(container.textContent).toContain("cancels unfinished public sign-ups")
+    await click([...container.querySelectorAll("button")].find((button) => button.textContent === "Switch to Invitation only")!)
+    expect(sent("PUT", "/api/v1/registration")?.body).toEqual({ policy: "invitation_only" })
+    expect(sent("PUT", "/api/v1/plan-settings")).toBeUndefined()
+  })
+
   it("has no untranslated text", async () => {
     await renderSettings(pseudoI18n())
     expect(untranslatedText(container, dateWords())).toEqual([])
@@ -159,7 +187,7 @@ describe("Administration", () => {
     await renderSettings(testI18n(), { registration: { policy: "invitation_only", only_me_available: false, open_available: false, open_unavailable_reason: "identity_email_not_configured" } })
     expect(section("identity-email-title")).not.toBeNull()
     expect(section("registration-title")).not.toBeNull()
-    expect(container.querySelectorAll("input[name=registration-policy]")).toHaveLength(2)
+    expect(container.querySelectorAll("input[name=registration-policy]")).toHaveLength(3)
     expect(section("identity-email-title")?.querySelector("input")).toBeNull()
     expect(section("storage-title")).not.toBeNull()
     expect(section("plans-title")).toBeNull()
@@ -177,7 +205,7 @@ describe("Administration", () => {
     })
     await click(container.querySelector<HTMLInputElement>("input[value='invitation_only']")!)
     expect(sent("PUT", "/api/v1/registration")?.body).toEqual({ policy: "invitation_only" })
-    expect(section("registration-title")?.querySelector("[role='status']")?.textContent).toBe(
+    expect([...section("registration-title")!.querySelectorAll("[role='status']")].at(-1)?.textContent).toBe(
       "People can now join with an invitation link.",
     )
   })

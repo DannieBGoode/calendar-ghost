@@ -22,6 +22,7 @@ export function useRegistration() {
     onSuccess: (result, policy) => {
       queryClient.setQueryData(["registration"], result)
       setMessage(t(SAVED[policy]))
+      void queryClient.invalidateQueries({ queryKey: ["setup"] })
     },
   })
   return { registration, change, message }

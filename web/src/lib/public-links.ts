@@ -1,7 +1,8 @@
 /** The pages someone opens from a link, before they have a session. */
-export type PublicPage = "invitation" | "password-reset"
+export type PublicPage = "invitation" | "password-reset" | "registration"
 
 const PUBLIC_PATHS: Record<string, PublicPage> = {
+  "/verify-email": "registration",
   "/invitation": "invitation",
   "/password-reset": "password-reset",
 }

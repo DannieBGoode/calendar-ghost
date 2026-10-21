@@ -54,11 +54,24 @@ async function render() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   act(() => root.render(<StaticI18nProvider i18n={testI18n()}><QueryClientProvider client={client}><IdentityEmailSection /></QueryClientProvider></StaticI18nProvider>))
   await tick()
+  return client
 }
 function button() { return container.querySelector<HTMLButtonElement>("button")! }
 async function click() { act(() => button().click()); await tick() }
 
 describe("Identity email", () => {
+  it("invalidates registration and setup when the current email test succeeds", async () => {
+    const client = await render()
+    client.setQueryData(["registration"], { open_available: false })
+    client.setQueryData(["setup"], { public_registration_available: false })
+    state = { ...idle, test_state: "queued" }
+    await click()
+    state = { ...idle, test_state: "accepted", tested_at: "2026-10-21T12:00:00Z" }
+    await tick(1000)
+    expect(client.getQueryState(["registration"])?.isInvalidated).toBe(true)
+    expect(client.getQueryState(["setup"])?.isInvalidated).toBe(true)
+  })
+
   it.each([
     ["smtp_missing", "CALENDAR_SYNC_SMTP_HOST"], ["smtp_security", "STARTTLS"],
     ["origin_missing", "PUBLIC_URL"], ["origin_invalid", "root origin"],

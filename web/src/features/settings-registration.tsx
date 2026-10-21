@@ -1,18 +1,22 @@
+import { useState } from "react"
+
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
+import { SOURCE_URL } from "@/lib/brand"
 import type { Registration, RegistrationPolicy } from "@/lib/api"
 import type { RegistrationCommands } from "@/lib/use-registration"
 
 /**
- * The Registration Policy: Only me, where nobody can join, or Invitation only. Only me is offered
- * again only while the administrator is the only person here.
+ * The Registration Policy and current Open readiness. Only me is offered again only while
+ * the administrator is the only person here.
  */
 export function RegistrationSection({ commands }: { commands: RegistrationCommands }) {
   const i18n = useI18n()
   const { t } = i18n
   const { registration, change, message } = commands
+  const [confirmClose, setConfirmClose] = useState(false)
   return (
     <section className="settings-section" aria-labelledby="registration-title">
       <div className="section-heading">
@@ -34,9 +38,17 @@ export function RegistrationSection({ commands }: { commands: RegistrationComman
         <PolicyChoice
           registration={registration.data}
           pending={change.isPending}
-          onChoose={(policy) => change.mutate(policy)}
+          onChoose={(policy) => {
+            if (registration.data.policy === "open" && policy === "invitation_only") setConfirmClose(true)
+            else change.mutate(policy)
+          }}
         />
       )}
+      {confirmClose && registration.data?.policy === "open" && <div className="settings-list p-6">
+        <p>{t("settings.registration.closeWarning")}</p>
+        <div className="mt-4 flex flex-wrap gap-3"><Button disabled={change.isPending} onClick={() => change.mutate("invitation_only", { onSuccess: () => setConfirmClose(false) })}>{t("settings.registration.closeConfirm")}</Button><Button variant="outline" onClick={() => setConfirmClose(false)}>{t("settings.registration.keepOpen")}</Button></div>
+      </div>}
+      <p className="field-hint">{t("settings.registration.plansOff")}</p>
       {change.error && (
         <p className="field-error" role="alert">
           {apiErrorMessage(i18n, change.error)}
@@ -92,7 +104,15 @@ function PolicyChoice({
             <small>{t("settings.registration.invitationOnlyHint")}</small>
           </span>
         </label>
+        <label className="radio-row">
+          <input type="radio" name="registration-policy" value="open" checked={policy === "open"} disabled={pending || !registration.open_available} onChange={() => onChoose("open")} />
+          <span><strong>{t("settings.registration.open")}</strong><small>{t("settings.registration.openHint")}</small></span>
+        </label>
       </div>
+      {!registration.open_available && <div className="p-5">
+        <p role="status">{t(registration.open_unavailable_reason === "identity_email_not_tested" ? "settings.registration.notTested" : "settings.registration.notConfigured")}</p>
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-3"><a className="text-link" href="#identity-email-title">{t("settings.registration.identityEmail")}</a><a className="text-link" href={`${SOURCE_URL}/docs/deployment.md#trusted-proxy-headers`} target="_blank" rel="noreferrer">{t("settings.registration.proxyGuide")}</a></div>
+      </div>}
     </fieldset>
   )
 }

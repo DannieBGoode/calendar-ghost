@@ -120,6 +120,23 @@ async function renderApp(i18n: I18n) {
 }
 
 describe("App", () => {
+  it.each([["/sign-up", "Create account"], ["/verify-email#proof", "Finish creating your account"]])("opens %s before the session gate", async (path, heading) => {
+    const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
+    const address = window.location.href
+    page.happyDOM.setURL(`http://localhost:8000${path}`)
+    try {
+      RESPONSES["/api/v1/setup"] = { administrator_configured: true, public_registration_available: true }
+      RESPONSES["/api/v1/registrations/check"] = { usable: true, email: "robin@example.test" }
+      await renderApp(testI18n())
+      expect(container.querySelector("h1")?.textContent).toBe(heading)
+      expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/api/v1/session")).toBe(false)
+    } finally {
+      RESPONSES["/api/v1/setup"] = { administrator_configured: true }
+      delete RESPONSES["/api/v1/registrations/check"]
+      page.happyDOM.setURL(address)
+    }
+  })
+
   it("translates the whole page", async () => {
     const { container } = await renderApp(pseudoI18n())
     const header = container.querySelector("header")
