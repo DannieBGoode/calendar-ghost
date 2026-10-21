@@ -166,6 +166,7 @@ def confirmed_credential(
     if (
         password is None
         or len(password) > 1024
+        or expected.password_hash is None
         or not passwords.verify(password, expected.password_hash)
     ):
         raise IncorrectPassword("that is not your current password")

@@ -210,5 +210,10 @@ def _current(credentials: CredentialChanges, user_id: UserId) -> CredentialSnaps
 
 
 def _confirm(expected: CredentialSnapshot, passwords: PasswordHasher, password: str | None) -> None:
-    if password is None or not passwords.verify(password, expected.password_hash):
+    if (
+        password is None
+        or len(password) > 1024
+        or expected.password_hash is None
+        or not passwords.verify(password, expected.password_hash)
+    ):
         raise IncorrectPassword("that is not your current password")

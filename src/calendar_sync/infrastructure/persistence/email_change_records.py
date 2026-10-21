@@ -48,7 +48,7 @@ def credential_matches(connection: sqlite3.Connection, expected: CredentialSnaps
     return (
         connection.execute(
             "SELECT 1 FROM users WHERE id = ? AND credential_revision = ? "
-            "AND password_hash = ? AND email IS ? AND state = 'active'",
+            "AND password_hash IS ? AND email IS ? AND state = 'active'",
             (expected.user_id.value, expected.revision, expected.password_hash, expected.email),
         ).fetchone()
         is not None

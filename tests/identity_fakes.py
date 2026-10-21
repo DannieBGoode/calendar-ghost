@@ -226,6 +226,7 @@ class MemorySessions:
         """A session of `user_id`, as signing in with their current password gives."""
         facts = self.users.sign_in_credentials(self.users.users[user_id].email)
         assert facts is not None
+        assert facts.credential.password_hash is not None
         session = self.start(
             user_id,
             facts.credential.password_hash,

@@ -810,3 +810,28 @@ live only in memory. Failed or cancelled preparation, shutdown, restart, or SMTP
 them; there is no delivery retry or outbox. Stopping the scheduler cancels and awaits its sender,
 without waiting for a bounded SMTP call already running or blocking the event loop on executor
 shutdown. The same sole executor lasts for the Scheduler object's lifetime.
+
+## Migration 39 provider sign-in storage
+
+Migration 39 rebuilds `users` so a missing password is stored as SQL NULL. Existing User fields,
+passwords, Plans and assignments, sessions, indexes, the email-retention trigger, and references
+are preserved. It adds User-owned `provider_identities`, uniquely bound by issuer and subject,
+and installation-wide `provider_sign_in_settings`. Every provider starts disabled; missing
+configuration remains unavailable even when administrator enablement is stored. This storage
+migration alone exposes no new sign-in flow.
+
+Before upgrading, stop the service, back up the complete database/data directory with its matching
+Master Key, and retain the previous image. Startup applies the migration and checks all foreign
+keys atomically. There is no down migration. To roll back, stop the service and restore the
+pre-upgrade data directory, matching Master Key, and previous image together. Never run an old
+binary against the upgraded database or remove migration records. Writes since the backup are
+lost on restore, and previously revoked access may return; review access before reopening ingress.
+
+A first password requires the User's live owning session and unchanged credential revision.
+Replacing an existing password, changing email, and User Deletion still require the current
+password. Setting a first password and unlinking an identity end other browser sessions and
+invalidate pending reset and email-change work; a reset ends all sessions. Provider disablement
+and unlinking refuse to leave an active User without a password or an available, enabled provider
+method. Disablement preserves identity bindings. An environment change can still remove provider
+availability: restore its configuration or have an active Installation Administrator issue a
+Password Reset Link. Reset can set a first password without enabling a disabled User.

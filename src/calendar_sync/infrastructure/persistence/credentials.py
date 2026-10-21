@@ -39,11 +39,7 @@ class SqliteCredentialChanges:
                 "WHERE id = ? AND state = 'active'",
                 (user_id.value,),
             ).fetchone()
-        return (
-            CredentialSnapshot(user_id, int(row[0]), str(row[1]), row[2])
-            if row is not None
-            else None
-        )
+        return CredentialSnapshot(user_id, int(row[0]), row[1], row[2]) if row is not None else None
 
     def change_password(self, expected: CredentialSnapshot, hashed: str, keep: str | None) -> bool:
         with transaction(self._database_path) as connection:
@@ -62,7 +58,7 @@ class SqliteCredentialChanges:
             changed = connection.execute(
                 "UPDATE users SET password_hash = ?, credential_revision = credential_revision + 1 "
                 "WHERE id = ? AND credential_revision = ? "
-                "AND password_hash = ? AND email IS ? AND state = 'active'",
+                "AND password_hash IS ? AND email IS ? AND state = 'active'",
                 (hashed, *_expected(expected)),
             ).rowcount
             if changed != 1:
@@ -84,7 +80,7 @@ class SqliteCredentialChanges:
                 changed = connection.execute(
                     "UPDATE users SET email = ?, credential_revision = credential_revision + 1 "
                     "WHERE id = ? AND credential_revision = ? "
-                    "AND password_hash = ? AND email IS ? AND state = 'active'",
+                    "AND password_hash IS ? AND email IS ? AND state = 'active'",
                     (email, *_expected(expected)),
                 ).rowcount
                 if changed != 1:
@@ -97,5 +93,5 @@ class SqliteCredentialChanges:
         return True
 
 
-def _expected(expected: CredentialSnapshot) -> tuple[str, int, str, str | None]:
+def _expected(expected: CredentialSnapshot) -> tuple[str, int, str | None, str | None]:
     return expected.user_id.value, expected.revision, expected.password_hash, expected.email

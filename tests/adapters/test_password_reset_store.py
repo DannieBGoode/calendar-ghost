@@ -160,6 +160,7 @@ def test_reset_tokens_are_hashed_and_secret_values_never_logged(
         reset.execute(prepared.link.token, secret, "synthetic-client")
     snapshot = h.changes.current(SECOND.id)
     assert snapshot is not None
+    assert snapshot.password_hash is not None
     assert ScryptPasswords().verify(secret, snapshot.password_hash)
     for value in (
         prepared.link.token,
@@ -238,7 +239,7 @@ def test_reset_migration_fresh_upgrade_restart_and_legacy_revocation(
     initialize_database(path)
     initialize_database(path)
     with transaction(path) as connection:
-        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 38
+        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 39
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         if version:
             assert connection.execute("SELECT credential_revision FROM users").fetchone()[0] == 0

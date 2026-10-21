@@ -73,6 +73,7 @@ def test_existing_identity_writes_wait_for_brief_contention(
     path, clock, h = _sqlite_identity(tmp_path)
     expected = h.changes.current(SECOND.id)
     assert expected is not None
+    assert expected.password_hash is not None
     session = h.sessions.start(SECOND.id, expected.password_hash, expected.email, expected.revision)
     assert session is not None
     signed_in_at = clock.now() + timedelta(hours=1)
@@ -133,6 +134,7 @@ def test_composed_registration_writes_refuse_brief_contention(
     sign_in(client)
     expected = container.identity.users.sign_in_credentials(ADMIN_EMAIL)
     assert expected
+    assert expected.credential.password_hash is not None
     completion = container.registrations.complete
     write = (
         partial(

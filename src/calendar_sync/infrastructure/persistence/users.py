@@ -75,7 +75,7 @@ class SqliteUserDirectory:
         return SignInCredentials(
             user,
             CredentialSnapshot(
-                user.id, int(row["credential_revision"]), str(row["password_hash"]), user.email
+                user.id, int(row["credential_revision"]), row["password_hash"], user.email
             ),
         )
 
@@ -163,7 +163,7 @@ class SqliteUserDirectory:
             row = connection.execute(
                 "SELECT password_hash FROM users WHERE id = ?", (user_id.value,)
             ).fetchone()
-        return str(row[0]) if row is not None else None
+        return row[0] if row is not None and row[0] is not None else None
 
     def set_password_hash(self, user_id: UserId, password_hash: str) -> None:
         with transaction(self._database_path) as connection:
@@ -250,7 +250,7 @@ class SqliteUserDirectory:
         return _user(row) if row is not None else None
 
 
-def insert_user(connection: sqlite3.Connection, user: User, password_hash: str) -> None:
+def insert_user(connection: sqlite3.Connection, user: User, password_hash: str | None) -> None:
     """Add a User inside the caller's transaction; raises EmailTaken."""
     try:
         connection.execute(
