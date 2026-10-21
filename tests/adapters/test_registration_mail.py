@@ -187,10 +187,13 @@ def test_cleanup_within_day_without_scheduler_or_smtp(tmp_path: Path) -> None:
 
         def drained() -> bool:
             with transaction(gate._database) as connection:
-                return bool(
-                    connection.execute("SELECT COUNT(*) FROM registration_proofs").fetchone()[0]
-                    == 0
-                )
+                # Independent half-batches commit separately; observe both stores.
+                return tuple(
+                    connection.execute(
+                        "SELECT (SELECT COUNT(*) FROM registration_proofs), "
+                        "(SELECT COUNT(*) FROM registration_request_attempts)"
+                    ).fetchone()
+                ) == (0, 5)
 
         await checkpoint(drained)
         with transaction(gate._database) as connection:
