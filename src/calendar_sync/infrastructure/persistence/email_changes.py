@@ -99,8 +99,14 @@ class SqliteEmailChangeProofs:
                 return None
             token = secrets.token_urlsafe(32)
             connection.execute(
-                "UPDATE email_change_proofs SET token_hash = ? WHERE id = ? AND user_id = ?",
-                (token_hash(token), request_id, row["user_id"]),
+                "UPDATE email_change_proofs SET token_hash = ?, expires_at = ? "
+                "WHERE id = ? AND user_id = ?",
+                (
+                    token_hash(token),
+                    (now + timedelta(hours=24)).isoformat(),
+                    request_id,
+                    row["user_id"],
+                ),
             )
             return PreparedEmailChange(str(row["proposed_email"]), token)
 

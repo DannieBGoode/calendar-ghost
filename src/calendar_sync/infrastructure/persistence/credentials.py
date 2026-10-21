@@ -33,7 +33,7 @@ class SqliteCredentialChanges:
         self._clock = clock
 
     def current(self, user_id: UserId) -> CredentialSnapshot | None:
-        with transaction(self._database_path, timeout=0.1) as connection:
+        with transaction(self._database_path) as connection:
             row = connection.execute(
                 "SELECT credential_revision, password_hash, email FROM users "
                 "WHERE id = ? AND state = 'active'",
@@ -46,7 +46,7 @@ class SqliteCredentialChanges:
         )
 
     def change_password(self, expected: CredentialSnapshot, hashed: str, keep: str | None) -> bool:
-        with transaction(self._database_path, timeout=0.1) as connection:
+        with transaction(self._database_path) as connection:
             connection.execute("BEGIN IMMEDIATE")
             now = self._clock.now().isoformat()
             if (
@@ -77,7 +77,7 @@ class SqliteCredentialChanges:
 
     def change_email(self, expected: CredentialSnapshot, email: str) -> bool:
         try:
-            with transaction(self._database_path, timeout=0.1) as connection:
+            with transaction(self._database_path) as connection:
                 connection.execute("BEGIN IMMEDIATE")
                 if current_request(connection, expected.user_id, self._clock.now()) is not None:
                     raise EmailChangeUnavailable

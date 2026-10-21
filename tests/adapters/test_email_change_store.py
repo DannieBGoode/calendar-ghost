@@ -65,6 +65,53 @@ def test_email_change_lifecycle(tmp_path: Path) -> None:
     assert store.pending(SECOND.id) is None
 
 
+def test_delayed_preparation_starts_a_full_day_without_repeat_extension(tmp_path: Path) -> None:
+    path, clock, h, store, expected, session = setup(tmp_path)
+    requested_at = clock.now()
+    request = store.request(expected, "new@example.test", session.token)
+    clock.moment = requested_at + timedelta(hours=23)
+    prepared = store.prepare(request.id)
+    assert prepared is not None
+    issued_expiry = requested_at + timedelta(hours=47)
+    pending = store.pending(SECOND.id)
+    assert pending is not None
+    assert pending.expires_at == issued_expiry
+    with transaction(path) as connection:
+        row = connection.execute(
+            "SELECT token_hash, expires_at FROM email_change_proofs WHERE id = ?", (request.id,)
+        ).fetchone()
+        assert row["token_hash"] == token_hash(prepared.token)
+        assert row["expires_at"] == issued_expiry.isoformat()
+
+    clock.moment = requested_at + timedelta(hours=25)
+    assert store.check(SECOND.id, prepared.token)
+    assert store.prepare(request.id) is None
+    assert store.pending(SECOND.id) == pending
+    clock.moment = issued_expiry
+    assert not store.check(SECOND.id, prepared.token)
+    assert store.pending(SECOND.id) is None
+    assert store.confirm(expected, prepared.token, session.token) is None
+    assert h.changes.current(SECOND.id) == expected
+
+
+@pytest.mark.parametrize("elapsed_hours", [24, 25])
+def test_expired_unprepared_request_cannot_gain_an_issued_lifetime(
+    tmp_path: Path, elapsed_hours: int
+) -> None:
+    path, clock, _h, store, expected, session = setup(tmp_path)
+    requested_at = clock.now()
+    request = store.request(expected, "new@example.test", session.token)
+    clock.moment = requested_at + timedelta(hours=elapsed_hours)
+    assert store.prepare(request.id) is None
+    assert store.pending(SECOND.id) is None
+    with transaction(path) as connection:
+        row = connection.execute(
+            "SELECT token_hash, expires_at FROM email_change_proofs WHERE id = ?", (request.id,)
+        ).fetchone()
+        assert row["token_hash"] is None
+        assert row["expires_at"] == request.expires_at.isoformat()
+
+
 @pytest.mark.parametrize(
     "refusal",
     [
