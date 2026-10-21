@@ -1,0 +1,3 @@
+# Synthetic rejected callback URL in Calendar Ghost OIDC origin validation.
+# tests/adapters/google/test_oidc.py rejects userinfo before any provider request.
+https://u:p@host.test
