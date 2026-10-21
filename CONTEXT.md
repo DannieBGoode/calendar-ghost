@@ -405,9 +405,19 @@ _Avoid_: Tenant, customer, member, login
 One User's sign-in binding to a provider's validated issuer and subject (`sub`), never to its
 mutable email. An existing binding keeps its owner when the provider's email changes. It is not a
 Connected Account, grants no calendar access, and consumes no Connected Account Allowance.
-Sign-in may link a new binding by email only when the provider asserts that email is verified;
+Sign-in may link a new binding by email only when the provider verifies it and the matching
+User has Local Email Verification;
 otherwise the person proves their existing password or explicitly links from their live owning
 session in Your account. An identity already owned by another User cannot be linked.
+
+**Local Email Verification**:
+The recorded proof that Calendar Ghost verified a User's current email through verified
+registration, confirmed email change, or new verified-provider admission. Legacy Users, initial
+setup, and direct Invitation acceptance begin without it; direct email changes clear it. Ordinary
+sign-in remains available. Provider linking by password or owning session does not set it.
+Password recovery preserves its value and removes all the User's Provider Identities, so recovery
+cannot leave another person's provider sign-in method usable. Connected Accounts remain intact.
+See ADR 0041.
 
 **Usable Sign-In Method**:
 A stored password, or a linked Provider Identity whose provider is both configured and enabled
@@ -445,8 +455,8 @@ Under Only Me, provider admission has one narrow exception: a still-live Invitat
 with an email matching the provider-verified email may create an ordinary User. Ordinary
 Invitation issuance and password acceptance remain forbidden there. Choosing Only Me still
 requires no other User; later provider admission does not change the selected policy. The Web UI
-keeps People and its management controls accessible whenever other Users exist, including then.
-With only the administrator under Only Me, it hides People and Plans. An Installation
+keeps People and its management controls accessible whenever other Users or live Invitations exist.
+With only the administrator and no live Invitations under Only Me, it hides People and Plans. An Installation
 Administrator may choose Open after a successful identity email test for the current settings,
 or choose Invitation Only without email. Only Me may be selected only while no other User exists.
 Data is User-scoped under every policy. Plans are independent and off by default. Losing matching
@@ -486,7 +496,8 @@ Administrator may issue a hand-delivered link lasting seven days; when identity 
 an active User may request an emailed link lasting one hour under any supported Registration
 Policy. Requests never disclose whether an address belongs to a User. Completion requires the
 current credential revision and an unexpired proof, changes the password, and ends all sessions
-and other reset proofs atomically. It never enables a disabled User or signs anyone in. Password
+and other reset proofs atomically, removing all of that User's Provider Identities while preserving
+Connected Accounts and Local Email Verification. It never enables a disabled User or signs anyone in. Password
 and email changes and disabling a User invalidate earlier proofs permanently. Existing and
 Invitation Only email addresses remain trusted recovery addresses without retroactive verification;
 the current address remains the recovery address while an Email Change Link is pending (ADR 0040).

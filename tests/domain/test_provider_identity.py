@@ -67,6 +67,7 @@ def test_claims_normalize_email_and_hide_identity_data() -> None:
 
 
 @pytest.mark.parametrize("email_verified", [False, True])
+@pytest.mark.parametrize("local_verified", [False, True])
 @pytest.mark.parametrize(
     ("existing_owner", "signed_in_user", "matching_email_user", "unverified", "verified"),
     [
@@ -93,10 +94,11 @@ def test_link_decision_table(
     unverified: LinkDecision,
     verified: LinkDecision,
     email_verified: bool,
+    local_verified: bool,
 ) -> None:
     assert decide_provider_link(
-        existing_owner, signed_in_user, matching_email_user, email_verified
-    ) is (verified if email_verified else unverified)
+        existing_owner, signed_in_user, matching_email_user, email_verified, local_verified
+    ) is (verified if email_verified and local_verified else unverified)
 
 
 @pytest.mark.parametrize(
@@ -144,7 +146,7 @@ def test_last_method_table(has_password: bool, remaining_enabled: int, allowed: 
 
 def test_new_user_admission_is_separate_from_linking_existing_users() -> None:
     for operational, invitation in product((False, True), repeat=2):
-        assert decide_provider_link(None, None, None, True) is LinkDecision.REFUSE
+        assert decide_provider_link(None, None, None, True, False) is LinkDecision.REFUSE
         assert (
             may_admit_provider_user(
                 ProviderAdmissionFacts(RegistrationPolicy.OPEN, operational, True, invitation)

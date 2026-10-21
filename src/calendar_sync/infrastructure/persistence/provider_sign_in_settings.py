@@ -46,7 +46,11 @@ class SqliteProviderSignInSettings:
             }
         return tuple(
             ProviderSignInSetting(
-                item.provider, settings.get(item.provider, False), item.available, item.reason
+                item.provider,
+                settings.get(item.provider, False),
+                item.available,
+                item.reason,
+                item.can_verify_email,
             )
             for item in self._availability.values()
         )

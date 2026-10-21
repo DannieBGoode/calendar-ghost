@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useI18n } from "@/i18n/provider"
 import { api, type SessionStatus } from "@/lib/api"
-import { enabledSignInProviders } from "@/lib/sign-in-providers"
+import { enabledSignInProviders, invitationSignInProviders } from "@/lib/sign-in-providers"
 
 /** Only enabled, configured methods are advertised. Proofs stay in server-set HttpOnly cookies. */
 export function ProviderSignInOptions({ invitation, isCurrent, children }: {
@@ -14,7 +14,7 @@ export function ProviderSignInOptions({ invitation, isCurrent, children }: {
   const { t } = useI18n()
   const providers = useQuery({ queryKey: ["sign-in-providers"], queryFn: api.signInProviders, staleTime: 0 })
   const begin = useBeginProvider(invitation, isCurrent)
-  const enabled = enabledSignInProviders(providers.data)
+  const enabled = invitation ? invitationSignInProviders(providers.data) : enabledSignInProviders(providers.data)
   const ready = !invitation || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invitation.email.trim())
   if (!enabled.length) return null
   return <div className="provider-sign-in-options">
@@ -32,7 +32,7 @@ export function InvitationProviderOptions({ token, isCurrent }: { token: string;
   const id = useId()
   const [email, setEmail] = useState("")
   const providers = useQuery({ queryKey: ["sign-in-providers"], queryFn: api.signInProviders })
-  if (!token || !enabledSignInProviders(providers.data).length) return null
+  if (!token || !invitationSignInProviders(providers.data).length) return null
   return <div className="invitation-provider-options">
     <div className="field-stack"><Label htmlFor={id}>{t("auth.provider.invitationEmail")}</Label><Input id={id} type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} maxLength={254} required aria-describedby={`${id}-hint`} /><p id={`${id}-hint`} className="field-hint">{t("auth.provider.invitationBinding")}</p></div>
     <ProviderSignInOptions invitation={{ token, email }} isCurrent={() => isCurrent(token)} />

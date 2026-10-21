@@ -94,7 +94,7 @@
     "enable": "Enable",
     "enableHint": "They can sign in again, and their rules resume.",
     "passwordReset": "Create password reset link",
-    "passwordResetHint": "A link they use once to choose a new password.",
+    "passwordResetHint": "A link they use once to choose a new password. Completing it ends their sessions and removes provider sign-in methods; calendar connections stay.",
     "delete": "Delete",
     "deleteHint": "Deletes their sign-in, rules, and calendar connections, and the events their rules wrote. Their calendar accounts and their own events stay."
   },

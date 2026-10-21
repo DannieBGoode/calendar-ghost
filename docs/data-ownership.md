@@ -220,7 +220,8 @@ down migration: close public registration, stop the service, and restore the mat
 backup, key, and image together, losing later writes. Never run an old image against stored Open
 or the upgraded schema. See [migration 38](deployment.md#migration-38-open-registration).
 Migration 39 preserves existing Users and passwords, adds optional passwords, Provider Identities,
-and bounded sign-in flow storage. Both providers start disabled. Rollback also requires the
+and bounded sign-in flow storage. Local Email Verification starts false for legacy Users; a
+first provider link by email then requires password confirmation. Both providers start disabled. Rollback also requires the
 matching stopped-service pre-upgrade database, Master Key, and previous image; no old binary may
 open the upgraded schema. Restoring loses later writes and can revive identity bindings and
 sessions removed since the backup. See [migration 39](deployment.md#migration-39-provider-sign-in-storage).
@@ -295,3 +296,10 @@ Migration 34 stores keep marks on each User's rules and grace/admission fields o
 Only the User-scoped unit of work writes them. Plan mail is held in memory only; a newer pending
 notice replaces an older one for the same User, and failed preparation, cancellation, shutdown,
 restart, or SMTP failure can lose it. There is no delivery outbox.
+
+
+Completed password recovery removes every old Provider Identity of the recovered User in the
+same transaction as the new password and session invalidation. Connected Accounts and their
+calendar credentials remain. Sign in with the recovered password and explicitly link trusted
+providers again. Recovery preserves Local Email Verification; it never infers it from a reset
+issuer. See [ADR 0041](adr/0041-verify-local-email-before-provider-auto-link.md).

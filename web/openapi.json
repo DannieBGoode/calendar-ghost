@@ -303,6 +303,13 @@
       },
       "AvailableProvidersResponse": {
         "properties": {
+          "capabilities": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProviderCapabilitiesResponse"
+            },
+            "title": "Capabilities",
+            "type": "object"
+          },
           "providers": {
             "items": {
               "type": "string"
@@ -312,7 +319,8 @@
           }
         },
         "required": [
-          "providers"
+          "providers",
+          "capabilities"
         ],
         "title": "AvailableProvidersResponse",
         "type": "object"
@@ -3233,6 +3241,19 @@
           "failed"
         ],
         "title": "ProviderCallsResponse",
+        "type": "object"
+      },
+      "ProviderCapabilitiesResponse": {
+        "properties": {
+          "can_verify_email": {
+            "title": "Can Verify Email",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "can_verify_email"
+        ],
+        "title": "ProviderCapabilitiesResponse",
         "type": "object"
       },
       "ProviderConfigurationResponse": {

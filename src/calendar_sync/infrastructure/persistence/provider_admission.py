@@ -16,6 +16,7 @@ from calendar_sync.application.identity.provider_sign_in_ports import (
 )
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import Role, User, UserId, UserState
+from calendar_sync.domain.provider_identity import LinkDecision
 from calendar_sync.infrastructure.persistence.provider_admission_records import (
     AdmissionTarget,
     load_target,
@@ -98,7 +99,9 @@ class SqliteProviderAdmission:
             connection.execute("BEGIN IMMEDIATE")
             now = self._clock.now()
             self._require_provider(connection, command, now)
-            require_target(connection, command, prepared.target, now)
+            decision = require_target(connection, command, prepared.target, now)
+            if decision is LinkDecision.PASSWORD_REQUIRED:
+                return None
             if prepared.target.credential is None and not (
                 command.claims.email_verified and command.claims.email
             ):
@@ -142,6 +145,7 @@ class SqliteProviderAdmission:
         if prepared.target.credential is None:
             user = User(prepared.user_id, command.claims.email, Role.USER, UserState.ACTIVE, now)
             insert_user(connection, user, None)
+            connection.execute("UPDATE users SET email_verified=1 WHERE id=?", (user.id.value,))
         if prepared.target.identity_owner is None:
             connection.execute(
                 "INSERT INTO provider_identities VALUES (?,?,?,?,?,?)",

@@ -359,3 +359,95 @@ def test_disable_checks_every_affected_active_user(methods: MethodsHarness) -> N
     with pytest.raises(LastSignInMethod):
         methods.settings.set_enabled(FIRST.id, "alpha", False)
     assert methods.settings.list()[0].enabled
+
+
+@pytest.mark.parametrize("kind", ["administrator", "email"])
+def test_password_recovery_removes_all_owned_provider_methods_only(
+    methods: MethodsHarness, kind: str
+) -> None:
+    from tests.users import add_account
+
+    add_account(methods.path, "preserved-calendar", SECOND.id)
+    with transaction(methods.path) as connection:
+        connection.execute(
+            "INSERT INTO provider_identities VALUES ('foreign-method',?,'alpha','https://alpha.test','foreign-subject',?)",
+            (FIRST.id.value, NOW.isoformat()),
+        )
+    links = SqlitePasswordResetLinks(methods.path, SequentialIds(), methods.clock)
+    if kind == "administrator":
+        proof = links.issue(SECOND.id, FIRST.id, NOW)
+    else:
+        prepared = links.issue_for_email(SECOND.email or "")
+        assert prepared is not None
+        proof = prepared.link
+    assert links.reset(proof.token, "replacement-hash") == SECOND.id
+    assert methods.methods.show(SECOND.id).identities == ()
+    assert len(methods.methods.show(FIRST.id).identities) == 1
+    with transaction(methods.path) as connection:
+        assert (
+            connection.execute("SELECT id FROM connected_accounts").fetchone()[0]
+            == "preserved-calendar"
+        )
+    assert links.reset(proof.token, "replayed") is None
+
+
+@pytest.mark.parametrize("verified", [False, True])
+@pytest.mark.parametrize("kind", ["administrator", "email", "deleted-administrator"])
+def test_reset_preserves_email_assurance_without_inferring_it_from_creator(
+    methods: MethodsHarness, verified: bool, kind: str
+) -> None:
+    with transaction(methods.path) as connection:
+        connection.execute(
+            "UPDATE users SET email_verified=? WHERE id=?", (int(verified), SECOND.id.value)
+        )
+    links = SqlitePasswordResetLinks(methods.path, SequentialIds(), methods.clock)
+    if kind == "email":
+        prepared = links.issue_for_email(SECOND.email or "")
+        assert prepared is not None
+        proof = prepared.link
+    else:
+        proof = links.issue(SECOND.id, FIRST.id, NOW)
+    if kind == "deleted-administrator":
+        with transaction(methods.path) as connection:
+            connection.execute(
+                "UPDATE users SET role='installation_administrator' WHERE id=?", (SECOND.id.value,)
+            )
+        SqliteUserDirectory(methods.path).delete(FIRST.id)
+        with transaction(methods.path) as connection:
+            assert (
+                connection.execute("SELECT created_by FROM password_reset_links").fetchone()[0]
+                is None
+            )
+    assert links.reset(proof.token, "new-hash") == SECOND.id
+    with transaction(methods.path) as connection:
+        assert (
+            bool(
+                connection.execute(
+                    "SELECT email_verified FROM users WHERE id=?", (SECOND.id.value,)
+                ).fetchone()[0]
+            )
+            is verified
+        )
+    assert methods.methods.show(SECOND.id).identities == ()
+
+
+def test_refused_reset_and_failed_provider_removal_preserve_all_credentials(
+    methods: MethodsHarness,
+) -> None:
+    from calendar_sync.application.identity.errors import ResetStorageUnavailable
+
+    links = SqlitePasswordResetLinks(methods.path, SequentialIds(), methods.clock)
+    proof = links.issue(SECOND.id, FIRST.id, NOW)
+    assert links.reset("invalid-proof", "forbidden") is None
+    assert len(methods.methods.show(SECOND.id).identities) == 2
+    with transaction(methods.path) as connection:
+        connection.execute(
+            "CREATE TRIGGER refuse_identity_removal BEFORE DELETE ON provider_identities "
+            "BEGIN SELECT RAISE(ABORT,'synthetic'); END"
+        )
+    with pytest.raises(ResetStorageUnavailable):
+        links.reset(proof.token, "forbidden")
+    assert not methods.methods.show(SECOND.id).has_password
+    assert len(methods.methods.show(SECOND.id).identities) == 2
+    assert links.owner(proof.token, NOW) == SECOND.id
+    assert SqliteSessions(methods.path, methods.clock).user_of("owner-session") == SECOND.id

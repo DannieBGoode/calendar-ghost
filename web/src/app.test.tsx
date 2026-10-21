@@ -779,6 +779,30 @@ describe("People", () => {
     expect(container.querySelector("#plans-empty")).not.toBeNull()
   })
 
+  it("keeps People reachable after an Invitation admits a new User under Only Me", async () => {
+    page.happyDOM.setURL("http://localhost:8000/people")
+    serveAs("installation_administrator", "only_me")
+    const served = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input, init) => input === "/api/v1/registration" ? Promise.resolve(jsonResponse({ policy: "only_me", only_me_available: false })) : served(input, init))
+    await renderApp(testI18n())
+    expect(navLabels()).toContain("People")
+    expect(window.location.pathname).toBe("/people")
+  })
+
+  it.each([false, true])("keeps Only Me Invitation controls reachable only with live Invitations: %s", async live => {
+    page.happyDOM.setURL("http://localhost:8000/people/invitations")
+    serveAs("installation_administrator", "only_me")
+    const served = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input, init) => input === "/api/v1/invitations" ? Promise.resolve(jsonResponse(live ? [{ id: "live-invitation", created_at: "2026-10-01T00:00:00Z", expires_at: "2099-01-01T00:00:00Z" }] : [])) : served(input, init))
+    const { container } = await renderApp(testI18n())
+    expect(navLabels().includes("People")).toBe(live)
+    expect(window.location.pathname).toBe(live ? "/people/invitations" : "/overview")
+    if (live) {
+      expect([...container.querySelectorAll("button")].some(button => button.textContent === "Revoke")).toBe(true)
+      expect(container.textContent).toContain("Change policy")
+    }
+  })
+
   it.each([
     ["someone who is not an administrator", "/people", "user", "invitation_only"],
     ["an administrator under Only me", "/people", "installation_administrator", "only_me"],

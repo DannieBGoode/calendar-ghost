@@ -14,6 +14,7 @@ from calendar_sync.application.identity.provider_sign_in_ports import (
     ProviderFlows,
     ProviderSignInRefused,
     ProviderSignInResult,
+    ProviderSignInSetting,
     ProviderSignInSettings,
 )
 
@@ -35,7 +36,9 @@ class BeginProviderSignIn:
         provider = self.providers.get(intent.provider)
         if provider is None:
             raise ProviderSignInRefused
-        _require_enabled(self.settings, intent.provider)
+        configuration = _require_enabled(self.settings, intent.provider)
+        if intent.invitation is not None and not configuration.can_verify_email:
+            raise ProviderSignInRefused
         state = secrets.token_urlsafe(32)
         self.flows.begin(intent, state)
         return provider.begin(
@@ -69,8 +72,8 @@ class CompleteProviderSignIn:
         return self.admission.complete(AdmissionCommand(claims, flow, None))
 
 
-def _require_enabled(settings: ProviderSignInSettings, provider: str) -> None:
-    if not any(
-        item.provider == provider and item.enabled and item.available for item in settings.list()
-    ):
-        raise ProviderSignInRefused
+def _require_enabled(settings: ProviderSignInSettings, provider: str) -> ProviderSignInSetting:
+    for item in settings.list():
+        if item.provider == provider and item.enabled and item.available:
+            return item
+    raise ProviderSignInRefused

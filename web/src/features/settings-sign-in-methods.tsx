@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ProviderSignInFailure } from "@/features/provider-sign-in-options"
 import { PasswordItem } from "@/features/settings-own-password"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
@@ -24,6 +25,7 @@ export function SignInMethods({ userId, onDone }: { userId: string; onDone: (mes
   const rows = identities.flatMap(identity => isSignInProvider(identity.provider) ? [{ provider: identity.provider, id: identity.id }] : [])
   const unlinked = SIGN_IN_PROVIDERS.filter(provider => enabled.has(provider) && !linked.has(provider)).map(provider => ({ provider, id: undefined }))
   return <>
+    <div className="provider-method-failure"><ProviderSignInFailure /></div>
     <PasswordItem hasPassword={methods.data.has_password} currentOwner={current} onDone={onDone} />
     {[...rows, ...unlinked].map(row => <ProviderMethodRow key={row.id ?? row.provider} provider={row.provider} identityId={row.id} enabled={enabled.has(row.provider)} removable={methods.data.has_password || (enabled.has(row.provider) ? usable > 1 : usable > 0)} current={current} refresh={refresh} removed={removal} onStart={() => onDone("")} />)}
     {identities.length > 0 && <div className="setting-item provider-connections-reminder"><p className="field-hint">{t("auth.provider.calendarStep")} <a className="text-link" href="/settings/connections">{t("settings.signIn.connections")}</a></p></div>}

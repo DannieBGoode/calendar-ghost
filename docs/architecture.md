@@ -592,7 +592,9 @@ remains. Identity use cases orchestrate narrow ports for configuration, proofs, 
 owned methods; public writers never receive `InstallationUnitOfWork`. Separate identity
 descriptors preserve the downward context dependencies described above. A Provider Identity
 belongs to one User by exact validated issuer and `sub`, with a global uniqueness constraint.
-Email is only verified linking/admission evidence, never a replacement identity key. It creates
+Email is linking/admission evidence, never a replacement identity key. Automatic linking also
+requires the matching User's Local Email Verification, read in the final transaction; otherwise
+password proof is required (ADR 0041). It creates
 no Connected Account, consumes no Connected Account Allowance, and changes no calendar consent.
 
 `infrastructure/oidc.py` uses Authlib's authorization-code/PKCE mechanics and joserfc's RS256
@@ -604,7 +606,8 @@ password-link flow whether a User exists or not; explicit linking proves the ini
 session instead. Tokens
 are discarded after translating claims, with no stored provider access/refresh tokens.
 
-Migration 39 makes password absence explicit as SQL NULL and adds the owned identities, separate
+Migration 39 makes password absence explicit as SQL NULL, adds conservative Local Email
+Verification, and adds the owned identities, separate
 anonymous and session-owned flow records, pending proofs, settings, and admission counters.
 State, browser binding, and pending proof values persist only as hashes; context is sealed with a
 purpose-derived Master Key. A callback claims its single-use flow before provider exchange.
@@ -618,7 +621,7 @@ owned method writes retain the ordinary five-second wait.
 Only Me's one-User restriction applies when choosing the policy. Later provider admission can
 consume a still-live Invitation with matching provider-verified email under Only Me, without
 changing the policy or enabling ordinary Invitation issuance/acceptance. People remains reachable
-when other Users exist. Open admission requires current matching identity email readiness.
+when other Users or live Invitations exist; the administrator can revoke a live Invitation there. Open admission requires current matching identity email readiness.
 Unlinking or provider disablement checks remaining configured and enabled methods atomically;
 an environment change may still interrupt access. First-password setting and owned method
 changes advance the credential revision, preserve the current session, and revoke other sessions

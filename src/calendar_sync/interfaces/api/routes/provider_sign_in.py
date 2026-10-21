@@ -15,6 +15,7 @@ from calendar_sync.interfaces.api.oidc_schemas import (
     AvailableProvidersResponse,
     ConfirmProviderRequest,
     PendingProviderResponse,
+    ProviderCapabilitiesResponse,
     ProviderStartRequest,
     ProviderStartResponse,
 )
@@ -44,12 +45,17 @@ FAILED = "/sign-in?provider_result=unavailable"
 @router.get("/api/v1/sign-in/providers", response_model=AvailableProvidersResponse)
 def providers(services: Services) -> AvailableProvidersResponse:
     with provider_errors():
+        enabled = [
+            item
+            for item in services.provider_sign_in.settings.list()
+            if item.enabled and item.available
+        ]
         return AvailableProvidersResponse(
-            providers=[
-                item.provider
-                for item in services.provider_sign_in.settings.list()
-                if item.enabled and item.available
-            ]
+            providers=[item.provider for item in enabled],
+            capabilities={
+                item.provider: ProviderCapabilitiesResponse(can_verify_email=item.can_verify_email)
+                for item in enabled
+            },
         )
 
 
@@ -108,8 +114,17 @@ def callback(slug: str, request: Request, services: Services) -> RedirectRespons
         response = _completed(result, services)
     except Exception:
         # Do not reflect arbitrary provider errors, query parameters or exception text.
-        return RedirectResponse(FAILED, status_code=303)
+        return RedirectResponse(_failure_target(request, services), status_code=303)
     return response
+
+
+def _failure_target(request: Request, services: Services) -> str:
+    try:
+        if resolve_owner(request, services.provider_sign_in) is not None:
+            return "/settings/account?provider_result=unavailable"
+    except Exception:
+        return FAILED
+    return FAILED
 
 
 def _completed(result: ProviderSignInResult, services: Services) -> RedirectResponse:

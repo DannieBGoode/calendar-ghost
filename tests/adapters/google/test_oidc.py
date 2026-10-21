@@ -192,3 +192,17 @@ def test_jwks_and_algorithm_bounds(variant: str) -> None:
 def test_callback_must_be_a_trusted_origin(uri: str) -> None:
     with pytest.raises(ValueError, match="trusted callback"):
         OidcClientConfig(CLIENT, "secret", uri)
+
+
+@pytest.mark.parametrize(("ahead", "accepted"), [(59, True), (60, True), (61, False), (120, False)])
+def test_issued_at_clock_skew_with_valid_lifetime(ahead: int, accepted: bool) -> None:
+    fake = OidcFake()
+    claims = fake.claims()
+    now = int(fake.clock.now().timestamp())
+    claims.update(iat=now + ahead, exp=now + 600)
+    fake.token = fake.signed(claims)
+    if accepted:
+        assert adapter(fake).exchange("code", NONCE, VERIFIER).email_verified
+    else:
+        with pytest.raises(ProviderSignInRefused):
+            adapter(fake).exchange("code", NONCE, VERIFIER)

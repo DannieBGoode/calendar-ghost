@@ -22,7 +22,10 @@ from calendar_sync.domain.access import UserId
 from calendar_sync.domain.provider_identity import ProviderClaims, ProviderIdentityKey
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
-from calendar_sync.infrastructure.persistence.provider_admission import SqliteProviderAdmission
+from calendar_sync.infrastructure.persistence.provider_admission import (
+    PreparedAdmission,
+    SqliteProviderAdmission,
+)
 from calendar_sync.infrastructure.persistence.provider_flows import SqliteProviderFlows
 from calendar_sync.infrastructure.security import CredentialCipher, token_hash
 from tests.application.test_provider_sign_in import enabled_settings
@@ -64,6 +67,7 @@ def admission(tmp_path: Path) -> AdmissionHarness:
             "VALUES ('existing','existing@example.test','hash','user','active',?)",
             (NOW.isoformat(),),
         )
+        connection.execute("UPDATE users SET email_verified=1")
         connection.execute("INSERT INTO provider_sign_in_settings VALUES ('google',1)")
         connection.execute("UPDATE installation_settings SET registration_policy = 'open'")
         connection.execute(
@@ -77,6 +81,8 @@ def admission(tmp_path: Path) -> AdmissionHarness:
 def test_existing_identity_ignores_changed_email(admission: AdmissionHarness) -> None:
     _, command = admission.command("existing@example.test")
     first = admission.admission.complete(command)
+    with transaction(admission.path) as connection:
+        connection.execute("UPDATE users SET email_verified=0")
     _, changed = admission.command("changed@example.test", False)
     result = admission.admission.complete(changed)
     assert first.session is not None
@@ -175,6 +181,13 @@ def test_provider_sign_in_rotates_session(admission: AdmissionHarness) -> None:
     assert result.session is not None
     assert result.session.token != browser.value
     assert result.session.expires_at == NOW + timedelta(days=7)
+    with transaction(admission.path) as connection:
+        assert (
+            connection.execute(
+                "SELECT email_verified FROM users WHERE id=?", (result.session.user_id.value,)
+            ).fetchone()[0]
+            == 1
+        )
     with pytest.raises(ProviderSignInRefused):
         admission.admission.complete(command)
 
@@ -396,6 +409,7 @@ def test_owned_link_never_switches_user(admission: AdmissionHarness, mutation: s
     from calendar_sync.application.identity.provider_sign_in_ports import LinkOwner
 
     with transaction(admission.path) as connection:
+        connection.execute("UPDATE users SET email_verified=0")
         for token in ("current", "other"):
             connection.execute(
                 "INSERT INTO user_sessions(token_hash,user_id,created_at,expires_at) "
@@ -447,6 +461,7 @@ def test_owned_link_never_switches_user(admission: AdmissionHarness, mutation: s
             == "existing"
         )
         assert connection.execute("SELECT credential_revision FROM users").fetchone()[0] == 1
+        assert connection.execute("SELECT email_verified FROM users").fetchone()[0] == 0
 
 
 def test_exchange_race_has_no_write_lock_and_cannot_resurrect_cancelled_flow(
@@ -593,3 +608,79 @@ def test_parallel_confirmations_have_one_session_winner(admission: AdmissionHarn
     with transaction(admission.path) as connection:
         assert connection.execute("SELECT count(*) FROM user_sessions").fetchone()[0] == 1
         assert connection.execute("SELECT count(*) FROM provider_identities").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("writer", ["direct", "directory"])
+def test_unproven_local_email_requires_password_before_matching_provider_link(
+    admission: AdmissionHarness, writer: str
+) -> None:
+    from calendar_sync.infrastructure.persistence.credentials import SqliteCredentialChanges
+    from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
+
+    if writer == "direct":
+        changes = SqliteCredentialChanges(admission.path, admission.clock)
+        expected = changes.current(UserId("existing"))
+        assert expected is not None
+        assert changes.change_email(expected, "claimed@example.test")
+    else:
+        SqliteUserDirectory(admission.path).set_email(UserId("existing"), "claimed@example.test")
+    browser, command = admission.command("claimed@example.test")
+    result = admission.admission.complete(command)
+    assert result.session is None
+    assert result.pending is not None
+    with transaction(admission.path) as connection:
+        assert connection.execute("SELECT count(*) FROM provider_identities").fetchone()[0] == 0
+    confirm = confirmation(admission)
+    with pytest.raises(ProviderSignInRefused):
+        confirm.execute(browser, result.pending.token, "claimed@example.test", "wrong", "client")
+    assert confirm.execute(
+        browser, result.pending.token, "claimed@example.test", "correct", "client"
+    ).user_id == UserId("existing")
+    with transaction(admission.path) as connection:
+        assert connection.execute("SELECT email_verified FROM users").fetchone()[0] == 0
+
+
+def test_recovered_password_removes_old_provider_sign_in_access(
+    admission: AdmissionHarness,
+) -> None:
+    from calendar_sync.infrastructure.persistence.registration import SqlitePasswordResetLinks
+    from tests.adapters.test_users_store import SequentialIds
+
+    _, first = admission.command("existing@example.test")
+    assert admission.admission.complete(first).session is not None
+    links = SqlitePasswordResetLinks(admission.path, SequentialIds(), admission.clock)
+    proof = links.issue_for_email("existing@example.test")
+    assert proof is not None
+    assert links.reset(proof.link.token, "replacement-hash") == UserId("existing")
+    _, old_provider = admission.command(None, False)
+    answer = admission.admission.complete(old_provider)
+    assert answer.session is None
+    assert answer.pending is not None
+
+
+def test_unproven_existing_email_never_creates_another_user(admission: AdmissionHarness) -> None:
+    with transaction(admission.path) as connection:
+        connection.execute("UPDATE users SET email_verified=0")
+    _, command = admission.command("existing@example.test")
+    answer = admission.admission.complete(command)
+    assert answer.pending is not None
+    assert answer.session is None
+    with transaction(admission.path) as connection:
+        assert connection.execute("SELECT count(*) FROM users").fetchone()[0] == 1
+        assert connection.execute("SELECT count(*) FROM provider_identities").fetchone()[0] == 0
+
+
+def test_final_admission_rechecks_local_verification(
+    admission: AdmissionHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prepare = admission.admission._prepare
+
+    def changed(command: AdmissionCommand) -> PreparedAdmission:
+        result = prepare(command)
+        with transaction(admission.path) as connection:
+            connection.execute("UPDATE users SET email_verified=0")
+        return result
+
+    monkeypatch.setattr(admission.admission, "_prepare", changed)
+    _, command = admission.command("existing@example.test")
+    assert admission.admission.complete(command).pending is not None

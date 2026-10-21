@@ -50,9 +50,9 @@ def test_upgrade_from_38_preserves_every_user_field_and_references(tmp_path: Pat
     initialize_database(path)
     initialize_database(path)
     with transaction(path) as connection:
-        assert [
-            dict(row) for row in connection.execute("SELECT * FROM users ORDER BY id")
-        ] == before_users
+        assert [dict(row) for row in connection.execute("SELECT * FROM users ORDER BY id")] == [
+            dict(row, email_verified=0) for row in before_users
+        ]
         assert [
             tuple(row)
             for row in connection.execute(

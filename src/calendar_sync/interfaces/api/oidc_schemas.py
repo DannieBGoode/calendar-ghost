@@ -25,8 +25,13 @@ class ProviderStartResponse(BaseModel):
     authorization_url: str
 
 
+class ProviderCapabilitiesResponse(BaseModel):
+    can_verify_email: bool
+
+
 class AvailableProvidersResponse(BaseModel):
     providers: list[str]
+    capabilities: dict[str, ProviderCapabilitiesResponse]
 
 
 class PendingProviderResponse(BaseModel):

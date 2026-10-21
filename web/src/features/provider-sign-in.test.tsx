@@ -12,6 +12,7 @@ import { SignInMethods } from "./settings-sign-in-methods"
 import { SignInProvidersSection } from "./settings-sign-in-providers"
 import { AuthScreen } from "./auth-screen"
 import { EmailChangeSignIn } from "./email-change-sign-in"
+import { PasswordResetPage } from "./password-reset-page"
 import { InvitationPage } from "./invitation-page"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -28,7 +29,7 @@ beforeEach(() => {
   root = createRoot(container)
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   routes = {
-    "GET /api/v1/sign-in/providers": { providers: ["google", "microsoft"] },
+    "GET /api/v1/sign-in/providers": { providers: ["google", "microsoft"], capabilities: { google: { can_verify_email: true }, microsoft: { can_verify_email: false } } },
     "GET /api/v1/sign-in/pending": { password_required: true },
     "GET /api/v1/account/sign-in-methods": { has_password: false, identities: [{ id: "identity-google", provider: "google" }] },
     "GET /api/v1/settings/sign-in-providers": ["google", "microsoft"].map(provider => ({ provider, enabled: false, available: true, reason: null, callback_uri: `https://configured.example.test/api/v1/sign-in/${provider}/callback` })),
@@ -223,8 +224,9 @@ describe("Provider recovery and ownership", () => {
     await render(<InvitationPage onSignedIn={vi.fn()} />)
     expect(container.querySelectorAll('input[type="email"]')).toHaveLength(1)
     type(container.querySelector<HTMLInputElement>('input[type="email"]')!, "robin@example.test")
-    await click(button("Sign in with Microsoft"))
-    expect(calls.find(call => call.path === "/api/v1/sign-in/microsoft/start")?.body).toEqual({ invitation_token: "synthetic-invitation", email: "robin@example.test" })
+    expect(container.textContent).not.toContain("Sign in with Microsoft")
+    await click(button("Sign in with Google"))
+    expect(calls.find(call => call.path === "/api/v1/sign-in/google/start")?.body).toEqual({ invitation_token: "synthetic-invitation", email: "robin@example.test" })
   })
 })
 
@@ -284,4 +286,55 @@ describe("Provider review regressions", () => {
     expect(vi.mocked(fetch).mock.calls.filter(([path]) => (path as string).endsWith("/google/start"))).toHaveLength(1)
     expect(google.getAttribute("aria-disabled")).toBe("true")
   })
+})
+
+
+describe("Final provider review", () => {
+  it("keeps refused Invitation recovery and eligible provider admission available together", async () => {
+    window.history.replaceState(null, "", "/invitation#synthetic-invitation")
+    routes["POST /api/v1/invitations/check"] = { usable: false, acceptance: null }
+    await render(<InvitationPage onSignedIn={vi.fn()} />)
+    expect(container.querySelector('a[href="/"]')).not.toBeNull()
+    expect(container.textContent).toContain("Ask the person who invited you")
+    expect(container.textContent).toContain("If this Invitation is still valid")
+    expect(container.textContent).not.toContain("Sign in with Microsoft")
+    expect(button("Sign in with Google")).toBeDefined()
+    expect(container.querySelector(".invitation-provider-fallback")).not.toBeNull()
+  })
+  it("shows owned callback failure in Your account", async () => {
+    window.history.replaceState(null, "", "/settings/account?provider_result=unavailable&error=private-error")
+    await render(<SignInMethods userId="robin" onDone={vi.fn()} />)
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Provider sign-in could not finish")
+    expect(container.textContent).not.toContain("private-error")
+  })
+  it.each([false, true])("redirects only a current Invitation and retains no authorization URL, replaced: %s", async replaced => {
+    window.history.replaceState(null, "", "/invitation#synthetic-invitation")
+    routes["POST /api/v1/invitations/check"] = { usable: false, acceptance: null }
+    let finish: (response: Response) => void = () => undefined
+    const original = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input, init) => (input as string).endsWith("/google/start") ? new Promise(resolve => { finish = resolve }) : original(input, init))
+    const redirect = vi.spyOn(window.location, "assign").mockImplementation(() => undefined)
+    const store = vi.spyOn(Storage.prototype, "setItem")
+    await render(<InvitationPage onSignedIn={vi.fn()} />)
+    type(container.querySelector<HTMLInputElement>('input[type="email"]')!, "robin@example.test")
+    await click(button("Sign in with Google"))
+    if (replaced) window.history.replaceState(null, "", "/invitation#replacement-invitation")
+    const authorization = "https://provider.example.test/?state=synthetic-private-proof"
+    act(() => finish(response({ authorization_url: authorization })))
+    await settle()
+    expect(redirect).toHaveBeenCalledTimes(replaced ? 0 : 1)
+    if (!replaced) expect(redirect).toHaveBeenCalledWith(authorization)
+    expect(store.mock.calls.some(call => call.some(value => value.includes("synthetic-private-proof")))).toBe(false)
+    expect(JSON.stringify(client.getMutationCache().getAll().map(m => m.state))).not.toContain("synthetic-private-proof")
+    expect(JSON.stringify(client.getQueryCache().getAll().map(q => q.state.data))).not.toContain("synthetic-private-proof")
+  })
+})
+
+
+it("explains password recovery removes sign-in providers while preserving calendars", async () => {
+  window.history.replaceState(null, "", "/reset-password#synthetic-reset")
+  routes["POST /api/v1/password-resets/check"] = { usable: true }
+  await render(<PasswordResetPage />)
+  expect(container.textContent).toContain("removes all provider sign-in methods")
+  expect(container.textContent).toContain("Your calendar connections stay")
 })

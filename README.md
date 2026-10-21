@@ -298,7 +298,8 @@ not prove inbox delivery. This is separate from incident notifications; a matchi
 lets an administrator choose **Open** under **Who can join**. Only me remains the default. See [identity email test readiness](docs/deployment.md#identity-email-test-readiness)
 for secure SMTP and trusted-origin requirements. When configured, **Forgot password?** on sign-in
 lets active Users request a single-use link lasting one hour; administrator-issued links retain
-seven days. Reset ends existing sessions and requires a fresh sign-in. No tested-email status is
+seven days. Reset ends existing sessions, removes provider sign-in methods, and requires a fresh password
+sign-in. Calendar connections stay; link trusted sign-in providers again from Your account. No tested-email status is
 required, and incident email preferences do not control recovery. Existing account email addresses
 are trusted without retroactive verification: check yours, since its mailbox owner can reset your
 password. See [password recovery](docs/deployment.md#password-recovery) for limits, lost-mail retry,
@@ -316,7 +317,9 @@ See [verified joining](docs/self-hosting.md#let-people-join-with-verified-email)
 Google and Microsoft sign-in are optional and off by default. An administrator configures the
 existing provider clients and separate sign-in callbacks, then enables each provider in
 **Settings → Administration → Sign-in providers**. Link a provider under **Settings → Your account**;
-calendar access still requires its own consent under **Settings → Connections**. A provider-only
+calendar access still requires its own consent under **Settings → Connections**. Automatic first
+linking requires a verified matching email on both the provider and Calendar Ghost; legacy or
+unverified local accounts use password confirmation. A provider-only
 User can set a password there and must do so before changing email or deleting themself.
 Microsoft does not supply verified-email evidence for automatic linking: use an existing
 password, or join through email verification first and explicitly link afterward. Under Only me,

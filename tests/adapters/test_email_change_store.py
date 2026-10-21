@@ -173,7 +173,7 @@ def test_confirmation_checks_ownership_and_live_session_atomically(
 
 
 def test_confirmation_keeps_only_confirming_session_and_revokes_resets(tmp_path: Path) -> None:
-    _path, clock, h, store, expected, session = setup(tmp_path)
+    path, clock, h, store, expected, session = setup(tmp_path)
     assert expected.password_hash is not None
     other = h.sessions.start(SECOND.id, expected.password_hash, expected.email, 0)
     reset = h.links.issue(SECOND.id, FIRST.id, clock.now())
@@ -184,6 +184,13 @@ def test_confirmation_keeps_only_confirming_session_and_revokes_resets(tmp_path:
     result = store.confirm(expected, prepared.token, session.token)
     assert result
     assert result.previous_email == SECOND.email
+    with transaction(path) as connection:
+        assert (
+            connection.execute(
+                "SELECT email_verified FROM users WHERE id=?", (SECOND.id.value,)
+            ).fetchone()[0]
+            == 1
+        )
     changed = h.users.get(SECOND.id)
     credential = h.changes.current(SECOND.id)
     assert changed is not None

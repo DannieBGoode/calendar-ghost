@@ -54,7 +54,10 @@ def google_sign_in(
     configured = sign_in_client(client, origin, "google")
     return ProviderSignInDescriptor(
         ProviderAvailability(
-            "google", configured is not None, None if configured else "configuration_required"
+            "google",
+            configured is not None,
+            None if configured else "configuration_required",
+            can_verify_email=True,
         ),
         GoogleAuthorization(configured, clock, RequestsOidcTransport()) if configured else None,
     )

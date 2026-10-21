@@ -10,6 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-20-open-registration-design.md`, especially Google and Microsoft sign-in decisions; ADRs 0023, 0028, 0029, 0030, and 0040.
 
+## Approved security refinement (2026-10-22)
+
+[ADR 0041](../../adr/0041-verify-local-email-before-provider-auto-link.md) refines the original
+auto-link decision: both provider verification and matching Local Email Verification are required;
+unproven local addresses use password confirmation. Legacy assurance starts false. Completed
+password recovery removes all old Provider Identities atomically, preserves Connected Accounts,
+and preserves the local verification value. This approved refinement governs the implementation
+and supersedes the earlier provider-only auto-link wording in Tasks 1 and 4 below.
+
 ## Global Constraints
 
 - Plan review is required before product code. This plan does not authorize execution.

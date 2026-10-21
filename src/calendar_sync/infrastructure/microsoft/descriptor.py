@@ -78,6 +78,7 @@ def microsoft_sign_in(
             "microsoft",
             authorization is not None,
             None if authorization else "configuration_required",
+            can_verify_email=False,
         ),
         authorization,
     )

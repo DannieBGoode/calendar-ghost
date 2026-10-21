@@ -205,8 +205,8 @@ registration proofs, and forbids ordinary Invitation issuance and password accep
 not revoke still-live Invitations. A later provider admission can consume one with an email
 matching the provider-verified email, creating an ordinary User with no own Plan while Only Me
 remains selected. Public joining without that Invitation stays closed. People and its existing
-management controls remain available whenever other Users exist; the sole-administrator Only Me
-view still hides them. This also amends the earlier assertion that Only Me always has one User
+management controls remain available whenever other Users or live Invitations exist; the
+sole-administrator Only Me view hides them only when no live Invitations remain. This also amends the earlier assertion that Only Me always has one User
 and therefore never needs Plans: an ordinary User admitted this way follows the Default Plan
 under the existing Allowance rules. Installation Administrators remain unlimited.
 
@@ -224,3 +224,12 @@ a first password, but changing email or deleting oneself still requires a curren
 There is no password removal. Administrator-issued reset can set a first password without
 enabling a disabled User. See [ADR 0040](0040-open-registration-and-email-ownership.md#amendment-provider-sign-in-implementation-2026-10-21)
 and the [operational recovery guide](../deployment.md#provider-sign-in-limits-and-recovery).
+
+
+## Amendment: local email assurance and complete password recovery (2026-10-22)
+
+[ADR 0041](0041-verify-local-email-before-provider-auto-link.md) tightens automatic linking to
+require both provider verification and Local Email Verification of the matching address. Existing
+unproven addresses use password confirmation. Every completed password recovery removes all old
+Provider Identities atomically, preserves Connected Accounts, and leaves local verification
+unchanged. That decision supersedes the provider-only verification condition above.

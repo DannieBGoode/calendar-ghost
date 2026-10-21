@@ -1532,6 +1532,10 @@ export interface components {
         };
         /** AvailableProvidersResponse */
         AvailableProvidersResponse: {
+            /** Capabilities */
+            capabilities: {
+                [key: string]: components["schemas"]["ProviderCapabilitiesResponse"];
+            };
             /** Providers */
             providers: string[];
         };
@@ -2476,6 +2480,11 @@ export interface components {
             provider: string;
             /** Rate Limited */
             rate_limited: number;
+        };
+        /** ProviderCapabilitiesResponse */
+        ProviderCapabilitiesResponse: {
+            /** Can Verify Email */
+            can_verify_email: boolean;
         };
         /** ProviderConfigurationResponse */
         ProviderConfigurationResponse: {

@@ -52,6 +52,7 @@ def decide_provider_link(
     signed_in_user: UserId | None,
     matching_email_user: UserId | None,
     email_verified: bool,
+    local_email_verified: bool,
 ) -> LinkDecision:
     """An existing identity binding wins; email alone never moves its ownership.
 
@@ -66,7 +67,11 @@ def decide_provider_link(
     if signed_in_user is not None:
         return LinkDecision.LINK
     if matching_email_user is not None:
-        return LinkDecision.LINK if email_verified else LinkDecision.PASSWORD_REQUIRED
+        return (
+            LinkDecision.LINK
+            if email_verified and local_email_verified
+            else LinkDecision.PASSWORD_REQUIRED
+        )
     return LinkDecision.REFUSE
 
 

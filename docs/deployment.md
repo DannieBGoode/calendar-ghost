@@ -816,7 +816,12 @@ shutdown. The same sole executor lasts for the Scheduler object's lifetime.
 
 ## Migration 39 provider sign-in storage
 
-Migration 39 rebuilds `users` so a missing password is stored as SQL NULL. Existing User fields,
+Migration 39 rebuilds `users` so a missing password is stored as SQL NULL, and adds constrained
+`email_verified` with a conservative false default for every existing User. No historical email
+verification is inferred. First provider linking for an unverified local address requires password
+confirmation; ordinary sign-in keeps working. Verified registration, confirmed email change, and
+new verified-provider admission set the marker. Direct email changes clear it; linking and password
+recovery preserve it. See [ADR 0041](adr/0041-verify-local-email-before-provider-auto-link.md). Existing User fields,
 passwords, Plans and assignments, sessions, indexes, the email-retention trigger, and references
 are preserved. It adds User-owned `provider_identities`, uniquely bound by issuer and subject,
 and installation-wide `provider_sign_in_settings`. Every provider starts disabled; missing
@@ -859,7 +864,11 @@ lost on restore, and previously revoked access may return; review access before 
 A first password requires the User's live owning session and unchanged credential revision.
 Replacing an existing password, changing email, and User Deletion still require the current
 password. Setting a first password and unlinking an identity end other browser sessions and
-invalidate pending reset and email-change work; a reset ends all sessions. Provider disablement
+invalidate pending reset and email-change work; every completed reset ends all sessions and removes
+all of that User's Provider Identities in the same transaction. Calendar Connected Accounts, rules,
+and Integration Tokens stay. Sign in with the recovered password and link trusted providers again.
+Neither emailed nor administrator-issued reset establishes Local Email Verification: a NULL reset
+creator can also result from deleting its issuing administrator. Provider disablement
 and unlinking refuse to leave an active User without a password or an available, enabled provider
 method. Disablement preserves identity bindings. An environment change can still remove provider
 availability: restore its configuration or have an active Installation Administrator issue a
@@ -905,8 +914,8 @@ link cannot extend its original flow's deadline. A provider session lasts seven 
 configuration changes may require starting again. Client ID, secret, tenant selector, and callback
 changes invalidate in-flight configuration bindings. Microsoft subjects are pairwise to the
 client ID: replacing it also prevents existing identity bindings from matching. Before replacing
-a client, establish passwords or another usable provider, then explicitly link identities under
-the new client. A secret rotation on the same client does not change that identity key.
+a client, establish and verify passwords or another usable provider. Sign in with that fallback,
+remove the obsolete Microsoft binding, then link Microsoft under the new client. A secret rotation on the same client does not change that identity key.
 
 Provider HTTP uses certificate verification, no redirects, a 10-second connect/read timeout per
 request, and a 1 MiB cap per response. This is not a ten-second total-flow deadline. Discovery and
@@ -930,12 +939,17 @@ scopes, `offline_access`, or `User.Read`, and stores no provider access or refre
 provider's sign-in configuration needs no SMTP for existing Users or invited admission under
 closed policies; Open admission additionally requires matching Identity Email Readiness.
 
-Public availability lists only enabled, configured provider slugs. Public start and password
+Public availability lists only enabled, configured provider slugs and their provider-owned
+`can_verify_email` capability. Invitation entry offers only capable providers and refuses other
+Invitation-bound starts before creating a flow. Capability means the provider can supply evidence,
+not that every identity has verified email; final admission still checks the actual claims. Public start and password
 confirmation refuse a signed-in browser; explicit linking starts through the owning account's
 route. Mutations require the exact configured Origin. Host-only HttpOnly SameSite=Lax browser
 proof and pending-proof cookies last ten minutes and are Secure on HTTPS. A success sets its
 session cookie only after bounded response reads succeed. Callbacks redirect only to `/overview`,
-`/settings/account`, `/provider-link`, or `/sign-in?provider_result=unavailable`. No requested return
+`/settings/account`, `/provider-link`, `/sign-in?provider_result=unavailable`, or the fixed
+`/settings/account?provider_result=unavailable` for a currently signed-in owner. Your account
+shows the same generic failure alert. No requested return
 address or provider error is reflected. Provider exchanges and storage run in request workers,
 with password hashing and network calls outside SQLite write locks.
 

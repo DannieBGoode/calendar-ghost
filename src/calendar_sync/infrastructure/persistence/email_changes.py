@@ -133,7 +133,8 @@ class SqliteEmailChangeProofs:
                 return None
             try:
                 connection.execute(
-                    "UPDATE users SET email = ?, credential_revision = ? WHERE id = ?",
+                    "UPDATE users SET email = ?, email_verified = 1, "
+                    "credential_revision = ? WHERE id = ?",
                     (
                         row["proposed_email"],
                         CredentialRevision(expected.revision).next().value,

@@ -484,7 +484,8 @@ Do not start the next PR before this one merges and its own plan is approved. Ke
 The fourth remaining PR implements optional OIDC sign-in and sign-up. Each provider is off by default;
 the Installation Administrator enables it. A provider identity is its issuer plus `sub`, never
 its email. Linking is initiated from Your account while signed in. Sign-in may auto-link only
-when the provider states that the email is verified.
+when the provider states that the email is verified and the matching address has Local Email
+Verification, as refined by [ADR 0041](../../adr/0041-verify-local-email-before-provider-auto-link.md).
 
 Only Me and Invitation Only admit only existing people or a person presenting a live Invitation
 whose provider-verified email matches the normalized email they entered. Open may create an
@@ -605,3 +606,15 @@ Do not adopt the review's suggestion that Open require Plans: it contradicts ADR
 approved independent switches. Do not claim Litestream makes every compaction fail: compatibility
 is a version-specific test and operational requirement. Review recommendations that broaden policy
 remain recommendations, never implied owner approval.
+
+
+### Approved provider sign-in assurance amendment (2026-10-22)
+
+The owner approved [ADR 0041](../../adr/0041-verify-local-email-before-provider-auto-link.md):
+auto-link requires provider-verified email and matching Local Email Verification. Legacy and
+unproven local addresses require password proof; existing issuer/subject ownership and explicit
+session-owned linking remain. Verified registration, confirmed email change, and new verified
+provider admission establish assurance; direct email changes clear it. Password/linking operations
+do not promote it. All completed password recovery removes old Provider Identities atomically,
+while preserving Connected Accounts, calendar credentials, and local email assurance. A reset's
+NULL creator cannot prove email delivery because administrator deletion also clears that field.

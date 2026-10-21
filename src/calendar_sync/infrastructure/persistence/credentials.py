@@ -79,7 +79,8 @@ class SqliteCredentialChanges:
                 if current_request(connection, expected.user_id, self._clock.now()) is not None:
                     raise EmailChangeUnavailable
                 changed = connection.execute(
-                    "UPDATE users SET email = ?, credential_revision = credential_revision + 1 "
+                    "UPDATE users SET email = ?, email_verified = 0, "
+                    "credential_revision = credential_revision + 1 "
                     "WHERE id = ? AND credential_revision = ? "
                     "AND password_hash IS ? AND email IS ? AND state = 'active'",
                     (email, *_expected(expected)),

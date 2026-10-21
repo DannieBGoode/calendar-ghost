@@ -12,7 +12,7 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { LinkStatus } from "@/lib/public-links"
 import { api, type ApiError } from "@/lib/api"
-import { enabledSignInProviders } from "@/lib/sign-in-providers"
+import { invitationSignInProviders } from "@/lib/sign-in-providers"
 import { useLinkCheck, useLinkToken } from "@/lib/use-link-check"
 
 export function InvitationPage({ onSignedIn }: { onSignedIn: () => void }) {
@@ -39,7 +39,7 @@ function InvitationLink({ token, isCurrent, onSignedIn }: LinkProps) {
       <InvitationProviderFallback status={check.status} providerAlternative={providerAlternative} token={token} isCurrent={isCurrent} />
       <InvitationCheckState status={check.status} error={check.error} onRecheck={recheck} />
       {refusal && <p className="inline-error" role="alert">{apiErrorMessage(i18n, refusal)}</p>}
-      {refused && !providerAlternative && <InvitationRecovery />}
+      {refused && <InvitationRecovery />}
       {formUsable && (verified
         ? <RegistrationRequestForm invitationToken={token} initialEmail={email} onEmail={setEmail} isCurrent={isCurrent} onUnavailable={recheck} />
         : <InvitationAcceptForm token={token} isCurrent={isCurrent} onSignedIn={onSignedIn} email={email} onEmail={setEmail} onRecheck={recheck} onUnusable={setRefusal} />)}
@@ -65,12 +65,12 @@ function InvitationCheckState({ status, error, onRecheck }: { status: LinkStatus
 function InvitationProviderFallback({ status, providerAlternative, token, isCurrent }: { status: LinkStatus; providerAlternative: boolean; token: string; isCurrent: (token: string) => boolean }) {
   const { t } = useI18n()
   if (!providerAlternative || status !== "unusable") return null
-  return <><p className="field-hint mb-4">{t("auth.provider.invitationPasswordUnavailable")}</p><InvitationProviderOptions token={token} isCurrent={isCurrent} /></>
+  return <div className="invitation-provider-fallback"><p className="field-hint">{t("auth.provider.invitationPasswordUnavailable")}</p><InvitationProviderOptions token={token} isCurrent={isCurrent} /></div>
 }
 
 function useProviderAlternative(token: string) {
   const providers = useQuery({ queryKey: ["sign-in-providers"], queryFn: api.signInProviders })
-  return token !== "" && enabledSignInProviders(providers.data).length > 0
+  return token !== "" && invitationSignInProviders(providers.data).length > 0
 }
 
 function isVerifiedInvitation(data: { acceptance: string | null } | undefined) { return data?.acceptance === "verified" }

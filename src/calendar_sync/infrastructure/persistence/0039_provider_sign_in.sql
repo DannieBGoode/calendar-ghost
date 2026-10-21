@@ -19,7 +19,8 @@ CREATE TABLE users_password_optional (
     plan_grace_limit INTEGER,
     plan_grace_admissions INTEGER,
     plan_admissions INTEGER NOT NULL DEFAULT 0,
-    credential_revision INTEGER NOT NULL DEFAULT 0
+    credential_revision INTEGER NOT NULL DEFAULT 0,
+    email_verified INTEGER NOT NULL DEFAULT 0 CHECK (email_verified IN (0, 1))
 );
 INSERT INTO users_password_optional (
     id, email, password_hash, role, state, language, notify_by_email, created_at,

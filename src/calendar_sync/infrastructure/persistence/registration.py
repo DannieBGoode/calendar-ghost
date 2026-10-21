@@ -342,6 +342,7 @@ class SqlitePasswordResetLinks:
                 "WHERE id = ?",
                 (password_hash, owner.value),
             )
+            connection.execute("DELETE FROM provider_identities WHERE user_id = ?", (owner.value,))
             revoke_resets(connection, owner, now.isoformat())
             revoke_email_changes(connection, owner, now.isoformat())
             connection.execute("DELETE FROM user_sessions WHERE user_id = ?", (owner.value,))

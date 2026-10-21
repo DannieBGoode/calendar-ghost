@@ -393,7 +393,10 @@ calendars separately under **Settings → Connections**; signing in grants no ca
 A Provider Identity is the validated issuer plus `sub`, not the email shown by the provider.
 Once linked, it continues to identify the same User if that email changes, without changing the
 User's Calendar Ghost email. A new binding may automatically link to an existing active User
-only with provider-verified email. You can instead sign in through a method you already have and
+only when the provider verifies the email and Calendar Ghost has already verified the same local
+address. Upgraded accounts and addresses entered during setup, direct Invitation joining, or a
+direct email change need password confirmation for a first provider link. You can instead sign in
+through a method you already have and
 choose **Link** in **Settings → Your account**. A binding belonging to another User is refused.
 
 Microsoft email is treated as unverified: neither `email`, `preferred_username`, nor `upn`
@@ -402,14 +405,18 @@ identity gets the same email/password form whether an account exists or not. Exi
 enter their Calendar Ghost password, or sign in separately and link from Your account. Newcomers
 use **Create account**, finish the existing email verification/password flow when Open is
 available, then explicitly link Microsoft from Your account. Under Invitation Only, use the
-ordinary Invitation flow first. No Microsoft email claim alone creates a User.
+ordinary Invitation flow first. No Microsoft email claim alone creates a User. Invitation provider choices therefore offer
+Google only when it is enabled and configured. If a link cannot be used, the page keeps the sign-in
+and recovery routes available; an unavailable password check alone does not prove the Invitation
+expired, since Only Me also refuses password acceptance.
 
 Only Me and Invitation Only admit a new User through provider sign-in only with a still-live
 Invitation and an email entered for that Invitation matching the provider-verified email. The
 final transaction rechecks both and consumes the Invitation. Choosing Only Me still requires you
 to be the sole User and cancels registration proofs; it keeps live Invitations. This narrow
 provider exception can admit another User later while Only Me remains selected. People and its
-existing management controls then stay available. Only Me still forbids issuing Invitations,
+existing management controls stay available while another User or any live Invitation exists,
+so an administrator can revoke outstanding Invitations without changing the policy. Only Me still forbids issuing Invitations,
 ordinary password acceptance, and public joining without an Invitation. Before choosing Only Me,
 revoke any outstanding Invitation on People if that person should no longer join. Returning to
 setup revokes all of them.
@@ -426,11 +433,16 @@ Disablement keeps the bindings for later re-enablement.
 Environment changes can still interrupt provider-only access. Keep a password or another usable
 method before changing provider configuration. Restore the original settings, or have an active
 administrator issue a seven-day Password Reset Link, which can set a first password without
-enabling a disabled User. If nobody can administer, restore configuration or follow
+enabling a disabled User. Completing any Password Reset Link removes all provider sign-in methods
+and ends sessions; calendar connections and rules stay. Sign in with the new password, then link
+the providers you trust again in Your account. Recovery preserves the local email verification
+state; it does not turn an unverified local address into a verified one. If nobody can administer,
+restore configuration or follow
 [backup recovery](data-ownership.md#backups-and-recovery); no offline reset command is shipped.
 Microsoft's `sub` is specific to the client ID, so replacing that ID loses the match to existing
-bindings. Sign in with a password or another method, link the new identity, then remove the old
-binding. Rotating a secret on the same client is different, but invalidates in-flight flows.
+bindings. Establish and verify a usable password or another provider before replacing the client.
+Sign in with that fallback, remove the obsolete Microsoft binding, then link Microsoft under the
+new client configuration. Rotating a secret on the same client is different, but invalidates in-flight flows.
 See Microsoft's [ID-token claims reference](https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference).
 
 Flows expire after ten minutes. Retry from sign-in after expiry or configuration changes. A

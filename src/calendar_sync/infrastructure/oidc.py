@@ -16,6 +16,7 @@ from joserfc.jwk import RSAKey
 from calendar_sync.application.identity.provider_sign_in_ports import ProviderSignInRefused
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.provider_identity import ProviderClaims
+from calendar_sync.infrastructure.identity_email import identity_loopback
 from calendar_sync.infrastructure.oidc_claims import text_claim, validate_claims
 from calendar_sync.infrastructure.oidc_http import OidcTransport, json_response, trusted_jwks
 
@@ -32,7 +33,7 @@ class OidcClientConfig:
     def __post_init__(self) -> None:
         parsed = urlsplit(self.redirect_uri)
         secure = parsed.scheme == "https" or (
-            parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+            parsed.scheme == "http" and identity_loopback(parsed.hostname or "")
         )
         if (
             not secure

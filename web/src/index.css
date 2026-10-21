@@ -8310,3 +8310,13 @@ html:has(.rule-preview-footer) {
 @media (pointer: coarse) {
   .provider-setup summary { min-height: 44px; align-content: center; }
 }
+
+.invitation-provider-fallback {
+  display: grid;
+  gap: 1.5rem;
+  margin-block: 1rem 1.5rem;
+}
+
+.provider-method-failure:has([role="alert"]) {
+  padding: 1.25rem;
+}

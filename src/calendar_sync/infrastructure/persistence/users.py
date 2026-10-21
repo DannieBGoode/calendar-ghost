@@ -139,7 +139,7 @@ class SqliteUserDirectory:
         try:
             with transaction(self._database_path) as connection:
                 connection.execute(
-                    "UPDATE users SET email = ?, "
+                    "UPDATE users SET email = ?, email_verified = 0, "
                     "credential_revision = credential_revision + 1 WHERE id = ?",
                     (email, user_id.value),
                 )

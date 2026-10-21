@@ -15,3 +15,8 @@ export const SIGN_IN_LABELS: Record<SignInProvider, MessageKey> = {
 export function enabledSignInProviders(data: { providers: string[] } | undefined): SignInProvider[] {
   return data && Array.isArray(data.providers) ? data.providers.filter(isSignInProvider) : []
 }
+
+/** Capability is provider-owned; actual verified evidence is checked for each sign-in. */
+export function invitationSignInProviders(data: { providers: string[]; capabilities?: Record<string, { can_verify_email: boolean }> } | undefined): SignInProvider[] {
+  return enabledSignInProviders(data).filter(provider => data?.capabilities?.[provider]?.can_verify_email === true)
+}

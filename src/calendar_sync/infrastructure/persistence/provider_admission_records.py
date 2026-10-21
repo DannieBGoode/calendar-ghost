@@ -84,10 +84,20 @@ def require_target(
         proven,
         credential.user_id if credential else None,
         command.claims.email_verified,
+        _email_verified(connection, credential),
     )
     if decision is LinkDecision.REFUSE and proven is not None:
         raise ProviderSignInRefused
     return decision
+
+
+def _email_verified(connection: sqlite3.Connection, credential: CredentialSnapshot | None) -> bool:
+    if credential is None:
+        return False
+    row = connection.execute(
+        "SELECT email_verified FROM users WHERE id=?", (credential.user_id.value,)
+    ).fetchone()
+    return row is not None and bool(row[0])
 
 
 def require_admission(

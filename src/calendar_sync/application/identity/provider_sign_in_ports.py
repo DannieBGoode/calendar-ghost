@@ -37,6 +37,7 @@ class ProviderAvailability:
     provider: str
     available: bool
     reason: str | None
+    can_verify_email: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +46,7 @@ class ProviderSignInSetting:
     enabled: bool
     available: bool
     reason: str | None
+    can_verify_email: bool = False
 
 
 class LastSignInMethod(ApplicationError):

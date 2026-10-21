@@ -55,6 +55,8 @@ def ready(path: Path) -> tuple[TestClient, Container, SyntheticAuthorization]:
         client.put("/api/v1/settings/sign-in-providers/google", json={"enabled": True}).status_code
         == 204
     )
+    with transaction(path) as connection:
+        connection.execute("UPDATE users SET email_verified=1")
     runtime = container.provider_sign_in.runtime
     assert runtime
     provider = SyntheticAuthorization(
@@ -260,7 +262,7 @@ def test_public_availability_is_private_and_minimal(tmp_path: Path) -> None:
     client = TestClient(create_app(build_container(configured(tmp_path / "test.db"))))
     answer = client.get("/api/v1/sign-in/providers")
     assert answer.status_code == 200
-    assert answer.json() == {"providers": []}
+    assert answer.json() == {"providers": [], "capabilities": {}}
     private(answer)
 
 
@@ -416,3 +418,33 @@ def test_every_admission_session_cancels_browser_flow(tmp_path: Path, entry: str
     assert answer.json()["authenticated"]
     with transaction(path) as connection:
         assert connection.execute("SELECT count(*) FROM provider_flows").fetchone()[0] == 0
+
+
+def test_invitation_only_unverified_email_cannot_be_auto_linked(tmp_path: Path) -> None:
+    path = tmp_path / "test.db"
+    client, _, provider = ready(path)
+    sign_in(client)
+    assert client.put("/api/v1/registration", json={"policy": "invitation_only"}).status_code == 200
+    token = client.post("/api/v1/invitations").json()["token"]
+    client.cookies.clear()
+    assert (
+        client.post(
+            "/api/v1/invitations/accept",
+            json={"token": token, "email": "claimed@example.test", "password": ADMIN_PASSWORD},
+        ).status_code
+        == 200
+    )
+    client.cookies.clear()
+    provider.claims = ProviderClaims(provider.claims.key, "claimed@example.test", True)
+    result = finish(client, begin(client))
+    assert result.headers["location"] == "/provider-link"
+    assert not client.get("/api/v1/session").json()["authenticated"]
+    with transaction(path) as connection:
+        assert (
+            connection.execute(
+                "SELECT email_verified FROM users WHERE email='claimed@example.test'"
+            ).fetchone()[0]
+            == 0
+        )
+        assert connection.execute("SELECT count(*) FROM provider_identities").fetchone()[0] == 0
+        assert connection.execute("SELECT count(*) FROM users").fetchone()[0] == 2

@@ -193,7 +193,8 @@ tables or abstractions belong in the email-change PR.
 
 OIDC in remaining PR 4 amends ADR 0030's password-only scope. Provider identities
 use issuer plus `sub`, never email. Linking starts from Your account while signed in; auto-link
-at sign-in requires a provider-verified email. Under Only Me and Invitation Only, admit only an
+at sign-in requires provider-verified email and matching Local Email Verification (ADR 0041).
+Under Only Me and Invitation Only, admit only an
 existing person or an invited person whose verified email matches. Under Open, create an ordinary
 User following the Default Plan. Each provider is off by default and enabled by the administrator.
 Reuse the installation's Google and Microsoft OAuth clients with `openid email profile` scopes;
@@ -208,7 +209,8 @@ email-proof system:
 
 - **Identity and calendar access stay separate.** Provider Identity is the validated issuer plus
   `sub`, uniquely owned by one User, never the provider's mutable email. Sign-in links automatically
-  to an existing active User only with provider-verified email; explicit linking proves the live
+  to an existing active User only with provider-verified email and matching Local Email Verification
+  (ADR 0041); explicit linking proves the live
   owning session. Existing bindings win over changed email. No Provider Identity grants calendar
   access, creates a Connected Account, or uses its Allowance. New admitted Users have Role.USER,
   no own Plan, and follow the Default Plan. Open still requires matching Identity Email Readiness.
@@ -217,7 +219,7 @@ email-proof system:
   the provider-verified email, while that policy remains selected. Choosing Only Me cancels all
   registration proofs, not live Invitations. Ordinary Invitation issuance, password acceptance,
   and public joining without an Invitation remain forbidden. People remains available whenever
-  other Users exist. Returning to setup revokes Invitations, provider work, and enablement.
+  other Users or live Invitations exist. Returning to setup revokes Invitations, provider work, and enablement.
 - **Microsoft email is not verification.** `email`, `preferred_username`, and `upn` cannot prove
   email ownership. The adapter always treats Microsoft email as unverified. Existing bindings
   sign in; unlinked identities receive a generic password-link flow, with no callback account
@@ -261,3 +263,12 @@ reverse proxy must use path-only logging. No address, token, provider reply, or 
 logs. See [limits and recovery](../deployment.md#provider-sign-in-limits-and-recovery) and
 [proxy logging](../deployment.md#provider-sign-in-http-and-proxy-logs). No live provider sign-in
 verification is claimed by the synthetic tests or preview.
+
+
+## Amendment: local email assurance and complete password recovery (2026-10-22)
+
+[ADR 0041](0041-verify-local-email-before-provider-auto-link.md) tightens automatic linking to
+require both provider verification and Local Email Verification of the matching address. Existing
+unproven addresses use password confirmation. Every completed password recovery removes all old
+Provider Identities atomically, preserves Connected Accounts, and leaves local verification
+unchanged. This is the authoritative refinement of the original provider-only verification condition.

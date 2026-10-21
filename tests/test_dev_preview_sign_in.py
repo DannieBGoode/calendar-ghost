@@ -15,7 +15,11 @@ def test_passwordless_preview_signs_in_locally_and_sets_first_password(tmp_path:
     assert container.scheduler is None
     with TestClient(create_app(container), base_url=origin, headers={"Origin": origin}) as client:
         assert client.get("/api/v1/sign-in/providers").json() == {
-            "providers": ["google", "microsoft"]
+            "providers": ["google", "microsoft"],
+            "capabilities": {
+                "google": {"can_verify_email": True},
+                "microsoft": {"can_verify_email": False},
+            },
         }
         start = client.post("/api/v1/sign-in/google/start", json={})
         url = start.json()["authorization_url"]
@@ -55,7 +59,10 @@ def test_disabled_preview_keeps_identity_for_recovery(tmp_path: Path) -> None:
     container = build_preview_container(tmp_path / "preview.db", sign_in=SignInFixture.DISABLED)
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
-        assert client.get("/api/v1/sign-in/providers").json() == {"providers": []}
+        assert client.get("/api/v1/sign-in/providers").json() == {
+            "providers": [],
+            "capabilities": {},
+        }
         assert client.get("/api/v1/account/sign-in-methods").json()["identities"] == [
             {"id": "preview-google", "provider": "google"}
         ]
