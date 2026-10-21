@@ -52,10 +52,15 @@ def _sign_in_transaction(database: Path, *, timeout: float) -> Iterator[sqlite3.
 
 class SqliteUserDirectory:
     def __init__(
-        self, database_path: Path, *, sign_in_timeout: float = BUSY_TIMEOUT_SECONDS
+        self,
+        database_path: Path,
+        *,
+        sign_in_timeout: float = BUSY_TIMEOUT_SECONDS,
+        read_timeout: float = BUSY_TIMEOUT_SECONDS,
     ) -> None:
         self._database_path = database_path
         self._sign_in_timeout = sign_in_timeout
+        self._read_timeout = read_timeout
 
     def sign_in_credentials(self, email: str | None) -> SignInCredentials | None:
         with transaction(self._database_path) as connection:
@@ -236,7 +241,7 @@ class SqliteUserDirectory:
                 revoke_email_changes(connection, user_id, datetime.now(UTC).isoformat())
 
     def _one(self, condition: str, *values: object) -> User | None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=self._read_timeout) as connection:
             # Interpolates only the constant columns and one of this class's own conditions.
             row = connection.execute(
                 f"SELECT {_COLUMNS} FROM users WHERE {condition}",  # noqa: S608

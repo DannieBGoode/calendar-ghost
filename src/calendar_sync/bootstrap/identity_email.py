@@ -6,15 +6,10 @@ from urllib.parse import urlsplit
 
 from calendar_sync.application.identity.credentials import CredentialChanges
 from calendar_sync.application.identity.email_changes import (
-    EmailChangedNotice,
-    EmailChangeMailRequest,
     EmailChangeServices,
 )
 from calendar_sync.application.identity.identity_email import (
     DeliverIdentityEmailTest,
-    EmailTest,
-    EmailTestState,
-    IdentityEmailQueue,
     IdentityEmailReason,
     IdentityEmailSetup,
     IdentityEmailTests,
@@ -26,14 +21,12 @@ from calendar_sync.application.identity.password_reset import (
     DeliverPasswordReset,
     IdentityResetSender,
     RequestPasswordReset,
-    ResetEmailRequest,
     SelfServicePasswordResets,
 )
 from calendar_sync.application.identity.ports import PasswordHasher, UserDirectory
 from calendar_sync.application.identity.registration import DeliverRegistration
 from calendar_sync.application.identity.registration_ports import (
     IdentityRegistrationSender,
-    RegistrationEmailRequest,
 )
 from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.shared.ports import Clock, IdGenerator
@@ -44,7 +37,6 @@ from calendar_sync.bootstrap.identity_email_changes import (
     compose_email_changes,
 )
 from calendar_sync.bootstrap.registration import RegistrationAdapters, build_registration
-from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.identity_email import (
     IdentitySmtp,
     identity_loopback,
@@ -179,65 +171,38 @@ def compose_identity_email(
     admission: ResetAdmission,
     passwords: PasswordHasher,
     credentials: CredentialChanges,
-) -> tuple[IdentityEmailServices, IdentityMailWorker | None]:
-    worker = (
-        IdentityMailWorker(
-            DeliverIdentityEmailTest(users, adapters.tests, adapters.setup, adapters.sender, clock)
+) -> tuple[IdentityEmailServices, IdentityMailWorker]:
+    worker = IdentityMailWorker(
+        DeliverIdentityEmailTest(users, adapters.tests, adapters.setup, adapters.sender, clock)
+        if adapters.sender is not None
+        else None,
+        adapters.tests,
+        clock,
+        reset_delivery=DeliverPasswordReset(resets, adapters.setup, adapters.sender)
+        if adapters.sender is not None
+        else None,
+        reset_admission=admission,
+        email_changes=EmailChangeMaintenance(
+            EmailChangeDelivery(adapters.email_changes.proofs, adapters.setup, adapters.sender)
             if adapters.sender is not None
             else None,
-            adapters.tests,
-            clock,
-            reset_delivery=DeliverPasswordReset(resets, adapters.setup, adapters.sender)
-            if adapters.sender is not None
-            else None,
-            reset_admission=admission,
-            email_changes=EmailChangeMaintenance(
-                EmailChangeDelivery(adapters.email_changes.proofs, adapters.setup, adapters.sender)
-                if adapters.sender is not None
-                else None,
-                adapters.email_changes.proofs,
-                adapters.email_changes.admission,
-            ),
-            registrations=RegistrationMaintenance(
-                DeliverRegistration(adapters.registrations.proofs, adapters.setup, adapters.sender)
-                if adapters.sender is not None
-                else None,
-                adapters.registrations.proofs,
-                adapters.registrations.admission,
-            ),
-        )
-        if adapters.sender is not None or admission.attempts is not None
-        else None
-    )
-    queue: IdentityEmailQueue = worker if worker is not None else _UnavailableQueue()
-    return IdentityEmailServices(
-        ShowIdentityEmail(users, adapters.tests, adapters.setup, queue),
-        RequestIdentityEmailTest(users, adapters.tests, adapters.setup, queue, clock),
-        RequestPasswordReset(admission, adapters.setup, worker or _UnavailableQueue()),
-        compose_email_changes(
-            adapters.email_changes, users, passwords, credentials, worker or _UnavailableQueue()
+            adapters.email_changes.proofs,
+            adapters.email_changes.admission,
         ),
+        registrations=RegistrationMaintenance(
+            DeliverRegistration(adapters.registrations.proofs, adapters.setup, adapters.sender)
+            if adapters.sender is not None
+            else None,
+            adapters.registrations.proofs,
+            adapters.registrations.admission,
+        ),
+    )
+    return IdentityEmailServices(
+        ShowIdentityEmail(users, adapters.tests, adapters.setup, worker),
+        RequestIdentityEmailTest(users, adapters.tests, adapters.setup, worker, clock),
+        RequestPasswordReset(admission, adapters.setup, worker),
+        compose_email_changes(adapters.email_changes, users, passwords, credentials, worker),
     ), worker
-
-
-class _UnavailableQueue:
-    def submit(self, _test: EmailTest) -> bool:
-        return False
-
-    def state(self, _actor: UserId) -> EmailTestState:
-        return EmailTestState.IDLE
-
-    def submit_reset(self, _request: ResetEmailRequest) -> bool:
-        return False
-
-    def submit_registration(self, _request: RegistrationEmailRequest) -> bool:
-        return False
-
-    def submit_change(self, _request: EmailChangeMailRequest) -> bool:
-        return False
-
-    def submit_notice(self, _notice: EmailChangedNotice) -> bool:
-        return False
 
 
 class IdentityMailAdapters(Protocol):
@@ -265,7 +230,7 @@ class IdentityMailAdapters(Protocol):
 
 def compose_identity_mail(
     adapters: IdentityMailAdapters,
-) -> tuple[IdentityEmailServices, IdentityMailWorker | None]:
+) -> tuple[IdentityEmailServices, IdentityMailWorker]:
     return compose_identity_email(
         adapters.identity_email,
         adapters.users,

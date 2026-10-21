@@ -8,8 +8,9 @@ with clarifications below. The owner delegated PR 2 plan review to Claude and au
 Delivery status on 2026-10-21: PR #129 identity email readiness and PR #130 self-service
 password recovery are merged, including migrations 35 and 36. Verified email changes (migration
 37) and all four context splits are complete. Open sign-up end to end (migration 38) is implemented
-on the delivery branch under its approved plan; final security/outside review, complete gates,
-PR publication, and CI remain pending. Only Me remains the default; choosing Open explicitly
+on the delivery branch under its
+[approved implementation plan](../plans/2026-10-21-open-registration.md); final security/outside
+review, complete gates, PR publication, and CI remain pending. Only Me remains the default; choosing Open explicitly
 requires matching tested identity email. Provider sign-in and hosted backup/restore, including
 offline recovery tooling, remain deferred. The delivery sequence below records the approved scope.
 

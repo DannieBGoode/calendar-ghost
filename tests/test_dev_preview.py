@@ -356,7 +356,7 @@ def test_preview_registration_fixture_uses_synthetic_proofs_without_mail(tmp_pat
 
     database = tmp_path / "dev-preview.db"
     container = build_preview_container(database, NOW, registration=RegistrationFixture.READY_OPEN)
-    assert container.identity_mail_worker is None
+    assert container.identity_mail_worker is not None
     with TestClient(create_app(container)) as client:
         assert client.get("/api/v1/setup").json()["public_registration_available"] is True
         assert (

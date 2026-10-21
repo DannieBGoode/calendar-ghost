@@ -30,7 +30,7 @@ from calendar_sync.domain.access import (
     require_registration_change,
 )
 from calendar_sync.domain.registration import may_accept_invitation_directly, may_issue_invitation
-from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.connections import BUSY_TIMEOUT_SECONDS, transaction
 from calendar_sync.infrastructure.persistence.credentials import revoke_resets
 from calendar_sync.infrastructure.persistence.email_change_records import revoke_email_changes
 from calendar_sync.infrastructure.persistence.registration_readiness import readiness_status
@@ -41,9 +41,11 @@ _INVITATION_USABLE = "accepted_at IS NULL AND revoked_at IS NULL AND expires_at 
 
 
 @contextmanager
-def _registration_transaction(database: Path) -> Iterator[sqlite3.Connection]:
+def _registration_transaction(
+    database: Path, *, timeout: float = BUSY_TIMEOUT_SECONDS
+) -> Iterator[sqlite3.Connection]:
     try:
-        with transaction(database, timeout=0.1) as connection:
+        with transaction(database, timeout=timeout) as connection:
             yield connection
     except sqlite3.Error:
         raise RegistrationStorageUnavailable from None
@@ -137,7 +139,7 @@ class SqliteInvitations:
 
     def issue(self, created_by: UserId, at: datetime) -> IssuedLink | None:
         link = IssuedLink(self._ids.new(), secrets.token_urlsafe(32), link_expiry(at))
-        with transaction(self._database_path) as connection:
+        with _registration_transaction(self._database_path) as connection:
             # Held from the checks to the insert, so an invitation issued while the last User
             # leaves is either revoked with the others or never issued.
             connection.execute("BEGIN IMMEDIATE")

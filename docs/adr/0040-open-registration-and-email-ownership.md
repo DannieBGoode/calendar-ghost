@@ -7,8 +7,8 @@ Delivery status on 2026-10-21: PR #129 identity email readiness and PR #130 self
 password recovery are merged, including migrations 35 and 36. Verified email changes (migration
 37) and context splits are complete. Open registration (migration 38) is implemented on the
 delivery branch; final security/outside review, complete gates, PR publication, and CI remain
-tracked in its implementation plan. Only Me remains the default. Provider sign-in and hosted
-backup/restore remain planned; no offline recovery tooling is claimed by this slice.
+tracked in its [implementation plan](../superpowers/plans/2026-10-21-open-registration.md).
+Only Me remains the default. Provider sign-in and hosted backup/restore remain planned; no offline recovery tooling is claimed by this slice.
 
 Amends [ADR 0030](0030-users-administrators-and-registration.md), within the isolation boundary of
 [ADR 0029](0029-isolate-users-in-one-sqlite-database.md) and the optional switches of
@@ -115,7 +115,10 @@ Migration 38 rebuilds installation settings to admit Open while preserving the s
 Plans setting, and Default Plan; no upgrade selects Open. It adds registration proofs and separate
 purpose-keyed counters. Open is selectable only by an active administrator with matching ready
 identity email, checked atomically with the write. All new registration SQLite phases use 100 ms
-waits, including post-commit session/sign-in writes; ordinary identity writes retain five seconds.
+waits, including post-commit session/sign-in writes and complete response assembly through User
+and Instant Sync availability reads. Plans retain fail-open behavior. A post-commit storage read
+failure offers private sign-in recovery with no cookie; set the cookie only after assembling the
+response. Ordinary identity and direct Invitation reads/writes retain five seconds.
 
 No down migration is provided. Before upgrade, stop and back up the complete database with its
 matching key and image. Rollback closes public joining, stops the service, and restores that
@@ -123,7 +126,9 @@ matching pre-upgrade set, losing later writes. Never run an old binary against s
 upgraded schema. See [migration 38](../deployment.md#migration-38-open-registration).
 Registration maintenance reserves 250 proofs and 250 counters per batch independently and yields
 to fair mail turns between full batches, aiming for deletion within 24 hours while running.
-Stopped services, storage faults, missing-key maintenance, and backups may retain records longer.
+Maintenance starts without SMTP or a Master Key, while mail and public joining remain unavailable
+without ready identity email and keyless token/completion admission stays in bounded memory.
+Stopped services, storage faults, and backups may retain records longer.
 Sign-up/reset allowances and 50-request lanes are independent, alongside ten security/test slots;
 queue loss stays generic. [Registration operations](../deployment.md#verified-registration)
 documents exact limits, resend, targeted/global suppression, and administrator fallback without

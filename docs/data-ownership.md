@@ -207,10 +207,10 @@ database alone cannot prove that restored access remains authorized.
 
 - Registration proofs and counters are removed without the scheduler, aiming for removal within
   24 hours while running. Each batch reserves at most 250 proofs and 250 counters independently,
-  with fair mail turns between full batches. Read-only checks never purge proofs. Stopped service,
-  storage failure, or missing-key maintenance can delay cleanup, and backups retain records until
-  their own retention expires. Closing Open to Invitation Only cancels public proofs; Only Me
-  cancels all registration proofs. Reopening never revives them. People has no pending list or
+  with fair mail turns between full batches, even without SMTP or a Master Key. Read-only checks
+  never purge proofs. Stopped service or storage failure can delay cleanup, and backups retain
+  records until their own retention expires. Closing Open to Invitation Only cancels public proofs;
+  Only Me cancels all registration proofs. Reopening never revives them. People has no pending list or
   approval queue. [Registration limits](deployment.md#registration-limits-mail-loss-and-retention)
   explains targeted/global suppression, separate reset allowances, and administrator fallback.
 - Reset counters and expired, consumed, or revoked proofs are cleaned in batches of at most 500

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from calendar_sync.application.identity.registration_ports import PreparedRegistration
 from calendar_sync.bootstrap.container import Container, build_container
-from calendar_sync.domain.access import RegistrationPolicy, Role, UserId
+from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId
 from calendar_sync.infrastructure.identity_email import IdentitySmtp
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import hash_password
@@ -608,6 +608,7 @@ def test_policy_storage_failure_is_safe_for_administrator_and_invitation_checks(
         connection.execute("DROP TABLE installation_settings")
     responses = [
         client.get("/api/v1/registration"),
+        client.post("/api/v1/invitations"),
         client.put("/api/v1/registration", json={"policy": "open"}),
         client.post("/api/v1/invitations/check", json={"token": "private-token"}),
         client.post(
@@ -618,3 +619,58 @@ def test_policy_storage_failure_is_safe_for_administrator_and_invitation_checks(
     for response in responses:
         assert (response.status_code, response.json()["code"]) == (503, "registration_unavailable")
         assert "private-token" not in response.text
+
+
+@pytest.mark.parametrize("phase", ["user", "watches", "availability_user"])
+def test_response_tail_storage_failure_recovers_after_committed_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, phase: str
+) -> None:
+    import sqlite3
+
+    from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
+    from calendar_sync.infrastructure.persistence.watches import SqliteCalendarWatchRepository
+
+    path = tmp_path / "test.db"
+    _, container = ready(path)
+    token = proof(container)
+    public = TestClient(create_app(container), raise_server_exceptions=False)
+    original_get = SqliteUserDirectory.get
+    calls = 0
+
+    def get(users: SqliteUserDirectory, user: UserId) -> User | None:
+        nonlocal calls
+        calls += 1
+        if calls == (1 if phase == "user" else 2):
+            raise sqlite3.OperationalError("synthetic private response read failure")
+        return original_get(users, user)
+
+    with monkeypatch.context() as faults:
+        if phase == "watches":
+            faults.setattr(
+                SqliteCalendarWatchRepository,
+                "list",
+                Mock(side_effect=sqlite3.OperationalError("synthetic watch read failure")),
+            )
+        else:
+            faults.setattr(SqliteUserDirectory, "get", get)
+        response = public.post(COMPLETE, json={"token": token, "password": ADMIN_PASSWORD})
+    assert (response.status_code, response.json()["code"]) == (401, "incorrect_credentials")
+    private(response)
+    assert "set-cookie" not in response.headers
+    assert "synthetic" not in response.text
+    after = snapshot(path)
+    assert len(after["users"]) == 2
+    assert len(after["user_sessions"]) == 2
+    assert (
+        container.registrations.check.proofs.check(token, container.registrations.check.fingerprint)
+        is None
+    )
+    with transaction(path) as connection:
+        assert connection.execute("SELECT used_at FROM registration_proofs").fetchone()[0]
+    replay = public.post(COMPLETE, json={"token": token, "password": ADMIN_PASSWORD})
+    assert replay.status_code == 410
+    assert snapshot(path)["users"] == after["users"]
+    assert snapshot(path)["user_sessions"] == after["user_sessions"]
+    signed_in = public.post("/api/v1/session", json={"email": EMAIL, "password": ADMIN_PASSWORD})
+    assert signed_in.status_code == 200
+    assert signed_in.json()["user"]["email"] == EMAIL

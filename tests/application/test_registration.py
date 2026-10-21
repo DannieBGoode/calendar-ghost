@@ -194,7 +194,7 @@ def test_composition_retains_maintenance_without_smtp(tmp_path: Path, key: bool)
         )
     )
     assert not container.registrations.readiness.public_available()
-    assert (container.identity_mail_worker is not None) is key
+    assert container.identity_mail_worker is not None
     assert container.registrations.request.admission is container.registrations.complete.admission
 
 

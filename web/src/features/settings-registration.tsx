@@ -16,7 +16,7 @@ export function RegistrationSection({ commands }: { commands: RegistrationComman
   const i18n = useI18n()
   const { t } = i18n
   const { registration, change, message } = commands
-  const [confirmClose, setConfirmClose] = useState(false)
+  const [confirmClose, setConfirmClose] = useState<RegistrationPolicy | null>(null)
   return (
     <section className="settings-section" aria-labelledby="registration-title">
       <div className="section-heading">
@@ -39,15 +39,12 @@ export function RegistrationSection({ commands }: { commands: RegistrationComman
           registration={registration.data}
           pending={change.isPending}
           onChoose={(policy) => {
-            if (registration.data.policy === "open" && policy === "invitation_only") setConfirmClose(true)
+            if (registration.data.policy === "open" && policy !== "open") setConfirmClose(policy)
             else change.mutate(policy)
           }}
         />
       )}
-      {confirmClose && registration.data?.policy === "open" && <div className="settings-list p-6">
-        <p>{t("settings.registration.closeWarning")}</p>
-        <div className="mt-4 flex flex-wrap gap-3"><Button disabled={change.isPending} onClick={() => change.mutate("invitation_only", { onSuccess: () => setConfirmClose(false) })}>{t("settings.registration.closeConfirm")}</Button><Button variant="outline" onClick={() => setConfirmClose(false)}>{t("settings.registration.keepOpen")}</Button></div>
-      </div>}
+      {confirmClose && registration.data?.policy === "open" && <CloseRegistration policy={confirmClose} change={change} onClose={() => setConfirmClose(null)} />}
       <p className="field-hint registration-plan-note">{t("settings.registration.plansOff")}</p>
       {change.error && (
         <p className="field-error" role="alert">
@@ -57,6 +54,14 @@ export function RegistrationSection({ commands }: { commands: RegistrationComman
       {message && <p role="status">{message}</p>}
     </section>
   )
+}
+
+function CloseRegistration({ policy, change, onClose }: { policy: RegistrationPolicy; change: RegistrationCommands["change"]; onClose: () => void }) {
+  const { t } = useI18n()
+  return <div className="settings-list p-6">
+    <p>{t(policy === "only_me" ? "settings.registration.closeOnlyMeWarning" : "settings.registration.closeWarning")}</p>
+    <div className="mt-4 flex flex-wrap gap-3"><Button disabled={change.isPending} onClick={() => change.mutate(policy, { onSuccess: onClose })}>{t(policy === "only_me" ? "settings.registration.closeOnlyMeConfirm" : "settings.registration.closeConfirm")}</Button><Button variant="outline" onClick={onClose}>{t("settings.registration.keepOpen")}</Button></div>
+  </div>
 }
 
 function PolicyChoice({

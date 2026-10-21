@@ -306,3 +306,11 @@ describe("InvitationPage", () => {
     expect(onSignedIn).not.toHaveBeenCalled()
   })
 })
+
+
+it.each(["%E0%A4%A", "x".repeat(129), "%C3%A9"])("offers unusable recovery for a rejected token: %s", async (token) => {
+  serve({ "/api/v1/invitations/check": jsonResponse({ code: "invalid_request", detail: "Request validation failed" }, 422), "/api/v1/setup": jsonResponse({ administrator_configured: true, public_registration_available: true }) })
+  await renderPage(testI18n(), `#${token}`)
+  expect(container.textContent).toContain("This invitation cannot be used")
+  expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Check link again")).toBe(false)
+})

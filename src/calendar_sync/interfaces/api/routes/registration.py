@@ -5,7 +5,11 @@ from typing import Annotated, Protocol
 from fastapi import APIRouter, Depends, Request, Response, status
 
 from calendar_sync.application.identity.administration import LinkUnusable
-from calendar_sync.application.identity.errors import IncorrectCredentials, PasswordPolicyViolation
+from calendar_sync.application.identity.errors import (
+    IncorrectCredentials,
+    PasswordPolicyViolation,
+    SignInStorageUnavailable,
+)
 from calendar_sync.application.identity.registration import (
     CheckRegistration,
     CompleteRegistration,
@@ -20,7 +24,7 @@ from calendar_sync.application.identity.registration_ports import (
     RegistrationStorageUnavailable,
     RegistrationUnavailable,
 )
-from calendar_sync.domain.access import InvalidEmail
+from calendar_sync.domain.access import InvalidEmail, User, UserId
 from calendar_sync.interfaces.api.dependencies import Identity, app_services, set_session_cookie
 from calendar_sync.interfaces.api.problems import ApiProblem, problem_from
 from calendar_sync.interfaces.api.routes.session import SignedInAnswers, signed_in
@@ -39,7 +43,13 @@ class RegistrationAvailability(Protocol):
     def readiness(self) -> RegistrationReadiness: ...
 
 
+class RegistrationAnswers(SignedInAnswers, Protocol):
+    def get(self, user: UserId) -> User | None: ...
+
+
 class Registrations(RegistrationAvailability, Protocol):
+    @property
+    def answers(self) -> RegistrationAnswers: ...
     @property
     def request(self) -> RequestRegistration: ...
     @property
@@ -116,6 +126,13 @@ def complete_registration(
         session = services.registrations.complete.execute(
             payload.token, payload.password, _client(request)
         )
+        try:
+            user = services.registrations.answers.get(session.user_id)
+            if user is None:
+                raise IncorrectCredentials("Sign in to continue")
+            answer = signed_in(user, services.registrations.answers)
+        except SignInStorageUnavailable:
+            raise IncorrectCredentials("Sign in to continue") from None
     except (RegistrationNetworkThrottled, RegistrationGlobalThrottled) as error:
         raise problem_from(status.HTTP_429_TOO_MANY_REQUESTS, error) from error
     except (RegistrationUnavailable, RegistrationStorageUnavailable) as error:
@@ -128,4 +145,4 @@ def complete_registration(
         # Admission committed; recover at sign-in after a session failure or credential race.
         raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
     set_session_cookie(response, session.token, services.secure_cookies)
-    return signed_in(services.identity.users.get(session.user_id), services)
+    return answer

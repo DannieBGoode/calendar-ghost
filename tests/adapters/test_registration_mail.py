@@ -2,7 +2,8 @@
 
 import asyncio
 import threading
-from datetime import timedelta
+from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -229,3 +230,93 @@ def test_verification_mail_has_validated_origin_and_literal_deadline() -> None:
         smtp.send_registration("new@example.test", "synthetic-token")
     assert "https://ghost.test/verify-email#synthetic-token" in send.call_args.args[2]
     assert "within 24 hours" in send.call_args.args[2]
+
+
+def test_keyless_lifespan_drains_obsolete_registration_records(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+
+    from fastapi.testclient import TestClient
+
+    from calendar_sync.bootstrap.config import Settings
+    from calendar_sync.bootstrap.container import build_container
+    from calendar_sync.infrastructure.persistence.registration_proofs import (
+        SqliteRegistrationProofs,
+    )
+    from calendar_sync.interfaces.api.app import create_app
+
+    database, _clock, _, _, _ = registration(tmp_path)
+    with transaction(database) as connection:
+        connection.executemany(
+            "INSERT INTO registration_proofs(token_hash, email, created_at, expires_at) "
+            "VALUES (?, ?, ?, ?)",
+            [
+                (
+                    f"{i:064x}",
+                    "obsolete@example.test",
+                    "2000-01-01T00:00:00+00:00",
+                    "2000-01-02T00:00:00+00:00",
+                )
+                for i in range(1001)
+            ],
+        )
+        connection.executemany(
+            "INSERT INTO registration_request_attempts(boundary, admitted_at, network_digest) "
+            "VALUES ('invalid-token', 0, 'obsolete')",
+            [()] * 1001,
+        )
+    batches: dict[str, list[int]] = {"proofs": [], "counters": []}
+    for name, adapter in (
+        ("proofs", SqliteRegistrationProofs),
+        ("counters", SqliteRegistrationAdmission),
+    ):
+        original = adapter.purge
+
+        def purged(
+            self: SqliteRegistrationProofs | SqliteRegistrationAdmission,
+            at: datetime,
+            limit: int = 500,
+            *,
+            original: Callable[..., int] = original,
+            name: str = name,
+        ) -> int:
+            assert limit <= 250
+            deleted = original(self, at, limit)
+            batches[name].append(deleted)
+            return deleted
+
+        monkeypatch.setattr(adapter, "purge", purged)
+    container = build_container(Settings(database, master_key=""))
+    assert container.scheduler is None
+    assert not container.registrations.readiness.public_available()
+    worker = container.identity_mail_worker
+    assert worker is not None
+    assert container.reset_admission.attempts is None
+    with TestClient(create_app(container)):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            with transaction(database) as connection:
+                counts = tuple(
+                    connection.execute(
+                        "SELECT (SELECT COUNT(*) FROM registration_proofs), "
+                        "(SELECT COUNT(*) FROM registration_request_attempts)"
+                    ).fetchone()
+                )
+            if counts == (0, 0):
+                break
+            time.sleep(0.01)
+        assert counts == (0, 0)
+        assert not worker.submit_registration(RegistrationEmailRequest("new@example.test", "old"))
+        assert not worker.submit_reset(ResetEmailRequest("new@example.test", "old"))
+        from calendar_sync.application.identity.registration_admission import (
+            RegistrationNetworkThrottled,
+        )
+
+        admission = container.registrations.check.admission
+        for _ in range(20):
+            assert not admission.check_token("192.0.2.1", lambda: False)
+        with pytest.raises(RegistrationNetworkThrottled):
+            admission.check_token("192.0.2.1", lambda: False)
+    assert all(sum(values) == 1001 for values in batches.values())
+    assert all(len(values) >= 5 for values in batches.values())

@@ -87,7 +87,6 @@ from calendar_sync.bootstrap.identity import (
 from calendar_sync.bootstrap.identity_email import (
     IdentityEmailAdapters,
     IdentityEmailServices,
-    _UnavailableQueue,
     build_identity_email,
     build_reset_admission,
     compose_identity_mail,
@@ -441,7 +440,9 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             adapters.identity_email.registrations,
             adapters.passwords,
             adapters.clock,
-            identity_mail_worker or _UnavailableQueue(),
+            identity_mail_worker,
+            instant_status,
+            adapters.sends_email,
         ),
         identity_mail_worker=identity_mail_worker,
         reset_admission=adapters.reset_admission,

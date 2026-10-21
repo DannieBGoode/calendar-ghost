@@ -621,13 +621,12 @@ No plaintext counter addresses, networks, passwords, or mail bodies persist. Que
 delivery tokens live only in process memory. Auth diagnostics never include addresses, tokens,
 passwords, request bodies, or provider exception text. The application sends no telemetry.
 
-With a Master Key, allowances survive restart even without usable identity email. A maintenance-only
-worker then refuses all mail lanes but continues cleanup. Admitted requests, completion attempts,
-and hourly worker maintenance remove obsolete counters and expired, consumed, or revoked proofs
+With a Master Key, allowances survive restart even without usable identity email. The worker
+continues maintenance even without SMTP or a Master Key, refusing mail lanes without delivery.
+Admitted requests, completion attempts, and hourly worker maintenance remove obsolete counters and expired, consumed, or revoked proofs
 in batches of at most 500; normal running maintenance aims to remove them within 24 hours. Token
-checks do not remove proofs; invalid checks may remove obsolete counters only. A stopped service,
-storage failure, or keyless installation cannot promise that cleanup deadline. Backups retain these
-records until their own retention expires. Without a Master Key, public recovery is unavailable
+checks do not remove proofs; invalid checks may remove obsolete counters only. A stopped service
+or storage failure can delay cleanup. Backups retain records until their own retention expires. Without a Master Key, public recovery is unavailable
 and administrator token/completion limits use bounded memory only, forgotten on restart.
 After an admission commits, a cleanup storage failure leaves that admitted request or completion
 free to proceed. Cleanup retries during later admitted work or hourly maintenance; admission
@@ -705,9 +704,11 @@ The normal session starts only after account creation commits, with the credenti
 guard. If that phase fails, the account and consumed proof remain committed: sign in with the
 password just chosen, rather than retrying registration. A replay cannot create another User.
 All registration storage phases use at most 100 ms SQLite waits, including reads, cleanup, and
-post-commit session creation and last-sign-in recording. Ordinary identity writes retain their
-five-second wait. New bodies are capped at 8 KiB, normalized email at 254 characters, tokens at 128
-ASCII characters, and verification passwords at 12 to 1,024 characters before storage or hashing.
+post-commit session creation, last-sign-in recording, and the User and Instant Sync reads needed
+to assemble the complete response. If those reads fail after the account commits, the response
+privately directs you to sign in; it sets no cookie. Plans reads still fail open. Ordinary identity
+and direct Invitation reads/writes retain their five-second wait. New bodies are capped at 8 KiB,
+normalized email at 254 characters, tokens at 128 ASCII characters, and verification passwords at 12 to 1,024 characters before storage or hashing.
 Setup, direct Invitation, and ordinary new-password bounds remain unchanged.
 
 ### Registration limits, mail loss, and retention
@@ -758,8 +759,8 @@ Maintenance and admitted traffic remove expired, consumed, or revoked proofs and
 without the scheduler, aiming for removal within 24 hours while running. Batches reserve at most
 250 deletions for proofs and 250 for counters, attempt both independently, and yield to mail between
 full batches. A cleanup failure after admission commits does not reverse admission. Read-only
-checks never purge proofs. Stopped services, storage faults, and missing-key maintenance can delay
-cleanup; backups keep records until their own retention expires.
+checks never purge proofs. Cleanup continues without SMTP or a Master Key. Stopped services and
+storage faults can delay cleanup; backups keep records until their own retention expires.
 
 ## Incident notifications
 

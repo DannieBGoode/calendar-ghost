@@ -261,3 +261,13 @@ describe("Settings for someone who is not an administrator", () => {
     expect(section("own-account-title")).not.toBeNull()
   })
 })
+
+
+it("confirms Only me cancels public and Invitation-bound pending sign-ups", async () => {
+  await renderSettings(testI18n(), { registration: { policy: "open", only_me_available: true, open_available: true, open_unavailable_reason: null }, answers: { "PUT /api/v1/registration": jsonResponse({ policy: "only_me", only_me_available: true, open_available: true, open_unavailable_reason: null }) } })
+  await click(container.querySelector<HTMLInputElement>("input[value=only_me]")!)
+  expect(sent("PUT", "/api/v1/registration")).toBeUndefined()
+  expect(container.textContent).toContain("including sign-ups linked to invitations")
+  await click([...container.querySelectorAll("button")].find((button) => button.textContent === "Switch to Only me")!)
+  expect(sent("PUT", "/api/v1/registration")?.body).toEqual({ policy: "only_me" })
+})

@@ -189,6 +189,8 @@ def invite(services: Services, actor: Administrator, response: Response) -> Issu
     response.headers.update(NO_STORE)
     try:
         return _link(services.administration.invite_user.execute(actor))
+    except RegistrationStorageUnavailable as error:
+        raise unavailable() from error
     except RegistrationClosed as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
 

@@ -508,9 +508,9 @@ origin, never Host or forwarded headers. Uvicorn resolves client addresses only 
 
 The bounded memory gate precedes SQLite. With a Master Key, admitted counters persist as
 purpose-separated HMAC digests derived with HKDF, so restart keeps allowances without retaining
-plaintext addresses or client networks. Without identity SMTP, a keyed installation still starts
-the worker for maintenance only; all mail lanes refuse admission. Without a Master Key there is
-no worker or durable reset admission, and administrator token/completion limits use memory only.
+plaintext addresses or client networks. The worker starts for maintenance even without identity
+SMTP or a Master Key; all mail lanes refuse admission when delivery is unavailable. Without a
+Master Key there is no durable keyed admission, and token/completion limits use bounded memory only.
 Admitted requests, completion attempts, and hourly worker maintenance clean obsolete counters and
 expired, used, or revoked reset proofs in batches of at most 500. Token checks never purge proofs;
 recording an invalid token may purge only obsolete counters. See
@@ -538,7 +538,7 @@ credential commit; a lost notice does not roll back the change.
 
 Migration 37 adds owned proof and issuance rows plus separate anonymous network counters.
 Purpose-separated HMAC digests protect persisted admission keys when the Master Key is present.
-The keyed maintenance worker removes obsolete records in bounded batches even without SMTP.
+The maintenance worker removes obsolete records in bounded batches even without SMTP or a Master Key.
 See [deployment](deployment.md#migration-37-email-change-proofs) for upgrade and restore steps.
 
 ## Verified registration boundary
@@ -562,8 +562,12 @@ leaves the User committed and able to sign in normally. Replay creates no additi
 
 Migration 38 preserves installation settings and adds only registration proofs and independent
 purpose-separated admission counters. All registration SQLite phases, including reads, admission,
-proof completion, cleanup, and post-commit session/sign-in writes, use 100 ms waits. Ordinary
-identity writes keep five seconds. Identity mail uses the configured trusted origin, fragment
+proof completion, cleanup, post-commit session/sign-in writes, and complete response assembly,
+use 100 ms waits. Response assembly reuses Instant Sync availability with bounded User, watch,
+Allowance, Delivery Evidence, and Provider Kind reads; Plans faults keep their existing fail-open
+behavior. Read failures after account creation return private sign-in recovery without a cookie;
+the cookie is set only after response assembly succeeds. Ordinary identity and direct Invitation
+reads/writes keep five seconds. Identity mail uses the configured trusted origin, fragment
 tokens, and no-store/no-referrer pages and responses. No token, address, password, body, account
 eligibility, or provider exception text reaches logs. See
 [deployment](deployment.md#verified-registration) for limits, lossy queues, retention, and rollback.
