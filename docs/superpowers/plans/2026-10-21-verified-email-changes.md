@@ -11,7 +11,7 @@ and old-address notices; SMTP and password verification stay outside write trans
 **Tech Stack:** Python 3.12, SQLite, FastAPI, React, TypeScript, existing identity SMTP and pnpm 12.
 
 **Spec:** `docs/superpowers/specs/2026-10-20-open-registration-design.md`, email-change scope;
-ADR 0040 and ADR 0030. Status: Tasks 1-5 implemented and reviewed; Task 6 documentation is in preparation. Final security review, release gates, and delivery remain open.
+ADR 0040 and ADR 0030. Status: Tasks 1-5 and documentation implemented and reviewed. Final branch scan, Docker/CI build, UI scoped review, and delivery remain open.
 
 ## Global Constraints
 
@@ -21,7 +21,7 @@ ADR 0040 and ADR 0030. Status: Tasks 1-5 implemented and reviewed; Task 6 docume
 - Network keys: IPv4 address or IPv6 /64; at most 10,000 live keys; never evict an active allowance.
 - Streamed bodies: 8,192 bytes; normalized email: 254 characters; token: 128 ASCII characters; current password: 1,024 characters.
 - Security changes and administrator tests share the bounded lane of 10; reset retains its separate lane of 50.
-- SQLite identity locks wait at most 100 ms. Cleanup batches are at most 500; target removal within 24 hours.
+- New email-change proof and admission locks wait at most 100 ms; existing User, Session, and credential writers retain their five-second wait. Cleanup batches are at most 500; target removal within 24 hours.
 - No new registration/provider tables, in-memory identity records, Plan Hold edits, complexity suppressions, or WIDE_DATACLASSES entries.
 - Keep import-linter contracts unchanged and constructors within seven fields. New code uses identity-named modules.
 - Do not grow `bootstrap/container.py`, `interfaces/api/schemas.py`, `persistence/sqlite.py`, or `application/sync/ports.py`.
@@ -129,7 +129,7 @@ SignIn uses the coherent read; setup and Invitation acceptance pass revision zer
 
 - [x] Fetch origin, inspect migration/ADR registries, then allocate the next free `<number>_email_changes.sql`. Latest main currently ends at 36. ADR 0040 covers this decision; no new ADR is needed.
 - [x] Write fresh/upgrade/idempotence/rollback tests. Add owned `email_change_proofs` and `email_change_attempts`, plus anonymous `email_change_network_attempts` under the approved isolation ruling; proofs have `id`, `user_id`, proposed email, credential revision, nullable token hash, created/expiry/use/revocation times; owned counters hold time, boundary, non-null `user_id`, and HMAC target digests; anonymous network counters hold HMAC network digests and times. Owned rows reference Users with cascade; request IDs are always scoped by User. Add indexes for owner, hash, expiry and allowance windows.
-- [ ] Write `test_email_change_lifecycle`: request keeps current email; preparation issues a 24-hour hash-only proof; check never consumes; replacement/cancel prevents prepare and confirm; cancelling a stale request ID leaves its replacement intact; status excludes expired, revoked and stale-revision requests.
+- [x] Write `test_email_change_lifecycle`: request keeps current email; preparation issues a 24-hour hash-only proof; check never consumes; replacement/cancel prevents prepare and confirm; cancelling a stale request ID leaves its replacement intact; status excludes expired, revoked and stale-revision requests.
 - [x] Write `test_confirmation_checks_ownership_and_live_session_atomically`: another User, expired/deleted session, wrong password snapshot, disabled/deleted owner, used/revoked/cross-purpose proof all change nothing; success retains only the confirming session and revokes resets/sibling changes.
 - [x] Write `test_email_change_uniqueness_race_is_neutral`: two Users request the same address; one confirmation wins, the other leaves its credentials/sessions intact and reveals no person. Requesting a taken address has the same response and no ownership lookup.
 - [x] Write `test_email_change_reset_password_and_disable_races`: both commit orders for reset and confirmation; ordinary password change cancels proofs; email away/back and disable/re-enable never revive them; failure after proof/session mutation rolls back every change.
@@ -209,7 +209,7 @@ AuthFrame and CurrentPasswordField; do not add it to the token-only public admis
 - [x] Write late-response tests for fragment changes and User switches: no stale status/password/error/success crosses boundaries; remove the fragment only for the current completed token; disable automatic mutation retries and clear password after submission. Success refreshes session, explains other sessions ended, and links to Your account.
 - [x] Observe failures, implement using DESIGN.md disclosures, focus restoration, field errors and polite announcements. Keep one primary action and visible focus during pending work; delete unused copy and keep every new module reachable.
 - [x] Run each web command with real exits: `pnpm run test`, `typecheck`, `lint`, `knip`, `doctor`, `build`; expect pass. Review/fix, commit source/catalog/substantive bundle, inspect size.
-- [ ] Check port 8001 is free, start `.venv/bin/python scripts/dev_preview.py --scenario healthy`; capture before/after at 1440 and 390 px in light/dark with keyboard. Use a disposable synthetic harness for configured SMTP and captured mail, not real accounts. Save `.context/` screenshots; check focus, Enter, overflow, announcements, contrast and reduced motion. Run the owner's `/impeccable critique audit` UI review before delivery.
+- [x] Check port 8001 is free, start `.venv/bin/python scripts/dev_preview.py --scenario healthy`; capture before/after at 1440 and 390 px in light/dark with keyboard. Use a disposable synthetic harness for configured SMTP and captured mail, not real accounts. Save `.context/` screenshots; check focus, Enter, overflow, announcements, contrast and reduced motion. Run the owner's `/impeccable critique audit` UI review before delivery.
 
 ### Task 6: Documentation, security review and delivery
 
@@ -218,18 +218,19 @@ AuthFrame and CurrentPasswordField; do not add it to the token-only public admis
 
 - [x] Document Email Change Link and pending behavior, old-address recovery access until completion, configuration failure/retry, lossy proof/notice delivery, cancellation before no-SMTP fallback, retained confirming session and Integration Tokens. No claims that later Open/OIDC/backup work has shipped.
 - [x] Document migration backup/upgrade and matching database/image rollback, loss of writes since backup, retention and Master Key counter effects. No down migration, old binary on new schema, secrets, or `.env` commits.
-- [ ] Run every backend gate separately: `.venv/bin/ruff format --check .`, `.venv/bin/ruff check .`, `.venv/bin/mypy`, `.venv/bin/lint-imports`, `.venv/bin/pytest --cov --cov-report=term-missing --cov-fail-under=80`.
-- [ ] Inside web run separately `pnpm audit --audit-level=high`, `pnpm run api:check`, `typecheck`, `lint`, `knip`, `doctor`, `test`, `build`. There is no package audit script. Site checks apply only if site changes. Never commit a SHA-only rebuild.
+- [x] Run every backend gate separately: `.venv/bin/ruff format --check .`, `.venv/bin/ruff check .`, `.venv/bin/mypy`, `.venv/bin/lint-imports`, `.venv/bin/pytest --cov --cov-report=term-missing --cov-fail-under=80`.
+- [x] Inside web run separately `pnpm audit --audit-level=high`, `pnpm run api:check`, `typecheck`, `lint`, `knip`, `doctor`, `test`, `build`. There is no package audit script. Site checks apply only if site changes. Never commit a SHA-only rebuild.
 - [ ] Run gitleaks 8.30.1 on history and branch: `gitleaks git .` and `gitleaks git . --log-opts=origin/main..HEAD`; run `docker compose build` or report its actual blocker. Inspect each exit code, never hide failures with tail.
-- [ ] Review account takeover, enumeration, hash/purpose/expiry/single-use, request/confirmation throttles, old-address notice, reset/password/sign-in/session races, cancellation and queue generations. Run whole-branch review and one test-first fix wave; retain implementer/reviewer/fix evidence in `.superpowers/sdd/`.
-- [ ] Obtain outside read-only Claude review of `git diff origin/main...HEAD`, excluding compiled static assets, `web/openapi.json`, `web/src/lib/api-schema.ts`. Fix every P1/P2 test-first and rerun affected and required gates; unavailable outside review remains unfinished.
+- [x] Review account takeover, enumeration, hash/purpose/expiry/single-use, request/confirmation throttles, old-address notice, reset/password/sign-in/session races, cancellation and queue generations. Run whole-branch review and one test-first fix wave; retain implementer/reviewer/fix evidence in `.superpowers/sdd/`.
+- [x] Obtain outside read-only Claude review of `git diff origin/main...HEAD`, excluding compiled static assets, `web/openapi.json`, `web/src/lib/api-schema.ts`. Fix every P1/P2 test-first and rerun affected and required gates; unavailable outside review remains unfinished.
 - [ ] Use the ship skill and `.github/PULL_REQUEST_TEMPLATE.md`, push/open against main, attach before/after screenshots, watch CI, verify and fix review comments test-first, then reply with fixing commits. Do not start the next PR before merge and owner approval of its plan.
 
 ## Plan self-review
 
 Every email-change requirement maps to Tasks 1-6. Review Focus conditions have named assertions.
 No future identity tables, dormant screens, Plan Hold work or architecture-contract changes are
-planned. Task reports 1-5 record implementation and focused review. Final review found the
-issued-proof expiry needs correction, and the owner is running UI critique and release gates;
-the affected checkboxes remain open until that evidence lands.
-Product code for Tasks 1-5 is committed; Task 6 delivery gates remain pending.
+planned. Task reports 1-5 record implementation and focused review. The issued-proof expiry
+regression was fixed in `0e5064a9`; UI critique scored the baseline 33/40 and audit 18/20, with
+two P2 findings fixed in `b7775b94`. The backend gate passed 4,569 tests at 97.16% coverage;
+the frontend gate passed 1,516 tests and all eight checks. Final branch scan, Docker/CI build,
+UI scoped review, and delivery remain pending.

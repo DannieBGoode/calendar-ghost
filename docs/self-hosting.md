@@ -658,8 +658,8 @@ Check spam and SMTP settings if no link arrives, then retry after waiting. Queue
 restart, shutdown, or SMTP failure can lose a message; there is no automatic retry or durable
 outbox. Attackers can exhaust a person's email allowance or the installation's global allowance;
 ask another administrator for a link or wait for the window. If no administrator can sign in,
-use the existing [backup recovery procedure](data-ownership.md#backups-and-recovery). PR 4's offline
-recovery command is not shipped. See [exact allowances and retention](deployment.md#password-recovery).
+use the existing [backup recovery procedure](data-ownership.md#backups-and-recovery). Offline
+recovery tooling remains planned. See [exact allowances and retention](deployment.md#password-recovery).
 The full memory gate can also delay administrator-link completion from a new network until
 capacity becomes available.
 

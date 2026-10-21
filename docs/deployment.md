@@ -588,8 +588,8 @@ Identity security mail ignores **Email notifications** and the installation's in
 It goes to the User's current account email. Existing and Invitation Only addresses, including
 direct email changes, remain eligible without retroactive verification. Check these addresses:
 a typo or an address belonging to somebody else gives that mailbox owner password recovery access.
-Only me remains the default; Open registration,
-PR 4's offline recovery command, and the later backup runbook remain unshipped. Plans are independent.
+Only me remains the default; Open registration, offline recovery tooling, and the hosted backup
+runbook remain planned. Plans are independent.
 
 ### Recovery allowances and fallback
 

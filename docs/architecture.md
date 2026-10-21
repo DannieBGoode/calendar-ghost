@@ -460,10 +460,12 @@ SQLite readiness/admission store, and bounded in-memory worker. The transport ve
 certificates for remote SMTP; configuration accepts HTTPS root origins with only localhost or
 literal loopback HTTP exceptions. A Master Key is required to bind persisted readiness to current
 settings without storing SMTP secrets. SQLite connections use the shared connection factory;
-identity writes use a 0.1-second timeout. SMTP runs outside database transactions and the event
-loop, in one sending thread. One worker holds at most ten waiting tests, carries no queued
-passwords, and performs no retries. The worker's latest attempt state belongs to the requesting
-administrator; installation-wide matching readiness survives restart. The administrator-only GET
+new email-change proof and admission writes wait at most 0.1 seconds for a SQLite lock, while
+existing User, Session, and credential writers retain their five-second wait. SMTP runs outside
+database transactions and the event loop, in one sending thread. One worker holds at most ten
+waiting tests, carries no queued passwords, and performs no retries. The worker's latest attempt
+state belongs to the requesting administrator; installation-wide matching readiness survives
+restart. The administrator-only GET
 returns configuration usability, matching tested time, and that actor's state. The bodyless POST
 accepts work with 202, not an assertion of SMTP success. The Web UI polls only queued/sending work.
 

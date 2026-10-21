@@ -182,7 +182,7 @@ Migration 36 preserves passwords, sessions, and User data but revokes legacy res
 administrator must reissue. Before upgrading, stop the service and take a complete backup with its
 matching key and previous image. For rollback restore the pre-upgrade database and image together,
 losing later writes; do not run an old image against the upgraded schema or remove migration records.
-PR 4's offline recovery command and the later continuous-backup runbook are unshipped. A backup
+The planned offline recovery tooling and continuous-backup runbook are unshipped. A backup
 can revive sessions and credentials that were revoked after it was taken; recovering the matching
 database alone cannot prove that restored access remains authorized.
 

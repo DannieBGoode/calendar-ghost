@@ -428,8 +428,9 @@ Under Only Me the Web UI hides Users, Invitations, Plans, and the Operator Overv
 Administrator may switch to Invitation Only, and back to Only Me only while no other User exists.
 Data is User-scoped under every policy; the policy decides only who may join and what the Web UI
 shows. Open requires tested identity email and arrives with verified sign-up for the Hosted Service;
-it remains unavailable until PR 8 of ADR 0040. Self-service password recovery is independent of Open
-and is available under the supported policies when identity email is configured.
+it remains unavailable until the planned Open registration work in ADR 0040 ships. Self-service
+password recovery is independent of Open and is available under the supported policies when
+identity email is configured.
 _Avoid_: Signup mode, public registration
 
 **Invitation**:
