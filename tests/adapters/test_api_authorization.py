@@ -1,10 +1,12 @@
 """Every API route requires a signed-in User except the documented public ones."""
 
 import re
+import sqlite3
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
@@ -13,17 +15,28 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, build_container, compose
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.infrastructure.persistence.connections import transaction
-from calendar_sync.infrastructure.security import CredentialCipher
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
+from calendar_sync.infrastructure.security import CredentialCipher, hash_password
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import (
     SESSION_COOKIE,
+    current_user,
     session_user,
     signed_in_user,
     status_reader,
 )
 from calendar_sync.interfaces.api.dependencies import administrator as administrator_session
+from tests.adapters.test_user_migration import database_at_version
 from tests.helpers import NOW, rule
-from tests.users import OTHER_USER, add_user, administrator, session_for, sign_in, sqlite_units
+from tests.users import (
+    ADMIN_PASSWORD,
+    OTHER_USER,
+    add_user,
+    administrator,
+    session_for,
+    sign_in,
+    sqlite_units,
+)
 
 # AGENTS.md: only setup, sign-in, the token-protected Invitation and Password Reset Links, and the
 # Watch Notice route providers call, which authenticates each notice by its registration's secret
@@ -79,6 +92,14 @@ TOKEN_ROUTES = STATUS_READER_ROUTES | INSTALLATION_READER_ROUTES
 # A provider's redirect cannot be answered with a 401, so the OAuth callback reads the session
 # itself and connects an account only for the User who began the flow in this browser.
 SESSION_AND_STATE_ROUTES = {("GET", "/api/v1/oauth/{slug}/callback")}
+EMAIL_CHANGE_ROOT = "/api/v1/account/email-change"
+EMAIL_CHANGE_ROUTES = {
+    ("GET", EMAIL_CHANGE_ROOT),
+    ("POST", EMAIL_CHANGE_ROOT),
+    ("DELETE", EMAIL_CHANGE_ROOT),
+    ("POST", EMAIL_CHANGE_ROOT + "/check"),
+    ("POST", EMAIL_CHANGE_ROOT + "/confirm"),
+}
 
 
 def _requires(dependant: Dependant, guard: object) -> bool:
@@ -121,6 +142,59 @@ def test_every_non_public_api_route_requires_a_signed_in_user(tmp_path: Path) ->
     assert session_and_state == SESSION_AND_STATE_ROUTES
     assert readers == STATUS_READER_ROUTES
     assert administered == ADMINISTRATOR_ROUTES
+
+
+def test_exact_email_change_routes_require_current_user(tmp_path: Path) -> None:
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+    routes = [
+        route
+        for route in app.routes
+        if isinstance(route, APIRoute)
+        and (route.path == EMAIL_CHANGE_ROOT or route.path.startswith(EMAIL_CHANGE_ROOT + "/"))
+    ]
+    signatures = {(method, route.path) for route in routes for method in route.methods or ()}
+    assert signatures == EMAIL_CHANGE_ROUTES
+    assert all(_requires(route.dependant, current_user) for route in routes)
+    assert all(not _requires(route.dependant, status_reader) for route in routes)
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "kwargs"),
+    [
+        ("GET", EMAIL_CHANGE_ROOT, {}),
+        (
+            "POST",
+            EMAIL_CHANGE_ROOT,
+            {"json": {"email": "next@example.test", "password": ADMIN_PASSWORD}},
+        ),
+        ("DELETE", EMAIL_CHANGE_ROOT, {"params": {"request_id": "synthetic-request"}}),
+        ("POST", EMAIL_CHANGE_ROOT + "/check", {"json": {"token": "synthetic-token"}}),
+        (
+            "POST",
+            EMAIL_CHANGE_ROOT + "/confirm",
+            {"json": {"token": "synthetic-token", "password": ADMIN_PASSWORD}},
+        ),
+    ],
+)
+def test_restricted_upgrade_session_cannot_use_email_change_verification_routes(
+    tmp_path: Path, method: str, path: str, kwargs: dict[str, Any]
+) -> None:
+    database = tmp_path / "test.db"
+    database_at_version(database, 20)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO installation_admin VALUES (1, ?, '2026-01-01')",
+            (hash_password(ADMIN_PASSWORD),),
+        )
+    initialize_database(database)
+    client = TestClient(create_app(build_container(Settings(database))))
+    signed_in = client.post("/api/v1/session", json={"email": None, "password": ADMIN_PASSWORD})
+    assert (signed_in.status_code, signed_in.json()["user"]["email"]) == (200, None)
+    answer = client.request(method, path, **kwargs)
+    assert (answer.status_code, answer.json()["code"]) == (403, "email_required")
+    assert answer.headers["cache-control"] == "no-store"
+    assert answer.headers["referrer-policy"] == "no-referrer"
+    assert client.get("/api/v1/session").json()["user"]["email"] is None
 
 
 def test_an_administrator_naming_a_malformed_user_is_told_nobody_has_it(tmp_path: Path) -> None:
