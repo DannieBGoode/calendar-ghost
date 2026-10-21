@@ -14,6 +14,8 @@ import type { I18n } from "@/i18n/translator"
 import { api } from "@/lib/api"
 import { LICENSE_URL, PRODUCT_NAME, SOURCE_URL } from "@/lib/brand"
 
+import { ProviderSignInOptions, ProviderSignInFailure } from "@/features/provider-sign-in-options"
+
 type AuthScreenProps = {
   mode: "setup" | "login"
   passwordResetAvailable?: boolean
@@ -44,6 +46,7 @@ export function AuthScreen({ mode, passwordOnly = false, passwordResetAvailable 
       <AuthIntro isSetup={isSetup} />
 
       <AuthFormPanel isSetup={isSetup}>
+        {!isSetup && <><ProviderSignInFailure /><ProviderSignInOptions /></>}
         <form onSubmit={submit} className="auth-form">
           <EmailField value={form.email} required={form.emailRequired} onChange={form.setEmail} />
           <div className="field-stack">

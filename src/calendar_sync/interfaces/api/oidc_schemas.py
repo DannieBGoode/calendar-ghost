@@ -55,6 +55,7 @@ class SignInMethodsResponse(BaseModel):
 
 
 class ProviderSettingResponse(BaseModel):
+    callback_uri: str | None
     provider: str
     enabled: bool
     available: bool

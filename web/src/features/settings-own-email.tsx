@@ -13,7 +13,7 @@ import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
 type EmailStatus = Awaited<ReturnType<typeof api.ownEmailChange>>
 
 /** The current sign-in stays visible until verification completes. */
-export function OwnEmailItem({ email }: { email: string | null }) {
+export function OwnEmailItem({ email, hasPassword = true }: { email: string | null; hasPassword?: boolean | null }) {
   const i18n = useI18n()
   const { t } = i18n
   const { status, current, refresh } = useEmailStatus()
@@ -23,7 +23,7 @@ export function OwnEmailItem({ email }: { email: string | null }) {
   const first = useRef<HTMLInputElement>(null)
   useDisclosureFocus(open, first, toggle)
   const data = status.data
-  const available = canChangeEmail(data) && !status.error
+  const available = canChangeEmail(data, hasPassword) && !status.error
   return (
     <div className="setting-item">
       <div className="setting-row">
@@ -33,6 +33,7 @@ export function OwnEmailItem({ email }: { email: string | null }) {
         </div>
         {!open && <Button ref={toggle} id="own-email-toggle" type="button" variant="outline" disabled={!available} onClick={() => { setMessage(""); setOpen(true) }}>{t("settings.ownAccount.email.change")}</Button>}
       </div>
+      {hasPassword === false && <p className="field-hint"><a className="text-link" href="#own-password-toggle">{t("settings.signIn.passwordBeforeEmail")}</a></p>}
       <EmailStatusNote status={status} current={current} refresh={refresh} onDone={setMessage} toggle={open ? first : toggle} />
       {open && data && <OwnEmailForm key={email} mode={data.mode} available={available} first={first} current={current} onClose={() => setOpen(false)} onDone={setMessage} onRefresh={refresh} />}
       <p role="status" className={message ? "mt-4 text-sm" : "sr-only"}>{message}</p>
@@ -40,8 +41,8 @@ export function OwnEmailItem({ email }: { email: string | null }) {
   )
 }
 
-function canChangeEmail(data: EmailStatus | undefined): boolean {
-  if (!data || data.mode === "unavailable") return false
+function canChangeEmail(data: EmailStatus | undefined, hasPassword: boolean | null): boolean {
+  if (hasPassword !== true || !data || data.mode === "unavailable") return false
   return data.mode === "verified" || data.pending === null
 }
 

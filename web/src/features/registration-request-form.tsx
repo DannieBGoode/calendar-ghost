@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useId, useState, type SyntheticEvent } from "react"
 
+import { ProviderSignInOptions } from "@/features/provider-sign-in-options"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -48,6 +49,7 @@ export function RegistrationRequestForm({ invitationToken, initialEmail = "", is
         <Label htmlFor={id}>{t("auth.email")}</Label>
         <Input id={id} type="email" autoComplete="email" maxLength={254} value={email} onChange={(event) => { setEmail(event.target.value); onEmail?.(event.target.value) }} required autoFocus />
       </div>
+      {invitationToken && <ProviderSignInOptions invitation={{ token: invitationToken, email }} isCurrent={() => isCurrent?.(invitationToken) === true} />}
       {request.error && <p className="inline-error" role="alert">{request.error instanceof ApiError && request.error.status === 503 ? t("auth.signUp.unavailable") : apiErrorMessage(i18n, request.error)}</p>}
       <Button type="submit" size="lg" disabled={!email.trim() || request.isPending}>{t(request.isPending ? "auth.pleaseWait" : "auth.signUp.submit")}</Button>
     </form>

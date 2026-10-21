@@ -189,7 +189,7 @@ describe("InvitationPage", () => {
   it("checks the token from the address before offering the form", async () => {
     const calls = serve({ "/api/v1/invitations/check": jsonResponse({ usable: true }) })
     await renderPage(testI18n(), `#${TOKEN}`)
-    expect(calls[0]).toEqual({ url: "/api/v1/invitations/check", method: "POST", body: { token: TOKEN } })
+    expect(calls.find(call => call.url === "/api/v1/invitations/check")).toEqual({ url: "/api/v1/invitations/check", method: "POST", body: { token: TOKEN } })
     expect(container.querySelector("form")).not.toBeNull()
   })
 
@@ -250,7 +250,7 @@ describe("InvitationPage", () => {
     })
     await settle()
 
-    expect(calls[0]).toEqual({ url: "/api/v1/invitations/check", method: "POST", body: { token: "inv_newer-token" } })
+    expect(calls.find(call => call.url === "/api/v1/invitations/check")).toEqual({ url: "/api/v1/invitations/check", method: "POST", body: { token: "inv_newer-token" } })
     expect(container.querySelector('[role="alert"]')).toBeNull()
     expect(container.querySelector<HTMLInputElement>("input[type=email]")!.value).toBe("")
     fillForm("robin@example.test", "a very long password")

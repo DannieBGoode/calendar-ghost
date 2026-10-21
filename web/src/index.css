@@ -8260,3 +8260,39 @@ html:has(.rule-preview-footer) {
     width: 100%;
   }
 }
+
+/* Provider identity buttons retain their official marks, palette and comparable prominence. */
+@font-face {
+  font-family: "Google Sans Sign In";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/sign-in/google-sans-latin-500.woff2") format("woff2");
+}
+.provider-sign-in-options { margin-bottom: 1.5rem; }
+.auth-form-panel > .provider-sign-in-options { margin-top: 1.5rem; margin-bottom: 0; }
+.provider-sign-in-buttons { display: flex; flex-direction: column; gap: .75rem; margin-bottom: .75rem; }
+.sign-in-provider { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #747775; border-radius: 4px; color: #1f1f1f; background: #fff; font: 500 14px/20px "Google Sans Sign In", var(--font-sans); cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out); }
+.sign-in-provider-microsoft { font-family: "Segoe UI", var(--font-sans); font-weight: 600; }
+.sign-in-provider:hover { background: #f2f2f2; }
+.sign-in-provider:focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+.sign-in-provider[aria-disabled="true"] { cursor: not-allowed; }
+.sign-in-provider:active { background: #e3e3e3; }
+.sign-in-provider-google:hover, .sign-in-provider-google:active { background: #fff; border-color: #1f1f1f; }
+.sign-in-mark { position: relative; display: block; width: 20px; height: 20px; flex-shrink: 0; overflow: hidden; }
+.sign-in-mark img { width: 20px; height: 20px; max-width: none; }
+.sign-in-mark img[class^="google-mark"] { position: absolute; width: 40px; height: 40px; left: -10px; top: -10px; }
+.google-mark-dark { display: none; }
+:root[data-theme="dark"] .sign-in-provider { background: #131314; color: #e3e3e3; border-color: #8e918f; }
+:root[data-theme="dark"] .sign-in-provider:hover { background: #242426; }
+:root[data-theme="dark"] .sign-in-provider:active { background: #303033; }
+:root[data-theme="dark"] .sign-in-provider-google:hover, :root[data-theme="dark"] .sign-in-provider-google:active { background: #131314; border-color: #e3e3e3; }
+:root[data-theme="dark"] .google-mark-light { display: none; }
+:root[data-theme="dark"] .google-mark-dark { display: block; }
+.invitation-provider-options { margin-bottom: 1.5rem; }
+.invitation-provider-options > .field-stack { margin-bottom: 1rem; }
+.provider-setup { margin-top: 1rem; font-size: .875rem; }
+.provider-setup summary { cursor: pointer; color: var(--foreground); }
+.provider-setup p { margin-top: .75rem; max-width: 70ch; }
+.provider-callback { display: block; margin-top: .5rem; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .sign-in-provider { transition: none; } }

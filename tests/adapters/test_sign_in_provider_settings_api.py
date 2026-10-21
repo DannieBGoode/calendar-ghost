@@ -68,3 +68,22 @@ def test_descriptors_reuse_clients_with_separate_sign_in_consent(tmp_path: Path,
     assert values["redirect_uri"] == [ORIGIN + "/api/v1/sign-in/" + slug + "/callback"]
     assert values["code_challenge_method"] == ["S256"]
     assert "synthetic-secret" not in answer.text
+
+
+def test_callback_uri_uses_configured_origin_not_request_host(tmp_path: Path) -> None:
+    settings = configured(tmp_path / "test.db")
+    client = TestClient(create_app(build_container(settings)), base_url="http://testserver")
+    sign_in(client)
+    answer = client.get(ROOT)
+    assert answer.status_code == 200
+    for item in answer.json():
+        assert item["callback_uri"] == f"{ORIGIN}/api/v1/sign-in/{item['provider']}/callback"
+
+
+def test_callback_uri_absent_without_configured_origin(tmp_path: Path) -> None:
+    settings = configured(tmp_path / "test.db", public_url="")
+    client = TestClient(create_app(build_container(settings)))
+    sign_in(client)
+    answer = client.get(ROOT)
+    assert answer.status_code == 200
+    assert all(item["callback_uri"] is None for item in answer.json())

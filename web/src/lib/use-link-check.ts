@@ -38,7 +38,7 @@ export function useLinkToken() {
 }
 
 /** Whether the server will still accept a link's token. A link without one is refused without asking. */
-export function useLinkCheck<P extends PublicPage>(page: P, token: string) {
+export function useLinkCheck<P extends Exclude<PublicPage, "provider-link">>(page: P, token: string) {
   const check = useQuery({
     queryKey: ["link-check", page, token],
     queryFn: () => CHECKS[page](token),

@@ -543,5 +543,34 @@
     "originInvalid": "Set CALENDAR_SYNC_PUBLIC_URL to a valid root origin with no path, query, fragment, or user information.",
     "originInsecure": "Use HTTPS for CALENDAR_SYNC_PUBLIC_URL. HTTP is allowed only for localhost or literal loopback development.",
     "masterKeyMissing": "Configure the installation Master Key, then restart the service."
+  },
+  "signIn": {
+    "firstPassword": "Set a password to confirm email changes and account deletion. You can also use it to sign in.",
+    "setPassword": "Set password",
+    "lastMethod": "Set a password or link another available provider before removing this sign-in method.",
+    "linked": "Linked for sign-in",
+    "notLinked": "Use this provider to sign in to Calendar Ghost.",
+    "unavailable": "Linked, but sign-in is currently unavailable.",
+    "recovery": "Use your password or another linked provider. If you cannot sign in, ask an administrator for a Password Reset Link.",
+    "link": "Link {provider}",
+    "remove": "Remove {provider}",
+    "connections": "Open Connections",
+    "passwordBeforeEmail": "Set a password before changing your email.",
+    "passwordBeforeDelete": "Set a password before deleting your account.",
+    "passwordSet": "Your password is set. Other devices were signed out."
+  },
+  "signInProviders": {
+    "title": "Provider sign-in",
+    "intro": "Let people sign in with Google or Microsoft. Joining still follows your registration policy. Calendar access is separate.",
+    "ready": "Ready to enable for sign-in.",
+    "unavailable": "Sign-in configuration needs attention.",
+    "on": "On",
+    "off": "Off",
+    "setup": "Set up {provider}",
+    "client": "Use the installed provider client ID and secret, a Master Key, and CALENDAR_SYNC_PUBLIC_URL. Restart after changing these settings.",
+    "callback": "Register this additional sign-in callback URI with the provider:",
+    "origin": "Set CALENDAR_SYNC_PUBLIC_URL to your HTTPS address, or a loopback address for local development, to see the callback URI.",
+    "scopes": "Sign-in requests openid, email, and profile. Keep the existing calendar callback registered separately.",
+    "recovery": "If turning this off would leave someone without a sign-in method, have them set a password or link another enabled provider first. For someone locked out, issue a Password Reset Link from People."
   }
 }

@@ -14,6 +14,7 @@ import { ForgotPasswordPage } from "@/features/forgot-password-page"
 import { RegistrationPage } from "@/features/registration-page"
 import { SignUpPage } from "@/features/sign-up-page"
 import { InvitationPage } from "@/features/invitation-page"
+import { ProviderLinkPage } from "@/features/provider-link-page"
 import { PasswordResetPage } from "@/features/password-reset-page"
 import { rich } from "@/i18n/rich"
 import { useI18n } from "@/i18n/provider"
@@ -58,6 +59,7 @@ export default function App() {
   if (window.location.pathname.replace(/\/+$/, "") === "/sign-up") return <SignUpPage />
   if (publicPage === "registration") return <RegistrationPage onSignedIn={() => setPublicPage(null)} />
   if (publicPage === "invitation") return <InvitationPage onSignedIn={() => setPublicPage(null)} />
+  if (publicPage === "provider-link") return <ProviderLinkPage />
   if (publicPage === "password-reset") return <PasswordResetPage />
   return <SessionGate />
 }

@@ -21,6 +21,11 @@ def settings(services: Services, _actor: Administrator) -> list[ProviderSettingR
     with provider_errors():
         return [
             ProviderSettingResponse(
+                callback_uri=(
+                    f"{services.provider_sign_in.origin}/api/v1/sign-in/{item.provider}/callback"
+                    if services.provider_sign_in.origin
+                    else None
+                ),
                 provider=item.provider,
                 enabled=item.enabled,
                 available=item.available,

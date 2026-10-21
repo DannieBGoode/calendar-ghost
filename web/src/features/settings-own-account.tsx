@@ -1,9 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useRef, useState, type SyntheticEvent } from "react"
+import { useState } from "react"
 
-import { CurrentPasswordField } from "@/components/current-password-field"
-import { NewPasswordFields } from "@/components/new-password-fields"
-import { Button } from "@/components/ui/button"
 import { OwnEmailItem } from "@/features/settings-own-email"
 import { InstantSyncItem } from "@/features/settings-instant-sync"
 import { SelfDeletionItem } from "@/features/settings-self-deletion"
@@ -11,9 +8,10 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { api, type SignedInUser } from "@/lib/api"
 import { EMAIL_NOTIFICATIONS_HELP_URL } from "@/lib/brand"
-import { newPasswordReady } from "@/lib/passwords"
 import { isAdministrator } from "@/lib/people"
-import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
+
+import { SignInMethods } from "@/features/settings-sign-in-methods"
+import { useSignInMethods } from "@/lib/use-sign-in-methods"
 
 type Announce = (message: string) => void
 
@@ -31,6 +29,7 @@ export function OwnAccountSection({
   onOpenPeople: () => void
 }) {
   const { t } = useI18n()
+  const { methods } = useSignInMethods(user.id)
   const [message, setMessage] = useState("")
   return (
     <section className="settings-section" aria-labelledby="own-account-title">
@@ -41,94 +40,17 @@ export function OwnAccountSection({
         </div>
       </div>
       <div className="settings-list">
-        <OwnEmailItem key={user.id} email={user.email} />
-        <PasswordItem onDone={setMessage} />
+        <OwnEmailItem key={user.id} email={user.email} hasPassword={methods.data?.has_password ?? null} />
+        <SignInMethods key={`methods-${user.id}`} userId={user.id} onDone={setMessage} />
         <EmailNotificationsItem user={user} sendsEmail={sendsEmail} onDone={setMessage} />
         <InstantSyncItem user={user} onDone={setMessage} />
-        <SelfDeletionItem onOpenPeople={onOpenPeople} />
+        <SelfDeletionItem hasPassword={methods.data?.has_password ?? null} onOpenPeople={onOpenPeople} />
       </div>
       {/* Always present, so a screen reader announces each message as it arrives. */}
       <p role="status" className={message ? undefined : "sr-only"}>
         {message}
       </p>
     </section>
-  )
-}
-
-function PasswordItem({ onDone }: { onDone: Announce }) {
-  const queryClient = useQueryClient()
-  const i18n = useI18n()
-  const { t } = i18n
-  const [open, setOpen] = useState(false)
-  const [current, setCurrent] = useState("")
-  const [passwords, setPasswords] = useState({ password: "", confirmation: "" })
-  const toggle = useRef<HTMLButtonElement>(null)
-  const first = useRef<HTMLInputElement>(null)
-  useDisclosureFocus(open, first, toggle)
-  const save = useMutation({
-    mutationFn: () => api.changeOwnPassword(current, passwords.password),
-    onSuccess: () => {
-      setOpen(false)
-      setCurrent("")
-      setPasswords({ password: "", confirmation: "" })
-      onDone(t("settings.ownAccount.password.saved"))
-      void queryClient.invalidateQueries({ queryKey: ["own-email-change"] })
-    },
-  })
-  const ready = current.length > 0 && newPasswordReady(passwords.password, passwords.confirmation)
-
-  function submit(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (ready) save.mutate()
-  }
-
-  function cancel() {
-    setOpen(false)
-    setCurrent("")
-    setPasswords({ password: "", confirmation: "" })
-    save.reset()
-  }
-
-  return (
-    <div className="setting-item">
-      <div className="setting-row">
-        <div>
-          <h3>{t("settings.ownAccount.password.title")}</h3>
-          <p>{t("settings.ownAccount.password.body")}</p>
-        </div>
-        {!open && (
-          <Button ref={toggle} id="own-password-toggle" type="button" variant="outline" onClick={() => setOpen(true)}>
-            {t("settings.ownAccount.password.change")}
-          </Button>
-        )}
-      </div>
-      {open && (
-        <form className="setting-form" onSubmit={submit}>
-          <CurrentPasswordField ref={first} id="own-current-password" value={current} onChange={setCurrent} />
-          <NewPasswordFields
-            idPrefix="own-new-password"
-            password={passwords.password}
-            confirmation={passwords.confirmation}
-            onChange={setPasswords}
-            passwordLabel={t("settings.ownAccount.password.newLabel")}
-            confirmationLabel={t("settings.ownAccount.password.confirmLabel")}
-          />
-          {save.error && (
-            <p className="field-error" role="alert">
-              {apiErrorMessage(i18n, save.error)}
-            </p>
-          )}
-          <div className="setting-form-actions">
-            <Button type="submit" disabled={!ready || save.isPending}>
-              {save.isPending ? t("auth.pleaseWait") : t("settings.ownAccount.password.save")}
-            </Button>
-            <Button type="button" variant="ghost" onClick={cancel}>
-              {t("settings.ownAccount.cancel")}
-            </Button>
-          </div>
-        </form>
-      )}
-    </div>
   )
 }
 

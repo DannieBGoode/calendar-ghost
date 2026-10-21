@@ -144,7 +144,8 @@
       "title": "No invitations are waiting",
       "body": "Invite someone to create a link they can use once to join."
     },
-    "plan": "They get the default plan, {name}. You can change it after they join."
+    "plan": "They get the default plan, {name}. You can change it after they join.",
+    "changePolicy": "Change policy to invite"
   },
   "verdicts": {
     "stalled": "Not running",

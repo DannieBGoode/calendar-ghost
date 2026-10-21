@@ -3330,6 +3330,17 @@
             "title": "Available",
             "type": "boolean"
           },
+          "callback_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback Uri"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
@@ -3351,6 +3362,7 @@
           }
         },
         "required": [
+          "callback_uri",
           "provider",
           "enabled",
           "available",

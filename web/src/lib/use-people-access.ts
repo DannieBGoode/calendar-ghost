@@ -8,7 +8,7 @@ export type PeopleAccess = "pending" | "open" | "closed"
 
 /**
  * The People page is for Installation Administrators, and only while the Registration Policy lets
- * people join: under Only me there is nobody else to manage. Shares the session and Registration
+ * people join, or there are other people to manage after provider Invitation admission. Shares the session and Registration
  * Policy queries, so changing the policy in Settings shows or hides it at once.
  */
 export function usePeopleAccess(): PeopleAccess {
@@ -19,5 +19,5 @@ export function usePeopleAccess(): PeopleAccess {
   if (!administrator) return "closed"
   if (registration.isPending) return "pending"
   const policy = registration.data?.policy
-  return policy === undefined || policy === "only_me" ? "closed" : "open"
+  return policy === undefined || (policy === "only_me" && registration.data?.only_me_available !== false) ? "closed" : "open"
 }

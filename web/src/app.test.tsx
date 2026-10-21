@@ -55,6 +55,8 @@ const NOTHING_SET_UP: UserOverview = {
 }
 
 const RESPONSES: Record<string, unknown> = {
+  "/api/v1/account/sign-in-methods": { has_password: true, identities: [] },
+  "/api/v1/sign-in/providers": { providers: [] },
   "/api/v1/setup": { administrator_configured: true },
   "/api/v1/session": { authenticated: true },
   "/api/v1/dashboard": dashboard,

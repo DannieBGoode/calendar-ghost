@@ -274,3 +274,20 @@ rules out.
 - ESLint bounds complexity, nesting, parameters, and length, as Ruff does for the backend, and no
   frontend code is exempt. Split a component, hook, or module that reaches a bound; do not disable
   the rule.
+
+### Provider sign-in preview
+
+Run `.venv/bin/python scripts/dev_preview.py --sign-in both` to show both identity buttons.
+Google signs into the preview administrator through a synthetic loopback callback; Microsoft
+opens the generic password-link form, which accepts the preview email and password above.
+`--sign-in passwordless` removes that administrator's password: use Google to enter, then open
+Settings, Your account to set a first password. `--sign-in disabled` preserves the Google binding
+but turns both providers off, showing password recovery guidance after ordinary password sign-in.
+The optional `--port` also sets the preview's callback origin. For the sign-up surface, combine
+`--sign-in both --registration readyOpen`; Invitation uses the registration preview link above.
+
+These fixtures use a fresh in-memory Master Key for identity proofs only, real temporary preview
+storage, and synthetic local provider responses. They load no environment clients, make no
+provider network calls, send no mail, and start no calendar synchronization. They add no routes
+to the production application. On light and dark appearances, check the sign-in page at 375px
+and desktop widths, then Your account, Administration, and the provider-link form.

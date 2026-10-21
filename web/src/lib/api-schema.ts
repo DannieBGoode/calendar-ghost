@@ -2511,6 +2511,8 @@ export interface components {
         ProviderSettingResponse: {
             /** Available */
             available: boolean;
+            /** Callback Uri */
+            callback_uri: string | null;
             /** Enabled */
             enabled: boolean;
             /** Provider */

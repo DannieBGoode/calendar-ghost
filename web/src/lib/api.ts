@@ -110,7 +110,13 @@ type Inputs<O> = (O extends { parameters: { path: infer Path } } ? { params: Pat
         ? { query?: never }
         : { query?: Query }
       : { query?: never }) &
-  (O extends { requestBody: { content: { "application/json": infer Body } } } ? { body: Body } : { body?: never })
+  (O extends { requestBody: { content: { "application/json": infer Body } } }
+    ? { body: Body }
+    : O extends { requestBody?: infer Body }
+      ? [NonNullable<Body>] extends [never]
+        ? { body?: never }
+        : { body?: JsonContent<NonNullable<Body>> }
+      : { body?: never })
 /** The inputs argument, optional only when the route requires none. */
 type InputArgs<O> = Record<never, never> extends Inputs<O> ? [inputs?: Inputs<O>] : [inputs: Inputs<O>]
 
@@ -313,6 +319,21 @@ function peopleByEmail(query: { plan: string } | { search?: string }, pageSize: 
 }
 
 export const api = {
+  signInProviders: () => call("/api/v1/sign-in/providers", "get"),
+  startProviderSignIn: (slug: string, invitation?: { invitation_token: string; email: string }) =>
+    call("/api/v1/sign-in/{slug}/start", "post", { params: { slug }, body: invitation ?? {} }),
+  pendingProviderLink: () => call("/api/v1/sign-in/pending", "get"),
+  confirmProviderLink: (email: string, password: string) =>
+    call("/api/v1/sign-in/confirm", "post", { body: { email, password } }),
+  signInMethods: () => call("/api/v1/account/sign-in-methods", "get"),
+  linkSignInProvider: (slug: string) =>
+    call("/api/v1/account/sign-in-methods/{slug}/start", "post", { params: { slug } }),
+  unlinkSignInProvider: (identityId: string) =>
+    call("/api/v1/account/sign-in-methods/{identity_id}", "delete", { params: { identity_id: identityId } }),
+  setOwnPassword: (password: string) => call("/api/v1/account/password", "post", { body: { password } }),
+  signInProviderSettings: () => call("/api/v1/settings/sign-in-providers", "get"),
+  setSignInProvider: (slug: string, enabled: boolean) =>
+    call("/api/v1/settings/sign-in-providers/{slug}", "put", { params: { slug }, body: { enabled } }),
   setup: () => call("/api/v1/setup", "get"),
   session: () => call("/api/v1/session", "get"),
   createAdmin: (email: string, password: string) =>

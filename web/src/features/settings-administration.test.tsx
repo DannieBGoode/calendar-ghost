@@ -55,6 +55,9 @@ let calls: Call[] = []
 
 function serve({ role = "installation_administrator", registration, answers = {} }: Scenario) {
   const defaults: Record<string, Response> = {
+    "GET /api/v1/account/sign-in-methods": jsonResponse({ has_password: true, identities: [] }),
+    "GET /api/v1/sign-in/providers": jsonResponse({ providers: [] }),
+    "GET /api/v1/settings/sign-in-providers": jsonResponse([]),
     "GET /api/v1/session": jsonResponse(session(role)),
     "GET /api/v1/identity-email": jsonResponse({ configured: false, unavailable_reason: "smtp_missing", test_state: "idle", tested_at: null }),
     "GET /api/v1/providers": jsonResponse([]),

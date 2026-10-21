@@ -28,7 +28,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, NoReturn, cast
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 from calendar_sync.application.identity.identity_email import (
     EmailTest,
@@ -114,6 +114,11 @@ from calendar_sync.infrastructure.persistence.registration_readiness import (
 )
 from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher, token_hash
+
+if TYPE_CHECKING or __package__:
+    from scripts.dev_preview_sign_in import SignInFixture, sign_in_fixture
+else:
+    from dev_preview_sign_in import SignInFixture, sign_in_fixture
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 PREVIEW_DATABASE = REPOSITORY / "dev-preview.db"
@@ -588,6 +593,8 @@ def build_preview_container(
     *,
     scenario: Scenario = Scenario.REVIEW,
     registration: RegistrationFixture | None = None,
+    sign_in: SignInFixture | None = None,
+    origin: str = "http://127.0.0.1:8001",
 ) -> Container:
     reset_preview_database(path)
     # Explicit settings: nothing is read from the environment or .env.
@@ -717,6 +724,8 @@ def build_preview_container(
         _seed_robin(adapters, path, moment, scenario)
     if registration is not None:
         container = registration_fixture(container, path, adapters.clock, registration)
+    if sign_in is not None:
+        container = sign_in_fixture(container, adapters, preview_user(path), sign_in, origin, path)
     return container
 
 
@@ -1253,10 +1262,19 @@ def main() -> None:
         choices=list(RegistrationFixture),
         help="optional synthetic joining fixture; sends no email",
     )
+    parser.add_argument(
+        "--sign-in",
+        type=SignInFixture,
+        choices=list(SignInFixture),
+        help="synthetic local provider sign-in; no provider calls",
+    )
     arguments = parser.parse_args()
     port = arguments.port
     container = build_preview_container(
-        scenario=arguments.scenario, registration=arguments.registration
+        scenario=arguments.scenario,
+        registration=arguments.registration,
+        sign_in=arguments.sign_in,
+        origin=f"http://127.0.0.1:{port}",
     )
 
     import uvicorn
@@ -1269,6 +1287,8 @@ def main() -> None:
         f"  Open http://127.0.0.1:{port}/activity and sign in with\n"
         f"  {PREVIEW_EMAIL} / {PREVIEW_PASSWORD}\n"
     )
+    if arguments.sign_in is SignInFixture.PASSWORDLESS:
+        print("  Passwordless fixture: use Sign in with Google to enter locally.\n")
     uvicorn.run(create_app(container), host="127.0.0.1", port=port)
 
 
