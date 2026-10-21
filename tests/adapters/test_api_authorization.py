@@ -222,7 +222,9 @@ def test_a_user_who_does_not_administer_is_refused_every_administrator_route(
     with TestClient(app) as client:
         sign_in(client)
         add_user(database, OTHER_USER, role="user")
+        client.cookies.delete(SESSION_COOKIE)
         client.cookies.set(SESSION_COOKIE, session_for(database, OTHER_USER))
+        assert client.get("/api/v1/session").json()["user"]["id"] == OTHER_USER.value
         answers = {
             (method, path): client.request(
                 method, re.sub(r"\{[^}]+\}", "x", path), json={"policy": "only_me"}
@@ -273,7 +275,9 @@ def test_a_user_who_does_not_administer_finds_no_user_through_an_administrator_r
             for user in ("nobody", "%20")
         }
         add_user(database, OTHER_USER, role="user")
+        client.cookies.delete(SESSION_COOKIE)
         client.cookies.set(SESSION_COOKIE, session_for(database, OTHER_USER))
+        assert client.get("/api/v1/session").json()["user"]["id"] == OTHER_USER.value
         answers = {
             (path, user): client.get(path.format(user_id=user)).status_code
             for _, path in USER_NAMING_ADMINISTRATOR_ROUTES

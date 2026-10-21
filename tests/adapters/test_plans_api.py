@@ -95,10 +95,14 @@ class Installation:
     """Someone Plans can limit: they do not administer."""
 
     def as_admin(self) -> None:
+        self.client.cookies.delete(SESSION_COOKIE)
         self.client.cookies.set(SESSION_COOKIE, session_for(self.database, self.admin))
+        assert self.client.get("/api/v1/session").json()["user"]["id"] == self.admin.value
 
     def as_member(self) -> None:
+        self.client.cookies.delete(SESSION_COOKIE)
         self.client.cookies.set(SESSION_COOKIE, session_for(self.database, self.member))
+        assert self.client.get("/api/v1/session").json()["user"]["id"] == self.member.value
 
     def define(self, *bodies: dict[str, Any]) -> None:
         for body in bodies:
@@ -137,6 +141,29 @@ def _problem(response: Any) -> tuple[int, str, dict[str, Any]]:
     """The status, code, and params an error answer carries."""
     body = response.json()
     return response.status_code, body["code"], body["params"]
+
+
+@pytest.mark.parametrize("target", ["admin", "member"])
+def test_switching_user_replaces_session_cookies_for_every_domain(
+    installation: Installation, target: str
+) -> None:
+    client = installation.client
+    previous = installation.member if target == "admin" else installation.admin
+    for domain in ("", "testserver.local"):
+        client.cookies.set(
+            SESSION_COOKIE, session_for(installation.database, previous), domain=domain
+        )
+    assert sum(cookie.name == SESSION_COOKIE for cookie in client.cookies.jar) == 2
+
+    if target == "admin":
+        installation.as_admin()
+        expected = installation.admin
+    else:
+        installation.as_member()
+        expected = installation.member
+
+    assert sum(cookie.name == SESSION_COOKIE for cookie in client.cookies.jar) == 1
+    assert client.get("/api/v1/session").json()["user"]["id"] == expected.value
 
 
 def _invalid(reason: str) -> tuple[int, str, dict[str, Any]]:
