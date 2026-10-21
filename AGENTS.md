@@ -286,7 +286,7 @@ fix the code, never disable a rule to pass. `knip` fails on an unused file, expo
 `web/src`: delete it. Add an exception to `web/knip.jsonc` only with a comment saying why.
 
 The frontend's API types are generated from the backend's OpenAPI schema (ADR 0025). After changing
-a response or request model in `interfaces/api/schemas.py`, run
+a response or request model in `interfaces/api/schemas/` or `interfaces/api/identity_schemas.py`, run
 `.venv/bin/python scripts/export_openapi.py` and `cd web && pnpm run api:types`, and commit both
 generated files. Never edit `web/openapi.json` or `web/src/lib/api-schema.ts` by hand.
 

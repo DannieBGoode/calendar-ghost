@@ -16,7 +16,9 @@ from calendar_sync.application.identity.identity_email import (
 from calendar_sync.domain.access import UserId
 from calendar_sync.interfaces.api.dependencies import administrator, app_services
 from calendar_sync.interfaces.api.problems import ApiProblem, problem_from
-from calendar_sync.interfaces.api.schemas import IdentityEmailResponse
+from calendar_sync.interfaces.api.schemas.identity import (
+    IdentityEmailResponse,
+)
 
 
 class IdentityEmail(Protocol):

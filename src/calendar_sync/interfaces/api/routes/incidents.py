@@ -8,7 +8,9 @@ from calendar_sync.application.operations.activity import OperationsQueries
 from calendar_sync.application.operations.ports import IncidentSummary
 from calendar_sync.interfaces.api.dependencies import current_user, user_services
 from calendar_sync.interfaces.api.problems import problem
-from calendar_sync.interfaces.api.schemas import IncidentResponse
+from calendar_sync.interfaces.api.schemas.shared import (
+    IncidentResponse,
+)
 from calendar_sync.interfaces.api.status_payload import message_response
 
 

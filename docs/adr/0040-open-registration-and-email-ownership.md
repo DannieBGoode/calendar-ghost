@@ -151,8 +151,9 @@ The owner replaced the original eight delivery slices after PR #129 and PR #130 
    plan, and run ports in focused sibling `*_ports.py` modules. The SQLite split now keeps
    the User's unit of work in `infrastructure/persistence/sqlite/unit_of_work.py`, its
    Synchronization repositories in `sqlite/sync/{accounts,rules,mappings,records}.py`, and
-   ownership and time helpers in `sqlite/shared.py`; the bootstrap and API schema splits remain
-   planned.
+   ownership and time helpers in `sqlite/shared.py`. The API schema split now keeps its models
+   in `interfaces/api/schemas/{shared,sync,identity,operations}.py`, with direct caller imports
+   and `interfaces/api/identity_schemas.py` unchanged; the bootstrap split remains planned.
 3. **Open sign-up end to end.** Deliver the Open policy value and migration, verified joining,
    email-first sign-up, verified Invitations, administrator choice and readiness checks, and
    screens together. Open stays unselectable until the administrator chooses it and identity

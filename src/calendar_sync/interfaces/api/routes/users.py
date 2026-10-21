@@ -71,24 +71,26 @@ from calendar_sync.interfaces.api.dependencies import (
 from calendar_sync.interfaces.api.plan_payload import person_plan_overview_response
 from calendar_sync.interfaces.api.problems import ApiProblem, problem_from
 from calendar_sync.interfaces.api.routes.session import SignedInAnswers, signed_in
-from calendar_sync.interfaces.api.schemas import (
+from calendar_sync.interfaces.api.schemas.identity import (
     AcceptInvitationRequest,
     IssuedLinkResponse,
     LinkRequest,
     LinkStatusResponse,
     PendingInvitationResponse,
-    PeopleQuery,
-    PersonPlanOverviewResponse,
-    PersonResponse,
     RegistrationRequest,
     RegistrationResponse,
     RoleRequest,
     SessionResponse,
     UserDeletionResponse,
-    UserOverviewResponse,
-    UserPageResponse,
     UserResponse,
     UserStateRequest,
+)
+from calendar_sync.interfaces.api.schemas.operations import (
+    PeopleQuery,
+    PersonPlanOverviewResponse,
+    PersonResponse,
+    UserOverviewResponse,
+    UserPageResponse,
 )
 from calendar_sync.interfaces.api.status_payload import resource_use_response, status_response
 

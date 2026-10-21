@@ -13,7 +13,9 @@ from fastapi import APIRouter, Depends
 
 from calendar_sync.interfaces.api.dependencies import app_services, current_user
 from calendar_sync.interfaces.api.routes.accounts import AuthorizationServices
-from calendar_sync.interfaces.api.schemas import ProviderConfigurationResponse
+from calendar_sync.interfaces.api.schemas.sync import (
+    ProviderConfigurationResponse,
+)
 
 Installation = Annotated[AuthorizationServices, Depends(app_services)]
 router = APIRouter()

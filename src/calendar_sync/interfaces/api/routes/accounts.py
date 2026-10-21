@@ -42,7 +42,7 @@ from calendar_sync.interfaces.api.dependencies import (
     user_services,
 )
 from calendar_sync.interfaces.api.problems import problem, problem_from
-from calendar_sync.interfaces.api.schemas import (
+from calendar_sync.interfaces.api.schemas.sync import (
     AccountAccessResponse,
     ConnectedAccountResponse,
     DiscoveredCalendarResponse,

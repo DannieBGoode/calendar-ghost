@@ -18,9 +18,8 @@ from calendar_sync.application.operations.status import (
 )
 from calendar_sync.domain.incidents import IncidentMessage
 from calendar_sync.domain.model import CalendarEndpoint
-from calendar_sync.interfaces.api.schemas import (
+from calendar_sync.interfaces.api.schemas.operations import (
     DashboardResponse,
-    IncidentMessageResponse,
     InstallationHealthResponse,
     InstallationHintResponse,
     InstallationIncidentResponse,
@@ -33,6 +32,9 @@ from calendar_sync.interfaces.api.schemas import (
     StatusIncidentResponse,
     StatusResponse,
     StatusRuleResponse,
+)
+from calendar_sync.interfaces.api.schemas.shared import (
+    IncidentMessageResponse,
 )
 
 

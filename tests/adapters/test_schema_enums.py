@@ -25,7 +25,7 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.domain.plans import AllowanceBasis, LimitedResource, SyncInterval
 from calendar_sync.domain.watches import Availability, CadenceReason
-from calendar_sync.interfaces.api import schemas
+from calendar_sync.interfaces.api.schemas import shared as schemas
 
 MIRRORS: dict[str, type[StrEnum]] = {
     "AllowanceBasisValue": AllowanceBasis,
