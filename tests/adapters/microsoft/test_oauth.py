@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
+from calendar_sync.application.sync.account_ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
@@ -18,7 +19,6 @@ from calendar_sync.application.sync.errors import (
     CalendarPermissionRequired,
     InvalidAuthorizationState,
 )
-from calendar_sync.application.sync.ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.providers import ProviderFailureKind

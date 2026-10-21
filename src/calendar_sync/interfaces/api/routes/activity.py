@@ -28,16 +28,18 @@ from calendar_sync.domain.changes import ComparisonKind
 from calendar_sync.domain.model import CalendarEvent, EventStatus, TimedInterval
 from calendar_sync.interfaces.api.dependencies import current_user, user_services
 from calendar_sync.interfaces.api.problems import ApiProblem, failure_params, problem
-from calendar_sync.interfaces.api.schemas import (
+from calendar_sync.interfaces.api.schemas.operations import (
     ActivityEventResponse,
     AuditEntryResponse,
     DashboardResponse,
     EventSnapshotResponse,
-    FieldChangeResponse,
     RecentChangeResponse,
     RecordedEventResponse,
-    RecordedTimeResponse,
     SourceChangeResponse,
+)
+from calendar_sync.interfaces.api.schemas.shared import (
+    FieldChangeResponse,
+    RecordedTimeResponse,
 )
 from calendar_sync.interfaces.api.status_payload import dashboard_response
 

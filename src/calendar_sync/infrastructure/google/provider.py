@@ -11,7 +11,7 @@ from google.auth.exceptions import RefreshError, TransportError
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProjectionOwnershipMismatch, ProviderFailure
-from calendar_sync.application.sync.ports import CreatedProjection, ProviderChangeSet
+from calendar_sync.application.sync.provider_ports import CreatedProjection, ProviderChangeSet
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import (

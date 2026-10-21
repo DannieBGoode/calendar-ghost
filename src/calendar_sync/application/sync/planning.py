@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from calendar_sync.application.sync.ports import CalendarReader
+from calendar_sync.application.sync.provider_ports import CalendarReader
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventMapping,

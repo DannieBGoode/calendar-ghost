@@ -9,11 +9,11 @@ from datetime import datetime
 
 import pytest
 
+from calendar_sync.application.sync.account_ports import AccountAccess
 from calendar_sync.application.sync.accounts import CheckAccountAccess, RecheckAdministratorLapses
 from calendar_sync.application.sync.errors import AccountAccessCheckFailed, ProviderFailure
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import AccountAccess
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentReport, IncidentResolution

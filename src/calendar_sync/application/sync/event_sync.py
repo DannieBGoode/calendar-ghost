@@ -6,7 +6,7 @@ from functools import partial
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import UnsupportedProjection
 from calendar_sync.application.sync.planning import EventPlanner, event_operation_key
-from calendar_sync.application.sync.ports import CalendarProvider
+from calendar_sync.application.sync.provider_ports import CalendarProvider
 from calendar_sync.application.sync.sync_run import (
     SyncRunContext,
     has_live_occurrences,

@@ -9,7 +9,8 @@ from types import TracebackType
 from typing import Literal, Protocol, Self
 
 from calendar_sync.application.shared.errors import ApplicationError
-from calendar_sync.application.sync.ports import RulePreviewSummary, ScheduledRule
+from calendar_sync.application.sync.record_ports import RulePreviewSummary
+from calendar_sync.application.sync.run_ports import ScheduledRule
 from calendar_sync.application.sync.watch_ports import PendingRequest, WatchNotice
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind

@@ -19,7 +19,7 @@ from calendar_sync.infrastructure.persistence.memory import (
     raise_instant_request,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
-from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
 from tests.contracts.persistence import PersistenceContract, PersistenceHarness
 from tests.helpers import NOW

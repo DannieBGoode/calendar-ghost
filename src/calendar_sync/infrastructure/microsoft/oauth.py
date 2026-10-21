@@ -21,6 +21,12 @@ from urllib.parse import urlencode
 import httpx
 
 from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.account_ports import (
+    AccountAccess,
+    AuthorizedAccount,
+    CalendarAccess,
+    DiscoveredCalendar,
+)
 from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
@@ -28,12 +34,6 @@ from calendar_sync.application.sync.errors import (
     CalendarPermissionRequired,
     ConnectedAccountDisconnected,
     ConnectedAccountNotFound,
-)
-from calendar_sync.application.sync.ports import (
-    AccountAccess,
-    AuthorizedAccount,
-    CalendarAccess,
-    DiscoveredCalendar,
 )
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind

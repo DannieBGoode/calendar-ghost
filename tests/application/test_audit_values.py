@@ -1,6 +1,6 @@
 import pytest
 
-from calendar_sync.application.sync.ports import CalendarAccess
+from calendar_sync.application.sync.account_ports import CalendarAccess
 from calendar_sync.domain.audit import AuditAction, AuditOutcome
 from calendar_sync.domain.model import SyncAction
 

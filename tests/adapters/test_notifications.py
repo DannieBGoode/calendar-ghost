@@ -12,7 +12,8 @@ from calendar_sync.application.operations.installation_health import (
 )
 from calendar_sync.application.sync.provider_descriptors import ClientSecretExpiry
 from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import build_adapters, compose, public_address
+from calendar_sync.bootstrap.container import build_adapters, compose
+from calendar_sync.bootstrap.shared import public_address
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause

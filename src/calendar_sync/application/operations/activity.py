@@ -16,7 +16,8 @@ from calendar_sync.application.operations.errors import (
     EventInspectionUnavailable,
 )
 from calendar_sync.application.operations.ports import IncidentSummary, OperationsOverview
-from calendar_sync.application.sync.ports import CalendarReader, UnitOfWorkFactory
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
+from calendar_sync.application.sync.provider_ports import CalendarReader
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventId,

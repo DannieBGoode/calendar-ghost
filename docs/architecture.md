@@ -22,8 +22,8 @@ also off by default, follows in the phases of
 
 ## Bounded contexts
 
-Each context is one package of `application/`, with its own `ports.py` and `errors.py` for the
-ports and errors its modules share
+Each context is one package of `application/`, with shared ports in `ports.py` or focused
+`*_ports.py` siblings and shared errors in `errors.py`
 ([ADR 0032](adr/0032-bounded-contexts-as-application-packages.md)):
 
 - **Synchronization** (`application/sync`) owns Directional Sync Rules, transformation, mappings,
@@ -41,6 +41,11 @@ ports and errors its modules share
   across Users: watch upkeep, the dispatch of Instant Sync Requests, and the Watch Notice inbox.
 - **Shared** (`application/shared`) holds only what every context needs: the base application
   error, the clock, and identifiers.
+
+Synchronization keeps its single `UnitOfWork` and `UnitOfWorkFactory` in `application/sync/ports.py`.
+Its shared ports are grouped by responsibility in sibling `provider_ports.py`, `account_ports.py`,
+`record_ports.py`, `health_ports.py`, `plan_ports.py`, and `run_ports.py`; the existing Instant Sync
+ports stay in `watch_ports.py`. This module split does not split the unit of work.
 
 Calendar Integration (provider authorization, discovery, change cursors, rate limits, and payload
 translation) is the provider adapters in `infrastructure/google`, `infrastructure/microsoft`, and
@@ -74,7 +79,13 @@ The domain imports only Python's standard library and provider-neutral domain mo
 Web API routes only parse input, call one use case or port, and map its result or application
 error to HTTP. `bootstrap/container.py` composes in two steps: `build_adapters` makes the SQLite and
 provider adapters from Settings, and `compose` wires the use cases from them into the `Container`
-the routes call. The `Container` holds installation-wide services (identity, administration,
+the routes call. The root retains `Container`, `Adapters`, and those factory functions;
+`bootstrap/sync.py` composes provider descriptors and each User's synchronization services,
+`bootstrap/identity.py` composes identity and administration, `bootstrap/operations.py` composes
+Plans and the scheduled and Instant Sync loops, and `bootstrap/shared.py` holds `UserServices`
+and shared address and mail helpers. Existing identity email composition stays in
+`bootstrap/identity_email.py` and `bootstrap/identity_email_changes.py`. The `Container` holds
+installation-wide services (identity, administration,
 Installation Health, the Operator Overview, the scheduler) and `for_user`, which composes one User's use cases from
 adapters made for that User: their unit of work, account store, Activity queries, incidents, and
 Incident Notifications. A route resolves the signed-in User from the session and calls only that
@@ -214,7 +225,7 @@ from whether Plans are on, whether the User administers, their own Plan, and the
 Identity and Access owns the administrator's use cases in `application/identity/plans.py`, over
 the `PlanCatalog` and `PlanAssignments` ports; billing will set a User's Plan through
 `PlanAssignments` alone. Synchronization enforces the limits without importing Identity, through
-the `Allowances` port it declares in `application/sync/ports.py`: `EnableSyncRule` checks the rule
+the `Allowances` port it declares in `application/sync/plan_ports.py`: `EnableSyncRule` checks the rule
 limit, the Connected Account store checks the account limit when it saves a new address, and
 `IssueIntegrationToken` checks the token limit. `PlanCadence` in
 `application/sync/watch_ports.py` turns each User's Allowance into their Sync Cadence. One
@@ -236,8 +247,8 @@ under a test that proves they agree.
 
 ## Calendar provider roles
 
-`application/sync/ports.py` splits the calendar provider port by role, and each use case receives only
-the roles it calls:
+`application/sync/provider_ports.py` splits the calendar provider port by role, and each use case
+receives only the roles it calls:
 
 | Role | Operations | Received by |
 | --- | --- | --- |
@@ -288,7 +299,7 @@ about the provider ([ADR 0022](adr/0022-route-calendar-requests-by-provider.md),
   neutral `NoticeRequest` (headers, query, body) into Watch Notices, so no Starlette type crosses
   the descriptor ([ADR 0036](adr/0036-instant-sync-through-provider-notices.md)).
 
-`calendar_providers` in `bootstrap/container.py` composes the descriptors into a
+`calendar_providers` in `bootstrap/sync.py` composes the descriptors into a
 `ProviderDirectory`. Routing builds its adapter map from it, Installation Hints read the guides, and
 the Web API lists the connectable providers at `GET /api/v1/providers` and runs their flows. Without
 the installation master key, a descriptor offers only its guide.
@@ -318,7 +329,7 @@ To add a provider:
 2. Add its Provider Kind to `domain/accounts.py` and its settings to `bootstrap/config.py`.
 3. Create `infrastructure/<provider>/` with its guide, adapter, translation, OAuth flow on the
    shared mechanics in `infrastructure/oauth.py`, Cause mapping, and `descriptor.py`.
-4. Add one line to `calendar_providers` in `bootstrap/container.py`, and import-linter contracts
+4. Add one line to `calendar_providers` in `bootstrap/sync.py`, and import-linter contracts
    that keep its SDK in its package and it independent of the other providers.
 5. Give it a test package under `tests/adapters/<provider>/` that runs the Calendar Provider
    contract through a fake of its API, a table-driven Cause test, and a privacy leak test.
@@ -387,10 +398,13 @@ and closes in one block. A test fails if any other module under `src/calendar_sy
 `sqlite3.connect`, so a setting added there applies to every adapter.
 
 `infrastructure/persistence/migrations.py` applies the schema migrations at startup.
-`infrastructure/persistence/sqlite.py` holds one User's repositories and unit of work, and
-`infrastructure/persistence/installation.py` the installation-wide unit of work. The in-memory
-store that application tests use is split the same way: `memory.py` holds one User's unit of work,
-and `memory_installation.py` the installation-wide one.
+`infrastructure/persistence/sqlite/unit_of_work.py` holds one User's unit of work. Its
+Synchronization repositories live in `sqlite/sync/accounts.py`, `sqlite/sync/rules.py`,
+`sqlite/sync/mappings.py`, and `sqlite/sync/records.py`, with ownership and time helpers in
+`sqlite/shared.py`. The existing identity and operations adapters remain in their focused
+persistence modules, and `infrastructure/persistence/installation.py` holds the installation-wide
+unit of work. The in-memory store that application tests use also separates these scopes:
+`memory.py` holds one User's unit of work, and `memory_installation.py` the installation-wide one.
 
 Every table holding a User's records carries `user_id`. A child refers to its parent by identifier
 and User together, such as a mapping's `(rule_id, user_id)` to its rule's `(id, user_id)`, so SQLite

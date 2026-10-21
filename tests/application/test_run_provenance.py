@@ -10,7 +10,7 @@ import pytest
 from calendar_sync.application.sync.change_feeds import ChangeFeeds, run_reason
 from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import ProviderChangeSet
+from calendar_sync.application.sync.provider_ports import ProviderChangeSet
 from calendar_sync.application.sync.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.sync.sync_run import SyncRunContext
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule

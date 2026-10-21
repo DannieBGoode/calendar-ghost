@@ -15,7 +15,7 @@ from calendar_sync.application.identity.ports import (
     IssuedIntegrationToken,
     UserDirectory,
 )
-from calendar_sync.application.sync.ports import Allowances
+from calendar_sync.application.sync.plan_ports import Allowances
 from calendar_sync.domain.access import UserId
 
 TOKEN_PREFIX = "cgs_"  # noqa: S105

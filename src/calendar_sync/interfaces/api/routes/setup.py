@@ -14,7 +14,11 @@ from calendar_sync.domain.access import InvalidEmail
 from calendar_sync.interfaces.api.dependencies import Identity, app_services, set_session_cookie
 from calendar_sync.interfaces.api.problems import problem_from
 from calendar_sync.interfaces.api.routes.session import SignedInAnswers, signed_in
-from calendar_sync.interfaces.api.schemas import SessionResponse, SetupRequest, SetupStatusResponse
+from calendar_sync.interfaces.api.schemas.identity import (
+    SessionResponse,
+    SetupRequest,
+    SetupStatusResponse,
+)
 
 
 class SetupIdentity(Identity, Protocol):

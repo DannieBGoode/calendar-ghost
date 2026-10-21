@@ -48,7 +48,7 @@ from calendar_sync.interfaces.api.problems import problem_from
 from calendar_sync.interfaces.api.routes.email_changes import IdentityEmail, email_change_failure
 from calendar_sync.interfaces.api.routes.session import SignedInAnswers, user_response
 from calendar_sync.interfaces.api.routes.users import deletion_response
-from calendar_sync.interfaces.api.schemas import (
+from calendar_sync.interfaces.api.schemas.identity import (
     ChangePasswordRequest,
     DeleteOwnAccountRequest,
     InstantSyncPreferenceRequest,

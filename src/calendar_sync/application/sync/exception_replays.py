@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from calendar_sync.application.sync.occurrences import SynchronizeOccurrences
-from calendar_sync.application.sync.ports import CalendarReader
+from calendar_sync.application.sync.provider_ports import CalendarReader
 from calendar_sync.application.sync.sync_run import SyncRunContext
 from calendar_sync.domain.model import CalendarEvent, EventMapping
 

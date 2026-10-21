@@ -24,13 +24,10 @@ from calendar_sync.application.operations.ports import (
     ResourceUse,
 )
 from calendar_sync.application.operations.status import StatusVerdict
+from calendar_sync.application.sync.account_ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import (
-    Allowances,
-    CalendarAccess,
-    DiscoveredCalendar,
-    ProviderCallCounts,
-)
+from calendar_sync.application.sync.plan_ports import Allowances
+from calendar_sync.application.sync.run_ports import ProviderCallCounts
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState

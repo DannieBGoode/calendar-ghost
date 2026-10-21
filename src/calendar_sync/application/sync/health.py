@@ -8,14 +8,14 @@ from typing import Protocol
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProviderFailure
-from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
-from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import (
+from calendar_sync.application.sync.health_ports import (
     IncidentNotifications,
     IncidentRepository,
     RuleHealthRecords,
-    UnitOfWorkFactory,
 )
+from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.domain.health import RuleHealthPolicy
 from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import SyncRule, SyncRuleId

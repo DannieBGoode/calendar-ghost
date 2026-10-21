@@ -41,7 +41,7 @@ from calendar_sync.infrastructure.persistence.memory_installation import (
     InMemoryWatchNoticeInbox,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
-from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.watch_inbox import (
     SqliteDeliveryEvidenceLog,
     SqliteWatchNoticeInbox,

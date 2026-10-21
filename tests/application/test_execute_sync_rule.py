@@ -13,11 +13,8 @@ import pytest
 
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import (
-    CreatedProjection,
-    ProviderChangeSet,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
+from calendar_sync.application.sync.provider_ports import CreatedProjection, ProviderChangeSet
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import (

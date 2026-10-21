@@ -24,11 +24,13 @@ from calendar_sync.interfaces.api.dependencies import (
     user_services,
 )
 from calendar_sync.interfaces.api.problems import problem, problem_from
-from calendar_sync.interfaces.api.schemas import (
-    InstallationHealthResponse,
+from calendar_sync.interfaces.api.schemas.identity import (
     IntegrationTokenResponse,
     IssuedIntegrationTokenResponse,
     IssueIntegrationTokenRequest,
+)
+from calendar_sync.interfaces.api.schemas.operations import (
+    InstallationHealthResponse,
     StatusResponse,
 )
 from calendar_sync.interfaces.api.status_payload import (

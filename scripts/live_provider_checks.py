@@ -38,7 +38,7 @@ import httpx
 
 from calendar_sync.application.sync.manual_runs import MANUAL_RUNS
 from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import calendar_providers
+from calendar_sync.bootstrap.sync import calendar_providers
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.domain.plans import NO_LIMITS, PlanLimits, SyncInterval

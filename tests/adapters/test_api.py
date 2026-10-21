@@ -13,6 +13,12 @@ from fastapi.testclient import TestClient
 
 from calendar_sync import __version__
 from calendar_sync.application.operations.status import GetInstallationStatus
+from calendar_sync.application.sync.account_ports import (
+    AccountAccess,
+    AuthorizedAccount,
+    CalendarAccess,
+    DiscoveredCalendar,
+)
 from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
@@ -22,19 +28,13 @@ from calendar_sync.application.sync.errors import (
     RemovalInterrupted,
 )
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.sync.ports import (
-    AccountAccess,
-    AuthorizedAccount,
-    CalendarAccess,
-    CalendarProvider,
-    DiscoveredCalendar,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.application.sync.preview import PreviewSyncRule
 from calendar_sync.application.sync.provider_descriptors import (
     ProviderDescriptor,
     ProviderDirectory,
 )
+from calendar_sync.application.sync.provider_ports import CalendarProvider
 from calendar_sync.application.sync.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncRunResult
@@ -43,11 +43,11 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import (
     Adapters,
     Container,
-    UserServices,
     build_adapters,
     build_container,
     compose,
 )
+from calendar_sync.bootstrap.shared import UserServices
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
@@ -87,7 +87,7 @@ from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence import activity_queries
 from calendar_sync.infrastructure.persistence.accounts import SqliteUserConnectedAccounts
 from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
-from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.providers.routing import RoutingAccountCalendars
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app

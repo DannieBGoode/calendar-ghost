@@ -30,7 +30,7 @@ from calendar_sync.domain.watches import (
 
 if TYPE_CHECKING:
     # ports.py imports this module, so the Allowances port is named here for type checking only.
-    from calendar_sync.application.sync.ports import Allowances
+    from calendar_sync.application.sync.plan_ports import Allowances
 
 logger = logging.getLogger(__name__)
 

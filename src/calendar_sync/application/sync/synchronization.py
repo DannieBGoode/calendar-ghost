@@ -14,6 +14,7 @@ from calendar_sync.application.sync.errors import (
 )
 from calendar_sync.application.sync.event_sync import SynchronizeEvents
 from calendar_sync.application.sync.exception_replays import ExceptionReplays
+from calendar_sync.application.sync.health_ports import RecoveryIncidents
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.sync.lone_occurrences import RetireLoneOccurrences
 from calendar_sync.application.sync.occurrences import SeriesRepairs, SynchronizeOccurrences
@@ -22,18 +23,15 @@ from calendar_sync.application.sync.planning import (
     decided_before_its_occurrences,
     event_operation_key,
 )
-from calendar_sync.application.sync.ports import (
-    CalendarProvider,
-    ProviderCallStats,
-    ProviderCallTally,
-    ProviderChangeSet,
-    RecoveryIncidents,
-    RunIdGenerator,
-    UnitOfWork,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.ports import UnitOfWork, UnitOfWorkFactory
+from calendar_sync.application.sync.provider_ports import CalendarProvider, ProviderChangeSet
 from calendar_sync.application.sync.resource_use import record_provider_calls
 from calendar_sync.application.sync.run_log import UntalliedProviderCalls, failure_site
+from calendar_sync.application.sync.run_ports import (
+    ProviderCallStats,
+    ProviderCallTally,
+    RunIdGenerator,
+)
 from calendar_sync.application.sync.sync_run import (
     SyncRunContext,
     SyncRunLog,

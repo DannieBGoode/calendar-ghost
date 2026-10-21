@@ -30,7 +30,8 @@ from calendar_sync.application.operations.scheduled_pass import (
 )
 from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.health import RunHealth
-from calendar_sync.application.sync.ports import ScheduledRule, UnitOfWorkFactory
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
+from calendar_sync.application.sync.run_ports import ScheduledRule
 from calendar_sync.application.sync.synchronization import SyncRunResult
 from calendar_sync.application.sync.watch_ports import PendingRequest
 from calendar_sync.domain.access import UserId

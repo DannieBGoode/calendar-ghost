@@ -8,7 +8,7 @@ import pytest
 
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.plan_holds import PlanHolds, PlanSettlementBusy, SettleLocks
-from calendar_sync.application.sync.ports import Allowances
+from calendar_sync.application.sync.plan_ports import Allowances
 from calendar_sync.domain.access import Role
 from calendar_sync.domain.model import SyncRuleId, SyncRuleState
 from calendar_sync.domain.plan_hold import GRACE, PlanGrace, PlanNoticeKind

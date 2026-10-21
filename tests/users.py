@@ -21,7 +21,7 @@ from calendar_sync.infrastructure.persistence.memory import (
     InMemoryUnitOfWorkFactory,
     InMemoryUserUnitOfWorkFactory,
 )
-from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 from calendar_sync.infrastructure.security import HistoryCipher, ScryptPasswords, token_hash
 from tests.helpers import NOW

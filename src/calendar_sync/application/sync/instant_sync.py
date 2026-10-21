@@ -23,11 +23,11 @@ from uuid import uuid4
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProviderFailure
-from calendar_sync.application.sync.ports import ProviderCallStats, ProviderCallTally
 from calendar_sync.application.sync.resource_use import (
     CallCountingUnitOfWork,
     record_provider_calls,
 )
+from calendar_sync.application.sync.run_ports import ProviderCallStats, ProviderCallTally
 from calendar_sync.application.sync.watch_ports import (
     CalendarWatcher,
     CalendarWatchRepository,

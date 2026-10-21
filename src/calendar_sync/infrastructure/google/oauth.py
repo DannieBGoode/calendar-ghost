@@ -14,6 +14,12 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
+from calendar_sync.application.sync.account_ports import (
+    AccountAccess,
+    AuthorizedAccount,
+    CalendarAccess,
+    DiscoveredCalendar,
+)
 from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
@@ -21,12 +27,6 @@ from calendar_sync.application.sync.errors import (
     CalendarPermissionRequired,
     ConnectedAccountDisconnected,
     ConnectedAccountNotFound,
-)
-from calendar_sync.application.sync.ports import (
-    AccountAccess,
-    AuthorizedAccount,
-    CalendarAccess,
-    DiscoveredCalendar,
 )
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind

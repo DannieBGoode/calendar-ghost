@@ -26,22 +26,24 @@ from calendar_sync.domain.plans import (
     UseCount,
 )
 from calendar_sync.interfaces.api.problems import problem_from
-from calendar_sync.interfaces.api.schemas import (
+from calendar_sync.interfaces.api.schemas.identity import (
     AppliedPlanResponse,
+    PlanLimitsRequest,
+    PlanLimitsResponse,
+    PlanNameResponse,
+    PlanResponse,
+    PlansResponse,
+    PlanUseCountsResponse,
+    UseCountResponse,
+)
+from calendar_sync.interfaces.api.schemas.operations import (
     LimitUseResponse,
     OverLimitResponse,
     OwnPlanResponse,
     PersonPlanOverviewResponse,
     PersonPlanUseResponse,
     PlanAssignmentsResponse,
-    PlanLimitsRequest,
-    PlanLimitsResponse,
     PlanMoveResponse,
-    PlanNameResponse,
-    PlanResponse,
-    PlansResponse,
-    PlanUseCountsResponse,
-    UseCountResponse,
 )
 
 

@@ -11,12 +11,9 @@ from calendar_sync.application.sync.errors import (
     RuleNotFound,
 )
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork
-from calendar_sync.application.sync.ports import (
-    Allowances,
-    RulePreviewSummary,
-    UnitOfWork,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.plan_ports import Allowances
+from calendar_sync.application.sync.ports import UnitOfWork, UnitOfWorkFactory
+from calendar_sync.application.sync.record_ports import RulePreviewSummary
 from calendar_sync.application.sync.removal import RemovalResult, RemoveSyncRule
 from calendar_sync.application.sync.rule_insertion import insert_rule
 from calendar_sync.domain.access import UserId

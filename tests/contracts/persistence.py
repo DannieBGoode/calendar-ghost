@@ -26,22 +26,17 @@ from calendar_sync.application.operations.ports import (
     ProviderCallUse,
     RecordedRule,
 )
+from calendar_sync.application.sync.account_ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.application.sync.errors import (
     DuplicateDirectionalRelationship,
     IdentityCollision,
     MissingReference,
     RecordRefused,
 )
-from calendar_sync.application.sync.ports import (
-    CalendarAccess,
-    DiscoveredCalendar,
-    IncidentRepository,
-    ProviderCallCounts,
-    RulePreviewSummary,
-    ScheduledRule,
-    UnitOfWork,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.sync.health_ports import IncidentRepository
+from calendar_sync.application.sync.ports import UnitOfWork, UnitOfWorkFactory
+from calendar_sync.application.sync.record_ports import RulePreviewSummary
+from calendar_sync.application.sync.run_ports import ProviderCallCounts, ScheduledRule
 from calendar_sync.application.sync.watch_ports import PendingRequest, Receipt
 from calendar_sync.domain.access import Role, UserId, UserState
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind

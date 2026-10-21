@@ -10,7 +10,7 @@ from calendar_sync.application.sync.errors import (
     ConnectedAccountDisconnected,
     ConnectedAccountNotFound,
 )
-from calendar_sync.application.sync.ports import Allowances
+from calendar_sync.application.sync.plan_ports import Allowances
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId

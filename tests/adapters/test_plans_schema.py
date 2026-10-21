@@ -17,7 +17,7 @@ from calendar_sync.infrastructure.persistence.installation import (
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
-from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
 from tests.adapters.test_user_migration import database_at_version
 from tests.helpers import NOW, endpoint, rule
 from tests.users import OTHER_USER, USER, add_account, add_user, sqlite_units

@@ -10,7 +10,7 @@ import pytest
 
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.planning import event_operation_key
-from calendar_sync.application.sync.ports import ProviderChangeSet
+from calendar_sync.application.sync.provider_ports import ProviderChangeSet
 from calendar_sync.domain.audit import RecordedEvent
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,

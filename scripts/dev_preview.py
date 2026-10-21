@@ -40,33 +40,30 @@ from calendar_sync.application.operations.operator_overview import OperatorOverv
 from calendar_sync.application.operations.ports import CauseSighting, SchedulerProgress
 from calendar_sync.application.operations.status import GetInstallationStatus
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.accounts import DiscoverCalendars, ListConnectedAccounts
-from calendar_sync.application.sync.errors import ProviderFailure
-from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
-from calendar_sync.application.sync.ports import (
+from calendar_sync.application.sync.account_ports import (
     AccountAuthorization,
     AccountCalendars,
     CalendarAccess,
-    CalendarProvider,
-    CalendarReader,
     ConnectedAccountRepository,
     DiscoveredCalendar,
-    ProviderChangeSet,
 )
+from calendar_sync.application.sync.accounts import DiscoverCalendars, ListConnectedAccounts
+from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.preview import PreviewSyncRule
 from calendar_sync.application.sync.provider_descriptors import (
     ProviderConnection,
     ProviderDescriptor,
     ProviderDirectory,
 )
-from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import (
-    Adapters,
-    Container,
-    UserServices,
-    build_adapters,
-    compose,
+from calendar_sync.application.sync.provider_ports import (
+    CalendarProvider,
+    CalendarReader,
+    ProviderChangeSet,
 )
+from calendar_sync.bootstrap.config import Settings
+from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
+from calendar_sync.bootstrap.shared import UserServices
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
@@ -101,7 +98,7 @@ from calendar_sync.domain.services import (
 from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteActivityQueries
-from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
 
 REPOSITORY = Path(__file__).resolve().parents[1]

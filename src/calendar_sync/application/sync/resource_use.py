@@ -12,7 +12,8 @@ from types import TracebackType
 from typing import Protocol, Self
 
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.ports import ProviderCallRepository, ProviderCallTally
+from calendar_sync.application.sync.record_ports import ProviderCallRepository
+from calendar_sync.application.sync.run_ports import ProviderCallTally
 
 logger = logging.getLogger(__name__)
 

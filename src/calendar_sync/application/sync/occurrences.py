@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import UnsupportedProjection
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import CalendarReader, OccurrenceWriter
+from calendar_sync.application.sync.provider_ports import CalendarReader, OccurrenceWriter
 from calendar_sync.application.sync.sync_run import (
     SyncRunContext,
     has_live_occurrences,

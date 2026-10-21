@@ -24,9 +24,9 @@ from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.health import RunHealth
 from calendar_sync.application.sync.plan_holds import PlanNotices
-from calendar_sync.application.sync.ports import ScheduledRule
 from calendar_sync.application.sync.resource_use import first_counted_day
 from calendar_sync.application.sync.retry import with_retries
+from calendar_sync.application.sync.run_ports import ScheduledRule
 from calendar_sync.application.sync.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.application.sync.synchronization import SyncRunResult
 from calendar_sync.application.sync.watch_ports import (

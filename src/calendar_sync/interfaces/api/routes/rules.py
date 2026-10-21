@@ -22,9 +22,9 @@ from calendar_sync.application.sync.errors import (
 )
 from calendar_sync.application.sync.locking import RuleWork
 from calendar_sync.application.sync.manual_runs import AdmitManualRun, ManualRunsThrottled
-from calendar_sync.application.sync.ports import RulePreviewSummary
 from calendar_sync.application.sync.preview import PreviewItem, PreviewSyncRule
 from calendar_sync.application.sync.reconciliation import ReconcileNow
+from calendar_sync.application.sync.record_ports import RulePreviewSummary
 from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.application.sync.rules import (
     ChangeSyncRulePolicy,
@@ -60,7 +60,10 @@ from calendar_sync.domain.runs import RuleRunOutcome
 from calendar_sync.domain.watches import CadenceReason
 from calendar_sync.interfaces.api.dependencies import available, current_user, user_services
 from calendar_sync.interfaces.api.problems import ApiProblem, problem, problem_from
-from calendar_sync.interfaces.api.schemas import (
+from calendar_sync.interfaces.api.schemas.shared import (
+    ProjectionChoice,
+)
+from calendar_sync.interfaces.api.schemas.sync import (
     CalendarEndpointPayload,
     CreateRuleRequest,
     DriftResponse,
@@ -68,7 +71,6 @@ from calendar_sync.interfaces.api.schemas import (
     PreviewItemResponse,
     PreviewProjectionResponse,
     PreviewSummaryResponse,
-    ProjectionChoice,
     ReconcileResultResponse,
     ReconciliationConflictResponse,
     RemovalResponse,

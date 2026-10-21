@@ -39,7 +39,7 @@ from calendar_sync.application.operations.status import (
 )
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.locking import RuleLocks
-from calendar_sync.application.sync.ports import Allowances
+from calendar_sync.application.sync.plan_ports import Allowances
 from calendar_sync.application.sync.resource_use import first_counted_day
 from calendar_sync.application.sync.rules import SyncRuleSummary
 from calendar_sync.domain.access import User, UserId

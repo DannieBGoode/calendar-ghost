@@ -9,8 +9,9 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
+from calendar_sync.application.sync.account_ports import AuthorizedAccount
 from calendar_sync.application.sync.errors import AccountLimitReached, AuthorizationFailed
-from calendar_sync.application.sync.ports import Allowances, AuthorizedAccount
+from calendar_sync.application.sync.plan_ports import Allowances
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
 from calendar_sync.domain.access import Role, UserId
@@ -23,7 +24,7 @@ from calendar_sync.infrastructure.oauth import connect_account
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.plans import SqlitePlans
-from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app

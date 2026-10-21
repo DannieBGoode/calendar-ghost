@@ -19,7 +19,7 @@ from calendar_sync.interfaces.api.dependencies import (
     set_session_cookie,
 )
 from calendar_sync.interfaces.api.problems import problem_from
-from calendar_sync.interfaces.api.schemas import (
+from calendar_sync.interfaces.api.schemas.identity import (
     SessionResponse,
     SignedInUserResponse,
     SignInRequest,

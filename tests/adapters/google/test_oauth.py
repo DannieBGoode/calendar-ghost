@@ -10,12 +10,12 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from oauthlib.oauth2 import WebApplicationClient  # type: ignore[import-untyped]
 
+from calendar_sync.application.sync.account_ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
     CalendarPermissionRequired,
 )
-from calendar_sync.application.sync.ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.oauth import (

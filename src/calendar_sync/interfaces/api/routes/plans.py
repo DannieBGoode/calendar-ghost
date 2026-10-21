@@ -48,16 +48,18 @@ from calendar_sync.interfaces.api.plan_payload import (
     plans_response,
 )
 from calendar_sync.interfaces.api.problems import problem_from
-from calendar_sync.interfaces.api.schemas import (
+from calendar_sync.interfaces.api.schemas.identity import (
     ChangePlanRequest,
     DefinePlanRequest,
-    OwnPlanResponse,
-    PlanAssignmentsRequest,
-    PlanAssignmentsResponse,
     PlanLimitsRequest,
     PlanResponse,
     PlansResponse,
     PlansSettingRequest,
+)
+from calendar_sync.interfaces.api.schemas.operations import (
+    OwnPlanResponse,
+    PlanAssignmentsRequest,
+    PlanAssignmentsResponse,
 )
 
 

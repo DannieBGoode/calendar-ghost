@@ -94,8 +94,10 @@ web/ and interfaces/  ->  application/  ->  domain/
 - `src/calendar_sync/application/` coordinates use cases through protocols. It cannot import
   concrete Google, Microsoft, SQLite, scheduler, notification, or Web API adapters.
 - The application has one package per bounded context (ADR 0032): `sync`, `identity`, and
-  `operations`, with `shared` below them. Each context's `ports.py` and `errors.py` hold what its
-  modules share; a use-case module may declare ports and errors of its own beside its use cases,
+  `operations`, with `shared` below them. Shared ports live in each context's `ports.py` or
+  focused `*_ports.py` siblings; shared errors live in `errors.py`. Synchronization retains its
+  single unit of work in `sync/ports.py`, with provider, account, record, health, plan, and run
+  ports in focused siblings. A use-case module may declare ports and errors beside its use cases,
   and other modules import them from there. Contexts depend only downward, `operations` →
   `identity` → `sync` → `shared`, and `lint-imports` fails otherwise, or when an application
   module belongs to no context. Put a new use case in the context whose language it speaks; a
@@ -284,7 +286,7 @@ fix the code, never disable a rule to pass. `knip` fails on an unused file, expo
 `web/src`: delete it. Add an exception to `web/knip.jsonc` only with a comment saying why.
 
 The frontend's API types are generated from the backend's OpenAPI schema (ADR 0025). After changing
-a response or request model in `interfaces/api/schemas.py`, run
+a response or request model in `interfaces/api/schemas/` or `interfaces/api/identity_schemas.py`, run
 `.venv/bin/python scripts/export_openapi.py` and `cd web && pnpm run api:types`, and commit both
 generated files. Never edit `web/openapi.json` or `web/src/lib/api-schema.ts` by hand.
 

@@ -146,7 +146,17 @@ The owner replaced the original eight delivery slices after PR #129 and PR #130 
 2. **Split growing files by context, with no behavior change.** Split `bootstrap/container.py`,
    `interfaces/api/schemas.py`, `infrastructure/persistence/sqlite.py`, and
    `application/sync/ports.py` into context-named modules. Preserve public names and the existing
-   import-linter contracts.
+   import-linter contracts. The Synchronization port split now keeps `UnitOfWork` and
+   `UnitOfWorkFactory` in `application/sync/ports.py`, with provider, account, record, health,
+   plan, and run ports in focused sibling `*_ports.py` modules. The SQLite split now keeps
+   the User's unit of work in `infrastructure/persistence/sqlite/unit_of_work.py`, its
+   Synchronization repositories in `sqlite/sync/{accounts,rules,mappings,records}.py`, and
+   ownership and time helpers in `sqlite/shared.py`. The API schema split now keeps its models
+   in `interfaces/api/schemas/{shared,sync,identity,operations}.py`, with direct caller imports
+   and `interfaces/api/identity_schemas.py` unchanged. The bootstrap split now keeps the root
+   factories, `Container`, and `Adapters` in `bootstrap/container.py`, with composition in
+   sibling `shared.py`, `sync.py`, `identity.py`, and `operations.py`; existing identity email
+   modules stay in place. All four module splits are complete.
 3. **Open sign-up end to end.** Deliver the Open policy value and migration, verified joining,
    email-first sign-up, verified Invitations, administrator choice and readiness checks, and
    screens together. Open stays unselectable until the administrator chooses it and identity

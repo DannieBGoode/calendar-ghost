@@ -24,7 +24,7 @@ from calendar_sync.application.operations.ports import (
     StatusRecords,
     UserPlanStanding,
 )
-from calendar_sync.application.sync.ports import ProviderCallCounts, ScheduledRule
+from calendar_sync.application.sync.run_ports import ProviderCallCounts, ScheduledRule
 from calendar_sync.application.sync.watch_ports import NoticeKind, WatchNotice
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
