@@ -35,8 +35,7 @@ export function EmailChangeSignIn({ isCurrent }: { isCurrent: () => boolean }) {
   }
   return (
     <>
-    <ProviderSignInOptions isCurrent={isCurrent} />
-    <p className="field-hint">{t("auth.provider.emailChange")}</p>
+    <ProviderSignInOptions isCurrent={isCurrent}><p className="field-hint">{t("auth.provider.emailChange")}</p></ProviderSignInOptions>
     <form className="auth-form" onSubmit={submit} aria-busy={login.isPending}>
       <p>{t("auth.emailChange.signIn")}</p>
       <div className="field-stack">

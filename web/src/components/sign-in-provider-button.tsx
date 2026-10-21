@@ -9,7 +9,7 @@ export function SignInProviderButton({ provider, pending, unavailable = false, o
   provider: SignInProvider; pending: boolean; unavailable?: boolean; onClick: () => void
 }) {
   const { t } = useI18n()
-  return <button type="button" className={`sign-in-provider sign-in-provider-${provider}`} aria-disabled={pending || unavailable} aria-busy={pending} onClick={() => { if (!pending && !unavailable) onClick() }}>
+  return <button type="button" className={`sign-in-provider sign-in-provider-${provider}`} data-state={pending ? "pending" : unavailable ? "unavailable" : "ready"} aria-disabled={pending || unavailable} aria-busy={pending} onClick={() => { if (!pending && !unavailable) onClick() }}>
     <span className="sign-in-mark" aria-hidden="true">{provider === "google"
       ? <><img className="google-mark-light" src={googleLight} alt="" /><img className="google-mark-dark" src={googleDark} alt="" /></>
       : <img src={microsoft} alt="" />}</span>

@@ -15,7 +15,7 @@ export function ProviderLinkPage() {
   return <AuthFrame heading={t("auth.provider.linkHeading")} intro={t("auth.provider.linkIntro")} panelTitle={t("auth.provider.linkPanel")} panelNote={t("auth.provider.linkNote")} icon={LockKeyhole}>
     {pending.isPending && <p role="status">{t("auth.pleaseWait")}</p>}
     {pending.data?.password_required && !pending.error ? <ProviderLinkForm /> : !pending.isPending && <p className="inline-error" role="alert">{t("auth.provider.expired")}</p>}
-    <p className="field-hint mt-6">{t("auth.provider.newcomer")}</p>
+    <p className="field-hint provider-link-newcomer">{t("auth.provider.newcomer")}</p>
     <div className="setting-form-actions mt-4"><Button variant="outline" asChild><a href="/sign-up">{t("auth.signUp.heading")}</a></Button><Button variant="ghost" asChild><a href="/sign-in">{t("auth.signIn")}</a></Button></div>
   </AuthFrame>
 }

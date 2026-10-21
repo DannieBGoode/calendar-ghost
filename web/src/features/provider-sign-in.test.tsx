@@ -11,6 +11,7 @@ import { ProviderLinkPage } from "./provider-link-page"
 import { SignInMethods } from "./settings-sign-in-methods"
 import { SignInProvidersSection } from "./settings-sign-in-providers"
 import { AuthScreen } from "./auth-screen"
+import { EmailChangeSignIn } from "./email-change-sign-in"
 import { InvitationPage } from "./invitation-page"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -75,7 +76,11 @@ describe("Provider sign-in", () => {
     await render(<InvitationPage onSignedIn={vi.fn()} />)
     const start = button("Sign in with Google")
     expect(start.getAttribute("aria-disabled")).toBe("true")
+    expect(start.dataset.state).toBe("unavailable")
+    await click(start)
+    expect(calls.some(call => call.path.endsWith("/google/start"))).toBe(false)
     type(container.querySelector<HTMLInputElement>("input[type=email]")!, "Robin@example.test")
+    expect(start.dataset.state).toBe("ready")
     await click(start)
     expect(calls.find(call => call.path === "/api/v1/sign-in/google/start")?.body).toEqual({ invitation_token: "synthetic-invitation", email: "Robin@example.test" })
   })
@@ -220,5 +225,63 @@ describe("Provider recovery and ownership", () => {
     type(container.querySelector<HTMLInputElement>('input[type="email"]')!, "robin@example.test")
     await click(button("Sign in with Microsoft"))
     expect(calls.find(call => call.path === "/api/v1/sign-in/microsoft/start")?.body).toEqual({ invitation_token: "synthetic-invitation", email: "robin@example.test" })
+  })
+})
+
+
+describe("Provider review regressions", () => {
+  it.each([false, true])("keeps email-change provider guidance conditional: %s", async enabled => {
+    routes["GET /api/v1/sign-in/providers"] = { providers: enabled ? ["google"] : [] }
+    await render(<EmailChangeSignIn isCurrent={() => true} />)
+    expect(container.textContent.includes("Signing in with a provider opens your account")).toBe(enabled)
+  })
+  it.each([false, true])("describes the sign-in methods actually offered: %s", async enabled => {
+    routes["GET /api/v1/sign-in/providers"] = { providers: enabled ? ["google"] : [] }
+    await render(<AuthScreen mode="login" />)
+    expect(container.textContent.includes("Choose how to sign in.")).toBe(enabled)
+    expect(container.textContent.includes("Or use your email and password")).toBe(enabled)
+    expect(container.textContent.includes("Use the email and password you sign in with.")).toBe(!enabled)
+  })
+  it.each([false, true])("restores removal focus and announces completion with remaining same-provider binding: %s", async another => {
+    routes["GET /api/v1/account/sign-in-methods"] = { has_password: true, identities: [{ id: "identity-google", provider: "google" }, ...(another ? [{ id: "other-google", provider: "google" }] : [])] }
+    const done = vi.fn()
+    await render(<SignInMethods userId="robin" onDone={done} />)
+    const remove = button("Remove Google")
+    remove.focus()
+    routes["GET /api/v1/account/sign-in-methods"] = { has_password: true, identities: another ? [{ id: "other-google", provider: "google" }] : [] }
+    await click(remove)
+    expect(document.activeElement).toBe(button(another ? "Remove Google" : "Link Google"))
+    expect(done).toHaveBeenNthCalledWith(1, "")
+    expect(done).toHaveBeenLastCalledWith("Google removed from sign-in.")
+  })
+  it.each([false, true])("respects focus moved during removal and an actor switch: %s", async switched => {
+    routes["GET /api/v1/account/sign-in-methods"] = { has_password: true, identities: [{ id: "identity-google", provider: "google" }] }
+    let finish: (response: Response) => void = () => undefined
+    const original = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input, init) => init?.method === "DELETE" ? new Promise(resolve => { finish = resolve }) : original(input, init))
+    const done = vi.fn()
+    await render(<SignInMethods userId="robin" onDone={done} />)
+    await click(button("Remove Google"))
+    done.mockClear()
+    if (switched) act(() => { client.setQueryData(["session"], { user: { id: "ash" } }) })
+    button("Change password").focus()
+    act(() => finish(response({})))
+    await settle()
+    expect(done).toHaveBeenCalledTimes(switched ? 0 : 1)
+    expect(document.activeElement).toBe(button("Change password"))
+  })
+  it("marks pending provider buttons while preserving focus and guarding repeat activation", async () => {
+    const original = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input, init) => (input as string).endsWith("/google/start") ? new Promise(() => undefined) : original(input, init))
+    await render(<ProviderSignInOptions />)
+    const google = button("Sign in with Google")
+    google.focus()
+    await click(google)
+    expect(google.dataset.state).toBe("pending")
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Please wait")
+    expect(document.activeElement).toBe(google)
+    await click(google)
+    expect(vi.mocked(fetch).mock.calls.filter(([path]) => (path as string).endsWith("/google/start"))).toHaveLength(1)
+    expect(google.getAttribute("aria-disabled")).toBe("true")
   })
 })

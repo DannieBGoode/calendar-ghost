@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useId, useState } from "react"
+import { useId, useState, type ReactNode } from "react"
 import { SignInProviderButton } from "@/components/sign-in-provider-button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -8,8 +8,8 @@ import { api, type SessionStatus } from "@/lib/api"
 import { enabledSignInProviders } from "@/lib/sign-in-providers"
 
 /** Only enabled, configured methods are advertised. Proofs stay in server-set HttpOnly cookies. */
-export function ProviderSignInOptions({ invitation, isCurrent }: {
-  invitation?: { token: string; email: string }; isCurrent?: () => boolean
+export function ProviderSignInOptions({ invitation, isCurrent, children }: {
+  invitation?: { token: string; email: string }; isCurrent?: () => boolean; children?: ReactNode
 }) {
   const { t } = useI18n()
   const providers = useQuery({ queryKey: ["sign-in-providers"], queryFn: api.signInProviders, staleTime: 0 })
@@ -21,6 +21,7 @@ export function ProviderSignInOptions({ invitation, isCurrent }: {
     <div className="provider-sign-in-buttons">{enabled.map(provider => <SignInProviderButton key={provider} provider={provider} pending={begin.isPending} unavailable={!ready} onClick={() => begin.mutate(provider)} />)}</div>
     <p className="field-hint">{t("auth.provider.calendarStep")}</p>
     <p role="status" className={begin.isPending ? "field-hint" : "sr-only"}>{begin.isPending ? t("auth.pleaseWait") : ""}</p>
+    {children}
     {begin.error && <p className="inline-error" role="alert">{t("auth.provider.unavailable")}</p>}
   </div>
 }

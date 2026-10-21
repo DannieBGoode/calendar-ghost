@@ -554,6 +554,7 @@
     "recovery": "Use your password or another linked provider. If you cannot sign in, ask an administrator for a Password Reset Link.",
     "link": "Link {provider}",
     "remove": "Remove {provider}",
+    "removed": "{provider} removed from sign-in.",
     "connections": "Open Connections",
     "passwordBeforeEmail": "Set a password before changing your email.",
     "passwordBeforeDelete": "Set a password before deleting your account.",
@@ -562,7 +563,7 @@
   "signInProviders": {
     "title": "Provider sign-in",
     "intro": "Let people sign in with Google or Microsoft. Joining still follows your registration policy. Calendar access is separate.",
-    "ready": "Ready to enable for sign-in.",
+    "ready": "Sign-in is configured.",
     "unavailable": "Sign-in configuration needs attention.",
     "on": "On",
     "off": "Off",
