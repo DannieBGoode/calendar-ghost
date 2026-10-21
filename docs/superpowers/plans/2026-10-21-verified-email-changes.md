@@ -11,7 +11,7 @@ and old-address notices; SMTP and password verification stay outside write trans
 **Tech Stack:** Python 3.12, SQLite, FastAPI, React, TypeScript, existing identity SMTP and pnpm 12.
 
 **Spec:** `docs/superpowers/specs/2026-10-20-open-registration-design.md`, email-change scope;
-ADR 0040 and ADR 0030. Status: proposed for owner review, no implementation authorized yet.
+ADR 0040 and ADR 0030. Status: Tasks 1-5 implemented and reviewed; Task 6 documentation is in preparation. Final security review, release gates, and delivery remain open.
 
 ## Global Constraints
 
@@ -97,11 +97,11 @@ New errors are `EmailChangeThrottled(retry_after: int)`, `EmailChangeStorageUnav
 (carrying IdentityEmailReason); register stable codes in Task 4. Concrete annotations use existing `UserId`, `CredentialSnapshot`, and the new pending/completion types.
 Store methods own their clock reads under the write lock; use cases never pass pre-lock expiry decisions.
 
-- [ ] Write `test_email_change_mode_decision_table`: all configuration combinations; upgraded first active administrator with no email is direct; an ordinary User gets no exception; unsafe SMTP never falls back.
-- [ ] Write `test_email_proof_usability_decision_table`: exact expiry refuses; used/revoked/wrong owner/stale revision/disabled refuse; valid owner succeeds.
-- [ ] Write `test_credential_revision_is_monotonic`: zero allowed, negative refused, next increments, away/back cannot restore an earlier revision.
-- [ ] Run `.venv/bin/pytest tests/domain/test_email_changes.py`; observe failure, implement the values/decisions, then expect pass.
-- [ ] Review/fix with a fresh reviewer, commit owned files and inspect `git diff --shortstat origin/main...HEAD`.
+- [x] Write `test_email_change_mode_decision_table`: all configuration combinations; upgraded first active administrator with no email is direct; an ordinary User gets no exception; unsafe SMTP never falls back.
+- [x] Write `test_email_proof_usability_decision_table`: exact expiry refuses; used/revoked/wrong owner/stale revision/disabled refuse; valid owner succeeds.
+- [x] Write `test_credential_revision_is_monotonic`: zero allowed, negative refused, next increments, away/back cannot restore an earlier revision.
+- [x] Run `.venv/bin/pytest tests/domain/test_email_changes.py`; observe failure, implement the values/decisions, then expect pass.
+- [x] Review/fix with a fresh reviewer, commit owned files and inspect `git diff --shortstat origin/main...HEAD`.
 
 ### Task 2: SQLite proofs, admission, and atomic credential changes
 
@@ -127,19 +127,19 @@ Change `Sessions.start(user_id: UserId, password_hash: str, email: str | None, r
 and `start_session(sessions, user_id, password_hash, email, revision)`; update every caller.
 SignIn uses the coherent read; setup and Invitation acceptance pass revision zero for their new User.
 
-- [ ] Fetch origin, inspect migration/ADR registries, then allocate the next free `<number>_email_changes.sql`. Latest main currently ends at 36. ADR 0040 covers this decision; no new ADR is needed.
-- [ ] Write fresh/upgrade/idempotence/rollback tests. Add only `email_change_proofs` and `email_change_attempts`; proofs have `id`, `user_id`, proposed email, credential revision, nullable token hash, created/expiry/use/revocation times; counters hold time, boundary, optional owning `user_id`, HMAC target/network digests. Owned rows reference Users with cascade; request IDs are always scoped by User. Add indexes for owner, hash, expiry and allowance windows.
+- [x] Fetch origin, inspect migration/ADR registries, then allocate the next free `<number>_email_changes.sql`. Latest main currently ends at 36. ADR 0040 covers this decision; no new ADR is needed.
+- [x] Write fresh/upgrade/idempotence/rollback tests. Add owned `email_change_proofs` and `email_change_attempts`, plus anonymous `email_change_network_attempts` under the approved isolation ruling; proofs have `id`, `user_id`, proposed email, credential revision, nullable token hash, created/expiry/use/revocation times; owned counters hold time, boundary, non-null `user_id`, and HMAC target digests; anonymous network counters hold HMAC network digests and times. Owned rows reference Users with cascade; request IDs are always scoped by User. Add indexes for owner, hash, expiry and allowance windows.
 - [ ] Write `test_email_change_lifecycle`: request keeps current email; preparation issues a 24-hour hash-only proof; check never consumes; replacement/cancel prevents prepare and confirm; cancelling a stale request ID leaves its replacement intact; status excludes expired, revoked and stale-revision requests.
-- [ ] Write `test_confirmation_checks_ownership_and_live_session_atomically`: another User, expired/deleted session, wrong password snapshot, disabled/deleted owner, used/revoked/cross-purpose proof all change nothing; success retains only the confirming session and revokes resets/sibling changes.
-- [ ] Write `test_email_change_uniqueness_race_is_neutral`: two Users request the same address; one confirmation wins, the other leaves its credentials/sessions intact and reveals no person. Requesting a taken address has the same response and no ownership lookup.
-- [ ] Write `test_email_change_reset_password_and_disable_races`: both commit orders for reset and confirmation; ordinary password change cancels proofs; email away/back and disable/re-enable never revive them; failure after proof/session mutation rolls back every change.
-- [ ] Write `test_email_change_expiry_is_read_after_lock_wait`: exact deadline after password verification or lock wait refuses without writes. Keep password verification and SMTP outside transactions.
-- [ ] Write shared session contract tests: old email/revision cannot start a session after change with the same hash, including away/back; current facts can; nullable email works only before initial add-email. Add `test_email_change_during_sign_in_refuses_old_address` and `test_email_change_aba_refuses_stale_sign_in` with paused password verification.
-- [ ] Write limits tests: sixth User request/hour refused, 60-second target cooldown across Users, hour boundary, concurrency and restart persistence; cancellation/success never refunds. Check 20 invalid and 10 completion attempts, independent from reset/sign-in, IPv6 /64, capacity 10,000, and rejected front-gate floods causing no SQLite writes.
-- [ ] Observe focused failures, implement the adapters with `connections.transaction(timeout=0.1)` and `BEGIN IMMEDIATE`. Use domain revision/proof decisions against rows loaded under lock. At confirmation recheck active state, revision, digest, expiry, uniqueness and kept session before mutation; then increment revision and invalidate atomically.
-- [ ] Extend existing credential/password/reset writers to revoke pending email changes in the same transaction. Direct change refuses a live pending request until explicit cancel. Add no records to `memory.py`; update existing User/session fake behavior and shared contracts, without adding new identity proof records there.
-- [ ] Test HMAC purpose separation, hash-only storage, User cascade, bounded purge after traffic/restart, cleanup faults preserving an already admitted operation, 100 ms lock failure, and no removal of live allowances/proofs. Retain no completed email-change history beyond cleanup.
-- [ ] Run `.venv/bin/pytest tests/domain/test_email_changes.py tests/adapters/test_email_change_store.py tests/adapters/test_email_change_admission.py tests/adapters/test_password_reset_store.py tests/adapters/test_users_store.py tests/adapters/test_admin_sessions.py tests/adapters/test_user_isolation_schema.py tests/application/test_identity.py`; expect pass. Review/fix, commit, inspect size.
+- [x] Write `test_confirmation_checks_ownership_and_live_session_atomically`: another User, expired/deleted session, wrong password snapshot, disabled/deleted owner, used/revoked/cross-purpose proof all change nothing; success retains only the confirming session and revokes resets/sibling changes.
+- [x] Write `test_email_change_uniqueness_race_is_neutral`: two Users request the same address; one confirmation wins, the other leaves its credentials/sessions intact and reveals no person. Requesting a taken address has the same response and no ownership lookup.
+- [x] Write `test_email_change_reset_password_and_disable_races`: both commit orders for reset and confirmation; ordinary password change cancels proofs; email away/back and disable/re-enable never revive them; failure after proof/session mutation rolls back every change.
+- [x] Write `test_email_change_expiry_is_read_after_lock_wait`: exact deadline after password verification or lock wait refuses without writes. Keep password verification and SMTP outside transactions.
+- [x] Write shared session contract tests: old email/revision cannot start a session after change with the same hash, including away/back; current facts can; nullable email works only before initial add-email. Add `test_email_change_during_sign_in_refuses_old_address` and `test_email_change_aba_refuses_stale_sign_in` with paused password verification.
+- [x] Write limits tests: sixth User request/hour refused, 60-second target cooldown across Users, hour boundary, concurrency and restart persistence; cancellation/success never refunds. Check 20 invalid and 10 completion attempts, independent from reset/sign-in, IPv6 /64, capacity 10,000, and rejected front-gate floods causing no SQLite writes.
+- [x] Observe focused failures, implement the adapters with `connections.transaction(timeout=0.1)` and `BEGIN IMMEDIATE`. Use domain revision/proof decisions against rows loaded under lock. At confirmation recheck active state, revision, digest, expiry, uniqueness and kept session before mutation; then increment revision and invalidate atomically.
+- [x] Extend existing credential/password/reset writers to revoke pending email changes in the same transaction. Direct change refuses a live pending request until explicit cancel. Add no records to `memory.py`; update existing User/session fake behavior and shared contracts, without adding new identity proof records there.
+- [x] Test HMAC purpose separation, hash-only storage, User cascade, bounded purge after traffic/restart, cleanup faults preserving an already admitted operation, 100 ms lock failure, and no removal of live allowances/proofs. Retain no completed email-change history beyond cleanup.
+- [x] Run `.venv/bin/pytest tests/domain/test_email_changes.py tests/adapters/test_email_change_store.py tests/adapters/test_email_change_admission.py tests/adapters/test_password_reset_store.py tests/adapters/test_users_store.py tests/adapters/test_admin_sessions.py tests/adapters/test_user_isolation_schema.py tests/application/test_identity.py`; expect pass. Review/fix, commit, inspect size.
 
 ### Task 3: Application orchestration and security mail
 
@@ -160,15 +160,15 @@ create `bootstrap/identity_email_changes.py`, `infrastructure/identity_email_cha
 `submit_notice(notice) -> bool`; delivery `prepare(request) -> PreparedEmailChange | None`,
 `send(prepared) -> None`. SMTP adds `send_email_change(recipient, token)` and `send_email_changed(recipient)`.
 
-- [ ] Write `test_request_requires_current_password_and_preserves_old_email`; confirm password once on request and again on completion. Wrong passwords never create/replace proofs. Count network request attempts before verification and durable User/email admission before issuing.
-- [ ] Write `test_direct_mode_never_bypasses_verification`: no SMTP permits direct; partial/invalid SMTP refuses actionably; restricted first User adds email without another password under every configuration; once stored the exception ends. A pending request blocks direct fallback after SMTP removal until explicit cancel.
-- [ ] Write `test_worker_rechecks_current_request_and_revision`: no send after replacement, cancel, disable, password/reset change or fingerprint mismatch; stale preparation cannot overwrite the replacement. Previously issued proof still completes without SMTP/readiness.
-- [ ] Write `test_security_lane_is_bounded_and_fair`: ten total waiting tests/changes/notices, reset retains fifty and receives alternating turns; one SMTP executor, no retries/outbox. Preparation is off the event loop. Stop/generation guards match existing reset delivery behavior.
-- [ ] Write `test_old_address_notice_is_after_commit_and_lossy`: exact previous recipient, notification preference/SMTP_RECIPIENT ignored, literal content-free template, no proof token; queue exception/saturation/SMTP failure cannot roll back success or create an error response.
-- [ ] Write `test_email_change_mail_is_private`: configured fragment origin `/email-change#<token>`, verified TLS, ten-second timeout, no request host influence, safe aggregate logs only; no address, token, password, body or provider exception marker in logs or repr.
-- [ ] Observe failures, implement use cases as load/verify/decide/save calls. Add a concrete delivery/cleanup bundle as the worker's sixth constructor dependency, not individual new arguments or a general job framework. Hourly and traffic-driven maintenance purges batches of 500 even when SMTP is unavailable.
-- [ ] Add `email_changes` to `IdentityEmailServices` as one grouped field. Build its SQLite adapters in `build_identity_email(settings, ids, clock)`, adding Clock at its existing callsite; extend `compose_identity_email` from five to seven parameters with PasswordHasher and CredentialChanges. Only replace the existing composition call in `container.py`; keep it no larger and add no identity logic there. Keep the dependency-call edits within the original container line count; other three growing files stay untouched.
-- [ ] Run `.venv/bin/pytest tests/application/test_email_changes.py tests/application/test_password_reset.py tests/adapters/test_identity_mail_worker.py tests/adapters/test_identity_email_transport.py tests/adapters/test_identity_email_store.py`; expect pass. Review/fix, commit, inspect size.
+- [x] Write `test_request_requires_current_password_and_preserves_old_email`; confirm password once on request and again on completion. Wrong passwords never create/replace proofs. Count network request attempts before verification and durable User/email admission before issuing.
+- [x] Write `test_direct_mode_never_bypasses_verification`: no SMTP permits direct; partial/invalid SMTP refuses actionably; restricted first User adds email without another password under every configuration; once stored the exception ends. A pending request blocks direct fallback after SMTP removal until explicit cancel.
+- [x] Write `test_worker_rechecks_current_request_and_revision`: no send after replacement, cancel, disable, password/reset change or fingerprint mismatch; stale preparation cannot overwrite the replacement. Previously issued proof still completes without SMTP/readiness.
+- [x] Write `test_security_lane_is_bounded_and_fair`: ten total waiting tests/changes/notices, reset retains fifty and receives alternating turns; one SMTP executor, no retries/outbox. Preparation is off the event loop. Stop/generation guards match existing reset delivery behavior.
+- [x] Write `test_old_address_notice_is_after_commit_and_lossy`: exact previous recipient, notification preference/SMTP_RECIPIENT ignored, literal content-free template, no proof token; queue exception/saturation/SMTP failure cannot roll back success or create an error response.
+- [x] Write `test_email_change_mail_is_private`: configured fragment origin `/email-change#<token>`, verified TLS, ten-second timeout, no request host influence, safe aggregate logs only; no address, token, password, body or provider exception marker in logs or repr.
+- [x] Observe failures, implement use cases as load/verify/decide/save calls. Add a concrete delivery/cleanup bundle as the worker's sixth constructor dependency, not individual new arguments or a general job framework. Hourly and traffic-driven maintenance purges batches of 500 even when SMTP is unavailable.
+- [x] Add `email_changes` to `IdentityEmailServices` as one grouped field. Build its SQLite adapters in `build_identity_email(settings, ids, clock)`, adding Clock at its existing callsite; extend `compose_identity_email` from five to seven parameters with PasswordHasher and CredentialChanges. Only replace the existing composition call in `container.py`; keep it no larger and add no identity logic there. Keep the dependency-call edits within the original container line count; other three growing files stay untouched.
+- [x] Run `.venv/bin/pytest tests/application/test_email_changes.py tests/application/test_password_reset.py tests/adapters/test_identity_mail_worker.py tests/adapters/test_identity_email_transport.py tests/adapters/test_identity_email_store.py`; expect pass. Review/fix, commit, inspect size.
 
 ### Task 4: Guarded HTTP API and generated types
 
@@ -185,12 +185,12 @@ ID is scoped to the owner and stale/unknown cancellation is idempotent. POST `/c
 The existing PUT `/api/v1/account/email` keeps its response and upgrade access, but calls guarded
 `email_changes.direct`. Confirmation refreshes session data through the existing session endpoint.
 
-- [ ] Write route tests for session/owner/restricted-session guards, no bearer bypass, current password twice, no direct PUT bypass, generic request/collision behavior, stale cancellation and configuration modes. Keep public-route lists unchanged in scope; document explicitly that verification needs a session.
-- [ ] Write streamed/false Content-Length boundary tests: 8,192/8,193 bytes; 254/255 normalized email; 128/129 ASCII/non-ASCII token; 1,024/1,025 current password. Refuse before lookup/hash and never echo rejected inputs in errors. Count completion before token lookup and password verification.
-- [ ] Write `test_email_change_private_headers_on_every_outcome`: no-store/no-referrer on page/API including 401,403,410,422,429,503; GET/check never consume. Map unavailable proof to 410, neutral address failure to 409, bad password to 403, throttles to 429 with Retry-After, storage/configuration failures to safe 503 codes.
-- [ ] Observe failures, implement identity-named schemas/router/protocols, extend IdentityBoundary to this API and `/email-change`, and add typed factory wiring. Keep `schemas.py` unchanged.
-- [ ] Run `.venv/bin/pytest tests/adapters/test_email_change_api.py tests/adapters/test_api_authorization.py tests/adapters/test_identity_api.py tests/adapters/test_password_reset_api.py`; expect pass.
-- [ ] Run `.venv/bin/python scripts/export_openapi.py`; inside web run `pnpm run api:types` and `pnpm run build`. Review/fix and commit generated files and substantive bundle with the route change; inspect size.
+- [x] Write route tests for session/owner/restricted-session guards, no bearer bypass, current password twice, no direct PUT bypass, generic request/collision behavior, stale cancellation and configuration modes. Keep public-route lists unchanged in scope; document explicitly that verification needs a session.
+- [x] Write streamed/false Content-Length boundary tests: 8,192/8,193 bytes; 254/255 normalized email; 128/129 ASCII/non-ASCII token; 1,024/1,025 current password. Refuse before lookup/hash and never echo rejected inputs in errors. Count completion before token lookup and password verification.
+- [x] Write `test_email_change_private_headers_on_every_outcome`: no-store/no-referrer on page/API including 401,403,410,422,429,503; GET/check never consume. Map unavailable proof to 410, neutral address failure to 409, bad password to 403, throttles to 429 with Retry-After, storage/configuration failures to safe 503 codes.
+- [x] Observe failures, implement identity-named schemas/router/protocols, extend IdentityBoundary to this API and `/email-change`, and add typed factory wiring. Keep `schemas.py` unchanged.
+- [x] Run `.venv/bin/pytest tests/adapters/test_email_change_api.py tests/adapters/test_api_authorization.py tests/adapters/test_identity_api.py tests/adapters/test_password_reset_api.py`; expect pass.
+- [x] Run `.venv/bin/python scripts/export_openapi.py`; inside web run `pnpm run api:types` and `pnpm run build`. Review/fix and commit generated files and substantive bundle with the route change; inspect size.
 
 ### Task 5: Pending email and session-aware confirmation UI
 
@@ -204,11 +204,11 @@ use inferred generated types. `OwnEmailItem({email,onDone})` replaces extracted 
 `EmailChangePage` is live at `/email-change`, uses `useLinkToken` and a session-scoped check,
 AuthFrame and CurrentPasswordField; do not add it to the token-only public admission mapping.
 
-- [ ] Write pending tests: current email stays visible, pending email/deadline/Cancel appear, replacement and cooldown are clear, no delivery promise, direct and invalid-config modes work, password changes invalidate status, long addresses wrap, stale cancel cannot clear a newer request. Refetch on focus and after mutations; scope queries by User and keep tokens out of query keys/devtools persistence.
-- [ ] Write confirmation tests: signed-out person signs in inline then checks proof, owning person enters current password, wrong User sees neutral unusable state with account-switch option, expired/replaced proof offers own-account retry. Preserve token only in memory through sign-in and explain reopen-link fallback after refresh.
-- [ ] Write late-response tests for fragment changes and User switches: no stale status/password/error/success crosses boundaries; remove the fragment only for the current completed token; disable automatic mutation retries and clear password after submission. Success refreshes session, explains other sessions ended, and links to Your account.
-- [ ] Observe failures, implement using DESIGN.md disclosures, focus restoration, field errors and polite announcements. Keep one primary action and visible focus during pending work; delete unused copy and keep every new module reachable.
-- [ ] Run each web command with real exits: `pnpm run test`, `typecheck`, `lint`, `knip`, `doctor`, `build`; expect pass. Review/fix, commit source/catalog/substantive bundle, inspect size.
+- [x] Write pending tests: current email stays visible, pending email/deadline/Cancel appear, replacement and cooldown are clear, no delivery promise, direct and invalid-config modes work, password changes invalidate status, long addresses wrap, stale cancel cannot clear a newer request. Refetch on focus and after mutations; scope queries by User and keep tokens out of query keys/devtools persistence.
+- [x] Write confirmation tests: signed-out person signs in inline then checks proof, owning person enters current password, wrong User sees neutral unusable state with account-switch option, expired/replaced proof offers own-account retry. Preserve token only in memory through sign-in and explain reopen-link fallback after refresh.
+- [x] Write late-response tests for fragment changes and User switches: no stale status/password/error/success crosses boundaries; remove the fragment only for the current completed token; disable automatic mutation retries and clear password after submission. Success refreshes session, explains other sessions ended, and links to Your account.
+- [x] Observe failures, implement using DESIGN.md disclosures, focus restoration, field errors and polite announcements. Keep one primary action and visible focus during pending work; delete unused copy and keep every new module reachable.
+- [x] Run each web command with real exits: `pnpm run test`, `typecheck`, `lint`, `knip`, `doctor`, `build`; expect pass. Review/fix, commit source/catalog/substantive bundle, inspect size.
 - [ ] Check port 8001 is free, start `.venv/bin/python scripts/dev_preview.py --scenario healthy`; capture before/after at 1440 and 390 px in light/dark with keyboard. Use a disposable synthetic harness for configured SMTP and captured mail, not real accounts. Save `.context/` screenshots; check focus, Enter, overflow, announcements, contrast and reduced motion. Run the owner's `/impeccable critique audit` UI review before delivery.
 
 ### Task 6: Documentation, security review and delivery
@@ -216,8 +216,8 @@ AuthFrame and CurrentPasswordField; do not add it to the token-only public admis
 **Files:** Update `CONTEXT.md`, `README.md`, `docs/architecture.md`, `development.md`, `deployment.md`,
 `self-hosting.md`, `data-ownership.md`, ADR 0040 status and this plan as behavior ships.
 
-- [ ] Document Email Change Link and pending behavior, old-address recovery access until completion, configuration failure/retry, lossy proof/notice delivery, cancellation before no-SMTP fallback, retained confirming session and Integration Tokens. No claims that later Open/OIDC/backup work has shipped.
-- [ ] Document migration backup/upgrade and matching database/image rollback, loss of writes since backup, retention and Master Key counter effects. No down migration, old binary on new schema, secrets, or `.env` commits.
+- [x] Document Email Change Link and pending behavior, old-address recovery access until completion, configuration failure/retry, lossy proof/notice delivery, cancellation before no-SMTP fallback, retained confirming session and Integration Tokens. No claims that later Open/OIDC/backup work has shipped.
+- [x] Document migration backup/upgrade and matching database/image rollback, loss of writes since backup, retention and Master Key counter effects. No down migration, old binary on new schema, secrets, or `.env` commits.
 - [ ] Run every backend gate separately: `.venv/bin/ruff format --check .`, `.venv/bin/ruff check .`, `.venv/bin/mypy`, `.venv/bin/lint-imports`, `.venv/bin/pytest --cov --cov-report=term-missing --cov-fail-under=80`.
 - [ ] Inside web run separately `pnpm audit --audit-level=high`, `pnpm run api:check`, `typecheck`, `lint`, `knip`, `doctor`, `test`, `build`. There is no package audit script. Site checks apply only if site changes. Never commit a SHA-only rebuild.
 - [ ] Run gitleaks 8.30.1 on history and branch: `gitleaks git .` and `gitleaks git . --log-opts=origin/main..HEAD`; run `docker compose build` or report its actual blocker. Inspect each exit code, never hide failures with tail.
@@ -229,5 +229,7 @@ AuthFrame and CurrentPasswordField; do not add it to the token-only public admis
 
 Every email-change requirement maps to Tasks 1-6. Review Focus conditions have named assertions.
 No future identity tables, dormant screens, Plan Hold work or architecture-contract changes are
-planned. Task implementers and fresh reviewers run sequentially with fix loops after approval.
-This plan is ready for owner review; no product code has changed and implementation gates are pending.
+planned. Task reports 1-5 record implementation and focused review. Final review found the
+issued-proof expiry needs correction, and the owner is running UI critique and release gates;
+the affected checkboxes remain open until that evidence lands.
+Product code for Tasks 1-5 is committed; Task 6 delivery gates remain pending.

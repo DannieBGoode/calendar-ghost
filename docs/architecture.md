@@ -481,9 +481,10 @@ Unknown, disabled, and eligible addresses have the same accepted response, inclu
 and delivery failure. Malformed input is rejected independently of accounts. This does not promise
 constant delivery latency: aggregate SMTP timing remains observable to mailbox owners.
 
-The existing worker reserves separate lanes for ten waiting administrator tests and fifty waiting
-reset requests, alternating work on one SMTP thread. Queued addresses and transient proofs remain in
-memory, with no plaintext-token outbox or retries. Identity mail always uses the validated configured
+The existing worker reserves a shared lane for ten waiting administrator tests, email changes,
+and old-address notices, and a separate lane for fifty waiting reset requests. It alternates
+work on one SMTP thread. Queued addresses and transient proofs remain in memory, with no
+plaintext-token outbox or retries. Identity mail always uses the validated configured
 origin, never Host or forwarded headers. Uvicorn resolves client addresses only through explicit
 `FORWARDED_ALLOW_IPS` trust; reset admission groups IPv6 by /64.
 
@@ -502,4 +503,22 @@ time, active state, and monotonic credential revision, then updates password/rev
 sessions and sibling proofs together. Password hashing and SMTP stay outside transactions. Guarded
 own-password/email changes reject stale confirmation if a reset won first; later valid sign-ins
 remain usable. Migration 36 revokes legacy unbound proofs while preserving passwords and sessions.
-Pending email-change cancellation will join this transaction in PR 3; no placeholder store exists.
+Email-change completion and cancellation use owned proof records. Completion retains the live
+confirming session and Integration Tokens, ends the other sessions, and invalidates reset and
+sibling email proofs under the same lock. It checks address uniqueness at confirmation; the
+proposed address reserves nothing. Password verification and SMTP stay outside the write lock.
+
+## Verified email change boundary
+
+The Identity context owns status, request, cancellation, proof check, and confirmation through
+narrow ports. API routes require the owning signed-in session, including proof checks. The direct
+email route uses the same mode decision, so usable identity SMTP requires verification; the
+upgraded first administrator may still add their initial email in a restricted session. The
+security mail worker rechecks the current request, active User, revision, and configuration
+fingerprint before preparing a hash-only proof. It queues an old-address notice only after the
+credential commit; a lost notice does not roll back the change.
+
+Migration 37 adds owned proof and issuance rows plus separate anonymous network counters.
+Purpose-separated HMAC digests protect persisted admission keys when the Master Key is present.
+The keyed maintenance worker removes obsolete records in bounded batches even without SMTP.
+See [deployment](deployment.md#migration-37-email-change-proofs) for upgrade and restore steps.

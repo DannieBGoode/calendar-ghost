@@ -35,7 +35,10 @@ recovery availability. Tests in `tests/adapters/test_identity_proxy_limits.py` u
 Uvicorn middleware around the real app to exercise client limits and configured mail origin.
 Reset passwords accept 12 to 1,024 characters; sign-in and all current-password confirmations
 accept up to 1,024. Setup, Invitation, and ordinary new-password creation retain their 256-character
-maximum. Open registration, verified email changes, and PR 4's offline recovery command are unshipped.
+maximum. Verified email changes are available when identity email configuration is usable. Exercise them
+with the synthetic SMTP capture and a disposable SQLite database; the request keeps the old
+address until the signed-in owner completes the link with their current password. Open
+registration and offline recovery tooling remain planned.
 
 ## Corresponding source link
 

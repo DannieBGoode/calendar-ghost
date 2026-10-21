@@ -445,7 +445,17 @@ current credential revision and an unexpired proof, changes the password, and en
 and other reset proofs atomically. It never enables a disabled User or signs anyone in. Password
 and email changes and disabling a User invalidate earlier proofs permanently. Existing and
 Invitation Only email addresses remain trusted recovery addresses without retroactive verification;
-direct email changes retain that trust until verified email changes ship in PR 3 (ADR 0040).
+the current address remains the recovery address while an Email Change Link is pending (ADR 0040).
+
+**Email Change Link**:
+A single-use proof sent to a proposed new address when a signed-in User requests a verified email
+change. The pending request lasts 24 hours from request, and the link lasts 24 hours from proof
+issuance. It belongs to that User and credential revision, and requires their live session
+and current password to complete. A newer request or cancellation makes an earlier link unusable;
+password changes, password reset completion, direct email changes, and disabling the User also
+invalidate it. Completion changes the email, retains the confirming session and Integration Tokens,
+and ends other browser sessions. Until then, the old mailbox can receive a Password Reset Link.
+_Avoid_: Email reservation, new account invitation
 
 **Public Health Status**:
 The minimal unauthenticated indication that the service is running. Calendar, account, rule, OAuth, audit, and incident details require the session of the User they belong to. Installation Status is its authenticated counterpart.
@@ -590,4 +600,5 @@ only to the requesting Installation Administrator's current email address, indep
 Incident Notifications and their preferences. SMTP acceptance is not proof of inbox delivery.
 The last verified time and the administrator's latest in-memory attempt state are distinct;
 a failed attempt does not erase earlier matching readiness. Returning to setup clears readiness.
-This test does not activate another Registration Policy or change existing account email updates.
+This test does not activate another Registration Policy. Verified email changes require usable
+identity email configuration, but not a successful readiness test.

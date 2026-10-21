@@ -1,15 +1,15 @@
 # Open registration and email ownership
 
-Status: accepted for planned phase 4 on 2026-10-20 with
+Status: accepted; verified email changes implemented on 2026-10-21, with later phases planned under
 [the design](../superpowers/specs/2026-10-20-open-registration-design.md).
-This is not a description of shipped behavior. The owner approved the revised design for planning;
-implementation still requires each PR's approved plan. The second Claude design/PR 2 plan review
-completed on 2026-10-20; the owner delegated PR 2 plan review and authorized continued execution.
+The owner approved the revised design for planning. This record distinguishes the implemented
+email-change slice from later Open registration, provider sign-in, and backup work.
 
 Delivery status on 2026-10-21: PR #129 identity email readiness and PR #130 self-service
-password recovery are merged, including migrations 35 and 36. Only Me and Invitation Only remain
-supported. The five remaining PRs below replace the earlier delivery sequence. These decisions
-remain planned until each PR ships.
+password recovery are merged, including migrations 35 and 36. The verified email-change slice
+implements migration 37 and its signed-in request, proof, cancellation, and confirmation flow;
+delivery review remains in progress. Only Me and Invitation Only remain supported. The later
+PRs below remain planned until each ships.
 
 Amends [ADR 0030](0030-users-administrators-and-registration.md), within the isolation boundary of
 [ADR 0029](0029-isolate-users-in-one-sqlite-database.md) and the optional switches of
@@ -20,10 +20,10 @@ Amends [ADR 0030](0030-users-administrators-and-registration.md), within the iso
 The Hosted Service needs people to join without an Invitation and recover their own passwords.
 For new joins under Open, an unverified address must not grant access, reserve another person's
 identity, or become a recovery address without proof. Existing and Invitation Only emails remain
-trusted recovery addresses under the approved compatibility policy. Until verified email changes
-ship, direct email changes retain that behavior: a wrong address can let its mailbox owner reset the account, so
-recovery docs must make that trust explicit. Self-hosted installations keep their current default
-and operate without email unless their administrator chooses otherwise.
+trusted recovery addresses under the approved compatibility policy. During a pending email change,
+the old address remains the sign-in and recovery address until confirmation. Self-hosted
+installations keep their current default and operate without email unless their administrator
+chooses otherwise.
 
 ## Policy approved by the owner
 
@@ -97,6 +97,14 @@ They were accepted with the revised design; their complete behavior and delivery
   cannot treat revived records as proof that their access remains authorized.
 
 ## Consequences
+
+The verified email-change slice keeps the old address until an owned, 24-hour proof is confirmed
+with the current password. The confirming browser session and Integration Tokens remain; other
+sessions end, and a best-effort notice goes to the old address after commit. A pending request
+must be cancelled before direct change when SMTP host and sender are both absent. Partial or unsafe
+identity SMTP cannot select direct change. Migration 37 has no down migration; rollback requires
+the matching pre-upgrade database and image, losing later writes. See
+[deployment](../deployment.md#verified-email-changes) for operation and retention.
 
 Email is a dependency of public admission and self-service recovery, not of existing sign-in or
 synchronization. Missing or changed SMTP configuration suspends public admission until tested,

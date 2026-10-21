@@ -502,8 +502,52 @@ Stop the service and back up the complete database with its matching Master Key 
 keeping the previous image. To roll back, stop the service and restore that pre-upgrade database
 and previous image together. Do not run the previous image against the upgraded database or remove
 migration records. Restoring discards changes since the backup, including later proof and allowance
-records. New proofs store only token hashes and are never reusable after a credential revision
-changes; a successful email change retains only its confirming session.
+records. There is no down migration; the old binary must not open the upgraded schema. Do not
+commit the backup, Master Key, or `.env`. New proofs store only token hashes and are never reusable
+after a credential revision changes; a successful email change retains only its confirming session.
+
+## Verified email changes
+
+In **Settings → Your account**, a signed-in User requests a change with the current password.
+Their old address remains the sign-in and password-recovery address until confirmation, so its
+mailbox owner can still request a reset link. A request does not reserve the proposed address.
+The pending request lasts 24 hours from request; the worker issues a single-use Email Change Link
+that lasts 24 hours from preparation. Open the link in the requesting User's session (sign in there
+if needed), then submit the current password again. The proof cannot be checked or completed with
+an Integration Token or another User's session. A new request replaces the previous one; Cancel
+invalidates it. A changed password, completed reset, direct email change, or disabled User also
+invalidates it. Confirmation keeps the confirming session and Integration Tokens, ends other
+browser sessions, and queues a notice to the old address after the database commit. Notice loss
+cannot undo the change.
+
+When SMTP host and sender are both absent, the ordinary password-confirmed direct change remains
+available. A live pending request must be cancelled first. If either SMTP host or sender is set,
+an incomplete or unsafe identity mail configuration refuses changes instead of selecting direct
+mode. Remote SMTP requires certificate-verified STARTTLS, a bare sender, a Master Key, and a valid
+HTTPS root `CALENDAR_SYNC_PUBLIC_URL`; localhost or literal loopback HTTP is for development.
+An HTTP LAN origin cannot send verification links. The upgraded first active administrator who
+has no email may still add one directly in the restricted session. A prior successful identity
+test is useful but is not required for a change. Restart after changing environment settings.
+
+Request acceptance does not promise a delivered link. The ten-slot security mail lane is shared
+with administrator identity tests and old-address notices. Queue saturation, shutdown, restart,
+or SMTP failure can lose proof or notice mail; there is no persistent outbox or automatic retry.
+Check spam and configuration, then request a replacement when the limit permits. Each User has
+five requests per rolling hour; a target address has a 60-second cooldown across Users. Each
+client network has 20 requests, 20 invalid proof checks, and 10 current-password submissions per
+15 minutes. IPv6 is grouped by /64 and at most 10,000 live network keys are held. A throttled
+response includes `Retry-After`; an invalid or stale proof calls for a new request. An address
+already held by another User is revealed only as a neutral failure at confirmation.
+
+SQLite retains only hashed link tokens and pending address/revision/expiry state, not plaintext
+tokens or mail bodies. With a Master Key, short-lived issuance and network counters survive
+restart as purpose-separated HMAC digests; without it, new verified requests are unavailable
+and existing proof completion uses bounded memory admission. The worker and admitted traffic
+remove obsolete proofs and counters in batches of at most 500, aiming for removal within 24
+hours while running. A stopped service, storage fault, or backup can retain them longer. Master
+Key replacement changes digest keys, so old address/network allowances no longer match. It also
+makes stored provider credentials and sealed history unreadable and invalidates matching email
+readiness. There is no supported in-place rotation tool: retain the matching key with backups.
 
 ## Password recovery
 
@@ -544,7 +588,7 @@ Identity security mail ignores **Email notifications** and the installation's in
 It goes to the User's current account email. Existing and Invitation Only addresses, including
 direct email changes, remain eligible without retroactive verification. Check these addresses:
 a typo or an address belonging to somebody else gives that mailbox owner password recovery access.
-Verified email changes are PR 3, still unshipped. Only me remains the default; Open registration,
+Only me remains the default; Open registration,
 PR 4's offline recovery command, and the later backup runbook remain unshipped. Plans are independent.
 
 ### Recovery allowances and fallback

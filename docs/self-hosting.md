@@ -628,7 +628,8 @@ The last verified time applies only to the current configuration and is separate
 attempt. Tests ignore your incident Email notifications preference and the installation's SMTP
 recipient. They are limited to three requests per administrator per rolling hour and use a bounded,
 in-memory worker with no retries, so a restart can lose queued work. Registration still offers
-Only me or Invitation only; ordinary email and password changes keep their existing behavior.
+Only me or Invitation only. Usable identity mail enables verified email changes independently of
+whether the test succeeded.
 
 For exact settings and the additive migration 35 upgrade/rollback procedure, see
 [Identity email test readiness](deployment.md#identity-email-test-readiness). Stop the service and
@@ -645,9 +646,10 @@ link lasting one hour; unknown and disabled addresses receive no mail. Reset end
 sessions and asks the person to sign in again. Identity mail ignores incident email preferences.
 Reset retains Integration Tokens: review them in Settings after recovery and revoke unfamiliar ones.
 
-Check your account email before relying on recovery. Existing and invited Users' addresses and
-direct email changes remain trusted without verification: whoever owns that mailbox can reset the
-account. Verified email changes and Open registration are not shipped. Remote identity SMTP
+Check your account email before relying on recovery. Existing and invited Users' addresses remain
+trusted without retroactive verification. While an email change is pending, the old address stays
+the recovery address, so whoever owns that mailbox can still request a reset link. Open
+registration is not shipped. Remote identity SMTP
 requires verified STARTTLS; emailed links require HTTPS, except localhost or literal loopback
 development. An HTTP LAN installation can still use an administrator's hand-delivered seven-day
 link without email. Reset never enables a disabled User.
@@ -672,3 +674,25 @@ Behind HTTPS proxies, configure only their exact peer IPs or narrow networks in
 Overwrite forwarded headers at the edge, restrict direct access to the application port, preserve
 `Authorization`, and enable secure cookies. Docker NAT may otherwise make clients share one gateway
 allowance. See [trusted proxy headers](deployment.md#trusted-proxy-headers) before exposing recovery.
+
+## Change your email
+
+In **Settings → Your account**, enter the new address and your current password. With usable
+identity mail, Calendar Ghost shows a pending request and sends a single-use Email Change Link to
+the new address. The old address still signs in and receives password recovery until you open the
+link in the requesting account's session and enter your current password again. Pending requests
+last 24 hours from request; issued links last 24 hours from preparation. If you are signed out,
+the link page lets you sign in to the same account. You may cancel or replace a pending request;
+neither reserves the new address. A successful change keeps that confirming browser signed in,
+ends your other browser sessions, and keeps your Integration Tokens. A security notice to the old
+address is sent after the change when delivery succeeds, regardless of **Email notifications**.
+
+If a link is missing, check spam and the identity SMTP settings, then request another after any
+cooldown. Mail can be lost on a restart, full worker queue, or SMTP failure and has no automatic
+retry. The pending state remains visible so you can cancel or replace it. If both SMTP host and
+sender are absent, direct change with the current password is available; cancel a live pending
+request first. If either setting is present but the identity configuration is incomplete or
+unsafe, fix it and restart: Calendar Ghost will not switch to direct change. A previous link can
+still complete after SMTP becomes unavailable. See [verified email changes](deployment.md#verified-email-changes)
+for exact limits, retention, and [migration 37](deployment.md#migration-37-email-change-proofs)
+for backup and rollback.
