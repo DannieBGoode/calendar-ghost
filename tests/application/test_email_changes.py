@@ -172,14 +172,19 @@ def test_old_address_notice_is_after_commit_and_lossy(tmp_path: Path, queue_fail
     changes, _, h, adapters, session, _ = services(tmp_path)
     queue = Mock()
 
+    observations: list[dict[str, object]] = []
+
     def submit(notice: EmailChangedNotice) -> bool:
-        assert notice.recipient == SECOND.email
-        assert notice.recipient not in repr(notice)
         changed = h.users.get(SECOND.id)
-        assert changed
-        assert changed.email == "new@example.test"
-        assert changes.show.execute(SECOND.id).pending is None
-        assert h.sessions.user_of(session.token) == SECOND.id
+        observations.append(
+            {
+                "recipient": notice.recipient,
+                "notice_repr": repr(notice),
+                "current_email": changed.email if changed else None,
+                "pending": changes.show.execute(SECOND.id).pending,
+                "session_owner": h.sessions.user_of(session.token),
+            }
+        )
         if queue_failure == "exception":
             raise RuntimeError("synthetic private exception")
         return False
@@ -193,6 +198,14 @@ def test_old_address_notice_is_after_commit_and_lossy(tmp_path: Path, queue_fail
     assert prepared
     confirm.execute(SECOND.id, prepared.token, "correct", session.token, "192.0.2.1")
     queue.submit_notice.assert_called_once()
+    assert len(observations) == 1
+    observed = observations[0]
+    assert observed["recipient"] == SECOND.email
+    assert SECOND.email is not None
+    assert SECOND.email not in str(observed["notice_repr"])
+    assert observed["current_email"] == "new@example.test"
+    assert observed["pending"] is None
+    assert observed["session_owner"] == SECOND.id
 
 
 def test_cancel_enables_explicit_direct_change_when_smtp_removed(tmp_path: Path) -> None:
