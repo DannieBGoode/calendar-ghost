@@ -256,7 +256,7 @@ class AcceptInvitation:
         except (LinkUnusable, EmailTaken):
             self.attempts.failed(client)
             raise
-        session = start_session(self.sessions, user.id, hashed)
+        session = start_session(self.sessions, user.id, hashed, user.email, 0)
         self.users.record_sign_in(user.id, now)
         return session
 

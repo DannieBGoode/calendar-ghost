@@ -6,9 +6,14 @@ import sqlite3
 from pathlib import Path
 
 from calendar_sync.application.identity.credentials import CredentialSnapshot
+from calendar_sync.application.identity.email_changes import EmailChangeUnavailable
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.email_change_records import (
+    current_request,
+    revoke_email_changes,
+)
 from calendar_sync.infrastructure.persistence.users import _taken_or
 from calendar_sync.infrastructure.security import token_hash
 
@@ -30,11 +35,15 @@ class SqliteCredentialChanges:
     def current(self, user_id: UserId) -> CredentialSnapshot | None:
         with transaction(self._database_path) as connection:
             row = connection.execute(
-                "SELECT credential_revision, password_hash FROM users "
+                "SELECT credential_revision, password_hash, email FROM users "
                 "WHERE id = ? AND state = 'active'",
                 (user_id.value,),
             ).fetchone()
-        return CredentialSnapshot(user_id, int(row[0]), str(row[1])) if row is not None else None
+        return (
+            CredentialSnapshot(user_id, int(row[0]), str(row[1]), row[2])
+            if row is not None
+            else None
+        )
 
     def change_password(self, expected: CredentialSnapshot, hashed: str, keep: str | None) -> bool:
         with transaction(self._database_path) as connection:
@@ -53,12 +62,13 @@ class SqliteCredentialChanges:
             changed = connection.execute(
                 "UPDATE users SET password_hash = ?, credential_revision = credential_revision + 1 "
                 "WHERE id = ? AND credential_revision = ? "
-                "AND password_hash = ? AND state = 'active'",
+                "AND password_hash = ? AND email IS ? AND state = 'active'",
                 (hashed, *_expected(expected)),
             ).rowcount
             if changed != 1:
                 return False
             revoke_resets(connection, expected.user_id, now)
+            revoke_email_changes(connection, expected.user_id, now)
             connection.execute(
                 "DELETE FROM user_sessions WHERE user_id = ? AND token_hash IS NOT ?",
                 (expected.user_id.value, token_hash(keep) if keep is not None else None),
@@ -69,19 +79,23 @@ class SqliteCredentialChanges:
         try:
             with transaction(self._database_path) as connection:
                 connection.execute("BEGIN IMMEDIATE")
+                if current_request(connection, expected.user_id, self._clock.now()) is not None:
+                    raise EmailChangeUnavailable
                 changed = connection.execute(
                     "UPDATE users SET email = ?, credential_revision = credential_revision + 1 "
                     "WHERE id = ? AND credential_revision = ? "
-                    "AND password_hash = ? AND state = 'active'",
+                    "AND password_hash = ? AND email IS ? AND state = 'active'",
                     (email, *_expected(expected)),
                 ).rowcount
                 if changed != 1:
                     return False
-                revoke_resets(connection, expected.user_id, self._clock.now().isoformat())
+                now = self._clock.now().isoformat()
+                revoke_resets(connection, expected.user_id, now)
+                revoke_email_changes(connection, expected.user_id, now)
         except sqlite3.IntegrityError as error:
             raise _taken_or(error) from error
         return True
 
 
-def _expected(expected: CredentialSnapshot) -> tuple[str, int, str]:
-    return expected.user_id.value, expected.revision, expected.password_hash
+def _expected(expected: CredentialSnapshot) -> tuple[str, int, str, str | None]:
+    return expected.user_id.value, expected.revision, expected.password_hash, expected.email

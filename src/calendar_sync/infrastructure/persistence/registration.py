@@ -23,6 +23,7 @@ from calendar_sync.domain.access import (
 )
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.credentials import revoke_resets
+from calendar_sync.infrastructure.persistence.email_change_records import revoke_email_changes
 from calendar_sync.infrastructure.persistence.users import insert_user
 from calendar_sync.infrastructure.security import token_hash
 
@@ -275,6 +276,7 @@ class SqlitePasswordResetLinks:
                 (password_hash, owner.value),
             )
             revoke_resets(connection, owner, now.isoformat())
+            revoke_email_changes(connection, owner, now.isoformat())
             connection.execute("DELETE FROM user_sessions WHERE user_id = ?", (owner.value,))
         return owner
 

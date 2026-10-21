@@ -58,7 +58,7 @@ def identity_origin(value: str) -> str | None:
 class IdentitySmtp:
     host: str
     port: int
-    sender: str
+    sender: str = field(repr=False)
     username: str = field(repr=False)
     password: str = field(repr=False)
     use_starttls: bool
@@ -89,6 +89,36 @@ class IdentitySmtp:
                 f"Reset your password: {origin}/password-reset#{token}\n\n"
                 "This link expires in one hour and can be used once.\n"
                 "If you did not request this, you can ignore this email.",
+            )
+        except Exception:
+            raise IdentityEmailDeliveryFailed() from None
+
+    def send_email_change(self, recipient: str, token: str) -> None:
+        try:
+            origin = self._origin()
+            if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", token) is None:
+                raise IdentityEmailDeliveryFailed()
+            self._send(
+                recipient,
+                "Calendar Ghost: verify your new email",
+                "An email change was requested for your Calendar Ghost account.\n\n"
+                f"Verify your new email: {origin}/email-change#{token}\n\n"
+                "This link expires in 24 hours and can be used once.\n"
+                "Sign in and confirm your current password to finish the change.\n"
+                "If you did not request this, you can ignore this email.",
+            )
+        except Exception:
+            raise IdentityEmailDeliveryFailed() from None
+
+    def send_email_changed(self, recipient: str) -> None:
+        try:
+            origin = self._origin()
+            self._send(
+                recipient,
+                "Calendar Ghost: your email changed",
+                "Your Calendar Ghost sign-in email has changed.\n\n"
+                "If you did not make this change, contact your installation administrator.\n\n"
+                f"Open Calendar Ghost: {origin}",
             )
         except Exception:
             raise IdentityEmailDeliveryFailed() from None

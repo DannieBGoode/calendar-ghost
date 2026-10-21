@@ -104,7 +104,7 @@ machine and creates only the destination representation selected by each rule.
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |
 | Incidents | Each person's Activity view, deduplication, optional email to each person, and the installation's SMTP recipient and webhook for installation incidents |
 | Monitoring | Each person's Installation Status for monitors, homelab dashboards, and AI agents through `GET /api/v1/status` and an MCP server at `/mcp`, and Installation Health for administrators, authorized with Integration Tokens issued in Settings |
-| Access | People sign in with email and password; Only me by default, or Invitation only; email password recovery when configured, administrator-issued reset links, single-use invitations, an administrator role, and encrypted OAuth credentials |
+| Access | People sign in with email and password; Only me by default, or Invitation only; verified email changes and email password recovery when configured, administrator-issued reset links, single-use invitations, an administrator role, and encrypted OAuth credentials |
 | Operator Overview | Administrators see on **People** whether each person's synchronization works and why not, with calendars only as "Calendar 1", "Calendar 2", and each person's rules, accounts, Activity, and provider calls counted; each person sees the same about themself in Settings |
 | Storage | Database and log usage in Settings, administrator-chosen Activity retention, and log download or purge |
 | Appearance | Device-aware light and dark themes with a browser-local override |
@@ -301,8 +301,16 @@ seven days. Reset ends existing sessions and requires a fresh sign-in. No tested
 required, and incident email preferences do not control recovery. Existing account email addresses
 are trusted without retroactive verification: check yours, since its mailbox owner can reset your
 password. See [password recovery](docs/deployment.md#password-recovery) for limits, lost-mail retry,
-administrator fallback, and migration 36 backup/rollback guidance. Open registration and verified
-email changes remain unshipped.
+administrator fallback, and migration 36 backup/rollback guidance. Open registration is not
+available. In **Settings → Your account**, request an email change with your current password.
+Your current address remains your sign-in and recovery address while a request is pending. Open
+the single-use Email Change Link sent to the new address within 24 hours, sign in to the
+requesting account if needed, and enter your current
+password again. You can cancel or replace a pending request. After confirmation, the browser that
+confirmed stays signed in, other browser sessions end, and Integration Tokens remain valid. If
+mail does not arrive, check spam and configuration, then request another link within the limits;
+delivery has no automatic retry. See [email changes](docs/self-hosting.md#change-your-email) and
+[migration 37](docs/deployment.md#migration-37-email-change-proofs).
 
 Check service health with:
 

@@ -170,3 +170,20 @@ recovery or verified email changes, and keeps existing sign-in access. The upgra
 one initial add-email step remains direct so email configuration cannot block their upgrade.
 Hosted Service continuous backup guidance
 remains optional for self-hosted installations.
+
+## Amendment: provider sign-in and revised delivery order (2026-10-21)
+
+[ADR 0040](0040-open-registration-and-email-ownership.md#amendment-five-remaining-prs-and-provider-sign-in-2026-10-21)
+replaces the earlier deferral of OIDC beyond password sign-in with a planned Google and Microsoft
+sign-in PR. After merged PR #129 and PR #130, the remaining order is verified email changes;
+context module splits with no behavior change; Open sign-up end to end; Google/Microsoft sign-in
+and sign-up; and hosted backup/restore before hosted launch. Each requires its own approved plan.
+
+Provider identities are issuer plus `sub`, never email. Linking starts from Your account while
+signed in. Auto-link at sign-in requires the provider to assert a verified email. Only Me and
+Invitation Only admit existing people or an invited person whose verified email matches; Open
+creates an ordinary User following the Default Plan. Each provider is off by default and enabled
+by the administrator. Reuse existing OAuth clients with only `openid email profile` sign-in scopes;
+calendar consent remains separate. People may keep or set a password and cannot remove their last
+sign-in method. Use maintained library support, with no new service and no ORM. Shipped sign-in
+remains email/password until that PR lands.

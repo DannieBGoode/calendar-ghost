@@ -406,6 +406,28 @@
         "title": "ClearedActivityResponse",
         "type": "object"
       },
+      "ConfirmEmailChangeRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 1024,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[\\x00-\\x7f]+$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "ConfirmEmailChangeRequest",
+        "type": "object"
+      },
       "ConnectedAccountResponse": {
         "properties": {
           "authorization_lapsed_at": {
@@ -751,6 +773,31 @@
         "title": "DeleteOwnAccountRequest",
         "type": "object"
       },
+      "DirectEmailChangeRequest": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "DirectEmailChangeRequest",
+        "type": "object"
+      },
       "DiscoveredCalendarResponse": {
         "properties": {
           "access_role": {
@@ -800,6 +847,90 @@
           "detail"
         ],
         "title": "DriftResponse",
+        "type": "object"
+      },
+      "EmailChangeAcceptedResponse": {
+        "properties": {
+          "accepted": {
+            "const": true,
+            "default": true,
+            "title": "Accepted",
+            "type": "boolean"
+          }
+        },
+        "title": "EmailChangeAcceptedResponse",
+        "type": "object"
+      },
+      "EmailChangeCheckResponse": {
+        "properties": {
+          "usable": {
+            "title": "Usable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "usable"
+        ],
+        "title": "EmailChangeCheckResponse",
+        "type": "object"
+      },
+      "EmailChangeMode": {
+        "enum": [
+          "direct",
+          "verified",
+          "unavailable"
+        ],
+        "title": "EmailChangeMode",
+        "type": "string"
+      },
+      "EmailChangeStatusResponse": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/EmailChangeMode"
+          },
+          "pending": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingEmailChangeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityEmailReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "mode",
+          "reason",
+          "pending"
+        ],
+        "title": "EmailChangeStatusResponse",
+        "type": "object"
+      },
+      "EmailChangeTokenRequest": {
+        "properties": {
+          "token": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[\\x00-\\x7f]+$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "EmailChangeTokenRequest",
         "type": "object"
       },
       "EventSnapshotResponse": {
@@ -964,6 +1095,18 @@
         },
         "title": "HTTPValidationError",
         "type": "object"
+      },
+      "IdentityEmailReason": {
+        "enum": [
+          "smtp_missing",
+          "smtp_security",
+          "origin_missing",
+          "origin_invalid",
+          "origin_insecure",
+          "master_key_missing"
+        ],
+        "title": "IdentityEmailReason",
+        "type": "string"
       },
       "IdentityEmailResponse": {
         "properties": {
@@ -1901,6 +2044,30 @@
           "token"
         ],
         "title": "PasswordResetLinkRequest",
+        "type": "object"
+      },
+      "PendingEmailChangeResponse": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "expires_at"
+        ],
+        "title": "PendingEmailChangeResponse",
         "type": "object"
       },
       "PendingInvitationResponse": {
@@ -3327,6 +3494,25 @@
         "title": "ReplaceRuleRequest",
         "type": "object"
       },
+      "RequestEmailChangeRequest": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 1024,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "RequestEmailChangeRequest",
+        "type": "object"
+      },
       "RequestPasswordResetRequest": {
         "properties": {
           "email": {
@@ -4085,32 +4271,6 @@
           "installation_sends_email"
         ],
         "title": "SessionResponse",
-        "type": "object"
-      },
-      "SetEmailRequest": {
-        "properties": {
-          "email": {
-            "maxLength": 320,
-            "title": "Email",
-            "type": "string"
-          },
-          "password": {
-            "anyOf": [
-              {
-                "maxLength": 1024,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Password"
-          }
-        },
-        "required": [
-          "email"
-        ],
-        "title": "SetEmailRequest",
         "type": "object"
       },
       "SetupRequest": {
@@ -5090,7 +5250,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetEmailRequest"
+                "$ref": "#/components/schemas/DirectEmailChangeRequest"
               }
             }
           },
@@ -5119,6 +5279,259 @@
           }
         },
         "summary": "Set Email"
+      }
+    },
+    "/api/v1/account/email-change": {
+      "delete": {
+        "operationId": "cancel_email_change_api_v1_account_email_change_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Email Change"
+      },
+      "get": {
+        "operationId": "show_email_change_api_v1_account_email_change_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailChangeStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Show Email Change"
+      },
+      "post": {
+        "operationId": "request_email_change_api_v1_account_email_change_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestEmailChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailChangeAcceptedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Email Change"
+      }
+    },
+    "/api/v1/account/email-change/check": {
+      "post": {
+        "operationId": "check_email_change_api_v1_account_email_change_check_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailChangeTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailChangeCheckResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Email Change"
+      }
+    },
+    "/api/v1/account/email-change/confirm": {
+      "post": {
+        "operationId": "confirm_email_change_api_v1_account_email_change_confirm_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmEmailChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Email Change"
       }
     },
     "/api/v1/account/instant-sync": {

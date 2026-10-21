@@ -13,6 +13,12 @@ from calendar_sync.application.identity.administration import (
     ShowOwnAccountDeletion,
     UserDeletionInterrupted,
 )
+from calendar_sync.application.identity.email_change_admission import EmailChangeStorageUnavailable
+from calendar_sync.application.identity.email_changes import (
+    EmailChangeConfigurationRequired,
+    EmailChangeUnavailable,
+    EmailChangeVerificationRequired,
+)
 from calendar_sync.application.identity.errors import (
     EmailTaken,
     IncorrectCredentials,
@@ -23,7 +29,6 @@ from calendar_sync.application.identity.sign_in import (
     ChangeOwnPassword,
     SetInstantSync,
     SetNotificationEmail,
-    SetOwnEmail,
 )
 from calendar_sync.application.sync.errors import (
     RemovalRequiresAuthorization,
@@ -38,7 +43,9 @@ from calendar_sync.interfaces.api.dependencies import (
     current_user,
     signed_in_user,
 )
+from calendar_sync.interfaces.api.identity_schemas import DirectEmailChangeRequest
 from calendar_sync.interfaces.api.problems import problem_from
+from calendar_sync.interfaces.api.routes.email_changes import IdentityEmail, email_change_failure
 from calendar_sync.interfaces.api.routes.session import SignedInAnswers, user_response
 from calendar_sync.interfaces.api.routes.users import deletion_response
 from calendar_sync.interfaces.api.schemas import (
@@ -47,7 +54,6 @@ from calendar_sync.interfaces.api.schemas import (
     InstantSyncPreferenceRequest,
     NotificationPreferenceRequest,
     OwnAccountDeletionResponse,
-    SetEmailRequest,
     SignedInUserResponse,
     UserDeletionResponse,
 )
@@ -62,8 +68,6 @@ class OwnAccountAdministration(Protocol):
 
 class AccountIdentity(Identity, Protocol):
     @property
-    def set_own_email(self) -> SetOwnEmail: ...
-    @property
     def set_notification_email(self) -> SetNotificationEmail: ...
     @property
     def change_own_password(self) -> ChangeOwnPassword: ...
@@ -76,6 +80,8 @@ class OwnAccountServices(SignedInAnswers, Protocol):
     def identity(self) -> AccountIdentity: ...
     @property
     def administration(self) -> OwnAccountAdministration: ...
+    @property
+    def identity_email(self) -> IdentityEmail: ...
 
 
 Services = Annotated[OwnAccountServices, Depends(app_services)]
@@ -85,10 +91,14 @@ router = APIRouter()
 
 
 @router.put("/api/v1/account/email", response_model=SignedInUserResponse)
-def set_email(payload: SetEmailRequest, user: SignedIn, services: Services) -> SignedInUserResponse:
+def set_email(
+    payload: DirectEmailChangeRequest, user: SignedIn, services: Services
+) -> SignedInUserResponse:
     """Add the email the upgraded first User must add, or change one with the password."""
     try:
-        changed = services.identity.set_own_email.execute(user.id, payload.email, payload.password)
+        changed = services.identity_email.email_changes.direct.execute(
+            user.id, payload.email, payload.password
+        )
     except InvalidEmail as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     except IncorrectCredentials as error:
@@ -97,6 +107,13 @@ def set_email(payload: SetEmailRequest, user: SignedIn, services: Services) -> S
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
     except EmailTaken as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
+    except (
+        EmailChangeConfigurationRequired,
+        EmailChangeUnavailable,
+        EmailChangeVerificationRequired,
+        EmailChangeStorageUnavailable,
+    ) as error:
+        raise email_change_failure(error) from None
     return user_response(changed, services)
 
 

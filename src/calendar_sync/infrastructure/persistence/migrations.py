@@ -46,6 +46,7 @@ _FORWARD_MIGRATIONS = (
     (34, "0034_plan_holds.sql"),
     (35, "0035_identity_email.sql"),
     (36, "0036_self_service_reset.sql"),
+    (37, "0037_email_changes.sql"),
 )
 
 

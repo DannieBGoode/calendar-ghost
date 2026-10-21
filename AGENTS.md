@@ -202,6 +202,8 @@ the Docker build context, and has its own `Site` workflow.
   User who began it. `/api/v1/status`, `/api/v1/installation/health`, and
   `/mcp` are the only routes that accept an Integration Token, and `/mcp` accepts nothing else
   (ADR 0024). `tests/adapters/test_api_authorization.py` lists them; extend it with every route.
+  Email-change verification requires the owning signed-in User's session, even to check a proof;
+  an Integration Token never authorizes those routes.
 - Google writes use `sendUpdates=none`. Outlook writes are appointments with no attendees that ask
   for no responses, and never call `/cancel`, `/forward`, or a response action. A change that could
   email attendees or mutate source events is release-blocking.

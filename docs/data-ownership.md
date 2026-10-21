@@ -34,6 +34,13 @@ rules, or events ([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
   client network (IPv6 grouped by /64), and their pair, derived with HKDF from the Master Key.
   They contain no plaintext address, network, or mail body and persist through restart when a
   Master Key exists. Without a key, token/completion limits live in bounded memory only.
+- Email Change Links: the owning User, proposed address, credential revision, request and expiry
+  times, and only the SHA-256 hash of an issued token. A pending request has no issued token until
+  the worker prepares mail. Owned issuance counters and anonymous network counters retain times
+  and purpose-separated HMAC digests of target addresses and client networks when the Master Key
+  exists. Plaintext tokens, passwords, and mail bodies are not stored. Obsolete proofs and
+  counters are removed in bounded batches while the service runs, aiming for removal within 24
+  hours; backups retain them until their own retention expires.
 - Integration Tokens: each token's User, name, scopes, and issue, last-use, and revocation times,
   with a SHA-256 hash of the token. The token itself is shown once when issued and never stored.
 - The Registration Policy.
@@ -126,10 +133,14 @@ The installation communicates with:
    prove inbox delivery. Active Users may separately request password recovery mail to their
    current account email, independent of incident preferences. Recovery resolves eligibility only
    in the worker and uses the configured trusted origin, never request headers. Existing and
-   invited Users' addresses remain trusted without verification, so their mailbox owners can reset
-   those accounts. Queues are volatile and messages have no automatic retry. See
+   invited Users' addresses remain trusted without retroactive verification, so their mailbox
+   owners can reset those accounts. Verified email changes send a proof to the new address and,
+   after confirmation, a security notice to the old address. The old mailbox remains a recovery
+   address until that confirmation. These identity messages ignore incident preferences and the
+   operator's SMTP recipient. Queues are volatile and messages have no automatic retry. See
    [password recovery](deployment.md#password-recovery) and
-   [identity email setup](deployment.md#identity-email-test-readiness).
+   [identity email setup](deployment.md#identity-email-test-readiness) and
+   [verified email changes](deployment.md#verified-email-changes).
    Request timing can reveal recent reset-request activity for an address independently of whether
    an account exists. In-flight preparation may leave an unused hash-only proof after shutdown;
    its token is not sent, and normal expiry and cleanup still apply.
@@ -171,7 +182,7 @@ Migration 36 preserves passwords, sessions, and User data but revokes legacy res
 administrator must reissue. Before upgrading, stop the service and take a complete backup with its
 matching key and previous image. For rollback restore the pre-upgrade database and image together,
 losing later writes; do not run an old image against the upgraded schema or remove migration records.
-PR 4's offline recovery command and the later continuous-backup runbook are unshipped. A backup
+The planned offline recovery tooling and continuous-backup runbook are unshipped. A backup
 can revive sessions and credentials that were revoked after it was taken; recovering the matching
 database alone cannot prove that restored access remains authorized.
 

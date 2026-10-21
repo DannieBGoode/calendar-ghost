@@ -149,7 +149,13 @@
     "reset_network_throttled": "Too many reset attempts from this network. Wait a while, then try again.",
     "reset_global_throttled": "Password reset is busy. Wait a while, then try again.",
     "reset_storage_unavailable": "Password reset is temporarily unavailable. Try again shortly.",
-    "request_too_large": "This request is too large. Shorten the values and try again."
+    "request_too_large": "This request is too large. Shorten the values and try again.",
+    "email_change_proof_unusable": "This link can no longer be used. Request a new one from Your account.",
+    "email_change_unavailable": "This email change cannot be completed. Check the address or try another one.",
+    "email_change_verification_required": "Your email needs verification. Refresh Your account to request a link.",
+    "email_change_configuration_required": "Email changes are unavailable. Ask your administrator to check identity email settings.",
+    "email_change_storage_unavailable": "Your email change could not be saved. Try again in a moment.",
+    "email_change_throttled": "Too many email change requests. Wait before trying again."
   },
   "provider": {
     "google": "Google Calendar",

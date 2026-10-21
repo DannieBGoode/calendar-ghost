@@ -320,9 +320,18 @@ export const api = {
   /** A null email signs in the upgraded first User, until they add one. */
   logIn: (email: string | null, password: string) =>
     call("/api/v1/session", "post", { body: { email, password } }),
-  /** Adds the email the upgraded first User must add; changing one also needs the password. */
+  /** Adds the upgraded first User's email; later direct changes require a password and no configured verification. */
   setOwnEmail: (email: string, password?: string) =>
     call("/api/v1/account/email", "put", { body: password === undefined ? { email } : { email, password } }),
+  ownEmailChange: () => call("/api/v1/account/email-change", "get"),
+  requestEmailChange: (email: string, password: string) =>
+    call("/api/v1/account/email-change", "post", { body: { email, password } }),
+  cancelEmailChange: (requestId: string) =>
+    call("/api/v1/account/email-change", "delete", { query: { request_id: requestId } }),
+  checkEmailChange: (token: string) =>
+    call("/api/v1/account/email-change/check", "post", { body: { token } }),
+  confirmEmailChange: (token: string, password: string) =>
+    call("/api/v1/account/email-change/confirm", "post", { body: { token, password } }),
   logOut: () => call("/api/v1/session", "delete"),
   /** Ends every other session of the signed-in User. */
   changeOwnPassword: (currentPassword: string, newPassword: string) =>

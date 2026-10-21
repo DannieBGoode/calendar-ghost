@@ -22,6 +22,7 @@ from calendar_sync.application.identity.ports import (
     PasswordHasher,
     Session,
     Sessions,
+    SignInCredentials,
     SignInThrottle,
     UserDirectory,
 )
@@ -61,7 +62,7 @@ class SetUpInstallation:
         hashed = self.passwords.hash(require_password(password))
         if not self.users.add_first(user, hashed):
             raise AdminAlreadyConfigured("Calendar Ghost is already set up; sign in instead")
-        session = start_session(self.sessions, user.id, hashed)
+        session = start_session(self.sessions, user.id, hashed, user.email, 0)
         self.users.record_sign_in(user.id, now)
         return session
 
@@ -87,8 +88,9 @@ class SignIn:
         wait = self.throttle.wait(keys)
         if wait > 0:
             raise SignInThrottled(wait)
-        user = self._user(email, address)
-        hashed = self.users.password_hash(user.id) if user is not None else None
+        facts = self._credentials(email, address)
+        user = facts.user if facts else None
+        hashed = facts.credential.password_hash if facts else None
         matches = self.passwords.verify(password, hashed or self._decoy)
         if user is None or hashed is None or not matches:
             self.throttle.failed(keys)
@@ -96,26 +98,33 @@ class SignIn:
         if user.state is UserState.DISABLED:
             raise UserDisabled("an Installation Administrator has disabled this User")
         self.throttle.succeeded(keys)
-        session = start_session(self.sessions, user.id, hashed)
+        assert facts is not None
+        session = start_session(
+            self.sessions, user.id, hashed, facts.credential.email, facts.credential.revision
+        )
         self.users.record_sign_in(user.id, self.clock.now())
         return session
 
-    def _user(self, email: str | None, address: str | None) -> User | None:
+    def _credentials(self, email: str | None, address: str | None) -> SignInCredentials | None:
         if email is None:
             # Password alone signs in only the upgraded first User, until they add an email.
-            return self.users.without_email()
-        return self.users.by_email(address) if address is not None else None
+            return self.users.sign_in_credentials(None)
+        return self.users.sign_in_credentials(address) if address is not None else None
 
 
-def start_session(sessions: Sessions, user_id: UserId, password_hash: str) -> Session:
+def start_session(
+    sessions: Sessions, user_id: UserId, password_hash: str, email: str | None, revision: int
+) -> Session:
     """A session for the User whose password was just checked against `password_hash`.
 
-    Checking a password is slow, so a password change, a reset, or disabling can land in
+    Checking a password is slow, so an email or password change, reset, or disabling can land in
     between; the session starts only if none did, atomically with its start.
     """
-    session = sessions.start(user_id, password_hash)
+    session = sessions.start(user_id, password_hash, email, revision)
     if session is None:
-        raise IncorrectCredentials("the password changed or the User was disabled; sign in again")
+        raise IncorrectCredentials(
+            "the credentials changed or the User was disabled; sign in again"
+        )
     return session
 
 

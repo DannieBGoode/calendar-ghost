@@ -399,3 +399,21 @@ def test_stale_own_password_and_email_changes_lose_to_reset(operation: str) -> N
     assert users.password_hash(owner.id) == "hashed:reset password"
     assert users.users[owner.id].email == owner.email
     assert sessions.sessions == {}
+
+
+@pytest.mark.parametrize("return_to_old", [False, True])
+def test_email_change_during_sign_in_refuses_old_address_and_aba(return_to_old: bool) -> None:
+    users, sessions = _installation()
+    admin = users.list()[0]
+
+    def change() -> None:
+        users.set_email(admin.id, "away@example.test")
+        if return_to_old:
+            users.set_email(admin.id, admin.email or "")
+
+    sign_in = SignIn(
+        users, ChangedWhileVerifying(change), sessions, CountingThrottle(), FixedClock()
+    )
+    with pytest.raises(IncorrectCredentials):
+        sign_in.execute("admin@example.test", PASSWORD, "client")
+    assert list(sessions.sessions.values()) == [admin.id]

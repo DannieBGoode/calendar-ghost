@@ -7,15 +7,23 @@ import secrets
 import sqlite3
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from calendar_sync.application.identity.credentials import CredentialSnapshot
 from calendar_sync.application.identity.errors import EmailTaken
-from calendar_sync.application.identity.ports import Session, UserPage, UserQuery, UserSort
+from calendar_sync.application.identity.ports import (
+    Session,
+    SignInCredentials,
+    UserPage,
+    UserQuery,
+    UserSort,
+)
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import Role, User, UserId, UserState, require_administrator_remains
 from calendar_sync.domain.plans import InvalidPlan, PlanKey
 from calendar_sync.infrastructure.persistence.connections import transaction
+from calendar_sync.infrastructure.persistence.email_change_records import revoke_email_changes
 from calendar_sync.infrastructure.security import token_hash
 
 logger = logging.getLogger(__name__)
@@ -35,6 +43,23 @@ _SORT_COLUMNS = {
 class SqliteUserDirectory:
     def __init__(self, database_path: Path) -> None:
         self._database_path = database_path
+
+    def sign_in_credentials(self, email: str | None) -> SignInCredentials | None:
+        with transaction(self._database_path) as connection:
+            row = connection.execute(
+                f"SELECT {_COLUMNS}, password_hash, credential_revision FROM users "  # noqa: S608
+                "WHERE email IS ?",
+                (email,),
+            ).fetchone()
+        if row is None:
+            return None
+        user = _user(row)
+        return SignInCredentials(
+            user,
+            CredentialSnapshot(
+                user.id, int(row["credential_revision"]), str(row["password_hash"]), user.email
+            ),
+        )
 
     def count(self) -> int:
         with transaction(self._database_path) as connection:
@@ -98,6 +123,7 @@ class SqliteUserDirectory:
                     "credential_revision = credential_revision + 1 WHERE id = ?",
                     (email, user_id.value),
                 )
+                revoke_email_changes(connection, user_id, datetime.now(UTC).isoformat())
         except sqlite3.IntegrityError as error:
             raise _taken_or(error) from error
 
@@ -128,6 +154,7 @@ class SqliteUserDirectory:
                 "credential_revision = credential_revision + 1 WHERE id = ?",
                 (password_hash, user_id.value),
             )
+            revoke_email_changes(connection, user_id, datetime.now(UTC).isoformat())
 
     def record_sign_in(self, user_id: UserId, at: datetime) -> None:
         with transaction(self._database_path) as connection:
@@ -191,6 +218,9 @@ class SqliteUserDirectory:
                 return
             require_administrator_remains(users, user_id, change(current))
             connection.execute(statement, parameters)
+            after = change(current)
+            if after is not None and after.state is UserState.DISABLED:
+                revoke_email_changes(connection, user_id, datetime.now(UTC).isoformat())
 
     def _one(self, condition: str, *values: object) -> User | None:
         with transaction(self._database_path) as connection:
@@ -297,18 +327,22 @@ class SqliteSessions:
         self._database_path = database_path
         self._clock = clock
 
-    def start(self, user_id: UserId, password_hash: str) -> Session | None:
+    def start(
+        self, user_id: UserId, password_hash: str, email: str | None, revision: int
+    ) -> Session | None:
         token = secrets.token_urlsafe(32)
-        now = self._clock.now()
-        expires = now + SESSION_LIFETIME
         with transaction(self._database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            now = self._clock.now()
+            expires = now + SESSION_LIFETIME
             # One statement, so a password change or reset that ends every session cannot fall
             # between the check and the insert.
             started = connection.execute(
                 """
                 INSERT INTO user_sessions(token_hash, user_id, created_at, expires_at)
                 SELECT ?, id, ?, ? FROM users
-                WHERE id = ? AND password_hash = ? AND state = 'active'
+                WHERE id = ? AND password_hash = ? AND email IS ?
+                    AND credential_revision = ? AND state = 'active'
                 """,
                 (
                     token_hash(token),
@@ -316,6 +350,8 @@ class SqliteSessions:
                     expires.isoformat(),
                     user_id.value,
                     password_hash,
+                    email,
+                    revision,
                 ),
             ).rowcount
             connection.execute(

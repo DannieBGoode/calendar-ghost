@@ -125,7 +125,7 @@ def test_cleartext_identity_mail_requires_loopback(host: str) -> None:
 
 
 @pytest.mark.parametrize("mode", ["trusted", "unknown_ca", "hostname_mismatch", "refused"])
-@pytest.mark.parametrize("kind", ["test", "reset"])
+@pytest.mark.parametrize("kind", ["test", "reset", "change", "notice"])
 def test_identity_smtp_verifies_tls(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, kind: str
 ) -> None:
@@ -147,6 +147,10 @@ def test_identity_smtp_verifies_tls(
         def send() -> None:
             if kind == "reset":
                 sender.send_reset("admin@example.test", "synthetic-token")
+            elif kind == "change":
+                sender.send_email_change("admin@example.test", "synthetic-token")
+            elif kind == "notice":
+                sender.send_email_changed("admin@example.test")
             else:
                 sender.send_test("admin@example.test")
 
@@ -322,3 +326,45 @@ def test_identity_mail_uses_one_explicit_envelope_recipient(
         "to_addrs": ["admin@example.test"],
     }
     assert captured.call_args.args[:2] == ("ghost@example.test", ["admin@example.test"])
+
+
+def test_email_change_mail_is_private() -> None:
+    from unittest.mock import patch
+
+    sender = IdentitySmtp(
+        "mail.example.test",
+        587,
+        "ghost@example.test",
+        "synthetic-user",
+        "synthetic-password",
+        True,
+        "https://GHOST.test:443/",
+    )
+    with patch("calendar_sync.infrastructure.identity_email.smtplib.SMTP") as smtp:
+        sender.send_email_change("new@example.test", "synthetic-token")
+        smtp.assert_called_once_with("mail.example.test", 587, timeout=10)
+        transport = smtp.return_value.__enter__.return_value
+        context = transport.starttls.call_args.kwargs["context"]
+        assert context.check_hostname
+        import ssl
+
+        assert context.verify_mode == ssl.CERT_REQUIRED
+        message = transport.send_message.call_args.args[0]
+        assert message["To"] == "new@example.test"
+        body = message.get_content()
+        assert "https://ghost.test/email-change#synthetic-token" in body
+        assert "24 hours" in body
+        assert "synthetic-password" not in body
+        sender.send_email_changed("previous@example.test")
+        notice = transport.send_message.call_args.args[0]
+        assert notice["To"] == "previous@example.test"
+        assert notice.get_content() == (
+            "Your Calendar Ghost sign-in email has changed.\n\n"
+            "If you did not make this change, contact your installation administrator.\n\n"
+            "Open Calendar Ghost: https://ghost.test\n"
+        )
+        assert "synthetic-token" not in notice.get_content()
+        assert "new@example.test" not in notice.get_content()
+    assert "synthetic-password" not in repr(sender)
+
+    assert "ghost@example.test" not in repr(sender)

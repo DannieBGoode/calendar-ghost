@@ -4,6 +4,12 @@ from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
 
+from calendar_sync.application.identity.credentials import CredentialChanges
+from calendar_sync.application.identity.email_changes import (
+    EmailChangedNotice,
+    EmailChangeMailRequest,
+    EmailChangeServices,
+)
 from calendar_sync.application.identity.identity_email import (
     DeliverIdentityEmailTest,
     EmailTest,
@@ -23,15 +29,25 @@ from calendar_sync.application.identity.password_reset import (
     ResetEmailRequest,
     SelfServicePasswordResets,
 )
-from calendar_sync.application.identity.ports import UserDirectory
+from calendar_sync.application.identity.ports import PasswordHasher, UserDirectory
 from calendar_sync.application.identity.reset_admission import ResetAdmission
 from calendar_sync.application.shared.ports import Clock, IdGenerator
 from calendar_sync.bootstrap.config import Settings
+from calendar_sync.bootstrap.identity_email_changes import (
+    EmailChangeAdapters,
+    build_email_changes,
+    compose_email_changes,
+)
 from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.identity_email import (
     IdentitySmtp,
     identity_loopback,
     identity_origin,
+)
+from calendar_sync.infrastructure.identity_email_changes import (
+    EmailChangeDelivery,
+    EmailChangeMaintenance,
+    IdentityChangeSender,
 )
 from calendar_sync.infrastructure.identity_front_gate import MemoryIdentityFrontGate
 from calendar_sync.infrastructure.identity_mail_worker import IdentityMailWorker
@@ -82,8 +98,8 @@ def _reason(settings: Settings) -> IdentityEmailReason | None:
     return None
 
 
-class IdentitySender(IdentityTestSender, IdentityResetSender, Protocol):
-    """The two security-email operations sharing one verified transport."""
+class IdentitySender(IdentityTestSender, IdentityResetSender, IdentityChangeSender, Protocol):
+    """Security-email operations sharing one verified transport."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +107,7 @@ class IdentityEmailAdapters:
     setup: IdentityEmailSetup
     tests: IdentityEmailTests
     sender: IdentitySender | None
+    email_changes: EmailChangeAdapters
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +115,7 @@ class IdentityEmailServices:
     show: ShowIdentityEmail
     request_test: RequestIdentityEmailTest
     request_reset: RequestPasswordReset
+    email_changes: EmailChangeServices
 
     @property
     def configured(self) -> bool:
@@ -113,7 +131,9 @@ def build_reset_admission(settings: Settings, clock: Clock) -> ResetAdmission:
     return ResetAdmission(MemoryIdentityFrontGate(clock), attempts, clock)
 
 
-def build_identity_email(settings: Settings, ids: IdGenerator) -> IdentityEmailAdapters:
+def build_identity_email(
+    settings: Settings, ids: IdGenerator, clock: Clock
+) -> IdentityEmailAdapters:
     setup = identity_setup(settings)
     sender = (
         IdentitySmtp(
@@ -129,7 +149,10 @@ def build_identity_email(settings: Settings, ids: IdGenerator) -> IdentityEmailA
         else None
     )
     return IdentityEmailAdapters(
-        setup, SqliteIdentityEmailTests(settings.database_path, ids), sender
+        setup,
+        SqliteIdentityEmailTests(settings.database_path, ids),
+        sender,
+        build_email_changes(settings, ids, clock, setup),
     )
 
 
@@ -139,6 +162,8 @@ def compose_identity_email(
     clock: Clock,
     resets: SelfServicePasswordResets,
     admission: ResetAdmission,
+    passwords: PasswordHasher,
+    credentials: CredentialChanges,
 ) -> tuple[IdentityEmailServices, IdentityMailWorker | None]:
     worker = (
         IdentityMailWorker(
@@ -151,6 +176,13 @@ def compose_identity_email(
             if adapters.sender is not None
             else None,
             reset_admission=admission,
+            email_changes=EmailChangeMaintenance(
+                EmailChangeDelivery(adapters.email_changes.proofs, adapters.setup, adapters.sender)
+                if adapters.sender is not None
+                else None,
+                adapters.email_changes.proofs,
+                adapters.email_changes.admission,
+            ),
         )
         if adapters.sender is not None or admission.attempts is not None
         else None
@@ -160,6 +192,9 @@ def compose_identity_email(
         ShowIdentityEmail(users, adapters.tests, adapters.setup, queue),
         RequestIdentityEmailTest(users, adapters.tests, adapters.setup, queue, clock),
         RequestPasswordReset(admission, adapters.setup, worker or _UnavailableQueue()),
+        compose_email_changes(
+            adapters.email_changes, users, passwords, credentials, worker or _UnavailableQueue()
+        ),
     ), worker
 
 
@@ -172,3 +207,46 @@ class _UnavailableQueue:
 
     def submit_reset(self, _request: ResetEmailRequest) -> bool:
         return False
+
+    def submit_change(self, _request: EmailChangeMailRequest) -> bool:
+        return False
+
+    def submit_notice(self, _notice: EmailChangedNotice) -> bool:
+        return False
+
+
+class IdentityMailAdapters(Protocol):
+    @property
+    def identity_email(self) -> IdentityEmailAdapters: ...
+
+    @property
+    def users(self) -> UserDirectory: ...
+
+    @property
+    def clock(self) -> Clock: ...
+
+    @property
+    def self_service_resets(self) -> SelfServicePasswordResets: ...
+
+    @property
+    def reset_admission(self) -> ResetAdmission: ...
+
+    @property
+    def passwords(self) -> PasswordHasher: ...
+
+    @property
+    def credential_changes(self) -> CredentialChanges: ...
+
+
+def compose_identity_mail(
+    adapters: IdentityMailAdapters,
+) -> tuple[IdentityEmailServices, IdentityMailWorker | None]:
+    return compose_identity_email(
+        adapters.identity_email,
+        adapters.users,
+        adapters.clock,
+        adapters.self_service_resets,
+        adapters.reset_admission,
+        adapters.passwords,
+        adapters.credential_changes,
+    )

@@ -156,7 +156,7 @@ from calendar_sync.bootstrap.identity_email import (
     IdentityEmailServices,
     build_identity_email,
     build_reset_admission,
-    compose_identity_email,
+    compose_identity_mail,
 )
 from calendar_sync.bootstrap.logs import configure_logging
 from calendar_sync.domain.access import UserId
@@ -475,7 +475,7 @@ def build_adapters(settings: Settings) -> Adapters:
     mail = _mail_server(settings)
     resets = SqlitePasswordResetLinks(database, ids, clock)
     adapters = Adapters(
-        identity_email=build_identity_email(settings, ids),
+        identity_email=build_identity_email(settings, ids, clock),
         reset_admission=build_reset_admission(settings, clock),
         unit_of_work=SqliteUnitOfWorkFactory(database, clock, history).for_user,
         installation_units=SqliteInstallationUnitOfWorkFactory(database),
@@ -631,13 +631,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         adapters.plan_catalog,
         adapters.plan_assignments,
     )
-    identity_email, identity_mail_worker = compose_identity_email(
-        adapters.identity_email,
-        adapters.users,
-        adapters.clock,
-        adapters.self_service_resets,
-        adapters.reset_admission,
-    )
+    identity_email, identity_mail_worker = compose_identity_mail(adapters)
     return Container(
         identity_email=identity_email,
         identity_mail_worker=identity_mail_worker,

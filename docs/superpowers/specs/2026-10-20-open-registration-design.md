@@ -5,11 +5,9 @@ Status: design approved for planning on 2026-10-20 after the HTTPS decision and 
 code is authorized until that plan is reviewed. The second Claude review completed on 2026-10-20,
 with clarifications below. The owner delegated PR 2 plan review to Claude and authorized execution.
 
-Delivery status on 2026-10-21: PR 1 identity email readiness is implemented. PR 2 self-service
-password recovery is implemented on an unmerged branch. Local gates, secret scans, security review,
-and independent and Claude reviews pass; supported image builds and PR/CI delivery remain pending.
-PR 3 verified email changes, PR 4 offline recovery, backup tooling/runbook, and the later
-Open activation remain unshipped. Only Me is still the default and Open remains unavailable.
+Delivery status on 2026-10-21: PR #129 identity email readiness and PR #130 self-service
+password recovery are merged, including migrations 35 and 36. The five remaining PRs below
+replace the original eight-slice sequence. Only Me is still the default and Open is unavailable.
 
 Builds on [the multi-user delivery order](2026-10-09-multi-user-design.md),
 [ADR 0029](../../adr/0029-isolate-users-in-one-sqlite-database.md),
@@ -103,8 +101,7 @@ Direct Invitation acceptance requires exactly Invitation Only at the final SQLit
 use lets_people_join for this decision: the ability to issue an Invitation, accept one directly,
 and finish a verified registration are different rules. Introduce only the named decisions each
 implemented path uses. Test the Open value with real SQLite before activation, including a policy
-change while password hashing runs. The prepared-schema PR permits Open as a stored value for
-these tests, but application policy setters and all public admission paths still refuse it.
+change while password hashing runs. The end-to-end Open PR adds the stored value and these tests together with verified admission.
 
 Switching Open to Invitation Only atomically invalidates pending public proofs. Turning Open on
 again does not revive them. An Invitation-bound proof may finish under Invitation Only, with its
@@ -114,11 +111,10 @@ nobody joins, by either route. The existing
 one-User restriction on returning to Only Me remains. Returning to setup revokes all pending
 registration proofs and Invitations, turns Plans off as today, and clears email-test readiness.
 
-Open is not selectable before the last implementation PR. Its enum and database constraint land
-in a prior prepared-schema PR, while production policy setters, availability, and admission are
-explicitly closed even if a stored row says open. SQLite tests may seed that value directly. No
-administrator API or environment flag can activate it early. The final PR removes these production
-closure guards only after verified admission and policy transitions have their SQLite coverage.
+Open becomes selectable in the end-to-end Open PR only after its complete verified admission
+path and readiness checks are wired. The administrator must explicitly choose it, and identity
+email must be ready. No separate prepared-schema release, dormant backend, or temporary
+production closure guards are needed.
 
 ## Password reset and email changes
 
@@ -320,8 +316,8 @@ inside the same credential-change transaction so an old reset cannot end a newer
 
 Add only the migrations each PR needs. Recheck origin/main's next free migration and ADR numbers
 immediately before allocating them. Do not reserve migration numbers here. Preserve every existing
-setting and default when rebuilding installation_settings in the prepared-schema PR. Open
-remains unavailable in production until the later activation PR. Each
+setting and default when rebuilding installation_settings in the end-to-end Open PR. Open
+remains unavailable until its administrator chooses it with identity email ready. Each
 migration needs SQLite tests and upgrade/rollback guidance. Rollback from active Open requires
 closing public registration and restoring a matching pre-upgrade backup and image; do not let an
 old binary read a policy it cannot understand.
@@ -369,7 +365,7 @@ Restore with both the application and Litestream stopped, traffic closed, and a 
 using matching secrets and image. Never overwrite a running database or start the API to inspect
 it: the current API lifespan starts scheduling and Instant Sync. First run supported offline
 inspection and preparation commands, which start no application, scheduler, mail, or provider
-adapter and open SQLite only through connections.py. Add this small operator interface in PR 4;
+adapter and open SQLite only through connections.py. Add this small operator interface in the hosted backup and restore PR;
 it is absent today and cannot be satisfied by documentation alone.
 
 Offline inspection checks schema compatibility, SQLite integrity and foreign keys, and that the
@@ -424,57 +420,64 @@ has continuous backups.
 
 ## Delivery slices
 
-Each PR must merge safely alone. Open becomes selectable and operational only in PR 8. Each
-slice brings only its own required records, ports, and production callers; no first PR creates
-reset, email-change, and registration tables for later work. Every web module must have a live
-caller and pass knip. Do not land unrouted dormant screens or add unused-export exceptions.
+PR #129 and PR #130 are merged. The owner replaced the original eight-slice delivery plan on
+2026-10-21 with these five remaining PRs, in order. Each PR merges safely alone and gets its own
+approved plan. Every web module has a live caller and passes knip. Add only records, ports, and
+callers required by the current PR.
 
-1. **Verified email transport and test readiness.** Harden identity SMTP, validate the trusted
-   origin, add administrator test UI/API and configuration-bound readiness, and a bounded mail
-   worker for that live caller. Only test-readiness persistence and its live-use limits land here.
-   Existing Registration Policy values and admission stay unchanged.
-2. **Self-service password reset.** Its own narrow ports/storage, durable request throttles with
-   the in-memory front gate, reset lane, public generic requests, 1-hour reset completion, atomic
-   credential/session invalidation, sign-in UI, generated API types, and docs. Include the proxy
-   deployment setup. Keep administrator-issued reset links at 7 days. Do not add future proof tables.
-3. **Verified email changes.** Its own proof records, request/cancel/confirm UI, notification,
-   the upgraded first User's direct add-email exception, and reset/session invalidation races.
-   Reuse implemented mechanisms
-   without generalizing for sign-up. Preserve direct changes when SMTP is absent.
-4. **Offline restore support.** Narrow offline inspect/prepare commands and SQLite-backed safety
-   tests, no provider network calls or app lifespan. Include access-proof/token invalidation and
-   the conservative restore path. No public maintenance endpoint, scheduler mode, or Plan Hold edits.
-5. **Hosted backup runbook.** Tested optional configuration, recovery/compaction procedure using
-   PR 4, privacy/deployment links, and measured synthetic recovery. The standard Compose deployment
-   gains no mandatory backup service. No new application runtime behavior.
-6. **Prepare the Open schema and admission guards.** Add the enum and constraint in one migration,
-   preserving all settings/defaults. Direct Invitation acceptance requires exactly Invitation Only
-   in both use case and atomic adapter. Production policy setters still reject Open regardless of
-   SMTP readiness; a stored Open value fails closed. Seed Open in SQLite tests to prove stale-form,
-   policy-change, and missing-administrator cases. No public registration routes or screens.
-7. **Verified joining backend, still closed.** Its own registration proof records and ports,
-   email-first request/completion use cases, Invitation verification, policy-transition proof
-   cancellation, and Default Plan tests. Exercise them with real SQLite seeded to Open. Production
-   joining remains unwired and its availability is false. No dormant frontend module is shipped.
-   This is the one short backend preparation slice required before public activation, not a future
-   abstraction layer. Its plan must list the exact final wiring guards and their negative tests.
-8. **Activate Open and joining UI.** Add administrator choice and readiness checks, production
-   public routes, email-first sign-up and verified Invitation screens, public availability, and
-   sign-in entry. Remove the specific preparation guards. Include full HTTP/SQLite race and
-   policy-transition coverage plus final docs. The enum/constraint and transaction mechanics are
-   already tested; this PR does not rebuild installation_settings or change persistence design.
+1. **Verified email changes.** This PR adds its own proof records, request/cancel/confirm UI,
+   old-address notice, upgraded first User's direct add-email exception, and reset/session races.
+   Reuse the shipped mechanisms without generalizing for sign-up. Preserve direct changes when
+   SMTP is absent. Add no storage for later PRs.
+2. **Split growing files by context, with no behavior change.** Split `bootstrap/container.py`,
+   `interfaces/api/schemas.py`, `infrastructure/persistence/sqlite.py`, and
+   `application/sync/ports.py` into context-named modules. Preserve public names and the existing
+   import-linter contracts.
+3. **Open sign-up end to end.** Deliver the Open policy value and migration, verified joining,
+   email-first sign-up, verified Invitations, administrator choice and readiness checks, and
+   screens together. Open stays unselectable until the administrator chooses it and identity
+   email is ready. Drop the temporary preparation guards required by the old split.
+4. **Sign in and sign up with Google or Microsoft.** Follow the OIDC decisions below. This has
+   its own plan and does not change calendar consent.
+5. **Hosted backup and restore.** Combine narrow offline inspection/preparation and their
+   SQLite safety tests with the optional backup tooling and tested hosted runbook. Ship before
+   hosted launch, after its own plan; this work is outside the current PR. No mandatory backup
+   service, public maintenance endpoint, scheduler mode, or Plan Hold edits.
 
-After approval, map the code with parallel read-only agents and write a separate lean plan for
-PR 1 with superpowers:writing-plans. Stop for owner review of that plan. Repeat this per PR; do not
-pre-authorize later implementation. Each plan names files, signatures, exact values, and behavioral
-tests, without copying code bodies, in about 300 lines or fewer.
+Identity rules belong in pure domain values and decisions, with decision-table tests: hashed,
+expiring, single-use email proofs, credential revision, and admission under each Registration
+Policy. Use cases load, decide, and save. New email-change proofs, registration proofs, and provider
+identities have SQLite adapters and temporary-database tests only; do not extend `memory.py`.
+Do not grow the four files named in remaining PR 2 while adding identity work. Keep import-linter
+contracts unchanged, constructors within seven fields, and no new WIDE_DATACLASSES entry or
+complexity suppression.
 
-Use subagent-driven implementation/review/fix loops and a .superpowers/sdd/ ledger. Before each PR,
-run every repository quality gate with real exit codes, the auth/email security review, and an
-outside read-only Claude review of the diff excluding the compiled static assets and generated
-OpenAPI files. Fix P1/P2 issues test-first. Follow the PR template, include only owned files and
-required bundles, check the diff size after each commit, push, open the PR, and watch CI. Do not
-rename the workspace branch or touch Plan Hold files.
+Commit this delivery revision separately before mapping verified email changes with parallel
+read-only agents. Write its lean plan with superpowers:writing-plans, naming files, signatures,
+exact values, and test assertions in about 300 lines or fewer. Stop for owner review before code.
+Use subagent-driven implementation/review/fix loops and a `.superpowers/sdd/` ledger afterward.
+Before each PR, run all repository gates with real exit codes, auth/email security review, and
+outside read-only Claude review excluding compiled assets and generated OpenAPI files. Fix P1/P2
+issues test-first, follow the PR template, check diff size after each commit, push, and watch CI.
+Do not start the next PR before this one merges and its own plan is approved. Keep Plan Hold out.
+
+## Google and Microsoft sign-in decisions
+
+The fourth remaining PR adds optional OIDC sign-in and sign-up. Each provider is off by default;
+the Installation Administrator enables it. A provider identity is its issuer plus `sub`, never
+its email. Linking is initiated from Your account while signed in. Sign-in may auto-link only
+when the provider states that the email is verified.
+
+Only Me and Invitation Only admit only existing people or an invited person whose verified email
+matches. Open may create an ordinary User following the Default Plan. Provider sign-in must obey
+Registration Policy at the final admission write. This is a separate admission decision from
+password-based Invitation acceptance; it does not open public joining under Only Me.
+
+Reuse the installation's Google and Microsoft OAuth clients with sign-in scopes only:
+`openid email profile`. Calendar consent remains a separate step. A person can always keep or
+set a password, and cannot remove their last sign-in method. Use a maintained OIDC library such
+as Authlib or the Google libraries already in use. Add no service or ORM. These are planned
+features; this document change enables none of them.
 
 ## Acceptance evidence
 
@@ -516,7 +519,7 @@ PR plan is reviewed:
   exact limits above. Administrator/offline fallback for targeted recovery suppression.
 - Bounded lossy email lanes with no HTTP queue-full oracle, plus the documented residual aggregate
   delivery-latency risk. This phase does not promise constant-time SMTP delivery.
-- Configuration-bound persistent test readiness and the eight-PR vertical delivery order.
+- Configuration-bound persistent test readiness and the five remaining PRs recorded above.
 - Optional Litestream runbook, the proposed operational targets, and narrow offline recovery tools,
   including the conservative disable/disconnect path for uncertain restore history.
 
@@ -539,7 +542,7 @@ administrator issuance with 409; keep reset prepare/purge off the event loop wit
 waits; move reset use cases off the shared sign-in throttle; preserve keyless administrator
 recovery with bounded memory limits. Keep the approved global/network limits and document their
 aggregate exhaustion risk instead of adding a /48 policy. Existing email addresses, including
-Invitation Only and pre-PR 3 direct changes, remain trusted recovery addresses as approved;
+Invitation Only and direct changes before verified email changes ship, remain trusted recovery addresses as approved;
 document the wrong-address mailbox takeover risk without retroactive verification. These clarify
 approved behavior and delivery order rather than add policy.
 

@@ -152,3 +152,21 @@ class ResetAdmissionDigests:
             [1, category, values], ensure_ascii=True, separators=(",", ":")
         ).encode()
         return hmac.new(self._key, framed, hashlib.sha256).hexdigest()
+
+
+class EmailChangeAdmissionDigests:
+    """Stable email-change HMAC keys, independent of SMTP and other identity purposes."""
+
+    def __init__(self, master_key: str) -> None:
+        self._key = HKDF(
+            algorithm=SHA256(),
+            length=32,
+            salt=None,
+            info=b"calendar-sync email change admission v1",
+        ).derive(_master_key_bytes(master_key))
+
+    def digest(self, category: str, *values: str) -> str:
+        framed = json.dumps(
+            [1, category, values], ensure_ascii=True, separators=(",", ":")
+        ).encode()
+        return hmac.new(self._key, framed, hashlib.sha256).hexdigest()

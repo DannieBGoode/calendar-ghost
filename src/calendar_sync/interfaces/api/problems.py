@@ -27,6 +27,16 @@ from calendar_sync.application.identity.administration import (
     YourOwnResetLink,
     YourOwnState,
 )
+from calendar_sync.application.identity.email_change_admission import (
+    EmailChangeStorageUnavailable,
+    EmailChangeThrottled,
+)
+from calendar_sync.application.identity.email_changes import (
+    EmailChangeConfigurationRequired,
+    EmailChangeProofUnusable,
+    EmailChangeUnavailable,
+    EmailChangeVerificationRequired,
+)
 from calendar_sync.application.identity.errors import (
     AdminAlreadyConfigured,
     EmailRequired,
@@ -129,6 +139,12 @@ def problem(
 
 # Looked up along each exception's MRO, so a subclass inherits its parent's code.
 _CODES: dict[type[Exception], str] = {
+    EmailChangeStorageUnavailable: "email_change_storage_unavailable",
+    EmailChangeThrottled: "email_change_throttled",
+    EmailChangeConfigurationRequired: "email_change_configuration_required",
+    EmailChangeProofUnusable: "email_change_proof_unusable",
+    EmailChangeUnavailable: "email_change_unavailable",
+    EmailChangeVerificationRequired: "email_change_verification_required",
     ResetStorageUnavailable: "reset_storage_unavailable",
     ResetAdmissionStorageUnavailable: "reset_storage_unavailable",
     ResetGlobalThrottled: "reset_global_throttled",
@@ -232,6 +248,10 @@ def _params(error: Exception) -> dict[str, ParamValue]:
         }
     if isinstance(error, SignInThrottled):
         return {"retry_after": error.retry_after}
+    if isinstance(error, EmailChangeThrottled):
+        return {"retry_after": error.retry_after}
+    if isinstance(error, EmailChangeConfigurationRequired):
+        return {"reason": error.reason.value}
     if isinstance(error, ManualRunsThrottled):
         # The wait is mostly tens of minutes, so the message names minutes, rounded up.
         return {"retry_after": error.retry_after, "count": math.ceil(error.retry_after / 60)}
@@ -316,7 +336,12 @@ async def _validation_problem(_request: Request, error: Exception) -> JSONRespon
     """FastAPI's list of errors stays the detail; params name the first one for the Web UI."""
     assert isinstance(error, RequestValidationError)
     errors = list(error.errors())
-    if _request.url.path.rstrip("/").startswith("/api/v1/password-resets"):
+    path = _request.url.path.rstrip("/")
+    if (
+        path.startswith("/api/v1/password-resets")
+        or path in {"/api/v1/account/email", "/api/v1/account/email-change"}
+        or path.startswith("/api/v1/account/email-change/")
+    ):
         # Never echo a body, token, password, email, or validator exception context.
         errors = [
             {key: value for key, value in item.items() if key in {"loc", "type", "msg"}}

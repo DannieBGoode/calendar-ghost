@@ -11,6 +11,7 @@ class CredentialSnapshot:
     user_id: UserId
     revision: int
     password_hash: str = field(repr=False)
+    email: str | None = field(repr=False)
 
 
 class CredentialChanges(Protocol):

@@ -1,4 +1,4 @@
-"""Bound reset bodies and protect reset responses before routing or validation."""
+"""Bound identity proof bodies and protect responses before routing or validation."""
 
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -13,10 +13,17 @@ def reset_api(path: str) -> bool:
     return path == "/api/v1/password-resets" or path.startswith("/api/v1/password-resets/")
 
 
+def email_change_api(path: str) -> bool:
+    return path in {"/api/v1/account/email", "/api/v1/account/email-change"} or path.startswith(
+        "/api/v1/account/email-change/"
+    )
+
+
 def _private(path: str) -> bool:
     return (
         reset_api(path)
-        or path in {"/password-reset", "/forgot-password"}
+        or email_change_api(path)
+        or path in {"/password-reset", "/forgot-password", "/email-change"}
         or (path.startswith("/api/v1/users/") and path.endswith("/password-reset-links"))
     )
 
@@ -40,7 +47,11 @@ class IdentityBoundary:
                 ] + PRIVATE_HEADERS
             await send(message)
 
-        if scope["method"] == "POST" and reset_api(scope["path"].rstrip("/")):
+        path = scope["path"].rstrip("/")
+        bounded = (scope["method"] == "POST" and reset_api(path)) or (
+            scope["method"] in {"POST", "PUT"} and email_change_api(path)
+        )
+        if bounded:
             body = await _bounded_body(receive)
             if body is None:
                 failure = problem(413, "request_too_large", "Request body is too large")
