@@ -1,11 +1,14 @@
 """Provider sign-in methods and installation enablement, separate from calendar consent."""
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Protocol
 
 from calendar_sync.application.identity.credentials import CredentialSnapshot
+from calendar_sync.application.identity.ports import Session
 from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.provider_identity import ProviderClaims
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,3 +70,128 @@ class ProviderSignInSettings(Protocol):
     def set_enabled(self, actor: UserId, provider: str, enabled: bool) -> None:
         """Recheck administrator and refuse disablement that strands an active User."""
         ...
+
+
+class ProviderSignInRefused(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__("Provider sign-in could not be completed")
+
+
+class ProviderSignInUnavailable(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__("Provider sign-in is temporarily unavailable")
+
+
+class ProviderSignInThrottled(ApplicationError):
+    def __init__(self, retry_after: int) -> None:
+        super().__init__("Provider sign-in is temporarily limited")
+        self.retry_after = retry_after
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserProof:
+    value: str = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class InvitationIntent:
+    token: str = field(repr=False)
+    email: str = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class BoundInvitation:
+    token_hash: str = field(repr=False)
+    email: str = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class BeginIntent:
+    provider: str
+    browser: BrowserProof
+    invitation: InvitationIntent | None = None
+    owner: LinkOwner | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FlowContext:
+    invitation: BoundInvitation | None
+    owner: LinkOwner | None
+    config_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderFlow:
+    state_hash: str = field(repr=False)
+    provider: str
+    browser_hash: str = field(repr=False)
+    expires_at: datetime
+    context: FlowContext
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderCallback:
+    provider: str
+    state: str = field(repr=False)
+    code: str = field(repr=False)
+    browser: BrowserProof
+    # Resolved from the current session by the interface, never accepted from request input.
+    owner: LinkOwner | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PendingLink:
+    token: str = field(repr=False)
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class PendingProviderLink:
+    flow: ProviderFlow
+    claims: ProviderClaims
+
+
+class ProviderAuthorization(Protocol):
+    @property
+    def fingerprint(self) -> str: ...
+
+    def begin(self, state: str, nonce: str, verifier: str) -> str: ...
+
+    def exchange(self, code: str, nonce: str, verifier: str) -> ProviderClaims: ...
+
+
+class ProviderFlows(Protocol):
+    def begin(self, intent: BeginIntent, state: str) -> ProviderFlow: ...
+
+    def consume(self, callback: ProviderCallback) -> ProviderFlow | None:
+        """Claim exactly once before exchange, bound to the actual current browser and owner."""
+        ...
+
+    def defer(self, flow: ProviderFlow, claims: ProviderClaims) -> PendingLink:
+        """Issue a fresh proof, invalidating any older pending proof for this browser."""
+        ...
+
+    def pending(self, browser: BrowserProof, token: str) -> PendingLink | None: ...
+
+    def cancel(self, browser: BrowserProof) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderSignInResult:
+    session: Session | None
+    pending: PendingLink | None
+
+
+@dataclass(frozen=True, slots=True)
+class AdmissionCommand:
+    claims: ProviderClaims
+    flow: ProviderFlow
+    expected: CredentialSnapshot | None
+
+
+class ProviderAdmission(Protocol):
+    def complete(self, command: AdmissionCommand) -> ProviderSignInResult: ...
+
+    def confirm(
+        self, pending: str, browser: BrowserProof, expected: CredentialSnapshot
+    ) -> Session | None: ...

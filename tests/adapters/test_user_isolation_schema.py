@@ -15,6 +15,11 @@ INSTALLATION_TABLES = {
     "identity_email_readiness",
     # Provider enablement is installation configuration, not an identity binding.
     "provider_sign_in_settings",
+    # Anonymous OIDC proof records name no target User before password proof.
+    "provider_flows",
+    "provider_pending_links",
+    # Anonymous, purpose-separated network and installation counters.
+    "provider_sign_in_attempts",
     # Reset admission is anonymous, with no User or eligibility outcome.
     "reset_request_attempts",
     "registration_request_attempts",

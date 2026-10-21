@@ -820,6 +820,17 @@ and installation-wide `provider_sign_in_settings`. Every provider starts disable
 configuration remains unavailable even when administrator enablement is stored. This storage
 migration alone exposes no new sign-in flow.
 
+It also adds anonymous `provider_flows` and `provider_pending_links`, User-owned
+`provider_link_flows` with a composite owning-session reference, and purpose-separated
+`provider_sign_in_attempts`. Bearer proofs persist only as hashes; identity and Invitation context
+is sealed with a purpose-derived Master Key. Flows and pending proofs last at most ten minutes,
+with at most 1,000 live records together. Identity traffic and maintenance remove expired records
+in batches of 250; stopped services and backups may retain them longer. OIDC storage waits at most
+100 ms. Its independent admission budgets allow 20 begins and callbacks per network per 15 minutes,
+10 password confirmations per network per 15 minutes, and 100 begins per installation per hour.
+IPv6 networks use /64, and the front gate admits at most 10,000 live network keys. Denied requests
+add no durable counter. These adapters become active when the provider sign-in routes are composed.
+
 Before upgrading, stop the service, back up the complete database/data directory with its matching
 Master Key, and retain the previous image. Startup applies the migration and checks all foreign
 keys atomically. There is no down migration. To roll back, stop the service and restore the

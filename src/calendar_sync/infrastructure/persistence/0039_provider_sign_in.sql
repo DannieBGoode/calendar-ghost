@@ -56,3 +56,44 @@ CREATE TABLE provider_sign_in_settings (
     provider TEXT PRIMARY KEY,
     enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1))
 );
+
+-- Anonymous flows and pending password proofs name no target User before password proof.
+CREATE TABLE provider_flows (
+    state_hash TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    browser_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    sealed_context BLOB NOT NULL
+);
+CREATE INDEX provider_flows_expiry ON provider_flows(expires_at);
+CREATE INDEX provider_flows_browser ON provider_flows(browser_hash);
+CREATE UNIQUE INDEX user_sessions_hash_user ON user_sessions(token_hash, user_id);
+CREATE TABLE provider_link_flows (
+    state_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_hash TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    browser_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    sealed_context BLOB NOT NULL,
+    FOREIGN KEY (session_hash, user_id) REFERENCES user_sessions(token_hash, user_id)
+        ON DELETE CASCADE
+);
+CREATE INDEX provider_link_flows_expiry ON provider_link_flows(expires_at);
+CREATE INDEX provider_link_flows_browser ON provider_link_flows(browser_hash);
+CREATE TABLE provider_pending_links (
+    token_hash TEXT PRIMARY KEY,
+    browser_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    sealed_context BLOB NOT NULL
+);
+CREATE INDEX provider_pending_links_expiry ON provider_pending_links(expires_at);
+CREATE TABLE provider_sign_in_attempts (
+    id INTEGER PRIMARY KEY,
+    boundary TEXT NOT NULL CHECK (boundary IN ('begin', 'callback', 'confirmation')),
+    network_digest TEXT NOT NULL,
+    admitted_at REAL NOT NULL
+);
+CREATE INDEX provider_sign_in_attempts_window ON provider_sign_in_attempts(boundary, network_digest, admitted_at);
+CREATE INDEX provider_sign_in_attempts_expiry ON provider_sign_in_attempts(admitted_at);
