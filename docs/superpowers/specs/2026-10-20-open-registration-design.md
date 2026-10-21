@@ -434,7 +434,10 @@ callers required by the current PR.
    `application/sync/ports.py` into context-named modules. Preserve public names and the existing
    import-linter contracts. The Synchronization port split now keeps `UnitOfWork` and
    `UnitOfWorkFactory` in `application/sync/ports.py`, with provider, account, record, health,
-   plan, and run ports in focused sibling `*_ports.py` modules; the other file splits remain
+   plan, and run ports in focused sibling `*_ports.py` modules. The SQLite split now keeps
+   the User's unit of work in `infrastructure/persistence/sqlite/unit_of_work.py`, its
+   Synchronization repositories in `sqlite/sync/{accounts,rules,mappings,records}.py`, and
+   ownership and time helpers in `sqlite/shared.py`; the bootstrap and API schema splits remain
    planned.
 3. **Open sign-up end to end.** Deliver the Open policy value and migration, verified joining,
    email-first sign-up, verified Invitations, administrator choice and readiness checks, and

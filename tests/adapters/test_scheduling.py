@@ -89,10 +89,10 @@ from calendar_sync.infrastructure.persistence.memory_installation import (
     InMemoryInstallationUnitOfWorkFactory,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
-from calendar_sync.infrastructure.persistence.sqlite import (
+from calendar_sync.infrastructure.persistence.sqlite.sync.accounts import (
     SqliteConnectedAccountRecords,
-    SqliteSyncRuleRepository,
 )
+from calendar_sync.infrastructure.persistence.sqlite.sync.rules import SqliteSyncRuleRepository
 from calendar_sync.infrastructure.scheduling import SchedulerWatch, SyncScheduler
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.fake_calendar import FakeCalendars, FixedClock

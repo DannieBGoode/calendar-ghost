@@ -62,7 +62,7 @@ from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
-from calendar_sync.infrastructure.persistence.sqlite import SqliteAuditRepository
+from calendar_sync.infrastructure.persistence.sqlite.sync.records import SqliteAuditRepository
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.adapters.test_user_migration import LATEST_VERSION, database_at_version
 from tests.helpers import NOW, endpoint, event, rule, week_start

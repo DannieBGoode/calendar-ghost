@@ -87,7 +87,7 @@ from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence import activity_queries
 from calendar_sync.infrastructure.persistence.accounts import SqliteUserConnectedAccounts
 from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
-from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.providers.routing import RoutingAccountCalendars
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app

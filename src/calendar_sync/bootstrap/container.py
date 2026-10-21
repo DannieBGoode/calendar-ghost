@@ -209,7 +209,7 @@ from calendar_sync.infrastructure.persistence.registration import (
     SqlitePasswordResetLinks,
     SqliteRegistrationSettings,
 )
-from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.storage import SqliteStorage
 from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 from calendar_sync.infrastructure.persistence.watch_inbox import (

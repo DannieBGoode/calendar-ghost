@@ -103,7 +103,7 @@ from calendar_sync.domain.services import (
 from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteActivityQueries
-from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
 
 REPOSITORY = Path(__file__).resolve().parents[1]

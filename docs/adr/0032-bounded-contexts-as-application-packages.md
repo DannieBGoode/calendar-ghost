@@ -65,7 +65,10 @@ states will not hold while it grows.
 
 - **SQLite schema migrations are their own module**, `infrastructure/persistence/migrations.py`,
   and the installation-wide unit of work is `infrastructure/persistence/installation.py`, so
-  `sqlite.py` holds one User's repositories and unit of work.
+  `sqlite/unit_of_work.py` holds one User's unit of work. Its Synchronization repositories live
+  in `sqlite/sync/accounts.py`, `sqlite/sync/rules.py`, `sqlite/sync/mappings.py`, and
+  `sqlite/sync/records.py`, with shared ownership and time helpers in `sqlite/shared.py`. Existing
+  identity and operations adapters stay in their focused persistence modules.
 
 ## Alternatives considered
 

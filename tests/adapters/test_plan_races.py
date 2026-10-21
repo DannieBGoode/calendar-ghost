@@ -57,7 +57,7 @@ from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAcc
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.plans import SqlitePlans
-from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWork
+from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteUnitOfWork
 from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.application.test_health import Incidents

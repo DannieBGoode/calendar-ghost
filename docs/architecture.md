@@ -392,10 +392,13 @@ and closes in one block. A test fails if any other module under `src/calendar_sy
 `sqlite3.connect`, so a setting added there applies to every adapter.
 
 `infrastructure/persistence/migrations.py` applies the schema migrations at startup.
-`infrastructure/persistence/sqlite.py` holds one User's repositories and unit of work, and
-`infrastructure/persistence/installation.py` the installation-wide unit of work. The in-memory
-store that application tests use is split the same way: `memory.py` holds one User's unit of work,
-and `memory_installation.py` the installation-wide one.
+`infrastructure/persistence/sqlite/unit_of_work.py` holds one User's unit of work. Its
+Synchronization repositories live in `sqlite/sync/accounts.py`, `sqlite/sync/rules.py`,
+`sqlite/sync/mappings.py`, and `sqlite/sync/records.py`, with ownership and time helpers in
+`sqlite/shared.py`. The existing identity and operations adapters remain in their focused
+persistence modules, and `infrastructure/persistence/installation.py` holds the installation-wide
+unit of work. The in-memory store that application tests use also separates these scopes:
+`memory.py` holds one User's unit of work, and `memory_installation.py` the installation-wide one.
 
 Every table holding a User's records carries `user_id`. A child refers to its parent by identifier
 and User together, such as a mapping's `(rule_id, user_id)` to its rule's `(id, user_id)`, so SQLite

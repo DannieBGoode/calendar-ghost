@@ -31,9 +31,9 @@ from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.watches import CalendarWatch, WatchRegistration
 from calendar_sync.infrastructure.persistence.activity_queries import operations_of
 from calendar_sync.infrastructure.persistence.connections import USERS_PER_QUERY, open_connection
-from calendar_sync.infrastructure.persistence.sqlite import (
-    optional_time,
-    outcome_from_row,
+from calendar_sync.infrastructure.persistence.sqlite.shared import optional_time
+from calendar_sync.infrastructure.persistence.sqlite.sync.records import outcome_from_row
+from calendar_sync.infrastructure.persistence.sqlite.sync.rules import (
     preview_from_row,
     rule_from_row,
 )
