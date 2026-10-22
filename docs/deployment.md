@@ -595,7 +595,8 @@ It goes to the User's current account email. Existing and Invitation Only addres
 direct email changes, remain eligible without retroactive verification. Check these addresses:
 a typo or an address belonging to somebody else gives that mailbox owner password recovery access.
 Only me remains the default. Open requires explicit administrator choice and tested identity email;
-offline recovery tooling and the hosted backup runbook remain planned. Plans are independent.
+use the [offline recovery runbook](hosted-backups.md#restore-order) for stopped-service recovery.
+Plans are independent.
 
 ### Recovery allowances and fallback
 
@@ -615,7 +616,8 @@ person's email allowance, or two sustained networks can exhaust the global allow
 recovery for everyone. Wait for the window, or use an administrator-issued link. Global/email
 request caps do not block administrator issuance, though token and completion network limits still
 apply. If no administrator can sign in, use the existing stopped-service backup recovery procedure;
-there is no offline password recovery command in this release.
+run the installed offline inspection and conservative preparation commands before application startup
+([recovery order](hosted-backups.md#restore-order)).
 
 ### Recovery retention and Master Key rotation
 
@@ -669,7 +671,8 @@ Master Key, and retain the previous image version. There is no down migration. F
 Never run an old image against stored Open or the upgraded schema, even after changing the policy
 back. Do not remove migration records or hand-edit the enum constraint. Restoring a backup can
 revive previously revoked access; see [backup risks](data-ownership.md#backups-and-recovery).
-The optional hosted backup runbook and offline recovery tooling remain unshipped.
+Use the [optional hosted backup runbook](hosted-backups.md), including offline inspection and
+preparation before startup. Older-schema backups need separately reviewed compatible offline tooling.
 
 ## Verified registration
 
@@ -759,7 +762,7 @@ Attackers can exhaust a person's email allowance or the installation allowance a
 Wait for the window or have an administrator close Open and use Invitation Only. Sign-up itself
 gives existing Users no recovery access. For reset suppression, use an administrator-issued reset
 link or wait; token/completion network limits still apply. If no administrator can sign in, use
-the existing stopped-service backup recovery procedure. No offline recovery command is shipped.
+the [stopped-service offline recovery procedure](hosted-backups.md#restore-order).
 
 SQLite keeps the Pending Registration email, optional Invitation reference, hash, and lifecycle
 times, with no password, mail body, or plaintext token. Counters keep times and keyed digests,
@@ -915,7 +918,7 @@ newcomers. Wait for the window, use an existing password, or ask an active admin
 Password Reset Link to set a first password. Ordinary password sign-in and reset have separate
 limits; reset token/completion limits still apply. Limits are not distributed denial-of-service
 protection. If no administrator can sign in, restore usable configuration or follow the existing
-stopped-service backup recovery procedure; no offline recovery command is shipped.
+[stopped-service offline recovery procedure](hosted-backups.md#restore-order).
 
 Flows, anonymous browser proofs, and pending password proofs last at most ten minutes; a pending
 link cannot extend its original flow's deadline. A provider session lasts seven days. Restart or

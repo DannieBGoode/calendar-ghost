@@ -40,7 +40,8 @@ with the synthetic SMTP capture and a disposable SQLite database; the request ke
 address until the signed-in owner completes the link with their current password. Open registration
 also requires a matching successful administrator email test and explicit Open selection.
 Verified-registration passwords accept 12 to 1,024 characters. Provider-only Users can set a first
-password of 12 to 256 characters. Offline recovery tooling remains planned. See
+password of 12 to 256 characters. The installed offline operator entry is documented below;
+[the hosted backup drill](hosted-backups.md#reproduce-and-qualify) uses only synthetic data. See
 [registration boundaries](architecture.md#verified-registration-boundary) and
 [provider sign-in](architecture.md#provider-sign-in-boundary).
 
@@ -350,3 +351,48 @@ remains in each provider package. The local identity assets and their origins ar
 [Google](https://developers.google.com/identity/branding-guidelines) and
 [Microsoft](https://learn.microsoft.com/en-us/entra/identity-platform/howto-add-branding-in-apps)
 button guidance, with comparable prominence and no runtime remote fonts or branding fetches.
+
+## Offline restoration command
+
+After installing the editable package, use the isolated terminal entry point:
+
+```sh
+.venv/bin/calendar-ghost-restore inspect --database /protected/restored.db
+mkdir -m 700 /protected/before-change
+.venv/bin/calendar-ghost-restore prepare --database /protected/restored.db \
+  --backup /protected/before-change/before.db --administrator-id SELECTED_USER_ID \
+  --acknowledge-services-stopped
+```
+
+Export the matching `CALENDAR_SYNC_MASTER_KEY` from your protected recovery store before either
+command. No normal Settings, API, provider, scheduler, Instant Sync, or mail composition runs.
+Inspection prints only schema and record counts. With no credentials to authenticate it reports
+`key_unverified`; a syntactically valid key alone does not establish a match. Neither command
+lists email addresses or credentials. Obtain the selected existing Installation Administrator's
+identifier from a protected operator inventory, never from a public list. Preparation asks twice
+for a hidden fresh password of 12 to 256 characters and refuses a terminal that cannot hide it.
+Never put the password or Master Key in command arguments.
+
+Keep traffic closed. Stop the application and backup replicator, then check their service status
+and process inventory before acknowledging `--acknowledge-services-stopped`. The command cannot verify that
+processes are stopped; a SQLite lock does not prove this. Keep every writer stopped throughout
+inspection and preparation. Use the matching image and a new database path, preserve the original,
+and keep the backup parent private, operator-owned, and free of symlinks. Preparation's
+before-change backup does not replace the independent recovery backup.
+
+For the container image, use the same installed command in a disposable interactive container,
+with the restored directory mounted and secrets supplied through a protected environment file:
+
+```sh
+docker run --rm -it --network none --env-file /protected/recovery.env \
+  -v /protected/restore:/restore --entrypoint calendar-ghost-restore MATCHING_IMAGE \
+  inspect --database /restore/restored.db
+docker run --rm -it --network none --env-file /protected/recovery.env \
+  -v /protected/restore:/restore --entrypoint calendar-ghost-restore MATCHING_IMAGE \
+  prepare --database /restore/restored.db --backup /restore/before-change/before.db \
+  --administrator-id SELECTED_USER_ID --acknowledge-services-stopped
+```
+
+Create `/protected/restore/before-change` with mode 0700 and the container operator's ownership
+first. Exit statuses are 0 for completion, 2 for usage, acknowledgement, or password input, and
+1 for storage, schema, administrator selection, or key failures. Diagnostics use fixed safe codes.

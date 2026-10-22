@@ -204,8 +204,12 @@ the backup and the Installation Master Key separately from the live host, and ne
 to a public issue or support request. A database without its master key cannot restore encrypted
 Connected Account credentials or sealed Source Change values.
 
-To restore, stop the service, restore the data directory and matching secrets, start the same or a
-newer compatible image, and check `/health` and Activity before allowing scheduled runs to resume.
+To restore, close ingress and stop both the application and any backup process. Preserve the
+newer failed database and restore to a new path with matching secrets and image. Run the installed
+`calendar-ghost-restore inspect` and conservative `prepare` commands before any application startup.
+Then use operator-only access to check sign-in and Installation Health, replay known access changes,
+and have confirmed owners reauthorize and reconcile. Follow the exact
+[stopped-service recovery order](hosted-backups.md#restore-order), including schema restrictions.
 Keep the previous database and image available until the restored installation has been verified.
 Do not use `docker compose down -v` as an upgrade step: removing the named volume removes the local
 installation state.
@@ -225,7 +229,8 @@ first provider link by email then requires password confirmation. Both providers
 matching stopped-service pre-upgrade database, Master Key, and previous image; no old binary may
 open the upgraded schema. Restoring loses later writes and can revive identity bindings and
 sessions removed since the backup. See [migration 39](deployment.md#migration-39-provider-sign-in-storage).
-The planned offline recovery tooling and continuous-backup runbook are unshipped. A backup
+The optional [hosted backup runbook](hosted-backups.md) describes pinned Litestream, independent
+exports, offline preparation and measured limits. A backup
 can revive sessions and credentials that were revoked after it was taken; recovering the matching
 database alone cannot prove that restored access remains authorized.
 

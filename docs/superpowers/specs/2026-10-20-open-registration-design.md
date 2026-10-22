@@ -13,7 +13,11 @@ password recovery are merged, including migrations 35 and 36. PR #131 verified e
 requires matching tested identity email. Provider sign-in (migration 39) is implemented on its
 delivery branch under its [approved plan](../plans/2026-10-21-provider-sign-in.md); whole-branch
 reviews, final gates, screenshots, publication, and CI remain tracked there. Hosted backup/restore,
-including offline recovery tooling, remains deferred. The delivery sequence below records the approved scope.
+including offline recovery tooling, is implemented on the delivery branch with the
+[runbook](../../hosted-backups.md) and [synthetic evidence](../../hosted-backup-drill.md).
+The tested v0.5.17 operating envelope requires stopped compaction; live VACUUM produced an invalid
+restore and remains unsupported. Hosted launch still requires measured remote qualification.
+The delivery sequence below records the approved scope.
 
 Builds on [the multi-user delivery order](2026-10-09-multi-user-design.md),
 [ADR 0029](../../adr/0029-isolate-users-in-one-sqlite-database.md),
@@ -459,7 +463,8 @@ callers required by the current PR.
    evidence remain tracked in that plan. Calendar consent stays separate.
 5. **Hosted backup and restore.** Combine narrow offline inspection/preparation and their
    SQLite safety tests with the optional backup tooling and tested hosted runbook. Ship before
-   hosted launch, after its own plan; this work is outside the current PR. No mandatory backup
+   hosted launch, after its own plan. Implemented on the delivery branch with offline tooling and
+   measured local stopped-maintenance recovery; remote qualification remains outstanding. No mandatory backup
    service, public maintenance endpoint, scheduler mode, or Plan Hold edits.
 
 Identity rules belong in pure domain values and decisions, with decision-table tests: hashed,

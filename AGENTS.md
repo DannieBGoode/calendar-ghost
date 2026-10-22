@@ -344,3 +344,9 @@ docs/                              Architecture, operations, domain references, 
 
 When a directory later needs materially different instructions, add a nested `AGENTS.md` scoped to
 that directory. Do not duplicate root guidance merely to restate it.
+
+Offline restoration is a separate stopped-service terminal composition in `bootstrap/restore.py`.
+Its Operations `RestoreStore` port narrowly crosses Users for inspection and conservative
+preparation; it does not receive `InstallationUnitOfWork` or compose the API or runtime workers.
+Keep diagnostics fixed and secret-free, require hidden confirmed password input, and preserve
+this isolation when changing the operator command. See `docs/development.md`.

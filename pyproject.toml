@@ -40,6 +40,7 @@ dev = [
   "ruff>=0.11,<1",
 ]
 [project.scripts]
+calendar-ghost-restore = "calendar_sync.bootstrap.restore:run"
 calendar-sync = "calendar_sync.interfaces.api.app:run"
 
 [tool.hatch.build.targets.wheel]
