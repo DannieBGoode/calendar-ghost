@@ -115,6 +115,11 @@
       "one": "Your plan lets {count} rule sync. Pause or remove it to start this rule.",
       "other": "Your plan lets {count} rules sync. Pause or remove one to start this rule."
     },
+    "too_many_kept_rules": {
+      "one": "Your plan lets you keep {count} rule. Choose at most {count} rule and save again.",
+      "other": "Your plan lets you keep {count} rules. Choose at most {count} rules and save again."
+    },
+    "plan_settlement_busy": "A rule is changing right now. Your choices were not saved. Try saving again shortly.",
     "plan_not_found": "This plan no longer exists. Reload to see the current plans.",
     "plans_need_default": "Plans can't be on without a default plan. Choose another default instead.",
     "provider_failed": "{Provider} reported a problem. Try again shortly.",

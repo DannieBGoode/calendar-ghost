@@ -21,6 +21,10 @@ from calendar_sync.interfaces.api.schemas.shared import (
 )
 
 
+class KeptRulesRequest(BaseModel):
+    rule_ids: list[str]
+
+
 class CalendarEndpointPayload(BaseModel):
     connected_account_id: str = Field(min_length=1)
     calendar_id: str = Field(min_length=1)

@@ -200,6 +200,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/plan/kept-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Keep Rules
+         * @description Replace the whole kept set and apply available places and swaps immediately, all or none.
+         *     Only this User's eligible rules may be chosen. A busy choice saves nothing; retry it later.
+         */
+        put: operations["keep_rules_api_v1_account_plan_kept_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/sign-in-methods": {
         parameters: {
             query?: never;
@@ -2023,6 +2044,11 @@ export interface components {
             /** Token */
             token: string;
         };
+        /** KeptRulesRequest */
+        KeptRulesRequest: {
+            /** Rule Ids */
+            rule_ids: string[];
+        };
         /**
          * LimitUseResponse
          * @description How many of one resource a person has, beside what the Plan they have allows.
@@ -3684,6 +3710,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OwnPlanResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    keep_rules_api_v1_account_plan_kept_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeptRulesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -23,6 +23,7 @@ from calendar_sync.application.sync.errors import (
     RuleNotFound,
 )
 from calendar_sync.application.sync.manual_runs import ManualRunsThrottled
+from calendar_sync.application.sync.plan_holds import PlanSettlementBusy, TooManyKeptRules
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.errors import DomainError, DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import SyncRuleId
@@ -185,6 +186,8 @@ FAMILY_KEY = PlanKey("family")
             "manual_runs_throttled",
             {"retry_after": 90, "count": 2},
         ),
+        (TooManyKeptRules(2), "too_many_kept_rules", {"limit": 2, "count": 2}),
+        (PlanSettlementBusy("retry the choice"), "plan_settlement_busy", {}),
         (DomainValidationError("name must not be empty"), "invalid_rule", {}),
         (InvalidStateTransition("cannot enable"), "invalid_state_transition", {}),
         (

@@ -1847,6 +1847,22 @@
         "title": "IssuedLinkResponse",
         "type": "object"
       },
+      "KeptRulesRequest": {
+        "properties": {
+          "rule_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rule Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rule_ids"
+        ],
+        "title": "KeptRulesRequest",
+        "type": "object"
+      },
       "LimitUseResponse": {
         "description": "How many of one resource a person has, beside what the Plan they have allows.",
         "properties": {
@@ -6196,6 +6212,56 @@
           }
         },
         "summary": "Own Plan"
+      }
+    },
+    "/api/v1/account/plan/kept-rules": {
+      "put": {
+        "description": "Replace the whole kept set and apply available places and swaps immediately, all or none.\nOnly this User's eligible rules may be chosen. A busy choice saves nothing; retry it later.",
+        "operationId": "keep_rules_api_v1_account_plan_kept_rules_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeptRulesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Keep Rules"
       }
     },
     "/api/v1/account/sign-in-methods": {

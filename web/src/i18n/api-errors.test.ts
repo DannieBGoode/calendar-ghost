@@ -25,6 +25,18 @@ describe("apiErrorMessage", () => {
     )
   })
 
+  it("explains keep-choice limits and a retry without saving", () => {
+    expect(apiErrorMessage(i18n, coded("too_many_kept_rules", { limit: 1, count: 1 }))).toBe(
+      "Your plan lets you keep 1 rule. Choose at most 1 rule and save again.",
+    )
+    expect(apiErrorMessage(i18n, coded("too_many_kept_rules", { limit: 3, count: 3 }))).toBe(
+      "Your plan lets you keep 3 rules. Choose at most 3 rules and save again.",
+    )
+    expect(apiErrorMessage(i18n, coded("plan_settlement_busy"))).toBe(
+      "A rule is changing right now. Your choices were not saved. Try saving again shortly.",
+    )
+  })
+
   it("fills server params and names the provider", () => {
     const error = coded("removal_interrupted", { processed: 2, remaining: 3, total: 5, provider: "google", kind: "rate_limit" })
     expect(apiErrorMessage(i18n, error)).toBe(
