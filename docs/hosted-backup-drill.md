@@ -15,7 +15,7 @@ from the [v0.5.17 release](https://github.com/benbjohnson/litestream/releases/ta
 shasum -a 256 .context/litestream-v0.5.17/litestream-0.5.17-darwin-arm64.tar.gz
 .context/litestream-v0.5.17/litestream version
 .venv/bin/python -m scripts.verify_hosted_backups \
-  --litestream .context/litestream-v0.5.17/litestream --output-dir .context/hosted-drill-reviewed
+  --litestream .context/litestream-v0.5.17/litestream --output-dir .context/hosted-drill-fix1
 ```
 
 All three commands exited 0. Version output was `0.5.17`. The archive's SHA-256 matched the
@@ -34,11 +34,11 @@ and a Plan-held rule. No API server or second application writer started. Every 
 
 | Check | Observed result |
 | --- | --- |
-| Whole supported drill | Exit 0, 93.447 seconds |
+| Whole supported drill | Exit 0, 94.625 seconds |
 | Database | 659,456 bytes, schema 39 |
-| Initial marker UTC | `2026-10-22T18:36:44.674281+00:00` |
-| Final marker UTC | `2026-10-22T18:38:14.114668+00:00` |
-| Latest local marker sync | Maximum 0.056 seconds across 30 measured markers |
+| Initial marker UTC | `2026-10-22T18:46:07.201022+00:00` |
+| Final marker UTC | `2026-10-22T18:47:37.261752+00:00` |
+| Latest local marker sync | Maximum 0.254 seconds across 30 measured markers |
 | Pre-maintenance sync | Source TXID 1, replica TXID 1, exit 0 |
 | Stop before offline VACUUM | SIGTERM, exit 0 within 30 seconds |
 | Same-path installed offline inspect | Exit 0 before compaction |
@@ -46,7 +46,7 @@ and a Plan-held rule. No API server or second application writer started. Every 
 | Restart, new marker, sync, stop | Matching TXIDs; SIGTERM exit 0 |
 | Fresh restores before/after maintenance | Exit 0, integrity and exact marker assertions pass |
 | Installed inspect and prepare | Exits 0 and 0; prepare used a real controlling terminal |
-| Restore plus inspect/prepare | 0.268 seconds combined |
+| Restore plus inspect/prepare | 0.402 seconds combined |
 | Conservative preparation | All authority invalidated; other User disabled; accounts disconnected |
 | Rules, mappings and Plans | Full restored fixture checked; Plan fields unchanged after preparation |
 | Fresh metadata and new prefix | Older one-marker restore plus new marker restored correctly; original prefix unchanged |
@@ -58,16 +58,21 @@ mode-0700 directory; no password or key entered argv, evidence or committed outp
 
 ## Retention and failure input
 
-Observed three initial L0 objects removed and six snapshots expired. Effective monitors reported
-all default level intervals. L1 compacted on UTC boundaries `18:37:00.043`, `18:37:30.029`, and
-`18:38:00.033`; this short run does not claim an observed hour of L3 operation.
+Observed three initial L0 objects removed and seven snapshots expired. Effective monitors reported
+all default level intervals. L1 compacted on UTC boundaries `18:46:30.041`, `18:47:00.026`, and
+`18:47:30.037`; this short run does not claim an observed hour of L3 operation.
 
 Retained snapshots `000000000000001d` and `0000000000000021` restored with exits 0, integrity,
-expected marker prefixes (27 and 31 markers), and installed offline inspection. Expired endpoints
-`0000000000000004`, `0000000000000008`, `000000000000000c`, `0000000000000010`,
-`0000000000000014`, and `0000000000000019` each failed restore with exit 1. The detached export
+exact marker tuples captured independently at acknowledged source TXIDs (27 and 31 markers),
+and installed offline inspection. Both include `initial` and `after-vacuum`; `1d` additionally
+contains exactly `retention-00` through `retention-24`, and `21` through `retention-28`. Expired endpoints
+`0000000000000004`, `0000000000000005`, `0000000000000009`, `000000000000000d`,
+`0000000000000010`, `0000000000000014`, and `0000000000000019` each returned exit 1 with
+the pinned `Error: no matching backup files available` diagnostic, recorded as
+`endpoint_unavailable`. Signals and generic operational errors fail the drill. The detached export
 still passed integrity, exact marker and installed inspection checks after its own original live
-endpoint became unavailable. This demonstrates retention semantics with shortened intervals,
+endpoint `0000000000000004` returned the same classified unavailable diagnostic. This demonstrates
+retention semantics with shortened intervals,
 not 720 hours elapsed or an exact expiry deadline.
 
 Stopping replication made the normal sync probe exit 1, exercising the failure input used by an

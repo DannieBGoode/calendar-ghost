@@ -15,7 +15,6 @@ from scripts.hosted_backup_process import (
     checked,
     inspect_cli,
     marker,
-    rows,
     verify_markers,
 )
 
@@ -31,6 +30,7 @@ def retention_drill(replication: Replication, root: Path, env: dict[str, str]) -
     snapshots: dict[str, str] = {}
     removed_snapshots: dict[str, str] = {}
     markers: list[str] = []
+    states: dict[str, tuple[str, ...]] = {}
     max_lag = 0.0
     l1_seen = False
     # 90 seconds covers several default 30-second L1 boundaries and shortened snapshots.
@@ -44,6 +44,7 @@ def retention_drill(replication: Replication, root: Path, env: dict[str, str]) -
             marker(replication.database, value)
             markers.append(value)
             sync = json.loads(replication.sync())
+            states[f"{sync['txid']:016x}"] = ("initial", "after-vacuum", *markers)
             max_lag = max(max_lag, time.monotonic() - written)
             current = endpoints(replication.replica, 9)
             removed_snapshots.update({p: txid for p, txid in snapshots.items() if p not in current})
@@ -60,11 +61,11 @@ def retention_drill(replication: Replication, root: Path, env: dict[str, str]) -
     if not removed_l0 or not removed_snapshots or not l1_seen:
         raise DrillFailure("retention settings not demonstrated by L0, snapshots and default L1")
     boundaries = effective_configuration(replication)
-    retained_results = restore_retained(replication, root, markers, env)
+    retained_results = restore_retained(replication, root, states, env)
     unavailable = expired_endpoints(replication, root, removed_snapshots)
     if exported is None:
         raise DrillFailure("independent export missing")
-    verify_export(replication, root, exported, export_txid, env)
+    export_expiry = verify_export(replication, root, exported, export_txid, env)
     # A stopped daemon must make the normal sync probe fail: the alert input is exercised.
     alarm = subprocess.run(  # noqa: S603 - explicit pinned executable, no shell
         [
@@ -92,6 +93,7 @@ def retention_drill(replication: Replication, root: Path, env: dict[str, str]) -
         "retained_snapshot_restores": retained_results,
         "expired_endpoint_attempts": unavailable,
         "independent_export_verified_after_expiry": True,
+        "export_endpoint_expiry": export_expiry,
         "sigterm_exit": stopped,
         "stopped_probe_exit": alarm.returncode,
         "alarm_input_validated": True,
@@ -117,16 +119,18 @@ def expired_endpoints(
             text=True,
             timeout=40,
         )
-        unavailable.append({"txid": txid, "exit": result.returncode})
-    if not any(item["exit"] != 0 for item in unavailable):
+        unavailable.append({"txid": txid, **endpoint_result(result)})
+    if not any(item["reason"] == "endpoint_unavailable" for item in unavailable):
         raise DrillFailure("no expired endpoint became unavailable")
     return unavailable
 
 
 def restore_retained(
-    replication: Replication, root: Path, markers: list[str], env: dict[str, str]
+    replication: Replication, root: Path, states: dict[str, tuple[str, ...]], env: dict[str, str]
 ) -> list[dict[str, Any]]:
     retained = endpoints(replication.replica, 9)
+    if not retained:
+        raise DrillFailure("no retained snapshot endpoints")
     retained_results = []
     for index, txid in enumerate(sorted(set(retained.values()))):
         target = root / f"retained-{index}.db"
@@ -141,19 +145,17 @@ def restore_retained(
                 f"file://{replication.replica}",
             ]
         )
-        restored = tuple(
-            row[0] for row in rows(target, "SELECT value FROM drill_markers ORDER BY rowid")
-        )
-        if restored != ("initial", "after-vacuum", *markers)[: len(restored)] or not restored:
-            raise DrillFailure("retained snapshot content differs")
+        if txid not in states:
+            raise DrillFailure("retained endpoint has no acknowledged source state")
+        verify_markers(target, states[txid])
         inspect_cli(target, env)
-        retained_results.append({"txid": txid, "markers": len(restored), "exit": 0})
+        retained_results.append({"txid": txid, "markers": len(states[txid]), "exit": 0})
     return retained_results
 
 
 def verify_export(
     replication: Replication, root: Path, exported: tuple[str, ...], txid: str, env: dict[str, str]
-) -> None:
+) -> dict[str, Any]:
     target = root / "independent-export.db"
     verify_markers(target, exported)
     inspect_cli(target, env)
@@ -171,8 +173,10 @@ def verify_export(
         text=True,
         timeout=40,
     )
-    if result.returncode == 0:
+    outcome = endpoint_result(result)
+    if outcome["reason"] != "endpoint_unavailable":
         raise DrillFailure("export's original live endpoint did not expire")
+    return {"txid": txid, **outcome}
 
 
 def effective_configuration(replication: Replication) -> list[str]:
@@ -195,3 +199,16 @@ def effective_configuration(replication: Replication) -> list[str]:
     if not boundaries:
         raise DrillFailure("no observed default L1 compaction boundary")
     return boundaries
+
+
+def endpoint_result(result: subprocess.CompletedProcess[str]) -> dict[str, Any]:
+    """Accept only the pinned restore-plan's specific missing-endpoint diagnostic."""
+    if result.returncode == 0:
+        return {"exit": 0, "reason": "available"}
+    if (
+        result.returncode == 1
+        and result.stdout == ""
+        and result.stderr.strip() == "Error: no matching backup files available"
+    ):
+        return {"exit": 1, "reason": "endpoint_unavailable"}
+    raise DrillFailure("endpoint probe failed: signal or operational error")
