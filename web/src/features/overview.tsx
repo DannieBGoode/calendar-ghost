@@ -104,7 +104,7 @@ function OnboardingSteps({
   const { t } = useI18n()
   // Only an authorized account lets the next step work; a disconnected one must be renewed first.
   const reauthorize = dashboard.connected_accounts === 0 && dashboard.disconnected_accounts > 0
-  const done = [dashboard.connected_accounts > 0, dashboard.sync_rules > 0, dashboard.enabled_rules + dashboard.held_rules > 0]
+  const done = [dashboard.connected_accounts > 0, dashboard.sync_rules > 0, dashboard.enabled_rules > 0]
   const current = done.indexOf(false)
   const rulesLink = (label: string, createRule: boolean) => (
     <Button asChild>
