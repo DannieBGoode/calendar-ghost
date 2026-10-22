@@ -168,3 +168,21 @@ def test_inspect_holds_one_read_snapshot_and_closes_on_failure(
     _refused(path, "schema_incompatible")
     with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
         opened[1].execute("SELECT 1")
+
+
+@pytest.mark.parametrize("stored", [12, "synthetic malformed credential"])
+def test_inspect_rejects_nonblob_credentials_before_decryption(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stored: int | str
+) -> None:
+    path = _database(tmp_path)
+    add_account(path, "synthetic")
+    with transaction(path) as connection:
+        connection.execute("UPDATE connected_accounts SET encrypted_credentials = ?", (stored,))
+    cipher = _cipher()
+
+    def refuse_decryption(sealed: bytes) -> str:
+        pytest.fail("malformed storage values must never reach decryption")
+
+    monkeypatch.setattr(cipher, "decrypt", refuse_decryption)
+    with pytest.raises(RestoreFailure, match=r"^key_mismatch$"):
+        SqliteRestoreStore(path, cipher).inspect()

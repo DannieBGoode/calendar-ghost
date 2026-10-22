@@ -43,8 +43,11 @@ class SqliteRestoreStore:
     def _authenticate_credentials(self, connection: sqlite3.Connection) -> int:
         authenticated = 0
         for row in connection.execute("SELECT encrypted_credentials FROM connected_accounts"):
+            sealed = row[0]
+            if not isinstance(sealed, bytes):
+                raise RestoreFailure("key_mismatch")
             try:
-                self._cipher.decrypt(bytes(row[0]))
+                self._cipher.decrypt(sealed)
             except (InvalidTag, ValueError, TypeError, UnicodeError):
                 raise RestoreFailure("key_mismatch") from None
             authenticated += 1
