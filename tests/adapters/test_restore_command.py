@@ -4,6 +4,8 @@ import os
 import pty
 import select
 import subprocess
+import sys
+import sysconfig
 import time
 from pathlib import Path
 
@@ -15,6 +17,13 @@ from calendar_sync.infrastructure.security import CredentialCipher
 from tests.users import add_account, add_user
 
 MARKER = "SYNTHETIC_SECRET_MARKER"
+RESTORE_COMMAND = str(Path(sysconfig.get_path("scripts")) / "calendar-ghost-restore")
+
+
+@pytest.fixture(autouse=True)
+def outside_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise the installed entry without a checkout-local virtual environment."""
+    monkeypatch.chdir(tmp_path)
 
 
 @pytest.fixture
@@ -30,7 +39,7 @@ def candidate(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
 
 def invoke(args: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603 - fixed executable and synthetic test arguments
-        [".venv/bin/calendar-ghost-restore", *args],
+        [RESTORE_COMMAND, *args],
         env=env,
         capture_output=True,
         text=True,
@@ -43,7 +52,7 @@ def terminal(args: list[str], env: dict[str, str], answers: tuple[bytes, bytes])
     if pid == 0:
         try:
             os.execve(  # noqa: S606 - fixed executable and synthetic test arguments
-                ".venv/bin/calendar-ghost-restore", ["calendar-ghost-restore", *args], env
+                RESTORE_COMMAND, ["calendar-ghost-restore", *args], env
             )
         except OSError:
             os._exit(127)
@@ -185,7 +194,7 @@ for name in sys.modules:
 assert len(threading.enumerate()) == 1
 """
     result = subprocess.run(  # noqa: S603 - fixed executable and synthetic test arguments
-        [".venv/bin/python", "-c", script, str(path), str(backup)],
+        [sys.executable, "-c", script, str(path), str(backup)],
         env=env,
         capture_output=True,
         text=True,
