@@ -8,6 +8,7 @@ from calendar_sync.domain.errors import DomainValidationError
 
 
 class RestoreAuthority(StrEnum):
+    PASSWORDS = "passwords"
     SESSIONS = "sessions"
     INVITATIONS = "invitations"
     INTEGRATION_TOKENS = "integration_tokens"

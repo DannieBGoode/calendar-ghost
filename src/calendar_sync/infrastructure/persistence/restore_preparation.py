@@ -152,6 +152,7 @@ def _invalidate(
 
 
 _UPDATES = {
+    RestoreAuthority.PASSWORDS: "UPDATE users SET password_hash=NULL",
     RestoreAuthority.PROVIDER_SIGN_IN: "UPDATE provider_sign_in_settings SET enabled=0",
     RestoreAuthority.WATCH_REGISTRATIONS: "UPDATE watch_registrations SET state='abandoned'",
     RestoreAuthority.INSTANT_SYNC_REQUESTS: (

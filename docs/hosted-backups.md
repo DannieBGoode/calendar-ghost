@@ -140,9 +140,11 @@ retention expires. Track and expire the local preparation backups explicitly too
    hidden prompts. Never put it in command arguments, an environment variable, a pipe or a log.
    Preparation creates a protected verified backup before changing authority, closes Open,
    clears email readiness, revokes sessions, invitations, Integration Tokens, OAuth states and
-   all identity proofs/flows, removes Provider Identities, disables provider sign-in, abandons
+   all restored passwords and identity proofs/flows, removes Provider Identities, disables provider
+   sign-in, abandons
    Watch Registrations and handles queued Instant Sync requests. It disables every User except
-   the selected administrator and disconnects every Connected Account by sealing empty credentials.
+   the selected administrator, leaves other Users without passwords, and disconnects every Connected
+   Account by sealing empty credentials.
    Rules, mappings and all Plan fields stay unchanged. Exit codes are 0 success, 1 operational
    refusal/failure, 2 usage or confirmation failure. Any nonzero exit keeps ingress closed.
 5. Configure **fresh local Litestream metadata and a new private replica prefix** for the restored
@@ -158,7 +160,8 @@ retention expires. Track and expire the local preparation backups explicitly too
    access. Check administrator sign-in
    and Installation Health. Compare the preserved newer database and authoritative operational
    records; replay known deletions, disables, disconnections and credential changes. Confirm
-   mailbox ownership before exposing password recovery. Reset and re-enable only confirmed Users.
+   mailbox ownership before exposing password recovery. Enable only confirmed Users, then issue
+   fresh Password Reset Links; enabling alone cannot restore their old passwords.
    Provider sign-in stays disabled until current email ownership is confirmed and an administrator
    explicitly enables it. Owners explicitly reauthorize Connected Accounts and reconcile rules;
    preserve Plan Holds and do not release them by hand.

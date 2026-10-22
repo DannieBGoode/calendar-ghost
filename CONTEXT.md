@@ -430,7 +430,24 @@ and administrator disablement cannot remove an active User's last usable method.
 loss outside the application can still interrupt access; restore the configuration or recover
 with an administrator-issued Password Reset Link. A password is optional for provider admission;
 a signed-in User may set their first one. Email changes and User Deletion require a current
-password, so a User with only provider sign-in first sets one. Password removal is not offered.
+password, so a User with only provider sign-in first sets one. Password removal is not offered
+online; conservative offline Restore Preparation withdraws restored passwords.
+
+**Restore Inspection**:
+A stopped-service, offline check of schema compatibility, integrity, foreign keys and sealed
+credentials. It starts no runtime workers and reports only fixed diagnostics and counts.
+
+**Restore Preparation**:
+Conservative offline withdrawal of restored authority after explicit stopped-service acknowledgement
+and a protected durable before-change backup. The Operations `RestoreStore` narrowly crosses Users;
+it receives no `InstallationUnitOfWork` and changes no online authorization boundary. It closes Open
+and invalidates
+restored passwords, sessions, bearer proofs, provider flows and identities, provider sign-in enablement,
+email readiness, Watch Registrations, queued Instant Sync work and Delivery Evidence. Only the selected
+Installation Administrator remains active with a fresh password; other Users are disabled with no
+password. Confirm current ownership, enable the User, then issue a fresh Password Reset Link before
+restoring access. Connected Accounts require explicit reauthorization; rules, mappings, cursors and
+all Plan fields remain unchanged. See [offline recovery](docs/hosted-backups.md#restore-order).
 
 **Installation Administrator**:
 A User who holds the role that operates the installation. The first User holds it, it may be given to other Users, and the last one cannot lose it while anyone else remains. When the last User deletes themself, the installation returns to setup. It grants installation-wide operational powers, never sight of another User's event content; an Installation Administrator's own rules and accounts are as private as anyone's.

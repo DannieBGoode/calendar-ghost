@@ -274,13 +274,30 @@ def test_prepare_revokes_all_bearer_proofs_and_provider_flows(
 def test_prepare_replaces_admin_password_and_removes_provider_identities(
     candidate: tuple[Path, CredentialCipher, Path],
 ) -> None:
+    from calendar_sync.application.identity.administration import ChangeUserState
+    from calendar_sync.application.identity.errors import IncorrectCredentials
+    from calendar_sync.application.identity.sign_in import SignIn
+    from calendar_sync.domain.access import UserState
+    from calendar_sync.infrastructure.identifiers import UuidIdGenerator
+    from calendar_sync.infrastructure.persistence.registration import SqlitePasswordResetLinks
+    from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
+    from calendar_sync.infrastructure.throttle import MemorySignInThrottle
+    from tests.users import USER
+
     path, cipher, backup = candidate
     _seed_authority(path)
     passwords = ScryptPasswords()
+    clock = SystemClock()
+    users, sessions = SqliteUserDirectory(path), SqliteSessions(path, clock)
+    sign_in = SignIn(users, passwords, sessions, MemorySignInThrottle(clock), clock)
     with transaction(path) as connection:
         connection.execute(
             "UPDATE users SET password_hash=?", (passwords.hash("old synthetic password"),)
         )
+    assert (
+        sign_in.execute("user-2@example.test", "old synthetic password", "synthetic").user_id
+        == OTHER_USER
+    )
     result = OfflineRestore(SqliteRestoreStore(path, cipher), passwords, SystemClock()).prepare(
         backup, "user-1", "new synthetic password", True
     )
@@ -298,6 +315,17 @@ def test_prepare_replaces_admin_password_and_removes_provider_identities(
         == "{}"
     )
     assert _rows(path, "SELECT state,updated_at FROM connected_accounts")[0][0] == "disconnected"
+    assert users.password_hash(OTHER_USER) is None
+    ChangeUserState(users, sessions).execute(USER, OTHER_USER, UserState.ACTIVE)
+    with pytest.raises(IncorrectCredentials):
+        sign_in.execute("user-2@example.test", "old synthetic password", "synthetic")
+    resets = SqlitePasswordResetLinks(path, UuidIdGenerator(), clock)
+    link = resets.issue(OTHER_USER, USER, clock.now())
+    assert resets.reset(link.token, passwords.hash("fresh recovered password")) == OTHER_USER
+    assert (
+        sign_in.execute("user-2@example.test", "fresh recovered password", "synthetic").user_id
+        == OTHER_USER
+    )
 
 
 def test_prepare_disables_provider_sign_in_before_auto_link(

@@ -30,7 +30,7 @@ def test_conservative_restoration_decision(
     assert decision.other_user_state is UserState.DISABLED
     assert decision.disconnect_accounts is True
     assert decision.invalidate == frozenset(RestoreAuthority)
-    assert len(decision.invalidate) == 14
+    assert len(decision.invalidate) == 15
 
 
 @pytest.mark.parametrize(

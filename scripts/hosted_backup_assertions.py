@@ -46,6 +46,7 @@ def assert_prepared(database: Path, before: Path, key: str) -> None:
 def _assert_owner_state(database: Path, key: str) -> None:
     expected = {
         "SELECT id,state FROM users ORDER BY id": (("user-1", "active"), ("user-2", "disabled")),
+        "SELECT password_hash FROM users WHERE id!='user-1'": ((None,),),
         "SELECT registration_policy FROM installation_settings": (("invitation_only",),),
         "SELECT enabled FROM provider_sign_in_settings": ((0,),),
         "SELECT fingerprint,tested_at FROM identity_email_readiness": ((None, None),),
