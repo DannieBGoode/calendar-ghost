@@ -3,12 +3,17 @@
 import sqlite3
 import stat
 from contextlib import closing
+from datetime import datetime
 from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
 
-from calendar_sync.application.operations.restoration import RestoreFailure, RestoreInspection
-from calendar_sync.infrastructure.persistence.connections import open_connection
+from calendar_sync.application.operations.restoration import (
+    RestoreFailure,
+    RestoreInspection,
+    RestorePreparation,
+)
+from calendar_sync.infrastructure.persistence.connections import open_connection as open_connection
 from calendar_sync.infrastructure.persistence.migrations import supported_schema_versions
 from calendar_sync.infrastructure.security import CredentialCipher
 
@@ -17,6 +22,17 @@ class SqliteRestoreStore:
     def __init__(self, database_path: Path, cipher: CredentialCipher) -> None:
         self._database_path = database_path
         self._cipher = cipher
+
+    def prepare(
+        self, backup_path: Path, administrator_id: str, password_hash: str, at: datetime
+    ) -> RestorePreparation:
+        from calendar_sync.infrastructure.persistence.restore_preparation import (
+            prepare_restored_database,
+        )
+
+        return prepare_restored_database(
+            self._database_path, self._cipher, backup_path, administrator_id, password_hash, at
+        )
 
     def inspect(self) -> RestoreInspection:
         _require_regular_file(self._database_path)
