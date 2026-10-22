@@ -60,7 +60,9 @@ def terminal(args: list[str], env: dict[str, str], answers: tuple[bytes, bytes])
                 if not data:
                     break
                 output += data
-                while prompts < 2 and output.count(b"password: ") > prompts:
+                while prompts < 2 and output.endswith(
+                    (b"New administrator password: ", b"Confirm administrator password: ")[prompts]
+                ):
                     os.write(fd, answers[prompts])
                     prompts += 1
         else:
@@ -79,9 +81,9 @@ def prepare_args(path: Path, backup: Path) -> list[str]:
         str(path),
         "--backup",
         str(backup),
-        "--administrator",
+        "--administrator-id",
         "user-1",
-        "--services-stopped",
+        "--acknowledge-services-stopped",
     ]
 
 
@@ -174,7 +176,7 @@ assert run() == 0
 import getpass
 getpass.getpass = lambda prompt: "fresh password"
 sys.argv = ["restore", "prepare", "--database", database, "--backup", backup,
-            "--administrator", "user-1", "--services-stopped"]
+            "--administrator-id", "user-1", "--acknowledge-services-stopped"]
 assert run() == 0
 for name in sys.modules:
     assert not any(part in name for part in (
@@ -203,7 +205,7 @@ def test_prepare_failure_diagnostics_hide_operator_values(
     elif fault == "backup":
         backup.write_text(MARKER)
     else:
-        args.remove("--services-stopped")
+        args.remove("--acknowledge-services-stopped")
         result = invoke(args, env)
         assert result.returncode == 2
         assert "services_not_acknowledged" in result.stderr
@@ -251,3 +253,18 @@ def test_prepare_lock_contention_has_safe_diagnostic(
     assert "storage_busy" in output
     assert MARKER not in output
     assert "Traceback" not in output
+
+
+def test_invalid_terminal_encoding_is_a_safe_input_failure(
+    candidate: tuple[Path, dict[str, str], Path],
+) -> None:
+    path, env, backup = candidate
+    before = path.read_bytes()
+    status, output = terminal(prepare_args(path, backup), env, (b"\xff\n", b"unused password\n"))
+    assert status == 2, output
+    assert "password_input_failed" in output
+    assert "Traceback" not in output
+    assert "UnicodeDecodeError" not in output
+    assert "unused password" not in output
+    assert not backup.exists()
+    assert path.read_bytes() == before

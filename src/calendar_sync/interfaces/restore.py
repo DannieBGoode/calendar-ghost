@@ -30,8 +30,8 @@ def _parser() -> RestoreParser:
         sub.add_argument("--database", type=Path, required=True)
         if command == "prepare":
             sub.add_argument("--backup", type=Path, required=True)
-            sub.add_argument("--administrator", required=True)
-            sub.add_argument("--services-stopped", action="store_true")
+            sub.add_argument("--administrator-id", required=True)
+            sub.add_argument("--acknowledge-services-stopped", action="store_true")
     return parser
 
 
@@ -47,14 +47,14 @@ def _password() -> str:
         return password
     except PasswordPolicyViolation:
         raise RestoreFailure("password_invalid") from None
-    except (EOFError, KeyboardInterrupt, OSError, getpass.GetPassWarning):
+    except (EOFError, KeyboardInterrupt, OSError, UnicodeError, getpass.GetPassWarning):
         raise RestoreFailure("password_input_failed") from None
 
 
 def run(argv: Sequence[str] | None, factory: Callable[[Path], OfflineRestore]) -> int:
     try:
         args = _parser().parse_args(argv)
-        if args.command == "prepare" and not args.services_stopped:
+        if args.command == "prepare" and not args.acknowledge_services_stopped:
             raise RestoreFailure("services_not_acknowledged")
         service = factory(args.database)
         if args.command == "inspect":
@@ -66,7 +66,7 @@ def run(argv: Sequence[str] | None, factory: Callable[[Path], OfflineRestore]) -
                 f"{result.authenticated_credentials} {key}"
             )
         else:
-            prepared = service.prepare(args.backup, args.administrator, _password(), True)
+            prepared = service.prepare(args.backup, args.administrator_id, _password(), True)
             print(
                 f"prepared disabled_users={prepared.disabled_users} "
                 f"disconnected_accounts={prepared.disconnected_accounts}"

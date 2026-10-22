@@ -359,8 +359,8 @@ After installing the editable package, use the isolated terminal entry point:
 .venv/bin/calendar-ghost-restore inspect --database /protected/restored.db
 mkdir -m 700 /protected/before-change
 .venv/bin/calendar-ghost-restore prepare --database /protected/restored.db \
-  --backup /protected/before-change/before.db --administrator SELECTED_USER_ID \
-  --services-stopped
+  --backup /protected/before-change/before.db --administrator-id SELECTED_USER_ID \
+  --acknowledge-services-stopped
 ```
 
 Export the matching `CALENDAR_SYNC_MASTER_KEY` from your protected recovery store before either
@@ -373,7 +373,7 @@ for a hidden fresh password of 12 to 256 characters and refuses a terminal that 
 Never put the password or Master Key in command arguments.
 
 Keep traffic closed. Stop the application and backup replicator, then check their service status
-and process inventory before acknowledging `--services-stopped`. The command cannot verify that
+and process inventory before acknowledging `--acknowledge-services-stopped`. The command cannot verify that
 processes are stopped; a SQLite lock does not prove this. Keep every writer stopped throughout
 inspection and preparation. Use the matching image and a new database path, preserve the original,
 and keep the backup parent private, operator-owned, and free of symlinks. Preparation's
@@ -389,7 +389,7 @@ docker run --rm -it --network none --env-file /protected/recovery.env \
 docker run --rm -it --network none --env-file /protected/recovery.env \
   -v /protected/restore:/restore --entrypoint calendar-ghost-restore MATCHING_IMAGE \
   prepare --database /restore/restored.db --backup /restore/before-change/before.db \
-  --administrator SELECTED_USER_ID --services-stopped
+  --administrator-id SELECTED_USER_ID --acknowledge-services-stopped
 ```
 
 Create `/protected/restore/before-change` with mode 0700 and the container operator's ownership
