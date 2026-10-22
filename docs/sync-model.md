@@ -348,10 +348,11 @@ Occurrence Mapping as an incorrect projection rather than a `projection_unmapped
 
 ## Plan settlement before a pass
 
-The Plan Hold engine runs after interrupted-lapse recovery and before rule listing when explicitly
-composed. Production passes leave it disabled (`plan_holds=None`) until PR 3 includes visible
-grace and held-rule state, the keep form, and status support. Today lowering a limit still refuses
-new Starts and stops nothing; no production grace or Plan notice starts.
+Production Plan settlement runs after interrupted-lapse recovery and before rule listing, so
+released rules can run in that same pass. New Starts remain limit-checked throughout a grace.
+Plans off, administrator status, or an unlimited Allowance releases holds on the next successful
+settlement. A Disabled User clears grace and keeps holds. Your plan and held-rule views expose
+the durable Plan state and keep choice even when notification email is lost.
 
 Settlement counts Enabled, lapse-stopped, and reserved replacement rules. A seven-day grace starts
 when they exceed the Allowance; a further lowering or an admission since the last settlement

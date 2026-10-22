@@ -394,3 +394,77 @@ def test_preview_registration_unavailable_keeps_open_and_the_proof(tmp_path: Pat
         registration = client.get("/api/v1/registration").json()
         assert registration["policy"] == "open"
         assert registration["open_unavailable_reason"] == "identity_email_not_configured"
+
+
+@pytest.mark.parametrize(
+    ("fixture", "counted", "held", "grace_held", "reserved", "verdict"),
+    [
+        ("grace", 2, 0, 1, 0, "healthy"),
+        ("held", 0, 2, None, None, "paused"),
+        ("mixed", 1, 1, None, None, "healthy"),
+        ("reserved", 2, 0, 0, 1, "healthy"),
+    ],
+)
+def test_preview_plan_holds_are_synthetic_and_user_scoped(
+    tmp_path: Path,
+    fixture: str,
+    counted: int,
+    held: int,
+    grace_held: int | None,
+    reserved: int | None,
+    verdict: str,
+) -> None:
+    from scripts.dev_preview import ROBIN
+    from scripts.dev_preview_plan_holds import PlanHoldsFixture
+
+    database = tmp_path / "dev-preview.db"
+    container = build_preview_container(
+        database, NOW, scenario=Scenario.HEALTHY, plan_holds=PlanHoldsFixture(fixture)
+    )
+    assert container.scheduler is None
+    assert container.sends_email is False
+    services = container.for_user(ROBIN)
+    assert services.execute_sync_rule is None
+    own = services.show_own_plan.execute()
+    assert own.allowance.limits.rules == 1
+    assert (own.rules_counted, own.held_rules) == (counted, held)
+    assert len(own.rules) == 2
+    if grace_held is None:
+        assert own.grace is None
+    else:
+        assert own.grace is not None
+        assert (own.grace.held, own.grace.reserved) == (grace_held, reserved)
+        assert own.grace.holds_at > NOW
+    assert services.get_installation_status.execute().health.value == verdict
+    sam = container.for_user(preview_user(database)).show_own_plan.execute()
+    assert sam.allowance.basis.value == "administrator"
+    assert sam.held_rules == 0
+    assert sam.grace is None
+    with pytest.raises(ProviderFailure):
+        cast(Any, services.inspect_activity_event.provider).create_projection()
+
+
+def test_preview_healthy_default_has_no_plan_holds_or_plans(tmp_path: Path) -> None:
+    from scripts.dev_preview import ROBIN
+
+    container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=Scenario.HEALTHY)
+    for owner in (ROBIN, preview_user(tmp_path / "dev-preview.db")):
+        own = container.for_user(owner).show_own_plan.execute()
+        assert own.allowance.basis.value == "plans_off"
+        assert own.held_rules == 0
+        assert own.grace is None
+    assert container.scheduler is None
+
+
+def test_preview_plan_holds_require_healthy_before_resetting_database(tmp_path: Path) -> None:
+    from scripts.dev_preview_plan_holds import PlanHoldsFixture
+
+    database = tmp_path / "dev-preview.db"
+    container = build_preview_container(database, NOW, scenario=Scenario.HEALTHY)
+    owner = preview_user(database)
+    before = container.for_user(owner).show_own_plan.execute()
+    with pytest.raises(ValueError, match="require --scenario healthy"):
+        build_preview_container(
+            database, NOW, scenario=Scenario.SETUP, plan_holds=PlanHoldsFixture.HELD
+        )
+    assert container.for_user(owner).show_own_plan.execute() == before

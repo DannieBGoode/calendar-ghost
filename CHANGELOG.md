@@ -6,15 +6,24 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
-- Plan Hold readers expose held state: status and MCP add `counts.held` and each
-  rule's `stop_cause`; Dashboard adds `held_rules`. A `degraded` held rule has no Stopped problem:
-  monitors must read `stop_cause` or `needs_attention` instead of `state` alone. Dashboard counts
-  omit held-owned incidents and blocks, while status totals and Activity keep them. Held rules
-  still need a working scheduler. Your plan adds `held_rules`, stored `grace`, and ranked `rules`
-  choices. The session-only `PUT /api/v1/account/plan/kept-rules` saves the complete `rule_ids`
-  choice atomically. Production still composes `plan_holds=None`; activation remains pending
-  until the visible grace, hold and recovery controls, keep form, and email explanations ship
-  together. Lowering a limit still stops nothing; no production grace or Plan notice starts.
+- Plan Hold is active in production with visible controls and recovery in the same release.
+  Running rules beyond the limit keep syncing during a seven-day grace. At expiry, excess
+  running or lapse-stopped rules are held; excess replacement drafts give up their reserved
+  places. Mappings and projections remain. Your plan shows grace deadlines, predicted holds and reserved
+  draft give-ups, and an inline choice of which rules keep syncing. Saving can swap held rules;
+  the scheduled pass only fills free places. Holds release without preview when the Allowance
+  permits, checking account authorization. A preview keeps a hold; capacity-loss warnings appear
+  before policy edits, Pause, and Disconnect. Existing accounts and tokens keep working.
+- Status and MCP add `counts.held` and each rule's `stop_cause`; Dashboard adds `held_rules`.
+  A held rule is `degraded` without a Stopped problem: monitors must read `stop_cause` or
+  `needs_attention` instead of `state` alone. Dashboard counts omit held-owned incidents and
+  blocks; raw status totals, the incident list, and Activity keep them. Held rules still need
+  a working scheduler. Mixed running and held rules can read healthy; all-held rules with a
+  successful history read paused. Grace itself is no status problem.
+- **Email notifications** covers incidents and private Plan grace/held-rule notices. Activity
+  keeps incidents; Your plan and held-rule views retain Plan state. Mail is best-effort and can
+  be lost or replaced by a newer pending notice; there is no outbox or retry. Identity and security
+  mail is independent of this preference. The stored preference and API route are unchanged.
 - **Forgot password?** on sign-in lets people request a private, single-use recovery link when
   secure identity email is configured. Emailed links last one hour; administrator-issued links
   keep their seven-day lifetime. Reset ends existing sessions and asks for a fresh sign-in.
@@ -26,25 +35,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   verified time applies to the current settings. Tests are limited to three per administrator
   per hour. Migration 35 stores readiness and admission counts; returning to setup clears
   readiness. Registration still offers Only me or Invitation only.
-- The Plan Hold engine and private Plan notice delivery are implemented, with production
-  activation explicitly disabled until PR 3b supplies visible grace and held-rule controls,
-  recovery actions, the keep form, and email explanations together (ADR 0039). Lowering a limit
-  still stops nothing; no production grace or Plan notice starts in this build.
-- Migration 34 adds rule keep marks and User grace/admission columns with nullable or zero
-  defaults. Older code ignores those columns, reads a future hold's stop code 2 as an
-  authorization lapse, and still counts it at Start; older raw display counts may omit it.
-  Every old save replaces 2 with 0 or 1. Exact-code-1 unfinished-lapse discovery can leave a
-  code-2-only User stopped: restore account access, or preview and Start within the limit.
-  Re-upgrade may automatically resume code 1 and, on an activated engine, give a new grace
-  if over the limit. This inert build recognizes 2 as a hold but never releases it in production:
-  for a future activated database, upgrade to an active release or pause, preview, and Start
-  within the limit. Reauthorization does not release a hold here. See the
-  [migration notes](docs/deployment.md#migration-34-plan-hold-engine).
-- **Email notifications** is the new name of the existing email preference in Settings, Your
-  account. It still controls optional incident email in this build; the stored preference and
-  API route are unchanged. Plan notices will share it when activated. Plan mail is best-effort:
-  failed or cancelled preparation, shutdown, restart, or SMTP failure can lose notices, and a
-  newer pending notice replaces a stale one for the same User.
+- Migration 34 stores rule keep marks and User grace/admission columns. Back up before changing
+  releases. Rolling back to inert PR 2 or PR 3a recognizes Plan Hold but cannot release it:
+  upgrade again, or pause, preview, and Start within the limit. Pre-migration-34 code reads stop
+  code 2 as an authorization lapse and erases it on save; exact-code-1 discovery may leave a
+  code-2-only User stopped. Re-upgrade can resume saved code 1 without a new limit check and
+  start another grace if over the limit. See the [migration notes](docs/deployment.md#migration-34-plan-hold-engine).
 
 - Plans let an administrator limit how much each person uses
   ([ADR 0038](docs/adr/0038-plans-allowances-and-limits.md)). Plans are off by default, and while
@@ -65,8 +61,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   per interval, each at its own time within it, so an hourly Plan's rules spread over the hour; a
   rule that never ran, is failing, or was just previewed still runs at the next five-minute pass.
   A rule's page and the Overview say how often the person's Plan syncs. Reauthorization is never
-  refused. A lowered limit refuses only what is new and stops nothing: rules beyond it keep
-  syncing, and existing accounts and tokens keep working. Returning to setup turns Plans off and
+  refused. A lowered rule limit gives excess a seven-day grace before holding it; existing
+  accounts and tokens keep working. Returning to setup turns Plans off and
   keeps their definitions. Sync now, Reconcile now, and Preview together allow someone whose Plan
   limits anything 12 runs in any hour, one every 5 minutes as the fastest Plan syncs, the same on
   every such Plan; the next one is refused and says in how many minutes to try again. The No

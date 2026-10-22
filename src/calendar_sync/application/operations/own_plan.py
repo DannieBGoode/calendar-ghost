@@ -47,7 +47,7 @@ class OwnPlan:
 
     @property
     def over_rule_limit(self) -> bool:
-        """Whether more rules count than the current Plan allows."""
+        """Whether more rules count than the Allowance permits; held rules are excluded."""
         return exceeds(self.rules_counted, self.allowance.limits.rules)
 
 

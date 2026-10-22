@@ -55,8 +55,8 @@ export function OwnAccountSection({
 }
 
 /**
- * The shared preference for Incident Notifications and Plan notices, once Plan Hold is active.
- * The Web UI keeps every incident in Activity; PR 3 adds the visible Plan notice fallback.
+ * The shared preference for Incident Notifications and Plan notices.
+ * Activity keeps incidents; Your plan and held-rule views keep the Plan notice fallback.
  * Where the installation sends no email there is nothing to choose, so it says who can set it up.
  */
 function EmailNotificationsItem({

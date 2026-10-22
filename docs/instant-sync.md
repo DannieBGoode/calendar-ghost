@@ -317,5 +317,9 @@ switch: each person can turn Instant Sync off for themselves
 
 A held rule wants no Calendar Watch, Watch Notice dispatch, or Instant Sync run. Upkeep still lists
 a User whose only rules are held while their watches exist, so it can retire those watches.
-The Plan Hold engine is dormant in production in PR 2; PR 3 activates it with visible state,
-status, and the keep form. Until then a lowered rule limit stops no rule or watch.
+Production settlement runs before scheduled rule listing, with visible grace, held-rule state,
+and keep choices in Your plan. Running rules beyond the limit keep syncing during a seven-day
+grace; at expiry, excess running or lapse-stopped rules are held, and excess replacement drafts
+give up their reserved places. Held rules stop Instant Sync dispatch and no longer want watches;
+upkeep retires their existing watches within its normal bounded budget. When the Allowance has
+room, settlement releases holds without a preview, checking both accounts' authorization first.

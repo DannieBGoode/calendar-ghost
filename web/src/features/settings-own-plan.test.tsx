@@ -273,7 +273,7 @@ describe("OwnPlanSection", () => {
       "Integration tokens",
     ])
     expect(section()?.querySelector(".plan-usage-hint")?.textContent).toBe(
-      "Running rules, and rules waiting for you to reauthorize an account. Paused rules and drafts don't count.",
+      "Running rules, rules waiting for reauthorization, and replacement drafts with a reserved place count. Other drafts, paused rules, and held rules don't.",
     )
     const closing = [...section()!.querySelectorAll(".plan-usage-row, .own-plan-close")]
     expect(closing.at(-1)?.textContent).toBe("To change your plan, ask your administrator.")
@@ -341,7 +341,7 @@ describe("OwnPlanSection", () => {
         detail: null,
         value: "3 of 2",
         chip: "Over",
-        note: "You have 3 active rules and your plan allows 2. They keep syncing, but you can't start another until fewer are active.",
+        note: "3 rules count toward your plan, which allows 2. Running rules beyond the limit keep syncing during a seven-day grace, then are held until your plan has room. Replacement drafts beyond the limit give up their reserved places instead.",
       },
       {
         title: "Calendar accounts",
@@ -418,6 +418,25 @@ describe("OwnPlanSection", () => {
     expect(button("Try again")).not.toBeNull()
   })
 
+  it.each([onlyMe, jsonResponse(UNREADABLE, 500)])("makes a failed explicit Plan recovery arrival reachable even without a limiting policy", async (registration) => {
+    window.history.replaceState(null, "", "/settings/account#your-plan")
+    vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
+    const answers = await renderSection(testI18n(), { ownPlan: jsonResponse(UNREADABLE, 500), registration, administrator: true })
+    expect(section()?.querySelector("[role='alert']")?.textContent).toBe("Your plan could not load.Try again")
+    expect(document.activeElement).toBe(section()?.querySelector("h2"))
+    answers["GET /api/v1/account/plan"] = jsonResponse({ ...administering, held_rules: 1 })
+    await click(button("Try again"))
+    expect(section()?.textContent).toContain("These rules resume at the next scheduled check.")
+    expect(section()?.querySelector("[role='alert']")).toBeNull()
+    expect(section()?.querySelector(".own-plan-card")).toBeNull()
+  })
+
+  it.each([plansOff, administering])("keeps successful exempt Plan arrivals hidden without held rules ($basis)", async (plan) => {
+    window.history.replaceState(null, "", "/settings/account#your-plan")
+    await renderSection(testI18n(), { ownPlan: jsonResponse(plan), registration: onlyMe, administrator: plan.basis === "administrator" })
+    expect(section()).toBeNull()
+  })
+
   it("test_grace_uses_local_time_and_separate_reserved_losses", async () => {
     const i18n = testI18n()
     const deadline = "2099-10-29T13:45:00Z"
@@ -439,6 +458,19 @@ describe("OwnPlanSection", () => {
     const holds_at = "2099-10-29T13:45:00Z"
     await renderSection(i18n, { ownPlan: jsonResponse({ ...freeOverLimit, grace: { held: 0, reserved: 1, rule_limit: 2, holds_at } }) })
     expect(section()?.textContent).toContain(`Your grace period ends on ${i18n.format.dateTime(holds_at)}.`)
+    expect(section()?.textContent).not.toContain("rules will be held")
+  })
+
+  it("keeps reserved-only excess distinct from running rules in the usage meter and grace", async () => {
+    await renderSection(testI18n(), { ownPlan: jsonResponse({ ...freeOverLimit,
+      limits: { ...freeOverLimit.limits!, rules: 1 }, rules_counted: 2,
+      rules: [{ rule_id: "active", place: "counted", kept: true }, { rule_id: "replacement", place: "reserved", kept: false }],
+      grace: { held: 0, reserved: 1, rule_limit: 1, holds_at: "2099-10-29T13:45:00Z" },
+    }) })
+    expect(rows()[0]?.meter).toBe("2 of 1, over the limit")
+    expect(rows()[0]?.note).toBe("2 rules count toward your plan, which allows 1. Running rules beyond the limit keep syncing during a seven-day grace, then are held until your plan has room. Replacement drafts beyond the limit give up their reserved places instead.")
+    expect(section()?.textContent).toContain("1 replacement draft will give up its reserved place.")
+    expect(section()?.textContent).not.toContain("2 active rules")
     expect(section()?.textContent).not.toContain("rules will be held")
   })
 

@@ -116,8 +116,10 @@ from calendar_sync.infrastructure.persistence.sqlite.unit_of_work import SqliteU
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher, token_hash
 
 if TYPE_CHECKING or __package__:
+    from scripts.dev_preview_plan_holds import PlanHoldsFixture, seed_plan_holds
     from scripts.dev_preview_sign_in import SignInFixture, sign_in_fixture
 else:
+    from dev_preview_plan_holds import PlanHoldsFixture, seed_plan_holds
     from dev_preview_sign_in import SignInFixture, sign_in_fixture
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -594,8 +596,11 @@ def build_preview_container(
     scenario: Scenario = Scenario.REVIEW,
     registration: RegistrationFixture | None = None,
     sign_in: SignInFixture | None = None,
+    plan_holds: PlanHoldsFixture | None = None,
     origin: str = "http://127.0.0.1:8001",
 ) -> Container:
+    if plan_holds is not None and scenario is not Scenario.HEALTHY:
+        raise ValueError("Plan Hold fixtures require --scenario healthy")
     reset_preview_database(path)
     # Explicit settings: nothing is read from the environment or .env.
     settings = Settings(path)
@@ -722,6 +727,8 @@ def build_preview_container(
     # A new installation has only its first User.
     if scenario is not Scenario.SETUP:
         _seed_robin(adapters, path, moment, scenario)
+    if plan_holds is not None:
+        seed_plan_holds(adapters, ROBIN, moment, plan_holds)
     if registration is not None:
         container = registration_fixture(container, path, adapters.clock, registration)
     if sign_in is not None:
@@ -1257,6 +1264,12 @@ def main() -> None:
         help="the Overview state to start in (default: review)",
     )
     parser.add_argument(
+        "--plan-holds",
+        type=PlanHoldsFixture,
+        choices=list(PlanHoldsFixture),
+        help="synthetic Plan Hold fixture on --scenario healthy; no scheduler or mail",
+    )
+    parser.add_argument(
         "--registration",
         type=RegistrationFixture,
         choices=list(RegistrationFixture),
@@ -1274,6 +1287,7 @@ def main() -> None:
         scenario=arguments.scenario,
         registration=arguments.registration,
         sign_in=arguments.sign_in,
+        plan_holds=arguments.plan_holds,
         origin=f"http://127.0.0.1:{port}",
     )
 

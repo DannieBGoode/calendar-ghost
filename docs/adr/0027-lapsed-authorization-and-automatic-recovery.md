@@ -87,5 +87,5 @@ Plan Hold is the second exclusive self-resuming stop cause (ADR 0039). It releas
 recovery preview when the Allowance permits, not on Reauthorization. A release reads both accounts
 inside its transaction: it becomes Enabled only when both are authorized, otherwise lapse-stopped.
 A preview keeps a hold; pause, disconnection, Material Rule Change, removal, or an intervention
-failure clears it. Interrupted-lapse discovery selects stop code 1 only, never code 2. The engine
-exists in PR 2 but production activation and the recovery controls await PR 3.
+failure clears it. Interrupted-lapse discovery selects stop code 1 only, never code 2. Production
+settlement is active with visible grace, keep choice, and held-rule recovery controls in PR 3b.

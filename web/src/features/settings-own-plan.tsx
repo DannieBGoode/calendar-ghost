@@ -32,9 +32,9 @@ function revealOnArrival(section: HTMLElement | null) {
 /**
  * Which Plan limits the signed-in User, then one row per limit with a meter and how much of it they
  * use, and how to change it. An administrator reads that no plan limits them. Hidden while Plans
- * are off and for an administrator under Only Me, unless held rules still await release. A failed load shows
- * its own error; an administrator sees it only once the Registration Policy loads and is not Only
- * Me. The server still checks every limit.
+ * are off and for an administrator under Only Me, unless held rules still await release. Explicit
+ * recovery arrivals show a failed load's Retry even under Only Me or unknown Registration Policy.
+ * The server still checks every limit.
  */
 export function OwnPlanSection({ administrator, onOpenConnections }: { administrator: boolean; onOpenConnections: () => void }) {
   const { t } = useI18n()
@@ -67,13 +67,15 @@ export function OwnPlanSection({ administrator, onOpenConnections }: { administr
 /**
  * The User's Plan as Your plan shows it: whether the section shows, whether its read failed for
  * someone it limits, and the Plan once read. Only administrators may read the Registration
- * Policy, and under Only Me the only User administers, so a failed read stays hidden from them.
+ * Policy. An explicit recovery arrival shows a failed read even under Only Me or unknown policy;
+ * successful exempt reads still follow normal visibility.
  */
 function useShownOwnPlan(administrator: boolean) {
   const ownPlan = useOwnPlan()
   const registration = useQuery({ queryKey: ["registration"], queryFn: api.registration, enabled: administrator })
   const policy = registration.data?.policy
-  const failed = ownPlan.isError && (ownPlanShown(ownPlan.data, policy) || !administrator || (policy !== undefined && policy !== "only_me"))
+  const recoveryArrival = window.location.hash === `#${ANCHOR}`
+  const failed = ownPlan.isError && (recoveryArrival || ownPlanShown(ownPlan.data, policy) || !administrator || (policy !== undefined && policy !== "only_me"))
   return {
     shown: failed || ownPlanShown(ownPlan.data, policy),
     failed,

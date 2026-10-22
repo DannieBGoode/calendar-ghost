@@ -75,7 +75,7 @@ describe("planCardSummary", () => {
 describe("planUsageRows", () => {
   it("names each limit and what counts toward it, in order", () => {
     expect(rows(robin).map((row) => [row.limit, row.title, row.hint])).toEqual([
-      ["rules", "Active rules", "Running, or waiting for reauthorization"],
+      ["rules", "Active rules", "Running rules, waiting for reauthorization, or replacement drafts with a reserved place"],
       ["accounts", "Calendar accounts", "Disconnected accounts count"],
       ["tokens", "Integration tokens", "Revoked tokens don't count"],
       ["speed", "Sync speed", "How soon changes reach other calendars"],
@@ -145,7 +145,7 @@ describe("planUsageRows", () => {
       use: { ...robin.use!, rules: { in_use: 3, allowed: 1 }, integration_tokens: { in_use: 2, allowed: 1 } },
     })
     expect(over[0]?.note?.text).toBe(
-      "robin@example.test has 3 active rules and Free allows 1. Their rules keep syncing, but they can't start another until fewer are active. They see the same on Your plan.",
+      "robin@example.test has 3 rules counting toward Free, which allows 1. Running rules beyond the limit keep syncing during a seven-day grace, then are held until their plan has room. Replacement drafts beyond the limit give up their reserved places instead. They see the same on Your plan.",
     )
     expect(over[2]?.note?.text).toBe(
       "robin@example.test has 2 integration tokens and Free allows 1. Their tokens keep working, but they can't issue another until one is revoked. They see the same on Your plan.",
@@ -186,7 +186,7 @@ describe("ownPlanCard", () => {
   it("gives the person page's rows in the reader's own words", () => {
     const rows = ownPlanCard(i18n, own)?.rows ?? []
     expect(rows.map((row) => [row.title, row.hint])).toEqual([
-      ["Active rules", "Running rules, and rules waiting for you to reauthorize an account. Paused rules and drafts don't count."],
+      ["Active rules", "Running rules, rules waiting for reauthorization, and replacement drafts with a reserved place count. Other drafts, paused rules, and held rules don't."],
       ["Calendar accounts", "Every account you connected counts, disconnected ones too."],
       ["Integration tokens", "Revoked tokens don't count."],
       ["Sync speed", "How soon changes reach your other calendars."],
@@ -208,7 +208,7 @@ describe("ownPlanCard", () => {
       })?.rows ?? []
     expect(rows.map((row) => row.note)).toEqual([
       {
-        text: "You have 3 active rules and your plan allows 1. They keep syncing, but you can't start another until fewer are active.",
+        text: "3 rules count toward your plan, which allows 1. Running rules beyond the limit keep syncing during a seven-day grace, then are held until your plan has room. Replacement drafts beyond the limit give up their reserved places instead.",
         tone: "attention",
       },
       null,

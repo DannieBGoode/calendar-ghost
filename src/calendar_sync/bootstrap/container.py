@@ -43,6 +43,7 @@ from calendar_sync.application.operations.ports import (
     WatchNoticeInbox,
 )
 from calendar_sync.application.operations.scheduled_pass import ScheduledPass
+from calendar_sync.application.operations.scheduled_plan_holds import ScheduledPlanHolds
 from calendar_sync.application.operations.storage import StorageAdministration
 from calendar_sync.application.shared.ports import Clock, IdGenerator
 from calendar_sync.application.sync.account_ports import (
@@ -396,8 +397,9 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         lambda owner: _scheduled_services(user_services(owner)),
         adapters.clock,
         cadence=cadence,
-        # PR 3 activates this only with visible grace, holds, and keep choice recovery.
-        plan_holds=None,
+        plan_holds=ScheduledPlanHolds(
+            adapters.allowances, lambda owner: user_services(owner).plan_holds, adapters.clock
+        ),
     )
     runs_rules = adapters.calendar_provider is not None and adapters.accounts is not None
     scheduler = (

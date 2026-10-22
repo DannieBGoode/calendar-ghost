@@ -79,7 +79,7 @@ function KeepEditor({ plan, onCancel }: { plan: OwnPlan; onCancel: () => void })
   useEffect(() => { heading.current?.focus() }, [])
   return (
     <form id="kept-rules-form" className="grid gap-4" aria-busy={pending} onSubmit={(event) => { event.preventDefault(); void save() }}>
-      <fieldset className="grid gap-3" aria-describedby="kept-rules-capacity kept-rules-hint">
+      <fieldset className="grid min-w-0 grid-cols-1 gap-3" aria-describedby="kept-rules-capacity kept-rules-hint">
         <legend ref={heading} tabIndex={-1} className="font-semibold">{t("settings.ownPlan.keep.open")}</legend>
         <p id="kept-rules-hint" className="text-sm text-muted-foreground">{t("settings.ownPlan.keep.hint")}</p>
         <p id="kept-rules-capacity" className="text-sm">{t("settings.ownPlan.keep.capacity", { count: selected.length, maximum: typeof limit === "number" ? i18n.format.number(limit) : t("settings.ownPlan.keep.unlimited") })}</p>
@@ -110,10 +110,15 @@ function KeepRow({ standing, rule, checked, pending, atMaximum, onChange }: RowP
   const status = { counted: t("settings.ownPlan.keep.active"), reserved: t("settings.ownPlan.keep.reserved"), held: t("settings.ownPlan.keep.held") }
   const id = `keep-rule-${standing.rule_id}`
   return (
-    <label className="flex items-center gap-3 rounded-md border border-border p-3">
+    <label className="flex min-w-0 items-start gap-3 rounded-md border border-border p-3">
       <Checkbox id={id} checked={checked} pending={pending || (!checked && atMaximum)} onCheckedChange={onChange} aria-describedby="kept-rules-capacity" />
-      <span className="min-w-0 flex-1 text-sm"><span className="block break-words font-medium">{t("settings.ownPlan.keep.direction", { source: rule.source.calendar_name ?? rule.source.calendar_id, destination: rule.destination.calendar_name ?? rule.destination.calendar_id })}</span><span className="text-muted-foreground">{status[standing.place]}</span></span>
-      {standing.kept && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Check aria-hidden="true" className="size-3.5" />{t("settings.ownPlan.keep.kept")}</span>}
+      <span className="min-w-0 flex-1 text-sm">
+        <span className="block break-words font-medium">{t("settings.ownPlan.keep.direction", { source: rule.source.calendar_name ?? rule.source.calendar_id, destination: rule.destination.calendar_name ?? rule.destination.calendar_id })}</span>
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+          <span>{status[standing.place]}</span>
+          {standing.kept && <span className="inline-flex min-w-0 items-center gap-1 break-words text-xs"><Check aria-hidden="true" className="size-3.5 shrink-0" /><span>{t("settings.ownPlan.keep.kept")}</span></span>}
+        </span>
+      </span>
     </label>
   )
 }

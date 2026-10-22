@@ -2,21 +2,20 @@
 
 ## Context
 
-Plans already refuse new Starts beyond the rule limit (ADR 0038). A lowered limit currently stops
-nothing. Enforcing an existing excess needs time for the User to choose, safe automatic release,
-and no loss of mappings or projections. A stop must remain distinguishable from Lapsed
+Plans refuse new Starts beyond the rule limit (ADR 0038). Before Plan Hold activation, a lowered
+limit stopped nothing. Enforcing an existing excess needs time for the User to choose, safe
+automatic release, and no loss of mappings or projections. A stop must remain distinguishable from Lapsed
 Authorization and from a failure that requires a recovery preview.
 
 ## Decision
 
-- **The engine ships before activation.** PR 2 includes domain decisions, persistence, User-scoped
-  settlement and keep choice, scheduler support, private emails, and the preference rename.
-  Production composition explicitly passes `plan_holds=None`. It cannot start a grace, hold a
-  rule, or send a Plan notice. PR 3a ships the keep-choice HTTP route and readers for Your plan,
-  rules, status, Dashboard, and MCP while retaining `plan_holds=None`. PR 3b must activate it in
-  the same change as visible grace and held-rule controls, the keep form, correct recovery
-  actions, and email explanations. No production grace or Plan notice starts before then. The
-  following settlement behavior describes the engine when explicitly composed.
+- **The engine shipped before activation.** PR 2 supplied domain decisions, persistence,
+  User-scoped settlement and keep choice, scheduler support, private emails, and the preference
+  rename, with `plan_holds=None`. PR 3a supplied the keep-choice HTTP route and readers for Your
+  plan, rules, status, Dashboard, and MCP, still inert. PR 3b activates production composition
+  with `ScheduledPlanHolds` in the same change as visible grace and held-rule controls, the keep
+  form, correct recovery actions, and email explanations. It reuses the same Allowances, User
+  services, clock, and process-shared locks. No new flag or engine policy is needed.
 - **Use Degraded with stop code 2.** `sync_rules.awaiting_reauthorization` stores 0 for no
   self-resuming cause, 1 for Lapsed Authorization, and 2 for Plan Hold. The domain keeps exclusive
   booleans and exposes `stop_cause`; no new rule state is needed. Held rules do not synchronize,
@@ -36,7 +35,8 @@ Authorization and from a failure that requires a recovery preview.
   or ineligible identifiers as `RuleNotFound`, and rejects more than a finite limit as
   `TooManyKeptRules`. It saves all marks or none, releases kept held rules into free places, and
   can swap a kept held rule with the worst not-kept counted rule without changing the count.
-  These User-requested holds send no email. The HTTP route ships in PR 3a; the form awaits PR 3b.
+  These User-requested holds send no email. The session-only HTTP route shipped in PR 3a;
+  PR 3b supplies the inline form under Your plan, linked from held-rule views.
 - **Preview preserves a hold.** Release needs no preview. It reads both account authorizations
   inside the transaction and returns Enabled only when both are authorized, otherwise
   lapse-stopped. Reauthorization resumes only code 1. Pause, disconnection, Material Rule Change,
@@ -65,8 +65,9 @@ Authorization and from a failure that requires a recovery preview.
   release holds and is unsafe. Ordinary cadence reads retain their fail-open policy.
 - **Private, best-effort notices.** A grace start and actual scheduled holds can email only that
   User, gated by active state, email address, `notify_by_email`, and SMTP. The setting is called
-  **Email notifications**; its PR 2 explanatory text remains incident-only until PR 3 supplies the
-  visible Plan notice fallback. Plan notices contain counts, limit, and a UTC deadline and may
+  **Email notifications**, with incidents retained in Activity and Plan state retained in Your
+  plan and held-rule views. Identity and security mail is independent of this preference. Plan
+  notices contain counts, limit, and a UTC deadline and may
   link to `/settings/account#your-plan` at a valid configured public address. They name no rule,
   calendar, account, or event, create no Incident or Audit Entry, and reach no installation channel.
   Grace counts include reserved drafts but predicted holds count only counted rules. Actual held
@@ -84,8 +85,8 @@ Authorization and from a failure that requires a recovery preview.
 
 Migration 34 adds `sync_rules.plan_kept` and the User's nullable grace deadline, grace limit,
 grace admissions, and default-zero admission counter. Nothing is backfilled into a hold. Only the
-User unit of work writes these columns. Production PR 2 stays inert; normally only an activated
-PR 3 or later can produce code 2.
+User unit of work writes these columns. Production PR 2 and PR 3a stayed inert; PR 3b activates
+settlement and can produce code 2 after grace expiry or an explicit keep-choice swap.
 
 Code from before migration 34 ignores the added columns but interprets 2 as Lapsed Authorization.
 Start still counts it; older raw `plan_use` display counts may omit it because their SQL uses
@@ -95,8 +96,8 @@ An account restoration or passing access check can recover those rules, or the U
 and Start within the limit. Re-upgrading may automatically resume a rule old code saved as 1
 without a fresh limit check, and an activated engine then gives a new grace if over the limit.
 
-This inert PR 2 build is different: it recognizes 2 as Plan Hold, and Reauthorization leaves it
-held, but production passes cannot release it. When opening a future activated database here,
+Rolling back to an inert PR 2 or PR 3a build is different: it recognizes 2 as Plan Hold, and
+Reauthorization leaves it held, but production passes cannot release it. When opening an activated database on such a build,
 upgrade to an active release, or pause to clear the hold, then preview and Start within the limit.
 Preview alone preserves a hold. The deployment guide and SQL header record both rollback cases.
 
@@ -107,14 +108,14 @@ The Plans spec section 13 remains the source of the full tradeoffs:
 - A further lowering restarts the whole grace; a raise within the limit clears it, so grace can
   exceed seven days across limit changes. A User's ordinary actions cannot create excess.
 - A failed or edited rule may lose its place to a released hold, so its recovery Start can be
-  refused. PR 3 must explain that before privacy edits, Pause, or Disconnect.
+  refused. The UI explains that before privacy edits, Pause, or Disconnect.
 - A kept rule can stay held after a competing Start; saving the choice again swaps it.
 - `awaiting_reauthorization` retains its historical name while rollback is supported.
-- Monitors reading only `state` will need the PR 3 status contract: a held rule is `degraded`
+- Monitors reading only `state` will need the status contract: a held rule is `degraded`
   without a Stopped problem. Held rules must count as requiring a scheduler (ADR 0024).
 - Account-limit refusal follows OAuth consent and may leave an unused provider grant; renamed
   accounts at the limit can need administrator help.
-- Mail is lossy and coalesced. PR 3's Your plan and held-rule views are the durable fallback.
+- Mail is lossy and coalesced. Your plan and held-rule views are the durable fallback.
 - Mass changes settle at most 100 Users per pass; watch retirement shares the 200-call upkeep
   budget. Pending mail retains at most one notice per affected User, not a fixed global cap.
 - There is no global draft cap or simultaneous manual-run cap. Manual-run and scheduler window

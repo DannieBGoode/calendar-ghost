@@ -153,7 +153,8 @@ def change_plan(
     plan_key: str, payload: ChangePlanRequest, services: Services, actor: Administrator
 ) -> PlanResponse:
     """Rename a Plan or change its limits; its key stays. New limits apply at once to new
-    rules, accounts, and tokens, and stop nothing that exists."""
+    rules, accounts, and tokens. Excess rules get a seven-day grace before a Plan Hold;
+    existing accounts and tokens keep working."""
     key = named_plan(plan_key)
     try:
         plan = _changed(key, payload.name, payload.limits)
