@@ -714,7 +714,11 @@ Before an upgrade or host migration:
 - keep the previous backup and version until the new installation passes `/health` and Activity
   checks.
 
-For a checkout-based installation, update the source and rebuild:
+Recovered installations must retain their [persistent Compose configuration](hosted-backups.md#persistent-compose-configuration).
+Update `CALENDAR_GHOST_RECOVERY_IMAGE` to the desired new image digest and use `--no-build`, keeping
+the prepared path and mounts; do not follow the ordinary build command below or drop the override.
+
+For other checkout-based installations, update the source and rebuild:
 
 Before building, set `CALENDAR_GHOST_SOURCE_URL` in `.env` to the immutable commit or release tag
 URL for that checkout. Docker builds use that value to make the UI's **Source** link identify the

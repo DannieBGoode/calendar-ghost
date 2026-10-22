@@ -302,9 +302,26 @@ def test_recovery_runbook_switches_both_processes_to_prepared_path() -> None:
     assert any(f"restore prepare --database {path}" in line for line in commands)
     assert len(inspections) >= 2
     assert all(f"--database {path}" in line for line in inspections)
-    assert text.rindex(inspections[-1]) < text.index("up -d --no-build app")
+    startup = next(line for line in commands if "up -d --no-build app" in line)
+    assert text.rindex(inspections[-1]) < text.index(startup)
     assert "Litestream to exactly `NEW_PATH`" in text
     assert all(f"NEW_PATH{suffix}" in text for suffix in ("-wal", "-shm", "-journal"))
     assert "Do not delete valid preparation sidecars" in text
     assert "Never copy over the failed database or its sidecars" in text
     assert "mode-0700" in text
+    settings = re.search(r"```dotenv\n(.*?)\n```", text, re.DOTALL)
+    assert settings is not None
+    persistent = dict(line.split("=", 1) for line in settings[1].splitlines())
+    assert persistent["COMPOSE_FILE"] == "docker-compose.yml:/protected/compose.restore.json"
+    assert all(
+        persistent.get(name)
+        for name in (
+            "CALENDAR_GHOST_RECOVERY_IMAGE",
+            "CALENDAR_GHOST_RECOVERY_DIR",
+            "CALENDAR_GHOST_RECOVERY_BACKUP_DIR",
+        )
+    )
+    assert "permanent configuration" in text
+    assert "Never drop the override" in text
+    guide = Path("docs/self-hosting.md").read_text().split("## 7.", 1)[1].split("## 8.", 1)[0]
+    assert "hosted-backups.md#persistent-compose-configuration" in guide

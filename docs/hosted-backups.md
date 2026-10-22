@@ -187,6 +187,26 @@ paths. Save `/protected/compose.restore.json` (JSON is valid Compose YAML):
 }
 ```
 
+## Persistent Compose configuration
+
+Before startup, make the override this installation's permanent configuration. Edit the existing
+protected project `.env`, preserving its other settings and secrets; never commit it. Persist:
+
+```dotenv
+COMPOSE_FILE=docker-compose.yml:/protected/compose.restore.json
+CALENDAR_GHOST_RECOVERY_IMAGE=MATCHING_IMAGE_DIGEST
+CALENDAR_GHOST_RECOVERY_DIR=/ABSOLUTE/RESTORED_DIRECTORY
+CALENDAR_GHOST_RECOVERY_BACKUP_DIR=/ABSOLUTE/PROTECTED_BACKUP_DIRECTORY
+```
+
+Replace the three recovery values as specified above. Run all commands from the same Compose
+project working directory so its `.env` loads; unset conflicting shell overrides. Plain
+`docker compose` now loads both files. Never drop the override while the failed database set remains
+at `/data`; keep it for all later recreations and maintenance. The explicit flags below select
+those same files. To upgrade a recovered installation, obtain the desired new image and update
+`CALENDAR_GHOST_RECOVERY_IMAGE` to its digest in this `.env`, retaining paths and mounts, then run
+`docker compose up -d --no-build app`. Do not use the ordinary `--build` upgrade or drop the override.
+
 Here `NEW_PATH` is `/recovery/prepared.db` inside the container; configure Litestream's database
 path to `/recovery/prepared.db`; its separate process must also see that same directory mounted
 at `/recovery`. Keep the matching protected secrets environment. Use the override
