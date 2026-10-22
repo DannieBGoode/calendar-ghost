@@ -280,3 +280,31 @@ def test_retained_endpoint_set_must_not_be_empty(
     monkeypatch.setattr(retention, "endpoints", lambda *_: {})
     with pytest.raises(drill.DrillFailure, match="no retained"):
         retention.restore_retained(Mock(replica=tmp_path), tmp_path, {}, {})
+
+
+def test_recovery_runbook_switches_both_processes_to_prepared_path() -> None:
+    import json
+    import re
+
+    text = Path("docs/hosted-backups.md").read_text()
+    override = re.search(r"```json\n(.*?)\n```", text, re.DOTALL)
+    assert override is not None
+    app = json.loads(override[1])["services"]["app"]
+    path = app["environment"]["CALENDAR_SYNC_DATABASE_PATH"]
+    assert path == "/recovery/prepared.db"
+    assert app["image"].startswith("${CALENDAR_GHOST_RECOVERY_IMAGE:?")
+    mounts = {mount["target"]: mount["source"] for mount in app["volumes"]}
+    assert mounts["/recovery"].startswith("${CALENDAR_GHOST_RECOVERY_DIR:?")
+    assert mounts["/protected/recovery"].startswith("${CALENDAR_GHOST_RECOVERY_BACKUP_DIR:?")
+    commands = [line for line in text.splitlines() if line.startswith("docker compose -f")]
+    assert all("-f /protected/compose.restore.json" in line for line in commands)
+    inspections = [line for line in commands if "restore inspect" in line]
+    assert any(f"restore prepare --database {path}" in line for line in commands)
+    assert len(inspections) >= 2
+    assert all(f"--database {path}" in line for line in inspections)
+    assert text.rindex(inspections[-1]) < text.index("up -d --no-build app")
+    assert "Litestream to exactly `NEW_PATH`" in text
+    assert all(f"NEW_PATH{suffix}" in text for suffix in ("-wal", "-shm", "-journal"))
+    assert "Do not delete valid preparation sidecars" in text
+    assert "Never copy over the failed database or its sidecars" in text
+    assert "mode-0700" in text

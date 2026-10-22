@@ -149,7 +149,13 @@ retention expires. Track and expire the local preparation backups explicitly too
    database. Keep the original prefix and its metadata untouched until their retention expires.
    Never reconnect an older recovered database to the failed host's newer replica. A disposable
    ahead-replica experiment is not an authorized production recovery procedure.
-6. Start exactly one application writer with operator-only access. Check administrator sign-in
+6. Configure the single application writer and Litestream to exactly `NEW_PATH`, using the
+   override below for Compose. Before startup, inspect the exact configured path again. Require
+   no `NEW_PATH-wal`, `NEW_PATH-shm` or `NEW_PATH-journal` from another database.
+   Do not delete valid preparation sidecars; preserve the prepared database's own SQLite files
+   together. Never copy over the failed database or its sidecars;
+   retain that separate file set untouched. Start exactly one application writer with operator-only
+   access. Check administrator sign-in
    and Installation Health. Compare the preserved newer database and authoritative operational
    records; replay known deletions, disables, disconnections and credential changes. Confirm
    mailbox ownership before exposing password recovery. Reset and re-enable only confirmed Users.
@@ -159,28 +165,54 @@ retention expires. Track and expire the local preparation backups explicitly too
 7. Verify replication to the new prefix and a fresh restore. Reopen ingress only after review.
    Open requires a new normal identity email test and an explicit administrator choice.
 
-In containers, stop the service first and use the explicit command, preserving the data mount,
-matching image and protected environment:
+For Compose, keep ingress closed and both processes stopped. Set `CALENDAR_GHOST_RECOVERY_IMAGE`
+to the matching image digest already available locally, `CALENDAR_GHOST_RECOVERY_DIR` to the
+absolute host directory containing the new restored `prepared.db`, and
+`CALENDAR_GHOST_RECOVERY_BACKUP_DIR` to a separate absolute host mode-0700 backup directory.
+Both directories must be writable by the matching image's runtime UID; use trusted nonsymlink
+paths. Save `/protected/compose.restore.json` (JSON is valid Compose YAML):
 
-```sh
-docker compose stop app
-docker compose run --rm -it --no-deps app calendar-ghost-restore inspect --database NEW_PATH
-docker compose run --rm -it --no-deps app calendar-ghost-restore prepare --database NEW_PATH \
-  --backup /protected/recovery/NEW_BEFORE.db --administrator-id EXISTING_ADMINISTRATOR_ID \
-  --acknowledge-services-stopped
+```json
+{
+  "services": {
+    "app": {
+      "image": "${CALENDAR_GHOST_RECOVERY_IMAGE:?set matching image digest}",
+      "environment": {"CALENDAR_SYNC_DATABASE_PATH": "/recovery/prepared.db"},
+      "volumes": [
+        {"type": "bind", "source": "${CALENDAR_GHOST_RECOVERY_DIR:?set absolute restore directory}", "target": "/recovery"},
+        {"type": "bind", "source": "${CALENDAR_GHOST_RECOVERY_BACKUP_DIR:?set absolute backup directory}", "target": "/protected/recovery"}
+      ]
+    }
+  }
+}
 ```
 
-Check the actual service name in your Compose file. Mount the protected backup directory and
-new database location explicitly in the recovery environment. `run` must not invoke ordinary
-application startup. Keep both writers stopped throughout inspection and preparation.
+Here `NEW_PATH` is `/recovery/prepared.db` inside the container; configure Litestream's database
+path to `/recovery/prepared.db`; its separate process must also see that same directory mounted
+at `/recovery`. Keep the matching protected secrets environment. Use the override
+for every recovery command and startup, so the CLI and single writer use the same image and mounts:
+
+```sh
+docker compose -f docker-compose.yml -f /protected/compose.restore.json run --rm -it --no-deps app calendar-ghost-restore inspect --database /recovery/prepared.db
+docker compose -f docker-compose.yml -f /protected/compose.restore.json run --rm -it --no-deps app calendar-ghost-restore prepare --database /recovery/prepared.db \
+  --backup /protected/recovery/NEW_BEFORE.db --administrator-id EXISTING_ADMINISTRATOR_ID \
+  --acknowledge-services-stopped
+docker compose -f docker-compose.yml -f /protected/compose.restore.json run --rm -it --no-deps app calendar-ghost-restore inspect --database /recovery/prepared.db
+docker compose -f docker-compose.yml -f /protected/compose.restore.json up -d --no-build app
+```
+
+Require every command to succeed. The final inspection checks the configured prepared path before
+operator-only startup, never the failed database at Compose's original `/data/calendar-sync.db`.
+`run` invokes only the explicit offline command. Keep both processes stopped throughout inspection
+and preparation.
 
 ## Compaction maintenance
 
 Calendar Ghost's existing `SqliteStorage.compact()` performs `VACUUM` followed by
 `wal_checkpoint(TRUNCATE)`. An active reader can cause StorageBusy. Never weaken that protection
 or retry while pretending a failed checkpoint succeeded. The WAL guide describes contention,
-not a guarantee that every live compaction fails. **Do not use Clear activity or Reclaim space while Litestream runs.** Clear activity may
-compact automatically. The pinned release produced a malformed restore after a successful live
+not a guarantee that every live compaction fails. **Do not use Clear activity or Reclaim space while Litestream runs.** Clear activity always attempts
+compaction. The pinned release produced a malformed restore after a successful live
 VACUUM, despite matching synced TXIDs and restore exit 0. An initial fresh restore was valid;
 the source remained valid. No sleep or later snapshot is a repair guarantee. Compatibility is
 limited to the stopped maintenance procedure below; the live experiment remains a negative finding.
@@ -199,7 +231,8 @@ and require exit 0. A signal exit or forced kill fails the procedure. Tagged
 [signal handling](https://github.com/benbjohnson/litestream/blob/v0.5.17/cmd/litestream/main.go)
 handles SIGTERM through shutdown; verify observed behavior in the deployed supervisor too.
 With both stopped, inspect exactly the configured database path before invoking the existing
-storage adapter without the API. The standard Compose path is `/data/calendar-sync.db`; if yours
+storage adapter without the API. For a recovered installation, add
+`-f docker-compose.yml -f /protected/compose.restore.json` to both commands below. The standard Compose path is `/data/calendar-sync.db`; if yours
 differs, use that same path for both commands. Stop on any inspection or compaction failure;
 do not restart replication:
 
