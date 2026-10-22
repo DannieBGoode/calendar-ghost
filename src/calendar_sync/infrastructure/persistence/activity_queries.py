@@ -28,6 +28,7 @@ from calendar_sync.application.operations.activity import (
     activity_category,
 )
 from calendar_sync.application.operations.ports import (
+    INCIDENTS_READ,
     AccountStanding,
     IncidentSummary,
     OpenBlock,
@@ -307,6 +308,18 @@ class SqliteOperationsQueries:
         with _reading(self._database_path) as connection:
             return operations_of(connection, [self._user])[self._user].overview
 
+    def assessment_incidents(self) -> list[IncidentSummary]:
+        with _reading(self._database_path) as connection:
+            rows = connection.execute(
+                f"""
+                {_INCIDENT_FACTS} WHERE i.user_id = ? AND i.state = 'open'
+                    AND (r.state IS NOT 'degraded' OR r.awaiting_reauthorization IS NOT 2)
+                ORDER BY i.updated_at DESC, i.id DESC LIMIT ?
+                """,
+                (self._user, INCIDENTS_READ),
+            ).fetchall()
+        return [_incident_with_facts(row) for row in rows]
+
     def incidents(self, before: str | None = None) -> list[IncidentSummary]:
         after, parameters = "", {"user": self._user, "limit": INCIDENTS_READ}
         if before is not None:
@@ -363,16 +376,12 @@ def _cursor_position(cursor: str) -> dict[str, str] | None:
     return {"state": state, "updated_at": updated_at, "id": incident_id}
 
 
-INCIDENTS_READ = 100
-"""How many of a User's incidents one page holds, as Installation Status and the Web UI read
-them, the most recently updated first."""
-
-
 @dataclass(frozen=True, slots=True)
 class UserOperations:
     overview: OperationsOverview
     incidents: tuple[IncidentSummary, ...]
     """Open Incidents, most recently updated first."""
+    assessment_incidents: tuple[IncidentSummary, ...]
 
 
 def operations_of(
@@ -403,6 +412,8 @@ def operations_of(
             )
         )
     incidents: dict[str, list[IncidentSummary]] = {user: [] for user in users}
+    held_incidents = dict.fromkeys(users, 0)
+    assessment: dict[str, list[IncidentSummary]] = {user: [] for user in users}
     for row in connection.execute(
         f"""
         {_INCIDENT_FACTS}
@@ -411,7 +422,12 @@ def operations_of(
         users,
     ):
         # The same facts as each User's own reader, so both readers assess the same incidents.
-        incidents[row["owner"]].append(_incident_with_facts(row))
+        incident = _incident_with_facts(row)
+        incidents[row["owner"]].append(incident)
+        if row["rule_state"] == "degraded" and row["rule_stop_code"] == 2:
+            held_incidents[row["owner"]] += 1
+        else:
+            assessment[row["owner"]].append(incident)
     last_synced = dict(
         connection.execute(
             f"""
@@ -434,11 +450,13 @@ def operations_of(
                 # Every open incident counts, though only the most recent are read, as in
                 # `SqliteOperationsQueries`, so both readers assess the same ones.
                 open_incidents=len(incidents[user]),
+                held_open_incidents=held_incidents[user],
                 last_synced_at=_optional_time(last_synced.get(user)),
                 open_blocks=tuple(blocks.get(user, ())),
                 accounts=tuple(accounts[user]),
             ),
             tuple(incidents[user][:INCIDENTS_READ]),
+            tuple(assessment[user][:INCIDENTS_READ]),
         )
         for user in users
     }
@@ -488,6 +506,7 @@ _INCIDENT_COLUMNS = """id, rule_id, account_id, category, state, summary, opened
 _INCIDENT_FACTS = f"""
     SELECT {", ".join(f"i.{column.strip()}" for column in _INCIDENT_COLUMNS.split(","))},
         i.user_id AS owner, r.id AS rule_found,
+        r.state AS rule_state, r.awaiting_reauthorization AS rule_stop_code,
         s.id AS source_account, s.state AS source_state, s.updated_at AS source_updated_at,
         d.id AS destination_account, d.state AS destination_state,
         d.updated_at AS destination_updated_at

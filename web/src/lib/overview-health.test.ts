@@ -17,6 +17,7 @@ const healthy: Dashboard = {
   enabled_rules: 2,
   running_rules: 2,
   stopped_rules: 0,
+  held_rules: 0,
   open_incidents: 0,
   last_synced_at: "2026-09-28T11:57:00Z",
   blocked_events: 0,

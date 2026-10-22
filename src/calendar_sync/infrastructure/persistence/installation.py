@@ -274,6 +274,7 @@ class SqliteInstallationUnitOfWork:
                     rules=tuple(rules.get(user, ())),
                     overview=operations.overview,
                     incidents=operations.incidents,
+                    assessment_incidents=operations.assessment_incidents,
                 )
         return records
 

@@ -106,6 +106,7 @@ from calendar_sync.application.sync.errors import (
     RuleNotFound,
 )
 from calendar_sync.application.sync.manual_runs import ManualRunsThrottled
+from calendar_sync.application.sync.plan_holds import PlanSettlementBusy, TooManyKeptRules
 from calendar_sync.domain.access import InvalidEmail, LastAdministrator, OnlyMeNeedsOneUser
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.plans import (
@@ -115,6 +116,7 @@ from calendar_sync.domain.plans import (
     InvalidAssignmentReason,
     InvalidPlan,
     InvalidPlanReason,
+    LimitedResource,
     PlanInUse,
     PlanIsDefault,
     PlanLimitReached,
@@ -225,6 +227,8 @@ _CODES: dict[type[Exception], str] = {
     UserDeletionInterrupted: "user_deletion_interrupted",
     # Plans (ADR 0038).
     PlanLimitReached: "plan_limit_reached",
+    TooManyKeptRules: "too_many_kept_rules",
+    PlanSettlementBusy: "plan_settlement_busy",
     PlansNeedDefault: "plans_need_default",
     PlanNotFound: "plan_not_found",
     PlanKeyTaken: "plan_key_taken",
@@ -297,7 +301,12 @@ def _registration_params(error: Exception) -> dict[str, ParamValue]:
 def _plan_params(error: Exception) -> dict[str, ParamValue]:
     """What a Plan's refusal names; `count` beside a number picks a plural message's form."""
     if isinstance(error, PlanLimitReached):
-        return {"reason": error.resource.value, "limit": error.limit, "count": error.limit}
+        reason = error.resource.value
+        if error.resource is LimitedResource.RULES and error.held_rules > 0:
+            reason = "rules_with_held"
+        return {"reason": reason, "limit": error.limit, "count": error.limit}
+    if isinstance(error, TooManyKeptRules):
+        return {"limit": error.limit, "count": error.limit}
     if isinstance(error, PlanInUse):
         return {"people": error.people, "count": error.people}
     if isinstance(error, InvalidPlan):

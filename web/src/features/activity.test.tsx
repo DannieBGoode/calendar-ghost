@@ -56,6 +56,7 @@ const rule: RuleSummary = {
   sync_birthdays: false,
   state: "enabled",
   reprojection_required: false,
+  stop_cause: null,
   effective_cadence: "instant",
   poll_every_minutes: 5,
   last_sync: null,

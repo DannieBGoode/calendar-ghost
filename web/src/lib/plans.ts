@@ -26,12 +26,12 @@ export function ownPlanShown(plan: OwnPlan | undefined, policy: Registration["po
 /** The refusal Start would meet, or null when the rule may start; a refused Start shows the same text. */
 export function startRefusal(
   { t }: I18n,
-  { can_start, rule_limit }: Pick<RuleDetail, "can_start" | "rule_limit">,
+  { can_start, rule_limit, held_rules }: Pick<RuleDetail, "can_start" | "rule_limit" | "held_rules">,
 ): string | null {
   if (can_start) return null
-  return rule_limit === null
-    ? t("common.apiError.plan_limit_reached")
-    : t("common.apiError.plan_limit_reached_rules", { count: rule_limit })
+  if (rule_limit === null) return t("common.apiError.plan_limit_reached")
+  const key = held_rules > 0 ? "common.apiError.plan_limit_reached_rules_with_held" : "common.apiError.plan_limit_reached_rules"
+  return t(key, { count: rule_limit })
 }
 
 /**
@@ -47,7 +47,7 @@ export function previewedStartRefusal(
 ): string | null {
   const limit = plan?.limits?.rules
   if (state !== "dry_run_validated" || keeps_place || plan === undefined || typeof limit !== "number") return null
-  return startRefusal(i18n, { can_start: plan.rules_counted < limit, rule_limit: limit })
+  return startRefusal(i18n, { can_start: plan.rules_counted < limit, rule_limit: limit, held_rules: plan.held_rules })
 }
 
 /**

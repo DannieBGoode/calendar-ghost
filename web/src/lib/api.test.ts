@@ -29,6 +29,16 @@ afterEach(() => {
 })
 
 describe("api routes", () => {
+  it("saves the whole keep choice through its typed route and accepts no-content success", async () => {
+    expectTypeOf(api.chooseKeptRules).returns.toEqualTypeOf<Promise<void>>()
+    const fetch = stubFetch(204)
+    await expect(api.chooseKeptRules(["rule-1", "rule-2"])).resolves.toBeUndefined()
+    expect(requested(fetch)).toEqual({
+      url: "/api/v1/account/plan/kept-rules",
+      method: "PUT",
+      body: JSON.stringify({ rule_ids: ["rule-1", "rule-2"] }),
+    })
+  })
   it("types each call by the route it names in the schema", () => {
     expectTypeOf(api.rules).returns.resolves.toEqualTypeOf<RuleSummary[]>()
     expectTypeOf(api.rule).returns.resolves.toEqualTypeOf<RuleDetail>()

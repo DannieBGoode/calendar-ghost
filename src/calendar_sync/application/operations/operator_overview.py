@@ -115,8 +115,10 @@ class UserStatuses:
             )
             for recorded in sorted(records.rules, key=lambda recorded: recorded.rule.id.value)
         ]
-        status = assess_installation(summaries, records.overview, records.incidents, scheduler, now)
-        return replace(status, calendar_numbers=numbers)
+        status = assess_installation(
+            summaries, records.overview, records.assessment_incidents, scheduler, now
+        )
+        return replace(status, open_incidents=records.incidents, calendar_numbers=numbers)
 
 
 @dataclass(frozen=True, slots=True)

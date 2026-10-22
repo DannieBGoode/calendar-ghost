@@ -388,10 +388,11 @@ class PlanLimitReached(DomainError):
     it catches it by name.
     """
 
-    def __init__(self, resource: LimitedResource, limit: int) -> None:
+    def __init__(self, resource: LimitedResource, limit: int, held_rules: int = 0) -> None:
         super().__init__(f"the plan's limit of {limit} {_NOUNS[resource]} is reached")
         self.resource = resource
         self.limit = limit
+        self.held_rules = held_rules
 
 
 NO_LIMITS_PLAN = NewPlan("No limits", NO_LIMITS)

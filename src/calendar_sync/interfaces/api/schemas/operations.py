@@ -27,6 +27,8 @@ from calendar_sync.interfaces.api.schemas.shared import (
     LimitedResourceValue,
     ProblemKindValue,
     RecordedTimeResponse,
+    RulePlaceValue,
+    RuleStopCauseValue,
     RunReasonValue,
     SourceComparisonValue,
     StatusVerdictValue,
@@ -62,6 +64,8 @@ class DashboardResponse(ApiResponse):
     """Enabled rules, running or stopped."""
     running_rules: int
     """Enabled rules that have not stopped, as the status API's `counts.running`."""
+    held_rules: int
+    """Rules on Plan Hold, which release automatically when their Allowance permits."""
     stopped_rules: int
     """Rules that do not synchronize until someone acts, as the status API's `counts.stopped`."""
     open_incidents: int
@@ -196,6 +200,7 @@ class StatusCountsResponse(ApiResponse):
     stopped: int
     """Rules that do not synchronize until someone acts: each has a `stopped` problem."""
     paused: int
+    held: int
     overdue: int
     open_incidents: int
     blocked_events: int
@@ -216,6 +221,7 @@ class StatusRuleResponse(ApiResponse):
     id: str
     name: str
     state: str
+    stop_cause: RuleStopCauseValue | None
     source: StatusCalendarResponse
     destination: StatusCalendarResponse
     projection: str
@@ -327,6 +333,19 @@ class PersonPlanOverviewResponse(ApiResponse):
     """How much of the Plan they have they use, whoever they are; null when they have no Plan."""
 
 
+class OwnPlanGraceResponse(ApiResponse):
+    holds_at: str
+    rule_limit: int
+    held: int
+    reserved: int
+
+
+class RuleStandingResponse(ApiResponse):
+    rule_id: str
+    place: RulePlaceValue
+    kept: bool
+
+
 class OwnPlanResponse(ApiResponse):
     """What the signed-in User's Plan allows and how much of it they have, for Your plan."""
 
@@ -336,6 +355,9 @@ class OwnPlanResponse(ApiResponse):
     limits: PlanLimitsResponse | None
     """What their Plan allows; null unless the basis is "plan", since then nothing limits them."""
     rules_counted: int
+    held_rules: int
+    grace: OwnPlanGraceResponse | None
+    rules: list[RuleStandingResponse]
     connected_accounts: int
     """Every calendar account, Disconnected Accounts included."""
     integration_tokens: int
@@ -347,7 +369,7 @@ class OwnPlanResponse(ApiResponse):
     may_connect_account: bool
     may_issue_token: bool
     over_rule_limit: bool
-    """More rules count than the rule limit: nothing stops, but no other rule can start."""
+    """More rules count than the current rule limit."""
 
 
 class PlanAssignmentsRequest(BaseModel):

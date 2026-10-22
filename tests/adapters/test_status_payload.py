@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 from calendar_sync.application.operations.ports import (
     AccountStanding,
     IncidentSummary,
+    OpenBlock,
     OperationsOverview,
     SchedulerProgress,
 )
@@ -156,3 +158,71 @@ def test_an_enabled_rule_is_enabled_on_the_dashboard_even_while_it_is_stopped() 
 
     # The Overview's setup checklist reads `enabled_rules`: the rule was turned on.
     assert (dashboard.enabled_rules, dashboard.running_rules, dashboard.stopped_rules) == (1, 0, 1)
+
+
+def test_held_status_payload_preserves_raw_incidents_and_blocks() -> None:
+    summary = _summary()
+    held = replace(summary, rule=summary.rule.hold())
+    incidents = (_incident(IncidentCategory.PERMANENT),)
+    overview = OperationsOverview(
+        2, 0, 1, NOW, (OpenBlock(42, RULE),), HEALTHY_ACCOUNTS, held_open_incidents=1
+    )
+    status = assess_installation([held], overview, incidents, SCHEDULER, NOW)
+    payload = status_response(status)
+    dashboard = dashboard_response(status)
+    assert (payload.counts.open_incidents, payload.counts.blocked_events) == (1, 1)
+    assert len(payload.incidents) == 1
+    assert (dashboard.open_incidents, dashboard.blocked_events) == (0, 0)
+    assert dashboard.blocked_entry_id is None
+    assert dashboard.blocked_rule_id is None
+    assert payload.rules[0].stop_cause == "plan_hold"
+    assert payload.problems == []
+    assert dashboard.held_rules == payload.counts.held == 1
+
+
+@pytest.mark.parametrize(
+    ("state", "awaiting", "held", "cause"),
+    [
+        (SyncRuleState.ENABLED, False, False, None),
+        (SyncRuleState.DEGRADED, False, False, None),
+        (SyncRuleState.DEGRADED, True, False, "lapsed_authorization"),
+        (SyncRuleState.DEGRADED, False, True, "plan_hold"),
+    ],
+)
+def test_status_rule_exposes_exact_self_resuming_stop_cause(
+    state: SyncRuleState, awaiting: bool, held: bool, cause: str | None
+) -> None:
+    summary = _summary()
+    summary = replace(
+        summary,
+        rule=replace(
+            summary.rule, state=state, awaiting_reauthorization=awaiting, held_by_plan=held
+        ),
+    )
+    overview = OperationsOverview(2, 0, 0, NOW, (), HEALTHY_ACCOUNTS)
+    payload = status_response(assess_installation([summary], overview, (), SCHEDULER, NOW))
+    assert payload.rules[0].stop_cause == cause
+    assert set(payload.counts.model_dump()) == {
+        "rules",
+        "running",
+        "stopped",
+        "paused",
+        "held",
+        "overdue",
+        "open_incidents",
+        "blocked_events",
+        "disconnected_accounts",
+        "lapsed_accounts",
+    }
+    assert set(payload.rules[0].model_dump()) == {
+        "id",
+        "name",
+        "state",
+        "stop_cause",
+        "source",
+        "destination",
+        "projection",
+        "last_succeeded_at",
+        "running",
+        "problem",
+    }

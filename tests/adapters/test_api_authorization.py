@@ -399,3 +399,16 @@ def test_every_route_answers_another_users_record_as_not_found(tmp_path: Path) -
     assert created == missing
     with sqlite_units(database, user=owner)() as uow:
         assert uow.rules.list() == (rule(),)
+
+
+def test_keep_rules_requires_current_user_and_never_a_status_reader(tmp_path: Path) -> None:
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+    routes = [
+        route
+        for route in app.routes
+        if isinstance(route, APIRoute) and route.path == "/api/v1/account/plan/kept-rules"
+    ]
+    assert len(routes) == 1
+    assert routes[0].methods == {"PUT"}
+    assert _requires(routes[0].dependant, current_user)
+    assert not _requires(routes[0].dependant, status_reader)

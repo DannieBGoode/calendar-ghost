@@ -3,17 +3,19 @@ and assigns Plans and turns them on, and every User reads their own Plan (ADR 00
 
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRuleId, SyncRuleState
+from calendar_sync.domain.plan_hold import PlanGrace
 from calendar_sync.domain.plans import NewPlan, Plan
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.plans import SqlitePlans
@@ -377,6 +379,9 @@ def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_that_limits_nob
         "plan": {"key": "no-limits", "name": "Everyone", "on_default": True},
         "limits": NO_LIMITS_BODY["limits"],
         "rules_counted": 0,
+        "held_rules": 0,
+        "grace": None,
+        "rules": [],
         "connected_accounts": 0,
         "integration_tokens": 0,
     }
@@ -1053,6 +1058,11 @@ def test_your_plan_while_plans_are_off_for_an_administrator_and_for_a_limited_me
         "basis": "plans_off",
         **UNLIMITED,
         "rules_counted": 2,
+        "held_rules": 0,
+        "grace": None,
+        "rules": [
+            {"rule_id": f"rule-{number}", "place": "counted", "kept": False} for number in (1, 2)
+        ],
         "connected_accounts": 2,
         "integration_tokens": 0,
     }
@@ -1060,6 +1070,9 @@ def test_your_plan_while_plans_are_off_for_an_administrator_and_for_a_limited_me
         "basis": "administrator",
         **UNLIMITED,
         "rules_counted": 0,
+        "held_rules": 0,
+        "grace": None,
+        "rules": [],
         "connected_accounts": 0,
         "integration_tokens": 0,
     }
@@ -1068,6 +1081,9 @@ def test_your_plan_while_plans_are_off_for_an_administrator_and_for_a_limited_me
         "plan": {"key": "free", "name": "Free", "on_default": True},
         "limits": FREE_BODY["limits"],
         "rules_counted": 2,
+        "held_rules": 0,
+        "grace": None,
+        "rules": while_off["rules"],
         "connected_accounts": 2,
         "integration_tokens": 0,
         "instant": False,
@@ -1129,3 +1145,294 @@ def test_the_rules_api_says_which_previewed_rule_keeps_a_replaced_rules_place(
         ("rule-3", False),
         ("rule-4", True),
     ]
+
+
+KEEP_RULES = "/api/v1/account/plan/kept-rules"
+
+
+def _keep(installation: Installation, *identifiers: str) -> Any:
+    return installation.client.put(KEEP_RULES, json={"rule_ids": list(identifiers)})
+
+
+def _choice_state(installation: Installation, user: UserId | None = None) -> Any:
+    with sqlite_units(
+        installation.database, user=user or installation.member, accounts=()
+    )() as uow:
+        return (
+            uow.rules.list(),
+            uow.rules.standings(),
+            uow.plan_grace.get(),
+            uow.plan_grace.admissions(),
+        )
+
+
+def _held_member_rules(installation: Installation) -> None:
+    _member_rules(installation)
+    with sqlite_units(installation.database, user=installation.member)() as uow:
+        second = uow.rules.get(SyncRuleId("rule-2"))
+        assert second is not None
+        uow.rules.save(second.hold())
+        uow.rules.keep([rule().id])
+        uow.commit()
+
+
+def test_own_plan_exposes_owned_ranked_choices_and_grace_without_writing(
+    installation: Installation,
+) -> None:
+    _held_member_rules(installation)
+    installation.define(FREE_BODY)
+    installation.turn_on("free")
+    deadline = NOW + timedelta(days=7)
+    with sqlite_units(installation.database, user=installation.member)() as uow:
+        # The draft is eligible only because it reserves a place. Held rules consume none.
+        previewed = uow.rules.get(SyncRuleId("rule-3"))
+        assert previewed is not None
+        uow.rules.save(replace(previewed, keeps_place=True))
+        uow.rules.keep([SyncRuleId("rule-3")])
+        uow.plan_grace.save(PlanGrace(deadline, 1, 0))
+        uow.commit()
+    installation.as_member()
+    before = _choice_state(installation)
+
+    answer = installation.client.get("/api/v1/account/plan")
+
+    assert answer.status_code == 200, answer.text
+    own = answer.json()
+    assert (own["rules_counted"], own["held_rules"]) == (2, 1)
+    assert own["grace"] == {
+        "holds_at": deadline.isoformat(),
+        "rule_limit": 1,
+        "held": 1,
+        "reserved": 0,
+    }
+    assert own["rules"] == [
+        {"rule_id": "rule-3", "place": "reserved", "kept": True},
+        {"rule_id": "rule-1", "place": "counted", "kept": False},
+        {"rule_id": "rule-2", "place": "held", "kept": False},
+    ]
+    assert _choice_state(installation) == before
+    installation.as_admin()
+    assert installation.client.get("/api/v1/account/plan").json()["rules"] == []
+
+
+def test_start_refusal_explains_held_rules_and_rule_payloads(
+    installation: Installation,
+) -> None:
+    _held_member_rules(installation)
+    installation.define(FREE_BODY)
+    installation.turn_on("free")
+    installation.as_member()
+    before = _choice_state(installation)
+    client = installation.client
+
+    details = client.get("/api/v1/rules/rule-3").json()
+    refused = client.post("/api/v1/rules/rule-3/enable")
+    listed = client.get("/api/v1/rules").json()
+    held = client.get("/api/v1/rules/rule-2").json()
+
+    assert (details["can_start"], details["rule_limit"], details["held_rules"]) == (False, 1, 1)
+    assert _problem(refused) == (
+        409,
+        "plan_limit_reached",
+        {"reason": "rules_with_held", "limit": 1, "count": 1},
+    )
+    assert [each["stop_cause"] for each in listed] == [None, "plan_hold", None]
+    assert held["stop_cause"] == "plan_hold"
+    assert _choice_state(installation) == before
+    # Lifecycle responses use the same inherited nullable stop cause.
+    assert client.post("/api/v1/rules/rule-2/pause").json()["stop_cause"] is None
+
+
+def test_own_plan_failure_never_invents_an_allowance(
+    installation: Installation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _held_member_rules(installation)
+    installation.define(FREE_BODY)
+    installation.turn_on("free")
+    installation.as_member()
+    before = _choice_state(installation)
+
+    def unavailable(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(SqlitePlans, "of", unavailable)
+    # The ordinary rule read keeps its fail-open hints; neither Your plan nor Start may do so.
+    details = installation.client.get("/api/v1/rules/rule-3").json()
+    assert (details["can_start"], details["rule_limit"], details["held_rules"]) == (True, None, 0)
+    assert installation.client.get("/api/v1/rules").status_code == 200
+    with pytest.raises(RuntimeError, match="database is locked"):
+        installation.client.get("/api/v1/account/plan")
+    with pytest.raises(RuntimeError, match="database is locked"):
+        installation.client.post("/api/v1/rules/rule-3/enable")
+    assert _choice_state(installation) == before
+
+
+def test_keep_rules_requires_the_owning_session(installation: Installation) -> None:
+    _member_rules(installation)
+    with sqlite_units(
+        installation.database,
+        user=installation.admin,
+        accounts=("admin-source", "admin-destination"),
+    )() as uow:
+        uow.rules.add(
+            replace(
+                rule(),
+                id=SyncRuleId("admin-rule"),
+                source=endpoint("admin-source", "source"),
+                destination=endpoint("admin-destination", "destination"),
+            )
+        )
+        uow.rules.keep([SyncRuleId("admin-rule")])
+        uow.commit()
+    before = _choice_state(installation)
+    foreign_before = _choice_state(installation, installation.admin)
+    installation.client.cookies.clear()
+
+    assert _problem(_keep(installation, "rule-1")) == (401, "session_required", {})
+    assert _choice_state(installation) == before
+    installation.as_member()
+    saved = _keep(installation, "rule-1")
+
+    assert saved.status_code == 204, saved.text
+    assert saved.content == b""
+    assert {each.rule_id.value for each in _choice_state(installation)[1] if each.kept} == {
+        "rule-1"
+    }
+    assert _choice_state(installation, installation.admin) == foreign_before
+
+
+def test_keep_rules_refuses_integration_tokens(installation: Installation) -> None:
+    _member_rules(installation)
+    issued = installation.client.post("/api/v1/integration-tokens", json={"name": "Monitor"})
+    assert issued.status_code == 201, issued.text
+    token = issued.json()["token"]
+    before = _choice_state(installation)
+    installation.client.cookies.clear()
+
+    answer = installation.client.put(
+        KEEP_RULES,
+        json={"rule_ids": ["rule-1"]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert _problem(answer) == (401, "session_required", {})
+    assert _choice_state(installation) == before
+
+
+def test_keep_rules_saves_the_whole_set_and_swaps_immediately(
+    installation: Installation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from calendar_sync.infrastructure.notifications import OwnerNotifier
+
+    def unexpected_mail(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("a keep choice must send no Plan notice")
+
+    monkeypatch.setattr(OwnerNotifier, "plan_changed", unexpected_mail)
+    _held_member_rules(installation)
+    installation.define(FREE_BODY)
+    installation.turn_on("free")
+    installation.as_member()
+
+    # The duplicate means one choice, replacing the first rule's mark and swapping at the limit.
+    swapped = _keep(installation, "rule-2", "rule-2")
+    swapped_state = _choice_state(installation)
+    cleared = _keep(installation)
+    cleared_state = _choice_state(installation)
+    with sqlite_units(installation.database, user=installation.member)() as uow:
+        second = uow.rules.get(SyncRuleId("rule-2"))
+        assert second is not None
+        uow.rules.save(second.pause())
+        uow.commit()
+    # Pausing freed a place, so saving the remaining held rule admits it without a preview.
+    released = _keep(installation, "rule-1")
+    released_state = _choice_state(installation)
+
+    assert [answer.status_code for answer in (swapped, cleared, released)] == [204] * 3
+    assert [each.held_by_plan for each in swapped_state[0][:2]] == [True, False]
+    assert {each.rule_id.value for each in swapped_state[1] if each.kept} == {"rule-2"}
+    assert swapped_state[3] == 0
+    assert not any(each.kept for each in cleared_state[1])
+    assert cleared_state[0] == swapped_state[0]
+    assert released_state[0][0].synchronizes
+    assert released_state[3] == 1
+    with transaction(installation.database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM incidents").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM audit_entries").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("identifier", ["unknown-rule", "admin-rule", "rule-3", "", " "])
+def test_keep_rules_unknown_foreign_and_ineligible_ids_are_not_found(
+    installation: Installation, identifier: str
+) -> None:
+    _held_member_rules(installation)
+    with sqlite_units(
+        installation.database,
+        user=installation.admin,
+        accounts=("admin-source", "admin-destination"),
+    )() as uow:
+        uow.rules.add(
+            replace(
+                rule(),
+                id=SyncRuleId("admin-rule"),
+                source=endpoint("admin-source", "source"),
+                destination=endpoint("admin-destination", "destination"),
+            )
+        )
+        uow.rules.keep([SyncRuleId("admin-rule")])
+        uow.commit()
+    installation.as_member()
+    before = _choice_state(installation)
+    foreign_before = _choice_state(installation, installation.admin)
+
+    answer = _keep(installation, "rule-2", identifier)
+
+    assert _problem(answer) == (404, "rule_not_found", {})
+    assert answer.json()["detail"] == "a chosen rule is not eligible to keep"
+    assert _choice_state(installation) == before
+    assert _choice_state(installation, installation.admin) == foreign_before
+
+
+@pytest.mark.parametrize(
+    "body", [{}, {"rule_ids": None}, {"rule_ids": "rule-1"}, {"rule_ids": [1]}, []]
+)
+def test_keep_rules_rejects_wrong_shapes(installation: Installation, body: Any) -> None:
+    _held_member_rules(installation)
+    installation.as_member()
+    before = _choice_state(installation)
+
+    answer = installation.client.put(KEEP_RULES, json=body)
+
+    assert (answer.status_code, answer.json()["code"]) == (422, "invalid_request")
+    assert _choice_state(installation) == before
+
+
+def test_keep_rules_too_many_returns_limit_and_plural_count(installation: Installation) -> None:
+    _held_member_rules(installation)
+    installation.define(FREE_BODY)
+    installation.turn_on("free")
+    installation.as_member()
+    before = _choice_state(installation)
+
+    answer = _keep(installation, "rule-1", "rule-2")
+
+    assert _problem(answer) == (409, "too_many_kept_rules", {"limit": 1, "count": 1})
+    assert _choice_state(installation) == before
+
+
+def test_keep_rules_busy_saves_nothing_and_can_be_retried(installation: Installation) -> None:
+    _held_member_rules(installation)
+    installation.define(FREE_BODY)
+    installation.turn_on("free")
+    installation.as_member()
+    app = installation.client.app
+    assert isinstance(app, FastAPI)
+    services = app.state.container.for_user(installation.member)
+    before = _choice_state(installation)
+    with services.plan_holds.locks.for_writes(SyncRuleId("rule-2")):
+        refused = _keep(installation, "rule-2")
+        assert _choice_state(installation) == before
+    retried = _keep(installation, "rule-2")
+
+    assert _problem(refused) == (409, "plan_settlement_busy", {})
+    assert retried.status_code == 204, retried.text
+    assert [each.held_by_plan for each in _choice_state(installation)[0][:2]] == [True, False]

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 
@@ -96,13 +96,14 @@ class RuleStatus:
 
 @dataclass(frozen=True, slots=True)
 class RuleCounts:
-    """How many rules run, stopped, are paused, and are overdue: the one count the Overview, the
+    """How many rules run, stopped, are paused, held, and overdue: the one count the Overview, the
     status API, MCP, and the Operator Overview share.
 
     A rule has stopped when it does not synchronize until someone acts, so it has a Stopped
-    problem: a degraded rule, an interrupted Rule Removal, and an enabled rule whose account was
-    disconnected or whose authorization lapsed. A rule whose removal is running is not counted at
-    all. Running rules are the enabled rules that have not stopped.
+    problem: a degraded rule without a Plan Hold, an interrupted Rule Removal, and an enabled rule
+    whose account was disconnected or whose authorization lapsed. A rule whose removal is running
+    is not counted at all. A Plan Hold is counted separately and has no Stopped problem. Running
+    rules are the enabled rules that have not stopped.
     """
 
     rules: int
@@ -110,6 +111,7 @@ class RuleCounts:
     stopped: int
     paused: int
     overdue: int
+    held: int
 
     @classmethod
     def of(cls, rules: Sequence[RuleStatus], problems: Sequence[Problem]) -> RuleCounts:
@@ -125,6 +127,7 @@ class RuleCounts:
             stopped=len(stopped),
             paused=states.count(SyncRuleState.PAUSED),
             overdue=sum(problem.kind is ProblemKind.OVERDUE for problem in problems),
+            held=sum(rule.summary.rule.stopped_by_plan_hold for rule in rules),
         )
 
 
@@ -189,7 +192,8 @@ class Dashboard:
     @classmethod
     def of(cls, status: InstallationStatus) -> Dashboard:
         overview = status.overview
-        blocks = overview.open_blocks
+        held = _held_rule_ids([rule.summary for rule in status.rules])
+        blocks = tuple(block for block in overview.open_blocks if block.rule_id not in held)
         return cls(
             rules=status.counts,
             enabled_rules=sum(
@@ -198,7 +202,7 @@ class Dashboard:
             connected_accounts=overview.connected_accounts,
             disconnected_accounts=overview.disconnected_accounts,
             lapsed_accounts=overview.lapsed_accounts,
-            open_incidents=overview.open_incidents,
+            open_incidents=overview.open_incidents - overview.held_open_incidents,
             last_synced_at=overview.last_synced_at,
             blocked_events=len(blocks),
             blocked_entry_id=blocks[0].entry_id if blocks else None,
@@ -234,14 +238,61 @@ def assess_installation(
 ) -> InstallationStatus:
     """The verdict, most urgent problem first, from what the installation recorded."""
     visible = [summary for summary in rules if not _removal_running(summary)]
-    enabled = [s for s in visible if s.rule.state is SyncRuleState.ENABLED]
+    held = _held_rule_ids(visible)
+    eligible = [summary for summary in visible if summary.rule.id.value not in held]
+    enabled = [s for s in eligible if s.rule.state is SyncRuleState.ENABLED]
+    assessment = replace(
+        overview,
+        open_incidents=overview.open_incidents - overview.held_open_incidents,
+        open_blocks=tuple(block for block in overview.open_blocks if block.rule_id not in held),
+    )
+    open_incidents = tuple(incident for incident in incidents if incident.state == "open")
+    stalled = bool(enabled or held) and _stalled(scheduler, now)
+    problems = _problems(
+        eligible,
+        assessment,
+        [incident for incident in open_incidents if incident.rule_id not in held],
+        scheduler,
+        now,
+        stalled=stalled,
+    )
+
+    first_by_rule: dict[str, Problem] = {}
+    for problem in problems:
+        if problem.rule_id is not None:
+            first_by_rule.setdefault(problem.rule_id, problem)
+    return InstallationStatus(
+        health=_health(problems, visible, enabled, assessment, stalled),
+        problems=tuple(problems),
+        rules=tuple(
+            RuleStatus(s, rule_name(s), first_by_rule.get(s.rule.id.value)) for s in visible
+        ),
+        open_incidents=open_incidents,
+        overview=overview,
+        scheduler=scheduler,
+        checked_at=now,
+        providers={account.id: account.provider for account in overview.accounts},
+    )
+
+
+def _held_rule_ids(rules: Sequence[SyncRuleSummary]) -> set[str]:
+    return {summary.rule.id.value for summary in rules if summary.rule.stopped_by_plan_hold}
+
+
+def _problems(
+    visible: Sequence[SyncRuleSummary],
+    overview: OperationsOverview,
+    open_incidents: Sequence[IncidentSummary],
+    scheduler: SchedulerProgress | None,
+    now: datetime,
+    *,
+    stalled: bool,
+) -> list[Problem]:
     disconnected = {
         a.id for a in overview.accounts if a.state is ConnectedAccountState.DISCONNECTED
     }
     lapsed = {a.id: a.provider for a in overview.accounts if a.lapsed}
-    open_incidents = tuple(incident for incident in incidents if incident.state == "open")
     block_rule_ids = {block.rule_id for block in overview.open_blocks}
-    stalled = bool(enabled) and _stalled(scheduler, now)
 
     problems: list[Problem] = []
     if stalled:
@@ -270,29 +321,21 @@ def assess_installation(
     # explains why it hasn't synced.
     overdue_excluded = named | {problem.rule_id for problem in waits if problem.rule_id}
     if not stalled and scheduler is not None:
-        problems.extend(_overdue(enabled, overdue_excluded, scheduler.last_pass_rule_ids, now))
+        problems.extend(
+            _overdue(
+                [s for s in visible if s.rule.state is SyncRuleState.ENABLED],
+                overdue_excluded,
+                scheduler.last_pass_rule_ids,
+                now,
+            )
+        )
     if overview.open_blocks:
         problems.append(_blocked(overview))
     # Every open incident is now covered: by its rule's Stopped problem, by the open blocks, or
     # by a review or waiting problem of its own. So open incidents never leave this list empty.
     problems.extend(problem for problem in waits if problem.rule_id not in named)
 
-    first_by_rule: dict[str, Problem] = {}
-    for problem in problems:
-        if problem.rule_id is not None:
-            first_by_rule.setdefault(problem.rule_id, problem)
-    return InstallationStatus(
-        health=_health(problems, visible, enabled, overview, stalled),
-        problems=tuple(problems),
-        rules=tuple(
-            RuleStatus(s, rule_name(s), first_by_rule.get(s.rule.id.value)) for s in visible
-        ),
-        open_incidents=open_incidents,
-        overview=overview,
-        scheduler=scheduler,
-        checked_at=now,
-        providers={account.id: account.provider for account in overview.accounts},
-    )
+    return problems
 
 
 def _removal_running(summary: SyncRuleSummary) -> bool:
@@ -538,10 +581,14 @@ class GetInstallationStatus:
     scheduler: SchedulerHeartbeat | None
 
     def execute(self) -> InstallationStatus:
-        return assess_installation(
+        status = assess_installation(
             self.rules.execute(),
             self.operations.overview(),
-            self.operations.incidents(),
+            self.operations.assessment_incidents(),
             self.scheduler.progress() if self.scheduler is not None else None,
             self.clock.now(),
+        )
+        return replace(
+            status,
+            open_incidents=tuple(i for i in self.operations.incidents() if i.state == "open"),
         )

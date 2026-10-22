@@ -200,6 +200,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/plan/kept-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Keep Rules
+         * @description Replace the whole kept set and apply available places and swaps immediately, all or none.
+         *     Only this User's eligible rules may be chosen. A busy choice saves nothing; retry it later.
+         */
+        put: operations["keep_rules_api_v1_account_plan_kept_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/sign-in-methods": {
         parameters: {
             query?: never;
@@ -1669,6 +1690,8 @@ export interface components {
             disconnected_accounts: number;
             /** Enabled Rules */
             enabled_rules: number;
+            /** Held Rules */
+            held_rules: number;
             /** Lapsed Accounts */
             lapsed_accounts: number;
             /** Last Synced At */
@@ -2023,6 +2046,11 @@ export interface components {
             /** Token */
             token: string;
         };
+        /** KeptRulesRequest */
+        KeptRulesRequest: {
+            /** Rule Ids */
+            rule_ids: string[];
+        };
         /**
          * LimitUseResponse
          * @description How many of one resource a person has, beside what the Plan they have allows.
@@ -2098,6 +2126,17 @@ export interface components {
             /** Needs Another Administrator */
             needs_another_administrator: boolean;
         };
+        /** OwnPlanGraceResponse */
+        OwnPlanGraceResponse: {
+            /** Held */
+            held: number;
+            /** Holds At */
+            holds_at: string;
+            /** Reserved */
+            reserved: number;
+            /** Rule Limit */
+            rule_limit: number;
+        };
         /**
          * OwnPlanResponse
          * @description What the signed-in User's Plan allows and how much of it they have, for Your plan.
@@ -2110,6 +2149,9 @@ export interface components {
             basis: "plans_off" | "administrator" | "plan";
             /** Connected Accounts */
             connected_accounts: number;
+            grace: components["schemas"]["OwnPlanGraceResponse"] | null;
+            /** Held Rules */
+            held_rules: number;
             /** Instant */
             instant: boolean;
             /** Integration Tokens */
@@ -2124,6 +2166,8 @@ export interface components {
             plan: components["schemas"]["AppliedPlanResponse"] | null;
             /** Poll Every Minutes */
             poll_every_minutes: number;
+            /** Rules */
+            rules: components["schemas"]["RuleStandingResponse"][];
             /** Rules Counted */
             rules_counted: number;
         };
@@ -2733,6 +2777,8 @@ export interface components {
              * @enum {string}
              */
             effective_cadence: "instant" | "not_watchable" | "waiting_for_provider" | "off_by_user" | "not_in_plan" | "no_public_address" | "not_reaching";
+            /** Held Rules */
+            held_rules: number;
             /** Id */
             id: string;
             /** Initial Lookback Days */
@@ -2759,6 +2805,8 @@ export interface components {
             source: components["schemas"]["NamedCalendarEndpointResponse"];
             /** State */
             state: string;
+            /** Stop Cause */
+            stop_cause: ("lapsed_authorization" | "plan_hold") | null;
             /** Sync All Day Events */
             sync_all_day_events: boolean;
             /** Sync Birthdays */
@@ -2814,6 +2862,8 @@ export interface components {
             source: components["schemas"]["CalendarEndpointPayload"];
             /** State */
             state: string;
+            /** Stop Cause */
+            stop_cause: ("lapsed_authorization" | "plan_hold") | null;
             /** Sync All Day Events */
             sync_all_day_events: boolean;
             /** Sync Birthdays */
@@ -2828,6 +2878,18 @@ export interface components {
              * @enum {string}
              */
             unanswered_invitations: "wait" | "as_tentative";
+        };
+        /** RuleStandingResponse */
+        RuleStandingResponse: {
+            /** Kept */
+            kept: boolean;
+            /**
+             * Place
+             * @enum {string}
+             */
+            place: "counted" | "reserved" | "held";
+            /** Rule Id */
+            rule_id: string;
         };
         /** RuleSummaryResponse */
         RuleSummaryResponse: {
@@ -2856,6 +2918,8 @@ export interface components {
             source: components["schemas"]["NamedCalendarEndpointResponse"];
             /** State */
             state: string;
+            /** Stop Cause */
+            stop_cause: ("lapsed_authorization" | "plan_hold") | null;
             /** Sync All Day Events */
             sync_all_day_events: boolean;
             /** Sync Birthdays */
@@ -3049,6 +3113,8 @@ export interface components {
             blocked_events: number;
             /** Disconnected Accounts */
             disconnected_accounts: number;
+            /** Held */
+            held: number;
             /** Lapsed Accounts */
             lapsed_accounts: number;
             /** Open Incidents */
@@ -3123,6 +3189,8 @@ export interface components {
             source: components["schemas"]["StatusCalendarResponse"];
             /** State */
             state: string;
+            /** Stop Cause */
+            stop_cause: ("lapsed_authorization" | "plan_hold") | null;
         };
         /** StorageResponse */
         StorageResponse: {
@@ -3684,6 +3752,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OwnPlanResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    keep_rules_api_v1_account_plan_kept_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeptRulesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

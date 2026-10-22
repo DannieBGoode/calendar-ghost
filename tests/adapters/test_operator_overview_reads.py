@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 
 from calendar_sync.application.operations.operator_overview import UserStatuses
-from calendar_sync.application.operations.status import GetInstallationStatus, InstallationStatus
+from calendar_sync.application.operations.status import (
+    Dashboard,
+    GetInstallationStatus,
+    InstallationStatus,
+)
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.rules import ListSyncRules
 from calendar_sync.domain.access import UserId
@@ -22,6 +26,7 @@ from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
+from calendar_sync.interfaces.api.status_payload import status_response
 from tests.helpers import RecentSchedulerHeartbeat, endpoint, rule
 from tests.users import OTHER_USER, USER, sqlite_units
 
@@ -102,6 +107,7 @@ def test_each_users_records_agree_with_what_that_user_reads(database: Path) -> N
     for user in (USER, OTHER_USER):
         own = SqliteOperationsQueries(database, user)
         assert records[user].overview == own.overview()
+        assert records[user].assessment_incidents == tuple(own.assessment_incidents())
         assert records[user].incidents == tuple(i for i in own.incidents() if i.state == "open")
         assert len(records[user].overview.open_blocks) == len(records[user].rules)
 
@@ -189,3 +195,131 @@ def test_a_user_with_more_than_100_open_incidents_reads_the_same_in_both_paths(
     assert records.incidents == tuple(i for i in own.incidents() if i.state == "open")
     assert len(records.incidents) == 100
     assert records.overview.open_incidents == own.overview().open_incidents == 102
+    assert len(own.assessment_incidents()) == 100
+    assert records.assessment_incidents == tuple(own.assessment_incidents())
+
+
+def test_dashboard_held_incident_count_is_exact_beyond_page_limit(database: Path) -> None:
+    with transaction(database) as connection:
+        connection.execute(
+            "UPDATE sync_rules SET state = 'degraded', awaiting_reauthorization = 2 WHERE id = ?",
+            (f"{USER.value}-rule-0",),
+        )
+        for number in range(150):
+            connection.execute(
+                """
+                INSERT INTO incidents (id, deduplication_key, rule_id, category, state, summary,
+                    opened_at, updated_at, user_id)
+                VALUES (?, ?, ?, 'temporary', 'open', 'Provider temporarily unavailable',
+                    '2026-09-28', ?, ?)
+                """,
+                (
+                    f"mixed-{number}",
+                    f"mixed-{number}",
+                    f"{USER.value}-rule-{number % 2}",
+                    f"2026-09-28T00:{number // 60:02d}:{number % 60:02d}",
+                    USER.value,
+                ),
+            )
+    with SqliteInstallationUnitOfWorkFactory(database)() as installation:
+        records = installation.status_records([USER, OTHER_USER])
+    own = SqliteOperationsQueries(database, USER)
+    assert own.overview() == records[USER].overview
+    assert own.overview().open_incidents == 151
+    assert own.overview().held_open_incidents == 76
+    assert records[OTHER_USER].overview.held_open_incidents == 0
+    assert len(records[USER].incidents) == 100
+
+    clock, locks = SystemClock(), RuleLocks()
+    heartbeat = RecentSchedulerHeartbeat(clock)
+    labelled = UserStatuses(SqliteInstallationUnitOfWorkFactory(database), locks, clock, heartbeat)
+    own_status = GetInstallationStatus(
+        ListSyncRules(sqlite_units(database, user=USER, accounts=()), locks), own, clock, heartbeat
+    ).execute()
+    for status in (own_status, labelled.of([USER])[USER]):
+        assert status.overview.open_incidents == 151
+        assert len(status.open_incidents) == 100
+        assert Dashboard.of(status).open_incidents == 75
+
+
+def test_operator_overview_matches_held_own_status(database: Path) -> None:
+    with transaction(database) as connection:
+        connection.execute(
+            "UPDATE sync_rules SET state = 'degraded', awaiting_reauthorization = 2 "
+            "WHERE user_id = ?",
+            (USER.value,),
+        )
+    clock, locks = SystemClock(), RuleLocks()
+    heartbeat = RecentSchedulerHeartbeat(clock)
+    labelled = UserStatuses(SqliteInstallationUnitOfWorkFactory(database), locks, clock, heartbeat)
+    own = GetInstallationStatus(
+        ListSyncRules(sqlite_units(database, user=USER, accounts=()), locks),
+        SqliteOperationsQueries(database, USER),
+        clock,
+        heartbeat,
+    ).execute()
+    status = labelled.of([USER])[USER]
+    assert _verdict(status) == _verdict(own)
+    assert status.counts == own.counts
+    assert (status.counts.held, status.counts.stopped) == (2, 0)
+    payload = status_response(status).model_dump(mode="json")
+    assert payload["rules"][0]["name"] == "Calendar 1 → Calendar 2"
+    assert payload["rules"][0]["stop_cause"] == "plan_hold"
+    assert all(r["source"]["number"] is not None for r in payload["rules"])
+    assert "calendar-0" not in str(payload)
+
+
+@pytest.mark.parametrize("account_owned", [False, True])
+def test_held_incident_page_cannot_hide_an_older_active_problem(
+    database: Path, account_owned: bool
+) -> None:
+    with transaction(database) as connection:
+        connection.execute("DELETE FROM incidents WHERE user_id = ?", (USER.value,))
+        connection.execute("DELETE FROM audit_entries WHERE user_id = ?", (USER.value,))
+        connection.execute(
+            "UPDATE connected_accounts SET authorization_lapsed_at = NULL WHERE user_id = ?",
+            (USER.value,),
+        )
+        connection.execute(
+            "UPDATE sync_rules SET state = 'degraded', awaiting_reauthorization = 2 WHERE id = ?",
+            (f"{USER.value}-rule-0",),
+        )
+        for number in range(101):
+            connection.execute(
+                """
+                INSERT INTO incidents (id, deduplication_key, rule_id, category, state, summary,
+                    opened_at, updated_at, user_id)
+                VALUES (?, ?, ?, 'permanent', 'open', 'Provider refused',
+                    '2026-09-29', '2026-09-29', ?)
+                """,
+                (f"held-{number}", f"held-{number}", f"{USER.value}-rule-0", USER.value),
+            )
+        connection.execute(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, account_id, category, state,
+                summary, opened_at, updated_at, user_id)
+            VALUES ('older-active', 'older-active', ?, ?, 'permanent', 'open',
+                'An active problem', '2026-09-28', '2026-09-28', ?)
+            """,
+            (
+                None if account_owned else f"{USER.value}-rule-1",
+                f"{USER.value}-source" if account_owned else None,
+                USER.value,
+            ),
+        )
+    clock, locks = SystemClock(), RuleLocks()
+    heartbeat = RecentSchedulerHeartbeat(clock)
+    own = GetInstallationStatus(
+        ListSyncRules(sqlite_units(database, user=USER, accounts=()), locks),
+        SqliteOperationsQueries(database, USER),
+        clock,
+        heartbeat,
+    ).execute()
+    labelled = UserStatuses(SqliteInstallationUnitOfWorkFactory(database), locks, clock, heartbeat)
+    for status in (own, labelled.of([USER])[USER]):
+        assert status.needs_attention
+        assert [problem.summary for problem in status.problems] == ["An active problem"]
+        assert len(status.open_incidents) == 100
+        assert all(incident.rule_id == f"{USER.value}-rule-0" for incident in status.open_incidents)
+        assert status.overview.open_incidents == 102
+        assert Dashboard.of(status).open_incidents == 1

@@ -33,6 +33,12 @@ StatusVerdictValue = Literal[
 ]
 
 
+RuleStopCauseValue = Literal["lapsed_authorization", "plan_hold"]
+
+
+RulePlaceValue = Literal["counted", "reserved", "held"]
+
+
 ProblemKindValue = Literal["stalled", "stopped", "review", "overdue", "blocked", "waiting"]
 
 

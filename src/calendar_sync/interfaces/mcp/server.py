@@ -51,6 +51,11 @@ Call get_status first. Its `status` is one of:
 most urgent first. Call get_rule with a rule id or its "Source → Destination" name for its last
 run. Events already synced stay where they are while a rule is stopped.
 
+A rule with `stop_cause: plan_hold` is on Plan Hold, counted in `counts.held`, and is not a
+Stopped problem. It releases automatically when its Allowance permits; see Your plan in
+Settings for its limit and recovery choices. A held rule still needs a working scheduler.
+`stop_cause: lapsed_authorization` means its calendar account needs reauthorization.
+
 get_status and get_rule answer for the User the token belongs to. An Installation
 Administrator's token with the installation:read scope may also call get_installation_health:
 incidents about the installation itself, and how many Users are in each status. It names no rule,

@@ -28,6 +28,9 @@ from calendar_sync.domain.plan_hold import PlanGrace, RuleStanding
 from calendar_sync.domain.plans import PlanUse
 from calendar_sync.domain.runs import RuleRunOutcome
 
+INCIDENTS_READ = 100
+"""How many newest incidents a status or assessment page holds, before or after hold filtering."""
+
 
 @dataclass(frozen=True, slots=True)
 class RecordedRule:
@@ -48,6 +51,9 @@ class StatusRecords:
     overview: OperationsOverview
     incidents: tuple[IncidentSummary, ...]
     """Open incidents, most recently updated first."""
+    assessment_incidents: tuple[IncidentSummary, ...]
+    """At most 100 newest open incidents after held-owner exclusion, for problems only. The
+    independent raw incident page above is what status serializes."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -330,6 +336,8 @@ class OperationsOverview:
     """Events of existing rules whose latest decision was a block, newest first."""
     accounts: tuple[AccountStanding, ...] = ()
     """Every Connected Account, ordered by id."""
+    held_open_incidents: int = 0
+    """Every open rule-owned Incident whose existing owner is on Plan Hold, before paging."""
 
     @property
     def lapsed_accounts(self) -> int:

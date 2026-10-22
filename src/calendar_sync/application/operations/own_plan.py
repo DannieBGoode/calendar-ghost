@@ -10,10 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from calendar_sync.application.identity.ports import IntegrationTokens
+from calendar_sync.application.operations.own_plan_holds import OwnPlanGrace, grace_view
 from calendar_sync.application.sync.account_ports import ConnectedAccountRepository
 from calendar_sync.application.sync.plan_ports import Allowances
 from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.plan_hold import RulePlace, RuleStanding
 from calendar_sync.domain.plans import Allowance, exceeds, has_room
 
 
@@ -29,6 +31,10 @@ class OwnPlan:
     """Every Connected Account, Disconnected Accounts included."""
     integration_tokens: int
     """Integration Tokens not revoked."""
+    held_rules: int = 0
+    grace: OwnPlanGrace | None = None
+    rules: tuple[RuleStanding, ...] = ()
+    """Owned eligible keep choices in kept, oldest, identifier rank order."""
 
     @property
     def may_connect_account(self) -> bool:
@@ -41,8 +47,7 @@ class OwnPlan:
 
     @property
     def over_rule_limit(self) -> bool:
-        """Whether more rules count than the Plan allows, after the limit was lowered: nothing
-        stops, but no rule may start until fewer count."""
+        """Whether more rules count than the current Plan allows."""
         return exceeds(self.rules_counted, self.allowance.limits.rules)
 
 
@@ -62,7 +67,11 @@ class ShowOwnPlan:
         Plan that is not theirs, and the Web UI reads a failure as no hints (ADR 0038)."""
         allowance = self.allowances.of(self.owner)
         with self.unit_of_work() as uow:
-            rules = sum(1 for rule in uow.rules.list() if rule.counts_toward_plan)
+            standings = tuple(uow.rules.standings())
+            held = sum(each.place is RulePlace.HELD for each in standings)
+            grace = grace_view(
+                uow.plan_grace.get(), standings, allowance.limits.rules, uow.plan_grace.admissions()
+            )
         accounts = len(self.accounts.list()) if self.accounts is not None else 0
         tokens = sum(1 for token in self.tokens.list() if token.revoked_at is None)
-        return OwnPlan(allowance, rules, accounts, tokens)
+        return OwnPlan(allowance, len(standings) - held, accounts, tokens, held, grace, standings)

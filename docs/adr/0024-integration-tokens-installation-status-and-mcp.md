@@ -49,11 +49,27 @@ Homepage that show one tile per service.
   takes its tone from the server's status even when the client's own per-rule problem list has not
   caught up yet, such as between one dashboard poll and the next: a generic hero for that tone
   still tells the truth instead of contradicting it with healthy, paused, or setup copy.
+- **Plan Hold is an additive reader contract.** Status and MCP expose `counts.held` and
+  `rules[].stop_cause` (`lapsed_authorization`, `plan_hold`, or null). A held rule remains
+  `degraded` but has no Stopped or reauthorization problem. Monitors read `stop_cause` or
+  `needs_attention`, rather than infer failure from `state`. A hold covers only its own rule's
+  Incidents and blocks; an independently lapsed account keeps its own problem unless another
+  stopped rule covers it. Running and stopped counts exclude holds. All-held status is `paused`
+  after a successful run, otherwise `setup`, while mixed running and held rules can be `healthy`.
+  Held rules require a working scheduler to release automatically when their Allowance permits,
+  so they count toward `stalled` with the same timing. The Dashboard exposes `held_rules` and
+  filters held-owned incidents and blocks, using an exact incident count before the bounded
+  incident page. Problem assessment reads its own capped page of the 100 newest open incidents
+  after held-owner exclusion, so a full page of held incidents cannot hide an older active
+  problem. Account-owned incidents remain eligible. The status API and MCP retain raw incident
+  and block totals and the original incident list; Activity remains unchanged. MCP adds no tool or scope and directs the User to Your plan.
+  These readers are prepared in PR 3a; production activation remains pending until the visible
+  grace and hold state, keep form, and recovery controls ship together (ADR 0039).
 - **The scheduler reports its own heartbeat.** `SchedulerHeartbeat` in `application/operations/ports.py`
   exposes when the current pass started, if one is running, when the last pass completed without
   raising, and which rules that pass listed. A completed pass is published before the running one is
   cleared, so a reader never sees no pass running next to the previous completion. With enabled
-  rules and no scheduler available at all, such as when no installation master key is configured,
+  or held rules and no scheduler available at all, such as when no installation master key is configured,
   the status is `stalled`: a dead process already fails `/health`, so this is reserved for a live
   process whose scheduler is not doing its job. The status is also `stalled` when no pass has
   completed within 15 minutes (three scheduler intervals), counted from process start before the

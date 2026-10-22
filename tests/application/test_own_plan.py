@@ -1,7 +1,8 @@
 """Your plan: what the signed-in User's Plan allows them, and how much of it they have."""
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import timedelta
 
 import pytest
 
@@ -15,6 +16,7 @@ from calendar_sync.application.operations.own_plan import OwnPlan, ShowOwnPlan
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.domain.plan_hold import PlanGrace, RulePlace, RuleStanding
 from calendar_sync.domain.plans import (
     Allowance,
     AllowanceBasis,
@@ -274,7 +276,7 @@ def test_an_administrator_demoted_over_the_limit_is_limited_until_promoted_again
     )
 
 
-def test_a_plans_fault_fails_your_plan() -> None:
+def test_own_plan_failure_never_invents_an_allowance() -> None:
     show = ShowOwnPlan(
         BrokenAllowances(), memory_units(user=ALICE.id), None, ListedTokens(), ALICE.id
     )
@@ -283,3 +285,137 @@ def test_a_plans_fault_fails_your_plan() -> None:
     # still checks every limit.
     with pytest.raises(RuntimeError, match="database is locked"):
         show.execute()
+
+
+def test_own_plan_exposes_grace_held_rules_and_keep_choices() -> None:
+    show = _show(
+        _plans(), rules=COUNTED + NOT_COUNTED + (_rule("held", SyncRuleState.ENABLED).hold(),)
+    )
+    deadline = NOW + timedelta(days=7)
+    grace = PlanGrace(deadline, 1, 2)
+    with show.unit_of_work() as uow:
+        uow.rules.keep([SyncRuleId("replacement")])
+        uow.plan_grace.admit()
+        uow.plan_grace.admit()
+        uow.plan_grace.save(grace)
+        before = (uow.rules.list(), uow.rules.standings())
+        uow.commit()
+
+    own = show.execute()
+
+    assert own.held_rules == 1
+    assert own.grace is not None
+    assert (own.grace.holds_at, own.grace.rule_limit, own.grace.held, own.grace.reserved) == (
+        deadline,
+        1,
+        2,
+        1,
+    )
+    assert own.rules == tuple(sorted(before[1], key=lambda each: each.rank))
+    assert own.rules[0].rule_id == SyncRuleId("replacement")
+    assert len(own.rules) == 5
+    with show.unit_of_work() as uow:
+        assert (uow.rules.list(), uow.rules.standings()) == before
+        assert (uow.plan_grace.get(), uow.plan_grace.admissions()) == (grace, 2)
+
+
+def _standing(name: str, place: RulePlace, order: int, *, kept: bool = False) -> RuleStanding:
+    return RuleStanding(SyncRuleId(name), place, order, kept)
+
+
+@pytest.mark.parametrize(
+    ("places", "predicted"),
+    [
+        ((RulePlace.COUNTED, RulePlace.RESERVED), (0, 1)),
+        ((RulePlace.RESERVED, RulePlace.COUNTED), (1, 0)),
+        ((RulePlace.COUNTED, RulePlace.RESERVED, RulePlace.COUNTED), (1, 1)),
+    ],
+)
+def test_reserved_place_loss_is_not_a_predicted_hold(
+    places: tuple[RulePlace, ...], predicted: tuple[int, int]
+) -> None:
+    from calendar_sync.application.operations.own_plan_holds import grace_view
+
+    standings = tuple(_standing(str(order), place, order) for order, place in enumerate(places))
+    own = grace_view(PlanGrace(NOW, 1, 0), standings, 1, 0)
+
+    assert own is not None
+    assert (own.held, own.reserved) == predicted
+
+
+@pytest.mark.parametrize(
+    ("limit", "admissions", "expected"),
+    [(1, 3, None), (2, 4, None), (None, 3, None), (3, 3, (1, 0)), (2, 3, (1, 1)), (4, 3, None)],
+)
+def test_grace_view_uses_current_allowance_without_mutation(
+    limit: int | None, admissions: int, expected: tuple[int, int] | None
+) -> None:
+    from calendar_sync.application.operations.own_plan_holds import grace_view
+
+    # Kept first; creation order breaks ties. The already held rule consumes no place.
+    standings = (
+        _standing("new-kept", RulePlace.COUNTED, 5, kept=True),
+        _standing("old", RulePlace.COUNTED, 1),
+        _standing("reserved", RulePlace.RESERVED, 2),
+        _standing("new", RulePlace.COUNTED, 3),
+        _standing("held", RulePlace.HELD, 0),
+    )
+    grace = PlanGrace(NOW - timedelta(days=1), 2, 3)
+    own = grace_view(grace, standings, limit, admissions)
+
+    if expected is None:
+        assert own is None
+    else:
+        assert own is not None
+        assert (own.holds_at, own.rule_limit, own.held, own.reserved) == (
+            grace.holds_at,
+            limit,
+            *expected,
+        )
+    assert grace == PlanGrace(NOW - timedelta(days=1), 2, 3)
+    assert standings[-1].place is RulePlace.HELD
+
+
+def test_pausing_within_the_limit_hides_grace_without_clearing_it() -> None:
+    show = _show(_plans(), rules=COUNTED[:2])
+    grace = PlanGrace(NOW, 1, 0)
+    with show.unit_of_work() as uow:
+        uow.plan_grace.save(grace)
+        uow.rules.save(COUNTED[0].pause())
+        uow.commit()
+
+    assert show.execute().grace is None
+    with show.unit_of_work() as uow:
+        assert uow.plan_grace.get() == grace
+
+
+@pytest.mark.parametrize("who", ["off", "administrator", "unlimited"])
+def test_unlimited_allowances_hide_stored_grace(who: str) -> None:
+    plans = _plans(on=who != "off")
+    user = ADMIN if who == "administrator" else ALICE
+    if who == "unlimited":
+        plans.change(replace(FREE, limits=replace(FREE.limits, rules=None)), NOW)
+    show = _show(plans, user, rules=COUNTED)
+    with show.unit_of_work() as uow:
+        uow.plan_grace.save(PlanGrace(NOW, 1, 0))
+        uow.commit()
+
+    assert show.execute().grace is None
+
+
+@pytest.mark.parametrize("held", [False, True])
+def test_empty_or_held_only_choices_have_no_grace(held: bool) -> None:
+    rules = (_rule("held", SyncRuleState.ENABLED).hold(),) if held else NOT_COUNTED
+    show = _show(_plans(), rules=rules)
+    with show.unit_of_work() as uow:
+        uow.plan_grace.save(PlanGrace(NOW, 1, 0))
+        uow.commit()
+
+    own = show.execute()
+
+    assert (own.rules_counted, own.held_rules, own.grace) == (0, int(held), None)
+    assert len(own.rules) == int(held)
+
+
+def test_without_stored_grace_an_excess_does_not_invent_a_deadline() -> None:
+    assert _show(_plans(), rules=COUNTED).execute().grace is None

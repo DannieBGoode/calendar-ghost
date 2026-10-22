@@ -274,3 +274,26 @@ def test_oauth_discovery_is_not_answered_by_the_web_ui(mcp: Any, path: str) -> N
     response = client.get(path)
     assert response.status_code == 404
     assert response.headers["content-type"] == "application/json"
+
+
+def test_status_and_mcp_expose_identical_hold_counts_and_causes(mcp: Any) -> None:
+    client, token = mcp
+    container = client.app.state.container
+    owner = container.token_authentication.authenticate(token).owner
+    with container.for_user(owner).list_sync_rules.unit_of_work() as uow:
+        uow.rules.save(rule().hold())
+        uow.commit()
+    called = _rpc(client, token, "tools/call", {"name": "get_status", "arguments": {}}).json()
+    api = client.get("/api/v1/status", headers={"Authorization": f"Bearer {token}"}).json()
+    structured = called["result"]["structuredContent"]
+    assert structured["counts"] == api["counts"]
+    assert structured["rules"] == api["rules"]
+    assert api["counts"]["held"] == 1
+    assert (api["counts"]["running"], api["counts"]["stopped"]) == (0, 0)
+    assert api["rules"][0]["stop_cause"] == "plan_hold"
+    assert api["rules"][0]["problem"] is None
+    assert api["rules"][0]["name"] == "Unnamed calendar → Unnamed calendar"
+    found = _rpc(
+        client, token, "tools/call", {"name": "get_rule", "arguments": {"rule": "rule-1"}}
+    ).json()["result"]["structuredContent"]
+    assert found["rule"]["stop_cause"] == "plan_hold"

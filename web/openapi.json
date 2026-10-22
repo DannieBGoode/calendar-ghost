@@ -669,6 +669,10 @@
             "title": "Enabled Rules",
             "type": "integer"
           },
+          "held_rules": {
+            "title": "Held Rules",
+            "type": "integer"
+          },
           "lapsed_accounts": {
             "title": "Lapsed Accounts",
             "type": "integer"
@@ -746,6 +750,7 @@
           "sync_rules",
           "enabled_rules",
           "running_rules",
+          "held_rules",
           "stopped_rules",
           "open_incidents",
           "last_synced_at",
@@ -1847,6 +1852,22 @@
         "title": "IssuedLinkResponse",
         "type": "object"
       },
+      "KeptRulesRequest": {
+        "properties": {
+          "rule_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Rule Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rule_ids"
+        ],
+        "title": "KeptRulesRequest",
+        "type": "object"
+      },
       "LimitUseResponse": {
         "description": "How many of one resource a person has, beside what the Plan they have allows.",
         "properties": {
@@ -2054,6 +2075,34 @@
         "title": "OwnAccountDeletionResponse",
         "type": "object"
       },
+      "OwnPlanGraceResponse": {
+        "properties": {
+          "held": {
+            "title": "Held",
+            "type": "integer"
+          },
+          "holds_at": {
+            "title": "Holds At",
+            "type": "string"
+          },
+          "reserved": {
+            "title": "Reserved",
+            "type": "integer"
+          },
+          "rule_limit": {
+            "title": "Rule Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "holds_at",
+          "rule_limit",
+          "held",
+          "reserved"
+        ],
+        "title": "OwnPlanGraceResponse",
+        "type": "object"
+      },
       "OwnPlanResponse": {
         "description": "What the signed-in User's Plan allows and how much of it they have, for Your plan.",
         "properties": {
@@ -2068,6 +2117,20 @@
           },
           "connected_accounts": {
             "title": "Connected Accounts",
+            "type": "integer"
+          },
+          "grace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OwnPlanGraceResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "held_rules": {
+            "title": "Held Rules",
             "type": "integer"
           },
           "instant": {
@@ -2114,6 +2177,13 @@
             "title": "Poll Every Minutes",
             "type": "integer"
           },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleStandingResponse"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
           "rules_counted": {
             "title": "Rules Counted",
             "type": "integer"
@@ -2124,6 +2194,9 @@
           "plan",
           "limits",
           "rules_counted",
+          "held_rules",
+          "grace",
+          "rules",
           "connected_accounts",
           "integration_tokens",
           "instant",
@@ -3945,6 +4018,10 @@
             "title": "Effective Cadence",
             "type": "string"
           },
+          "held_rules": {
+            "title": "Held Rules",
+            "type": "integer"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -4035,6 +4112,21 @@
             "title": "State",
             "type": "string"
           },
+          "stop_cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lapsed_authorization",
+                  "plan_hold"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Cause"
+          },
           "sync_all_day_events": {
             "title": "Sync All Day Events",
             "type": "boolean"
@@ -4071,6 +4163,7 @@
           "unanswered_invitations",
           "sync_birthdays",
           "state",
+          "stop_cause",
           "reprojection_required",
           "effective_cadence",
           "poll_every_minutes",
@@ -4082,6 +4175,7 @@
           "running",
           "can_start",
           "rule_limit",
+          "held_rules",
           "keeps_place"
         ],
         "title": "RuleDetailResponse",
@@ -4183,6 +4277,21 @@
             "title": "State",
             "type": "string"
           },
+          "stop_cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lapsed_authorization",
+                  "plan_hold"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Cause"
+          },
           "sync_all_day_events": {
             "title": "Sync All Day Events",
             "type": "boolean"
@@ -4219,9 +4328,38 @@
           "unanswered_invitations",
           "sync_birthdays",
           "state",
+          "stop_cause",
           "reprojection_required"
         ],
         "title": "RuleResponse",
+        "type": "object"
+      },
+      "RuleStandingResponse": {
+        "properties": {
+          "kept": {
+            "title": "Kept",
+            "type": "boolean"
+          },
+          "place": {
+            "enum": [
+              "counted",
+              "reserved",
+              "held"
+            ],
+            "title": "Place",
+            "type": "string"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "place",
+          "kept"
+        ],
+        "title": "RuleStandingResponse",
         "type": "object"
       },
       "RuleSummaryResponse": {
@@ -4303,6 +4441,21 @@
             "title": "State",
             "type": "string"
           },
+          "stop_cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lapsed_authorization",
+                  "plan_hold"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Cause"
+          },
           "sync_all_day_events": {
             "title": "Sync All Day Events",
             "type": "boolean"
@@ -4339,6 +4492,7 @@
           "unanswered_invitations",
           "sync_birthdays",
           "state",
+          "stop_cause",
           "reprojection_required",
           "effective_cadence",
           "poll_every_minutes",
@@ -4908,6 +5062,10 @@
             "title": "Disconnected Accounts",
             "type": "integer"
           },
+          "held": {
+            "title": "Held",
+            "type": "integer"
+          },
           "lapsed_accounts": {
             "title": "Lapsed Accounts",
             "type": "integer"
@@ -4942,6 +5100,7 @@
           "running",
           "stopped",
           "paused",
+          "held",
           "overdue",
           "open_incidents",
           "blocked_events",
@@ -5160,12 +5319,28 @@
           "state": {
             "title": "State",
             "type": "string"
+          },
+          "stop_cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lapsed_authorization",
+                  "plan_hold"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Cause"
           }
         },
         "required": [
           "id",
           "name",
           "state",
+          "stop_cause",
           "source",
           "destination",
           "projection",
@@ -6196,6 +6371,56 @@
           }
         },
         "summary": "Own Plan"
+      }
+    },
+    "/api/v1/account/plan/kept-rules": {
+      "put": {
+        "description": "Replace the whole kept set and apply available places and swaps immediately, all or none.\nOnly this User's eligible rules may be chosen. A busy choice saves nothing; retry it later.",
+        "operationId": "keep_rules_api_v1_account_plan_kept_rules_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeptRulesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Keep Rules"
       }
     },
     "/api/v1/account/sign-in-methods": {

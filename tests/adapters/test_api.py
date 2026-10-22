@@ -167,6 +167,7 @@ def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
             "enabled_rules": 0,
             "running_rules": 0,
             "stopped_rules": 0,
+            "held_rules": 0,
             "open_incidents": 0,
             "last_synced_at": None,
             "blocked_events": 0,

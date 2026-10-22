@@ -91,17 +91,22 @@ class EnableSyncRule:
             # that raises fails the Start, so a fault never admits a rule past the limit.
             uow.rules.save(enabled)
             limit = self.allowances.of(self.owner).limits.rules
-            if limit is not None and not may_start(rule, _counted(uow.rules.list()), limit):
-                raise PlanLimitReached(LimitedResource.RULES, limit)
+            counted, held = _plan_counts(uow.rules.list())
+            if limit is not None and not may_start(rule, counted, limit):
+                raise PlanLimitReached(LimitedResource.RULES, limit, held)
             if not rule.counts_toward_plan:
                 uow.plan_grace.admit()
             uow.commit()
         return enabled
 
 
-def _counted(rules: Iterable[SyncRule]) -> int:
-    """How many of a User's rules count toward their Plan's rule limit (ADR 0038)."""
-    return sum(rule.counts_toward_plan for rule in rules)
+def _plan_counts(rules: Iterable[SyncRule]) -> tuple[int, int]:
+    """Count occupied places and Plan Holds from the same rules snapshot."""
+    counted = held = 0
+    for rule in rules:
+        counted += rule.counts_toward_plan
+        held += rule.stopped_by_plan_hold
+    return counted, held
 
 
 @dataclass(slots=True)
@@ -234,6 +239,7 @@ class SyncRuleDetails:
     """Whether Start would admit the rule now under its User's rule limit; Start checks again."""
     rule_limit: int | None = None
     """The rule limit that applies to the User; None when none does, or it could not be read."""
+    held_rules: int = 0
 
 
 @dataclass(slots=True)
@@ -248,7 +254,7 @@ class GetSyncRuleDetails:
             rule = uow.rules.get(rule_id)
             if rule is None:
                 raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
-            can_start, rule_limit = self._start_check(uow, rule)
+            can_start, rule_limit, held_rules = self._start_check(uow, rule)
             return SyncRuleDetails(
                 rule=rule,
                 mapping_count=uow.mappings.count_for_rule(rule_id),
@@ -259,9 +265,10 @@ class GetSyncRuleDetails:
                 names=uow.calendar_names.names((rule.source, rule.destination)),
                 can_start=can_start,
                 rule_limit=rule_limit,
+                held_rules=held_rules,
             )
 
-    def _start_check(self, uow: UnitOfWork, rule: SyncRule) -> tuple[bool, int | None]:
+    def _start_check(self, uow: UnitOfWork, rule: SyncRule) -> tuple[bool, int | None, int]:
         """Whether Start would admit the rule now, and the rule limit it would apply.
 
         Fails open: when the User's Allowance cannot be read, Start shows as allowed with no
@@ -276,10 +283,10 @@ class GetSyncRuleDetails:
                 self.owner.value,
                 error.__class__.__name__,
             )
-            return True, None
-        counting = _counted(uow.rules.list())
+            return True, None, 0
+        counting, held = _plan_counts(uow.rules.list())
         after = counting if rule.counts_toward_plan else counting + 1
-        return may_start(rule, after, limit), limit
+        return may_start(rule, after, limit), limit, held
 
 
 @dataclass(frozen=True, slots=True)

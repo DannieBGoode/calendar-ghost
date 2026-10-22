@@ -366,6 +366,10 @@ export const api = {
     call("/api/v1/account/instant-sync", "put", { body: { instant_sync: instantSync } }),
   /** What the signed-in User's Plan allows and how much of it they have. */
   ownPlan: () => call("/api/v1/account/plan", "get"),
+  /** Saves the whole set of rules chosen to keep syncing under the current Plan. */
+  chooseKeptRules: async (ruleIds: string[]): Promise<void> => {
+    await call("/api/v1/account/plan/kept-rules", "put", { body: { rule_ids: ruleIds } })
+  },
   /** What the Operator Overview shows administrators about the signed-in User. */
   /** Whether the signed-in User may delete themself now, and whether nobody would remain. */
   ownAccountDeletion: () => call("/api/v1/account/deletion", "get"),

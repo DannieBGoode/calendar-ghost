@@ -131,6 +131,31 @@ def test_a_start_past_the_rule_limit_is_refused_and_the_rule_stays_previewed() -
     assert _state(units, rule().id) is SyncRuleState.ENABLED
 
 
+@pytest.mark.parametrize("held", [False, True])
+def test_start_refusal_explains_held_rules(held: bool) -> None:
+    other = _rule(LATER, SyncRuleState.ENABLED)
+    units = _units(rule(), other.hold() if held else other.pause(), _rule(NEXT))
+    before = dict(units.state.rules)
+    details = GetSyncRuleDetails(units, RuleLocks(), _plans(), USER).execute(NEXT)
+
+    with pytest.raises(PlanLimitReached) as refused:
+        _start(units, _plans(), NEXT)
+
+    assert (refused.value.limit, refused.value.held_rules) == (1, int(held))
+    assert (details.can_start, details.rule_limit, details.held_rules) == (False, 1, int(held))
+    assert units.state.rules == before
+    with units() as uow:
+        assert uow.plan_grace.admissions() == 0
+
+
+def test_a_reserved_start_succeeds_while_another_rule_is_held() -> None:
+    units = _units(
+        rule(), _rule(LATER, SyncRuleState.ENABLED).hold(), replace(_rule(NEXT), keeps_place=True)
+    )
+
+    assert _start(units, _plans(), NEXT).synchronizes
+
+
 def test_a_start_counts_against_the_users_own_plan() -> None:
     four = [_rule(SyncRuleId(f"rule-{index}"), SyncRuleState.ENABLED) for index in range(2, 6)]
     units = _units(*four, _rule(NEXT), _rule(LATER))

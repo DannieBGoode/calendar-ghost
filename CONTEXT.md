@@ -83,9 +83,11 @@ place inherits its predecessor's order and keep mark; giving up that place is no
 The scheduler releases holds without a new preview when the Allowance permits, to Enabled when
 both accounts are authorized and otherwise to Lapsed Authorization. Previewing a held rule keeps
 the hold. The User's keep choice may release or swap held rules immediately (ADR 0039).
-The engine and private Plan notices exist in PR 2, but production passes explicitly disable it.
-Until PR 3 supplies activation, status, held-rule visuals, and the keep form, a lowered limit
-refuses new Starts and stops nothing; no production grace or Plan notice starts.
+The engine and private Plan notices exist in PR 2. PR 3a adds the keep-choice HTTP route and
+Plan Hold readers for Your plan, rules, status, Dashboard, and MCP. Production still composes
+`plan_holds=None`; activation, visible grace and held-rule controls, the keep form, recovery
+actions, and email explanations await PR 3b. Until then, a lowered limit refuses new Starts and
+stops nothing; no production grace or Plan notice starts.
 _Avoid_: Suspension, plan pause, downgrade deletion
 
 **Commercial Mode**:

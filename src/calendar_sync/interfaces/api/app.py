@@ -33,6 +33,7 @@ from calendar_sync.interfaces.api.routes import (
     incidents,
     integrations,
     password_reset,
+    plan_choices,
     plans,
     provider_sign_in,
     registration,
@@ -64,6 +65,7 @@ class UserApiServices(
     incidents.IncidentServices,
     integrations.IntegrationServices,
     plans.OwnPlanServices,
+    plan_choices.OwnPlanChoiceServices,
     rules.RuleServices,
     McpUserServices,
     Protocol,
@@ -190,6 +192,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         sign_in_provider_settings,
         registration,
         plans,
+        plan_choices,
         watch_notices,
     ):
         app.router.routes.extend(module.router.routes)

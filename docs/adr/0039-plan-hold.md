@@ -12,9 +12,11 @@ Authorization and from a failure that requires a recovery preview.
 - **The engine ships before activation.** PR 2 includes domain decisions, persistence, User-scoped
   settlement and keep choice, scheduler support, private emails, and the preference rename.
   Production composition explicitly passes `plan_holds=None`. It cannot start a grace, hold a
-  rule, or send a Plan notice. PR 3 must activate it in the same change as visible grace and hold
-  state, status, Dashboard, MCP, the keep form, and correct recovery actions. The following
-  settlement behavior describes the engine when explicitly composed.
+  rule, or send a Plan notice. PR 3a ships the keep-choice HTTP route and readers for Your plan,
+  rules, status, Dashboard, and MCP while retaining `plan_holds=None`. PR 3b must activate it in
+  the same change as visible grace and held-rule controls, the keep form, correct recovery
+  actions, and email explanations. No production grace or Plan notice starts before then. The
+  following settlement behavior describes the engine when explicitly composed.
 - **Use Degraded with stop code 2.** `sync_rules.awaiting_reauthorization` stores 0 for no
   self-resuming cause, 1 for Lapsed Authorization, and 2 for Plan Hold. The domain keeps exclusive
   booleans and exposes `stop_cause`; no new rule state is needed. Held rules do not synchronize,
@@ -34,7 +36,7 @@ Authorization and from a failure that requires a recovery preview.
   or ineligible identifiers as `RuleNotFound`, and rejects more than a finite limit as
   `TooManyKeptRules`. It saves all marks or none, releases kept held rules into free places, and
   can swap a kept held rule with the worst not-kept counted rule without changing the count.
-  These User-requested holds send no email. The HTTP route and form await PR 3.
+  These User-requested holds send no email. The HTTP route ships in PR 3a; the form awaits PR 3b.
 - **Preview preserves a hold.** Release needs no preview. It reads both account authorizations
   inside the transaction and returns Enabled only when both are authorized, otherwise
   lapse-stopped. Reauthorization resumes only code 1. Pause, disconnection, Material Rule Change,
