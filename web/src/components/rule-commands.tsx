@@ -180,7 +180,7 @@ export function RuleCommandMenu({
   const i18n = useI18n()
   const { t } = i18n
   // Read before any return, as the rules of hooks require.
-  const mayNotRestart = usePlanWarning() && countsTowardPlan(state, stopCause)
+  const mayNotRestart = usePlanWarning()
   const busy = pending !== undefined
   const items: OverflowMenuItem[] = []
   if (canRunNow(state, unauthorized, stopCause)) {
@@ -228,14 +228,9 @@ function canRunNow(state: string, unauthorized: boolean, stopCause: RuleSummary[
   return state === "enabled" && !unauthorized && stopCause !== "plan_hold"
 }
 
-/** Enabled and lapse-stopped rules count. A Plan Hold gives up its place. */
-function countsTowardPlan(state: string, stopCause: RuleSummary["stop_cause"]): boolean {
-  return stopCause !== "plan_hold" && (state === "enabled" || stopCause === "lapsed_authorization")
-}
-
 /**
- * What Pause does; and, while more rules count than the plan allows, that the plan may not let
- * the rule start again, since a paused rule gives up its place (decision 4).
+ * What Pause does, and why excess or held rules can prevent a later Start. This also applies
+ * when pausing a held rule, which ends its automatic release without freeing a place.
  */
 function pauseDescription({ t }: I18n, destination: string, mayNotRestart: boolean): string {
   const description = t("ruleDetails.commands.pauseDescription", { destination })

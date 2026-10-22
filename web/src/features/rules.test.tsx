@@ -403,6 +403,23 @@ function pauseDescription(menuLabel: string) {
 }
 
 describe("RulesView", () => {
+  it("warns before pausing a held rule even though it does not count toward capacity", async () => {
+    await renderRulesList(testI18n(), { rows: [ruleSummary("held", { state: "degraded", stop_cause: "plan_hold" })], ownPlan: jsonResponse({ ...overTheLimit, rules_counted: 1, held_rules: 1, over_rule_limit: false }) })
+    expect(container.textContent).toContain("Held by your plan")
+    expect(pauseDescription("More actions for Work A to Work B1")).toBe(
+      "Stop writing to Work B1. Existing events stay; resuming needs a new preview. Your plan may not let this rule start again.",
+    )
+  })
+
+  it("suppresses the held-rule Pause warning after a failed Plan read without disabling Pause", async () => {
+    await renderRulesList(testI18n(), { rows: [ruleSummary("held", { state: "degraded", stop_cause: "plan_hold" })], ownPlan: planUnreadable })
+    expect(pauseDescription("More actions for Work A to Work B1")).toBe(
+      "Stop writing to Work B1. Existing events stay; resuming needs a new preview.",
+    )
+    const pause = [...container.querySelectorAll("[role=menuitem]")].find((item) => item.querySelector(".overflow-menu-label")?.textContent === "Pause rule")!
+    expect(pause.getAttribute("aria-disabled")).not.toBe("true")
+  })
+
   it("preserves modified clicks on the hold's next step", async () => {
     const onViewChange = vi.fn()
     await renderRulesList(testI18n(), { rows: [ruleSummary("held", { state: "degraded", stop_cause: "plan_hold" })], ownPlan: jsonResponse(overTheLimit), onViewChange })
@@ -516,14 +533,14 @@ describe("RulesView", () => {
     expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
   })
 
-  it("warns in Pause that the plan may not let a rule that counts start again", async () => {
+  it("warns in Pause when the plan may not let any stopped rule start again", async () => {
     await renderRulesList(testI18n(), { ownPlan: jsonResponse(overTheLimit) })
     expect(pauseDescription("More actions for Work A to Work B1")).toBe(
       "Stop writing to Work B1. Existing events stay; resuming needs a new preview. Your plan may not let this rule start again.",
     )
-    // A rule a provider failure stopped no longer counts, so pausing it frees nothing.
+    // Warning eligibility is separate from capacity: an ordinary stopped rule may also be refused on Start.
     expect(pauseDescription("More actions for Work A to Work B2")).toBe(
-      "Stop writing to Work B2. Existing events stay; resuming needs a new preview.",
+      "Stop writing to Work B2. Existing events stay; resuming needs a new preview. Your plan may not let this rule start again.",
     )
   })
 

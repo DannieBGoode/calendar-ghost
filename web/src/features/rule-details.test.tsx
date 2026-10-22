@@ -295,6 +295,7 @@ describe("RuleDetailsView", () => {
     click(container.querySelector("button[aria-haspopup=menu]"))
     expect(container.querySelector("[role=menu]")?.textContent).toContain("Preview")
     expect(container.querySelector("[role=menu]")?.textContent).toContain("Pause rule")
+    expect(container.querySelector("[role=menu]")?.textContent).toContain("Your plan may not let this rule start again.")
     expect(container.querySelector("[role=menu]")?.textContent).not.toMatch(/Sync now|Reconcile now/)
   })
 
