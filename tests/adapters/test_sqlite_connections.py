@@ -274,3 +274,17 @@ def test_a_migration_that_fails_leaves_no_partial_change(
         connection.execute("DELETE FROM oauth_states")
     assert "half_done" not in tables
     assert versions == applied
+
+
+def test_readonly_connection_handles_uri_characters_and_wal(tmp_path: Path) -> None:
+    database = tmp_path / "calendar #?% ü.db"
+    with closing(open_connection(database)) as writer:
+        writer.execute("PRAGMA journal_mode = WAL")
+        writer.execute("CREATE TABLE synthetic (value INTEGER)")
+        writer.execute("INSERT INTO synthetic VALUES (42)")
+        writer.commit()
+        assert Path(f"{database}-wal").stat().st_size > 0
+        with closing(open_connection(database, mode="ro")) as reader:
+            assert reader.execute("SELECT value FROM synthetic").fetchone()[0] == 42
+            with pytest.raises(sqlite3.OperationalError, match="readonly"):
+                reader.execute("UPDATE synthetic SET value = 43")

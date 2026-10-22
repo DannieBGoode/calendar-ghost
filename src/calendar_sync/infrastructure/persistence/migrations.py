@@ -61,6 +61,11 @@ class MigrationFailed(RuntimeError):
     """A migration would have left a record referring to one that does not exist."""
 
 
+def supported_schema_versions() -> frozenset[int]:
+    """The exact ledger this binary understands, without opening or migrating a database."""
+    return frozenset((1, *(version for version, _ in _FORWARD_MIGRATIONS)))
+
+
 def initialize_database(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     migrations = files("calendar_sync.infrastructure.persistence")

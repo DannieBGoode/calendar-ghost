@@ -21,10 +21,14 @@ def open_connection(
     database_path: Path,
     *,
     timeout: float = BUSY_TIMEOUT_SECONDS,
+    mode: Literal["rwc", "rw", "ro"] = "rwc",
     isolation_level: Literal["DEFERRED", "IMMEDIATE", "EXCLUSIVE"] | None = "DEFERRED",
 ) -> sqlite3.Connection:
     """A connection with the installation's settings; the caller closes it."""
-    connection = sqlite3.connect(database_path, timeout=timeout, isolation_level=isolation_level)
+    target = database_path if mode == "rwc" else f"{database_path.absolute().as_uri()}?mode={mode}"
+    connection = sqlite3.connect(
+        target, timeout=timeout, isolation_level=isolation_level, uri=mode != "rwc"
+    )
     try:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
