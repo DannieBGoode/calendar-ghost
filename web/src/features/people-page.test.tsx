@@ -911,6 +911,14 @@ describe("People page", () => {
     expect(document.activeElement?.getAttribute("aria-label")).toBe("Actions for robin@example.test")
   })
 
+  it("keeps password recovery reachable for another User admitted under Only Me", async () => {
+    await renderPeople(testI18n(), { answers: { "GET /api/v1/registration": jsonResponse({ policy: "only_me", only_me_available: false }) } })
+    expect(container.querySelector("#invite-someone")).toBeNull()
+    expect(container.querySelector('a[href="/settings/administration"]')).not.toBeNull()
+    await choose("robin@example.test", "Create password reset link")
+    expect(container.querySelector<HTMLInputElement>(".link-reveal input")!.value).toBe(`${ORIGIN}/password-reset#reset_synthetic`)
+  })
+
   it("runs one command at a time, so a second reset link cannot revoke the one shown", async () => {
     await renderPeople(testI18n())
     // Hold each reset link's answer, so a later request can answer first.

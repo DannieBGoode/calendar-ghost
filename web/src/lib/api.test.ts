@@ -47,6 +47,8 @@ describe("api routes", () => {
       call("/api/v1/rules", "post"),
       // @ts-expect-error Removing a rule needs the projections query.
       call("/api/v1/rules/{rule_id}", "delete", { params: { rule_id: "r" } }),
+      // @ts-expect-error A provider begin body cannot contain provider claims.
+      call("/api/v1/sign-in/{slug}/start", "post", { params: { slug: "google" }, body: { subject: "private" } }),
       // @ts-expect-error The dashboard takes no body.
       call("/api/v1/dashboard", "get", { body: {} }),
       // @ts-expect-error Activity has no `rule` query parameter.
@@ -55,6 +57,15 @@ describe("api routes", () => {
       call("/api/v1/dashboard", "post"),
     ]
     expectTypeOf(wrongCalls).toBeFunction()
+  })
+
+  it("accepts an omitted or supplied optional provider start body", async () => {
+    const fetch = stubFetch(200, { authorization_url: "https://provider.example.test/authorize" })
+    await call("/api/v1/sign-in/{slug}/start", "post", { params: { slug: "google" } })
+    expect(requested(fetch).body).toBeUndefined()
+    fetch.mockClear()
+    await api.startProviderSignIn("google", { invitation_token: "synthetic", email: "robin@example.test" })
+    expect(JSON.parse(requested(fetch).body as string)).toEqual({ invitation_token: "synthetic", email: "robin@example.test" })
   })
 
   it("sends every activity filter as the query the route declares", async () => {

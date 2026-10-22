@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, LockKeyhole } from "lucide-react"
 import { useId, useState, type ReactNode, type SyntheticEvent } from "react"
 
@@ -11,8 +11,11 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { rich } from "@/i18n/rich"
 import type { I18n } from "@/i18n/translator"
+import { enabledSignInProviders } from "@/lib/sign-in-providers"
 import { api } from "@/lib/api"
 import { LICENSE_URL, PRODUCT_NAME, SOURCE_URL } from "@/lib/brand"
+
+import { ProviderSignInOptions, ProviderSignInFailure } from "@/features/provider-sign-in-options"
 
 type AuthScreenProps = {
   mode: "setup" | "login"
@@ -28,6 +31,7 @@ export function AuthScreen({ mode, passwordOnly = false, passwordResetAvailable 
   const passwordId = useId()
   const confirmationId = useId()
   const isSetup = mode === "setup"
+  const hasProviders = useHasProviders(isSetup)
   const form = useCredentials(isSetup, passwordOnly)
   const { password, setPassword, confirmation, setConfirmation, mismatch, canSubmit, mutation } = form
 
@@ -43,8 +47,10 @@ export function AuthScreen({ mode, passwordOnly = false, passwordResetAvailable 
       </div>
       <AuthIntro isSetup={isSetup} />
 
-      <AuthFormPanel isSetup={isSetup}>
+      <AuthFormPanel isSetup={isSetup} hasProviders={hasProviders}>
+        {!isSetup && <><ProviderSignInFailure /><ProviderSignInOptions /></>}
         <form onSubmit={submit} className="auth-form">
+          <SignInPasswordBoundary hasProviders={hasProviders} />
           <EmailField value={form.email} required={form.emailRequired} onChange={form.setEmail} />
           <div className="field-stack">
             <Label htmlFor={passwordId}>{t("auth.password")}</Label>
@@ -101,7 +107,7 @@ function AuthIntro({ isSetup }: { isSetup: boolean }) {
   )
 }
 
-function AuthFormPanel({ isSetup, children }: { isSetup: boolean; children: ReactNode }) {
+function AuthFormPanel({ isSetup, hasProviders, children }: { isSetup: boolean; hasProviders: boolean; children: ReactNode }) {
   const { t } = useI18n()
   return (
     <section className="auth-form-panel" aria-label={isSetup ? t("auth.createAdministrator") : t("auth.signIn")}>
@@ -109,7 +115,7 @@ function AuthFormPanel({ isSetup, children }: { isSetup: boolean; children: Reac
         <LockKeyhole aria-hidden="true" />
         <div>
           <h2>{isSetup ? t("auth.createAdministrator") : t("auth.signInHeading")}</h2>
-          <p>{isSetup ? t("auth.setup.emailNote") : t("auth.login.passwordNote")}</p>
+          <p>{isSetup ? t("auth.setup.emailNote") : t(hasProviders ? "auth.login.methodNote" : "auth.login.passwordNote")}</p>
         </div>
       </div>
       {children}
@@ -223,4 +229,15 @@ function SignInLinks({ registrationAvailable, passwordResetAvailable }: { regist
     {registrationAvailable && <Button variant="outline" size="lg" asChild><a href="/sign-up">{t("auth.signUp.heading")}</a></Button>}
     {passwordResetAvailable && <Button variant="ghost" size="lg" asChild><a href="/forgot-password">{t("auth.forgotPassword.heading")}</a></Button>}
   </>
+}
+
+
+function useHasProviders(isSetup: boolean) {
+  const providers = useQuery({ queryKey: ["sign-in-providers"], queryFn: api.signInProviders, enabled: !isSetup })
+  return !isSetup && enabledSignInProviders(providers.data).length > 0
+}
+
+function SignInPasswordBoundary({ hasProviders }: { hasProviders: boolean }) {
+  const { t } = useI18n()
+  return hasProviders ? <p className="provider-password-boundary">{t("auth.login.passwordAlternative")}</p> : null
 }

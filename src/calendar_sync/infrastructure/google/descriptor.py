@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from calendar_sync.application.identity.provider_sign_in_ports import (
+    ProviderAvailability,
+    ProviderSignInDescriptor,
+)
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.provider_descriptors import (
     ProviderConnection,
@@ -9,9 +13,12 @@ from calendar_sync.application.sync.provider_descriptors import (
 )
 from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService
+from calendar_sync.infrastructure.google.oidc import GoogleAuthorization
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
 from calendar_sync.infrastructure.google.watches import GoogleCalendarWatcher, GoogleNoticeReader
 from calendar_sync.infrastructure.oauth import OAuthClientConfig
+from calendar_sync.infrastructure.oidc_descriptor import sign_in_client
+from calendar_sync.infrastructure.oidc_http import RequestsOidcTransport
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
@@ -38,4 +45,19 @@ def google_provider(
         provider=GoogleCalendarProvider(oauth.service_for, clock),
         watcher=GoogleCalendarWatcher(oauth.service_for, clock),
         notice_reader=GoogleNoticeReader(),
+    )
+
+
+def google_sign_in(
+    client: OAuthClientConfig, origin: str | None, clock: Clock
+) -> ProviderSignInDescriptor:
+    configured = sign_in_client(client, origin, "google")
+    return ProviderSignInDescriptor(
+        ProviderAvailability(
+            "google",
+            configured is not None,
+            None if configured else "configuration_required",
+            can_verify_email=True,
+        ),
+        GoogleAuthorization(configured, clock, RequestsOidcTransport()) if configured else None,
     )

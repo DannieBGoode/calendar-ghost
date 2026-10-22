@@ -97,6 +97,13 @@ def test_sibling_completion_race_creates_one_user(tmp_path: Path) -> None:
     with transaction(database) as connection:
         assert (
             connection.execute(
+                "SELECT email_verified FROM users WHERE id=?", (user.id.value,)
+            ).fetchone()[0]
+            == 1
+        )
+    with transaction(database) as connection:
+        assert (
+            connection.execute(
                 "SELECT credential_revision FROM users WHERE id = ?", (user.id.value,)
             ).fetchone()[0]
             == 0

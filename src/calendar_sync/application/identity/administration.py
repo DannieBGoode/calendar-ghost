@@ -24,6 +24,7 @@ from calendar_sync.application.identity.ports import (
     RegistrationSettings,
     Session,
     Sessions,
+    SignInBrowser,
     SignInThrottle,
     UserDirectory,
 )
@@ -250,7 +251,14 @@ class AcceptInvitation:
     clock: Clock
     attempts: LinkAttempts
 
-    def execute(self, token: str, email: str, password: str, client: str) -> Session:
+    def execute(
+        self,
+        token: str,
+        email: str,
+        password: str,
+        client: str,
+        browser: SignInBrowser | None = None,
+    ) -> Session:
         now = self.clock.now()
         normalized = email_address(email)
         require_password(password)
@@ -274,7 +282,7 @@ class AcceptInvitation:
         except (LinkUnusable, EmailTaken):
             self.attempts.failed(client)
             raise
-        session = start_session(self.sessions, user.id, hashed, user.email, 0)
+        session = start_session(self.sessions, user.id, hashed, user.email, 0, browser)
         self.users.record_sign_in(user.id, now)
         return session
 

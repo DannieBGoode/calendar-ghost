@@ -1,6 +1,6 @@
 """Resolve identity email readiness from installation configuration."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 from urllib.parse import urlsplit
 
@@ -24,6 +24,7 @@ from calendar_sync.application.identity.password_reset import (
     SelfServicePasswordResets,
 )
 from calendar_sync.application.identity.ports import PasswordHasher, UserDirectory
+from calendar_sync.application.identity.provider_sign_in_ports import ProviderFlowMaintenance
 from calendar_sync.application.identity.registration import DeliverRegistration
 from calendar_sync.application.identity.registration_ports import (
     IdentityRegistrationSender,
@@ -114,6 +115,7 @@ class IdentityEmailAdapters:
     sender: IdentitySender | None
     email_changes: EmailChangeAdapters
     registrations: RegistrationAdapters
+    provider_stores: tuple[ProviderFlowMaintenance, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +197,7 @@ def compose_identity_email(
             else None,
             adapters.registrations.proofs,
             adapters.registrations.admission,
+            provider_stores=adapters.provider_stores,
         ),
     )
     return IdentityEmailServices(
@@ -230,9 +233,10 @@ class IdentityMailAdapters(Protocol):
 
 def compose_identity_mail(
     adapters: IdentityMailAdapters,
+    provider_stores: tuple[ProviderFlowMaintenance, ...] = (),
 ) -> tuple[IdentityEmailServices, IdentityMailWorker]:
     return compose_identity_email(
-        adapters.identity_email,
+        replace(adapters.identity_email, provider_stores=provider_stores),
         adapters.users,
         adapters.clock,
         adapters.self_service_resets,

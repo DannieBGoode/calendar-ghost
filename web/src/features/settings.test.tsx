@@ -224,6 +224,9 @@ function mockFetch({
   ...rest
 }: Scenario) {
   const responses: Record<string, Response> = {
+    "/api/v1/account/sign-in-methods": jsonResponse({ has_password: true, identities: [] }),
+    "/api/v1/sign-in/providers": jsonResponse({ providers: [] }),
+    "/api/v1/settings/sign-in-providers": jsonResponse([]),
     "/api/v1/providers": jsonResponse(providers ?? (configured ? [googleProvider(redirectUri)] : [])),
     "/api/v1/accounts": jsonResponse(accounts),
     "/api/v1/storage": jsonResponse(storage),
@@ -808,7 +811,7 @@ describe("Settings tabs", () => {
   it.each([
     ["connections", ["accounts-title", "integrations-title"]],
     ["account", ["own-account-title", "appearance-title"]],
-    ["administration", ["registration-title", "identity-email-title", "storage-title"]],
+    ["administration", ["registration-title", "identity-email-title", "sign-in-providers-title", "storage-title"]],
   ] as const)("shows the %s tab's sections", async (tab, shown) => {
     await renderSettings(testI18n(), { tab })
     expect(sections()).toEqual(shown)

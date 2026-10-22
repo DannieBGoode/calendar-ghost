@@ -14,6 +14,7 @@ from calendar_sync.application.identity.ports import (
     PasswordHasher,
     Session,
     Sessions,
+    SignInBrowser,
     UserDirectory,
 )
 from calendar_sync.application.identity.registration_admission import RegistrationAdmission
@@ -85,7 +86,9 @@ class CompleteRegistration:
     admission: RegistrationAdmission
     fingerprint: str | None
 
-    def execute(self, token: str, password: str, client: str) -> Session:
+    def execute(
+        self, token: str, password: str, client: str, browser: SignInBrowser | None = None
+    ) -> Session:
         self.admission.admit_completion(client)
         if (
             CheckRegistration(self.proofs, self.admission, self.fingerprint).execute(token, client)
@@ -100,7 +103,7 @@ class CompleteRegistration:
         if user is None:
             raise LinkUnusable("this registration link is no longer usable")
         try:
-            session = start_session(self.sessions, user.id, hashed, user.email, 0)
+            session = start_session(self.sessions, user.id, hashed, user.email, 0, browser)
             self.users.record_sign_in(user.id, self.clock.now())
         except SignInStorageUnavailable:
             # Admission already committed. Retrying this proof cannot create another User.

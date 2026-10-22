@@ -104,8 +104,8 @@ web/ and interfaces/  ->  application/  ->  domain/
   glossary concept that several contexts name belongs in `domain/`.
 - `src/calendar_sync/infrastructure/` owns Google and Microsoft Graph payload translation, OAuth,
   SQLite, scheduling, notifications, and cryptography. Each provider's package (`google/`,
-  `microsoft/`) exposes one descriptor to bootstrap; nothing outside it branches on its Provider
-  Kind, and the two never import each other (`docs/architecture.md`, Provider descriptors).
+  `microsoft/`) exposes calendar and sign-in descriptors to bootstrap; nothing outside it branches
+  on its Provider Kind, and the two never import each other (`docs/architecture.md`, Provider descriptors).
 - `src/calendar_sync/interfaces/` owns HTTP schemas, routes, sessions, and serving the compiled UI.
 - `src/calendar_sync/bootstrap/` is the only dependency-composition boundary.
 - `web/` contains the React source. Reuse the existing shadcn-style components and design tokens
@@ -192,7 +192,10 @@ the Docker build context, and has its own `Site` workflow.
   User's record answers 404, never 403, so its existence is not revealed (ADR 0029); the Operator
   Overview's route for one User, `/api/v1/users/{user_id}/overview`, also answers 404 to anyone
   who does not administer, as for an unknown User. Only setup,
-  sign-in, the session status and sign-out, the bounded public verified registration routes
+  sign-in, the session status and sign-out, the bounded provider sign-in routes
+  (`GET /api/v1/sign-in/providers`, `POST /api/v1/sign-in/{slug}/start`,
+  `GET /api/v1/sign-in/{slug}/callback`, `GET /api/v1/sign-in/pending`,
+  `POST /api/v1/sign-in/confirm`), the bounded public verified registration routes
   (`/api/v1/registrations/request`, `/api/v1/registrations/check`, `/api/v1/registrations`),
   the bounded public Password Reset Link request
   (`/api/v1/password-resets/request`), the token-protected Invitation and Password Reset Link
@@ -207,7 +210,9 @@ the Docker build context, and has its own `Site` workflow.
   `/mcp` are the only routes that accept an Integration Token, and `/mcp` accepts nothing else
   (ADR 0024). `tests/adapters/test_api_authorization.py` lists them; extend it with every route.
   Email-change verification requires the owning signed-in User's session, even to check a proof;
-  an Integration Token never authorizes those routes.
+  an Integration Token never authorizes those routes. Provider linking resolves the owning session
+  at both start and callback. Provider sign-in mutations require the configured Origin;
+  Integration Tokens authorize none.
 - Google writes use `sendUpdates=none`. Outlook writes are appointments with no attendees that ask
   for no responses, and never call `/cancel`, `/forward`, or a response action. A change that could
   email attendees or mutate source events is release-blocking.

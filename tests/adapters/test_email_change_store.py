@@ -33,6 +33,7 @@ def setup(
     )
     expected = h.changes.current(SECOND.id)
     assert expected
+    assert expected.password_hash is not None
     session = h.sessions.start(SECOND.id, expected.password_hash, expected.email, expected.revision)
     assert session
     return path, clock, h, store, expected, session
@@ -172,7 +173,8 @@ def test_confirmation_checks_ownership_and_live_session_atomically(
 
 
 def test_confirmation_keeps_only_confirming_session_and_revokes_resets(tmp_path: Path) -> None:
-    _path, clock, h, store, expected, session = setup(tmp_path)
+    path, clock, h, store, expected, session = setup(tmp_path)
+    assert expected.password_hash is not None
     other = h.sessions.start(SECOND.id, expected.password_hash, expected.email, 0)
     reset = h.links.issue(SECOND.id, FIRST.id, clock.now())
     request = store.request(expected, "new@example.test", session.token)
@@ -182,6 +184,13 @@ def test_confirmation_keeps_only_confirming_session_and_revokes_resets(tmp_path:
     result = store.confirm(expected, prepared.token, session.token)
     assert result
     assert result.previous_email == SECOND.email
+    with transaction(path) as connection:
+        assert (
+            connection.execute(
+                "SELECT email_verified FROM users WHERE id=?", (SECOND.id.value,)
+            ).fetchone()[0]
+            == 1
+        )
     changed = h.users.get(SECOND.id)
     credential = h.changes.current(SECOND.id)
     assert changed is not None
@@ -237,6 +246,7 @@ def test_email_change_uniqueness_race_is_neutral(tmp_path: Path) -> None:
     proof = store.prepare(request.id)
     other = h.changes.current(FIRST.id)
     assert other
+    assert other.password_hash is not None
     other_session = h.sessions.start(other.user_id, other.password_hash, other.email, 0)
     assert other_session
     clock.moment += timedelta(minutes=1)
@@ -263,6 +273,7 @@ def test_confirmation_failure_rolls_back_proof_credential_and_sessions(tmp_path:
     request = store.request(expected, "new@example.test", session.token)
     prepared = store.prepare(request.id)
     assert prepared
+    assert expected.password_hash is not None
     other = h.sessions.start(expected.user_id, expected.password_hash, expected.email, 0)
     assert other
     with transaction(path) as connection:
@@ -355,7 +366,7 @@ def test_email_change_migration_upgrade_restart_and_preservation(
     initialize_database(path)
     initialize_database(path)
     with transaction(path) as connection:
-        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 38
+        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 39
         assert not connection.execute("PRAGMA foreign_key_check").fetchall()
         assert not connection.execute("SELECT * FROM email_change_proofs").fetchall()
     if version:

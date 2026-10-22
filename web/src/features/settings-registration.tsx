@@ -39,12 +39,12 @@ export function RegistrationSection({ commands }: { commands: RegistrationComman
           registration={registration.data}
           pending={change.isPending}
           onChoose={(policy) => {
-            if (registration.data.policy === "open" && policy !== "open") setConfirmClose(policy)
+            if ((registration.data.policy === "open" && policy !== "open") || policy === "only_me") setConfirmClose(policy)
             else change.mutate(policy)
           }}
         />
       )}
-      {confirmClose && registration.data?.policy === "open" && <CloseRegistration policy={confirmClose} change={change} onClose={() => setConfirmClose(null)} />}
+      {confirmClose && registration.data?.policy !== confirmClose && <CloseRegistration policy={confirmClose} change={change} onClose={() => setConfirmClose(null)} />}
       <p className="field-hint registration-plan-note">{t("settings.registration.plansOff")}</p>
       {change.error && (
         <p className="field-error" role="alert">
@@ -60,7 +60,7 @@ function CloseRegistration({ policy, change, onClose }: { policy: RegistrationPo
   const { t } = useI18n()
   return <div className="settings-list p-6">
     <p>{t(policy === "only_me" ? "settings.registration.closeOnlyMeWarning" : "settings.registration.closeWarning")}</p>
-    <div className="mt-4 flex flex-wrap gap-3"><Button disabled={change.isPending} onClick={() => change.mutate(policy, { onSuccess: onClose })}>{t(policy === "only_me" ? "settings.registration.closeOnlyMeConfirm" : "settings.registration.closeConfirm")}</Button><Button variant="outline" onClick={onClose}>{t("settings.registration.keepOpen")}</Button></div>
+    <div className="mt-4 flex flex-wrap gap-3"><Button disabled={change.isPending} onClick={() => change.mutate(policy, { onSuccess: onClose })}>{t(policy === "only_me" ? "settings.registration.closeOnlyMeConfirm" : "settings.registration.closeConfirm")}</Button><Button variant="outline" onClick={onClose}>{t("settings.registration.cancelClose")}</Button></div>
   </div>
 }
 

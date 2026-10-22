@@ -10,8 +10,9 @@ control plane. This keeps the self-hosted data boundary visible in the code and 
 ownership understandable to the operator.
 
 Every record belongs to one User, and no User sees another's ([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
-[ADR 0030](adr/0030-users-administrators-and-registration.md)). Users sign in with email and
-password; an Installation Administrator is a User with a role, not a separate account. The
+[ADR 0030](adr/0030-users-administrators-and-registration.md)). Users sign in with email/password
+or an optional enabled Provider Identity; an Installation Administrator is a User with a role,
+not a separate account. The
 Registration Policy starts at Only Me, so a household installation that one person runs behaves as
 before. The future hosted service runs this same codebase (ADR 0023). The Operator Overview shows
 administrators every User's health without their calendars. Plans, behind their own setting and
@@ -34,7 +35,8 @@ Each context is one package of `application/`, with shared ports in `ports.py` o
   failures, retries, and provider call counts belong here. Calendar Watches of one User and
   their upkeep (`UpkeepWatches`) live here too.
 - **Identity and Access** (`application/identity`) owns Users, their roles and sessions, the
-  Registration Policy, Invitations and Password Reset Links, Integration Tokens, and Plans: their
+  Registration Policy, Invitations and Password Reset Links, Provider Identities and usable
+  sign-in methods, Integration Tokens, and Plans: their
   definitions, the Plans setting, and each User's own Plan.
 - **Operations** (`application/operations`) owns Activity, Installation Status, Installation
   Health and Installation Hints, the Operator Overview, and storage. It also runs Instant Sync
@@ -285,7 +287,7 @@ adapter's own tests cover what is particular to its provider
 
 ## Provider descriptors
 
-Each provider's package describes itself to bootstrap with one `ProviderDescriptor`
+Each provider's package describes itself to bootstrap with a calendar `ProviderDescriptor`
 (`application/sync/provider_descriptors.py`), and nothing outside that package knows anything else
 about the provider ([ADR 0022](adr/0022-route-calendar-requests-by-provider.md), amended):
 
@@ -303,6 +305,14 @@ about the provider ([ADR 0022](adr/0022-route-calendar-requests-by-provider.md),
 `ProviderDirectory`. Routing builds its adapter map from it, Installation Hints read the guides, and
 the Web API lists the connectable providers at `GET /api/v1/providers` and runs their flows. Without
 the installation master key, a descriptor offers only its guide.
+
+Provider sign-in has a separate `ProviderSignInDescriptor` in
+`application/identity/provider_sign_in_ports.py`. Each provider's `descriptor.py` exposes its
+sign-in factory beside its calendar factory; `bootstrap/provider_sign_in.py` composes these
+through the identity ports using the existing OAuth client settings. The calendar descriptor
+stays in Synchronization and cannot depend upward on Identity. Provider-specific issuer policy
+stays inside each provider package; neutral OIDC mechanics and route handlers do not branch on
+provider names. See the [identity descriptor amendment](adr/0022-route-calendar-requests-by-provider.md#amendment-identity-descriptors-2026-10-21).
 
 Only a Provider Kind names a provider in the domain, application, and interfaces, and no module
 outside a provider's package names a Provider Kind member: `tests/test_provider_neutrality.py`
@@ -574,3 +584,48 @@ reads/writes keep five seconds. Identity mail uses the configured trusted origin
 tokens, and no-store/no-referrer pages and responses. No token, address, password, body, account
 eligibility, or provider exception text reaches logs. See
 [deployment](deployment.md#verified-registration) for limits, lossy queues, retention, and rollback.
+
+## Provider sign-in boundary
+
+`domain/provider_identity.py` decides linking, admission, and whether a usable sign-in method
+remains. Identity use cases orchestrate narrow ports for configuration, proofs, admission, and
+owned methods; public writers never receive `InstallationUnitOfWork`. Separate identity
+descriptors preserve the downward context dependencies described above. A Provider Identity
+belongs to one User by exact validated issuer and `sub`, with a global uniqueness constraint.
+Email is linking/admission evidence, never a replacement identity key. Automatic linking also
+requires the matching User's Local Email Verification, read in the final transaction; otherwise
+password proof is required (ADR 0041). It creates
+no Connected Account, consumes no Connected Account Allowance, and changes no calendar consent.
+
+`infrastructure/oidc.py` uses Authlib's authorization-code/PKCE mechanics and joserfc's RS256
+signature verification. The adapter checks audience/authorized party, nonce, issuance and expiry
+with 60 seconds of clock skew, and bounded subject. Provider packages own trusted endpoints,
+issuer and tenant rules. Microsoft validates the tenant-expanded token and signing-key issuers
+and treats email as unverified. Unlinked identities with unverified email receive the same
+password-link flow whether a User exists or not; explicit linking proves the initiating live
+session instead. Tokens
+are discarded after translating claims, with no stored provider access/refresh tokens.
+
+Migration 39 makes password absence explicit as SQL NULL, adds conservative Local Email
+Verification, and adds the owned identities, separate
+anonymous and session-owned flow records, pending proofs, settings, and admission counters.
+State, browser binding, and pending proof values persist only as hashes; context is sealed with a
+purpose-derived Master Key. A callback claims its single-use flow before provider exchange.
+Final admission holds a short SQLite write lock to recheck time, configuration, provider
+enablement, ownership, credentials, active state, policy/readiness, and any Invitation. Identity
+binding, a new ordinary User with no own Plan when permitted, proof consumption, and a fresh
+seven-day session commit together. Owned linking retains its initiating session. Network calls,
+sealing, and password hashing stay outside that lock. Public flow storage uses 100 ms waits;
+owned method writes retain the ordinary five-second wait.
+
+Only Me's one-User restriction applies when choosing the policy. Later provider admission can
+consume a still-live Invitation with matching provider-verified email under Only Me, without
+changing the policy or enabling ordinary Invitation issuance/acceptance. People remains reachable
+when other Users or live Invitations exist; the administrator can revoke a live Invitation there. Open admission requires current matching identity email readiness.
+Unlinking or provider disablement checks remaining configured and enabled methods atomically;
+an environment change may still interrupt access. First-password setting and owned method
+changes advance the credential revision, preserve the current session, and revoke other sessions
+and pending credential proofs. Password-confirmed email change and User Deletion require a
+provider-only User to set a password first. See
+[operation and recovery](deployment.md#provider-sign-in-limits-and-recovery) and
+[migration 39](deployment.md#migration-39-provider-sign-in-storage).

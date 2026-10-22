@@ -25,9 +25,24 @@ def joining_api(path: str) -> bool:
     )
 
 
+def provider_api(path: str) -> bool:
+    return (
+        path.startswith(
+            (
+                "/api/v1/sign-in/",
+                "/api/v1/account/sign-in-methods",
+                "/api/v1/settings/sign-in-providers",
+            )
+        )
+        or path == "/api/v1/account/password"
+    )
+
+
 def _private(path: str) -> bool:
     return (
-        reset_api(path)
+        provider_api(path)
+        or path in {"/api/v1/session", "/api/v1/setup/admin", "/sign-in", "/provider-link"}
+        or reset_api(path)
         or email_change_api(path)
         or joining_api(path)
         or path
@@ -63,8 +78,16 @@ class IdentityBoundary:
             await send(message)
 
         path = scope["path"].rstrip("/")
-        bounded = (scope["method"] == "POST" and (reset_api(path) or joining_api(path))) or (
-            scope["method"] in {"POST", "PUT"} and email_change_api(path)
+        if provider_api(path) and len(scope.get("query_string", b"")) > BODY_LIMIT:
+            await JSONResponse(
+                {"code": "request_too_large", "detail": "Query is too large", "params": {}},
+                status_code=413,
+            )(scope, receive, private_send)
+            return
+        bounded = (
+            (provider_api(path) and scope["method"] in {"POST", "PUT", "DELETE"})
+            or (scope["method"] == "POST" and (reset_api(path) or joining_api(path)))
+            or (scope["method"] in {"POST", "PUT"} and email_change_api(path))
         )
         if bounded:
             body = await _bounded_body(receive)

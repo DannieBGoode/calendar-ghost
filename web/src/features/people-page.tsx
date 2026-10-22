@@ -32,7 +32,7 @@ const TAB_TITLES: Record<PeopleTab, MessageKey> = {
  * role and state, when they last signed in, and whether their synchronization works, never what
  * they own. People comes first, with Installation Health above them; the invitations still
  * waiting, and the Plans that limit people, have tabs of their own. The app offers this page only
- * while the Registration Policy lets people join. `notice` says what just happened elsewhere, such
+ * while the Registration Policy lets people join, or other Users need management. `notice` says what just happened elsewhere, such
  * as deleting someone from their own page; `panelFocus` moves focus to the Plan panel the address
  * opens, as a toast's next step does from elsewhere.
  */
@@ -143,10 +143,7 @@ function PeopleContent({
         </div>
         {!plans && (
           <div className="heading-action">
-            <Button id="invite-someone" type="button" disabled={invitations.invite.isPending} onClick={inviteSomeone}>
-              <UserPlus aria-hidden="true" />
-              {invitations.invite.isPending ? t("people.invitations.inviting") : t("people.invitations.invite")}
-            </Button>
+            <InvitationAction pending={invitations.invite.isPending} onInvite={inviteSomeone} />
           </div>
         )}
         {plans && (
@@ -215,4 +212,12 @@ function PeopleTabs({
       ]}
     />
   )
+}
+
+/** Only Me preserves recovery for admitted people, but still refuses issuing new Invitations. */
+function InvitationAction({ pending, onInvite }: { pending: boolean; onInvite: () => void }) {
+  const { t } = useI18n()
+  const registration = useQuery({ queryKey: ["registration"], queryFn: api.registration })
+  if (registration.data?.policy === "only_me") return <Button variant="outline" asChild><a href="/settings/administration">{t("people.invitations.changePolicy")}</a></Button>
+  return <Button id="invite-someone" type="button" disabled={pending} onClick={onInvite}><UserPlus aria-hidden="true" />{t(pending ? "people.invitations.inviting" : "people.invitations.invite")}</Button>
 }

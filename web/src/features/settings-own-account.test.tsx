@@ -38,6 +38,8 @@ let calls: Call[] = []
 
 function serve(answers: Record<string, Response> = {}) {
   const routes: Record<string, Response> = {
+    "GET /api/v1/account/sign-in-methods": jsonResponse({ has_password: true, identities: [] }),
+    "GET /api/v1/sign-in/providers": jsonResponse({ providers: [] }),
     "GET /api/v1/account/email-change": jsonResponse({ mode: "direct", reason: null, pending: null }),
     "PUT /api/v1/account/email": jsonResponse({ ...user, email: "robin@home.example.test" }),
     "PUT /api/v1/account/password": NO_CONTENT,
@@ -227,6 +229,15 @@ describe("OwnAccountSection", () => {
     root = null
     await renderSection(pseudoI18n(), { sendsEmail: false, signedIn: administrator })
     expect(untranslatedText(container, [user.email!])).toEqual([])
+  })
+
+  it("asks a provider-only User to set a password before email changes or deletion", async () => {
+    await renderSection(testI18n(), { answers: { "GET /api/v1/account/sign-in-methods": jsonResponse({ has_password: false, identities: [{ id: "linked-google", provider: "google" }] }) } })
+    expect(button("Change email").disabled).toBe(true)
+    expect(container.querySelector("#own-delete-toggle")).toBeNull()
+    expect(container.textContent).toContain("Set a password before changing your email.")
+    expect(container.textContent).toContain("Set a password before deleting your account.")
+    expect(button("Set password")).toBeDefined()
   })
 
   it("changes the email with the current password", async () => {

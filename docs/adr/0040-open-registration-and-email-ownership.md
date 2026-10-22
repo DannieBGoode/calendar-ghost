@@ -4,11 +4,13 @@ Status: accepted; verified email changes, context splits, and end-to-end Open re
 implemented on 2026-10-21 under [the design](../superpowers/specs/2026-10-20-open-registration-design.md).
 
 Delivery status on 2026-10-21: PR #129 identity email readiness and PR #130 self-service
-password recovery are merged, including migrations 35 and 36. Verified email changes (migration
-37) and context splits are complete. Open registration (migration 38) is implemented on the
-delivery branch; final security/outside review, complete gates, PR publication, and CI remain
-tracked in its [implementation plan](../superpowers/plans/2026-10-21-open-registration.md).
-Only Me remains the default. Provider sign-in and hosted backup/restore remain planned; no offline recovery tooling is claimed by this slice.
+password recovery are merged, including migrations 35 and 36. PR #131 verified email changes
+(migration 37), PR #132 context splits, and PR #133 Open registration (migration 38) are merged.
+Their delivery evidence remains in the corresponding implementation plans.
+Only Me remains the default. Provider sign-in (migration 39) is implemented on its delivery branch
+under the [approved plan](../superpowers/plans/2026-10-21-provider-sign-in.md); its whole-branch
+reviews, final gates, publication, and CI remain tracked there. Hosted backup/restore and offline
+recovery tooling remain planned.
 
 Amends [ADR 0030](0030-users-administrators-and-registration.md), within the isolation boundary of
 [ADR 0029](0029-isolate-users-in-one-sqlite-database.md) and the optional switches of
@@ -175,9 +177,8 @@ The owner replaced the original eight delivery slices after PR #129 and PR #130 
    modules stay in place. All four module splits are complete.
 3. **Open sign-up end to end.** Deliver the Open policy value and migration, verified joining,
    email-first sign-up, verified Invitations, administrator choice and readiness checks, and
-   screens together. Implemented on the delivery branch with migration 38; final delivery checks
-   and publication remain pending. Open requires explicit administrator choice and matching ready
-   identity email. There is no separate preparation release.
+   screens together. Merged as PR #133 with migration 38. Open requires explicit administrator
+   choice and matching ready identity email. There is no separate preparation release.
 4. **Sign in and sign up with Google or Microsoft.** Follow the OIDC decisions below. This has
    its own plan and does not change calendar consent.
 5. **Hosted backup and restore.** Combine narrow offline inspection/preparation and their
@@ -190,12 +191,84 @@ receive SQLite adapters only, tested on temporary databases; do not grow the in-
 New identity code stays out of the four growing files until their context split. No future proof
 tables or abstractions belong in the email-change PR.
 
-OIDC is now planned in remaining PR 4, amending ADR 0030's password-only scope. Provider identities
+OIDC in remaining PR 4 amends ADR 0030's password-only scope. Provider identities
 use issuer plus `sub`, never email. Linking starts from Your account while signed in; auto-link
-at sign-in requires a provider-verified email. Under Only Me and Invitation Only, admit only an
+at sign-in requires provider-verified email and matching Local Email Verification (ADR 0041).
+Under Only Me and Invitation Only, admit only an
 existing person or an invited person whose verified email matches. Under Open, create an ordinary
 User following the Default Plan. Each provider is off by default and enabled by the administrator.
 Reuse the installation's Google and Microsoft OAuth clients with `openid email profile` scopes;
 calendar consent is separate. A person may keep or set a password, and the last sign-in method
 cannot be removed. Use maintained OIDC library support, such as Authlib or the existing Google
 libraries, with no new service and no ORM. Each remaining PR needs its own approved plan.
+
+## Amendment: provider sign-in implementation (2026-10-21)
+
+The approved provider sign-in plan settles these details without adding another registration or
+email-proof system:
+
+- **Identity and calendar access stay separate.** Provider Identity is the validated issuer plus
+  `sub`, uniquely owned by one User, never the provider's mutable email. Sign-in links automatically
+  to an existing active User only with provider-verified email and matching Local Email Verification
+  (ADR 0041); explicit linking proves the live
+  owning session. Existing bindings win over changed email. No Provider Identity grants calendar
+  access, creates a Connected Account, or uses its Allowance. New admitted Users have Role.USER,
+  no own Plan, and follow the Default Plan. Open still requires matching Identity Email Readiness.
+- **Only Me has a narrow provider exception.** The one-User restriction applies when choosing Only
+  Me. Later provider admission may consume a still-live Invitation whose presented email matches
+  the provider-verified email, while that policy remains selected. Choosing Only Me cancels all
+  registration proofs, not live Invitations. Ordinary Invitation issuance, password acceptance,
+  and public joining without an Invitation remain forbidden. People remains available whenever
+  other Users or live Invitations exist. Returning to setup revokes Invitations, provider work, and enablement.
+- **Microsoft email is not verification.** `email`, `preferred_username`, and `upn` cannot prove
+  email ownership. The adapter always treats Microsoft email as unverified. Existing bindings
+  sign in; unlinked identities receive a generic password-link flow, with no callback account
+  lookup or existence signal based on unverified email. Newcomers complete existing verified email
+  registration under Open, then explicitly link from Your account. Microsoft subjects are pairwise
+  to the client ID: replacing it needs another usable method and explicit relinking.
+- **Passwords are optional, sensitive actions keep their confirmation.** SQL NULL represents no
+  password. A live owning session with the same credential revision may set a first password.
+  Replacing a password, changing email, and User Deletion still require the current password;
+  provider-only Users first set one. No password removal is added. A usable method is a password
+  or a linked provider both configured and enabled. Unlinking and administrator disablement
+  atomically refuse to strand an active User. Disablement keeps bindings. Environment loss can
+  still interrupt access; restore configuration or use an administrator-issued Password Reset
+  Link, which can set a first password without re-enabling a disabled User.
+- **OIDC has its own bounded boundary.** Authlib handles authorization-code/S256 PKCE mechanics,
+  joserfc verifies RS256 signatures and claims, and provider packages own issuer/tenant validation
+  through separate Identity descriptors (ADR 0022). Existing clients request only
+  `openid email profile`. Callbacks derive from the trusted public origin; no caller return URL
+  chooses a redirect. The Master Key seals context, bearer proofs persist only as hashes, and
+  provider tokens are discarded. Final identity/admission/session mutation rechecks authorization
+  under a short SQLite lock, with provider calls and hashing outside it.
+
+Migration 39 preserves existing User fields, passwords, sessions, Plans, and foreign keys while
+making passwords nullable and adding provider identities, settings, bounded flows and counters.
+Both providers are off by default. Upgrade requires a stopped-service backup of the complete
+database, matching Master Key, and previous image; rollback restores those together, losing later
+writes. Never run an old binary on the upgraded schema. See
+[migration 39](../deployment.md#migration-39-provider-sign-in-storage).
+
+Flows and pending proofs last at most ten minutes. Begins allow 20 per network per 15 minutes
+and 100 across the installation per hour, callbacks 20 per network per 15 minutes, and password
+confirmations 10 per network per 15 minutes. The global cap can temporarily lock provider-only
+Users out; password sign-in and administrator-issued recovery remain independent alternatives,
+with their own limits. Network groups are IPv4 addresses or IPv6 /64s; memory admits at most
+10,000 live network keys and storage at most 1,000 live flows/pending proofs. Public flow SQLite
+waits are 100 ms. These bounds do not promise distributed denial-of-service protection.
+
+OIDC callback code/state queries are the necessary exception to email proofs' fragment-only URLs.
+Application access logs remove them, authentication transport logs reveal no payload, and every
+reverse proxy must use path-only logging. No address, token, provider reply, or body belongs in
+logs. See [limits and recovery](../deployment.md#provider-sign-in-limits-and-recovery) and
+[proxy logging](../deployment.md#provider-sign-in-http-and-proxy-logs). No live provider sign-in
+verification is claimed by the synthetic tests or preview.
+
+
+## Amendment: local email assurance and complete password recovery (2026-10-22)
+
+[ADR 0041](0041-verify-local-email-before-provider-auto-link.md) tightens automatic linking to
+require both provider verification and Local Email Verification of the matching address. Existing
+unproven addresses use password confirmation. Every completed password recovery removes all old
+Provider Identities atomically, preserves Connected Accounts, and leaves local verification
+unchanged. This is the authoritative refinement of the original provider-only verification condition.

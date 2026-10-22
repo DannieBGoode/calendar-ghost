@@ -693,7 +693,10 @@ the address or Invitation first, completion refuses neutrally without changing t
 
 Under Invitation Only, Invitations still join directly without SMTP. A previously issued
 Invitation-bound verification link may also finish there without current SMTP/readiness. Only Me
-refuses every join. Returning to Invitation Only atomically cancels pending public proofs; Only Me
+refuses both email/password joining routes. The separate
+[provider admission exception](self-hosting.md#sign-in-with-google-or-microsoft) can consume a
+still-live Invitation with matching provider-verified email there. Returning to Invitation Only
+atomically cancels pending public proofs; Only Me
 cancels all registration proofs and still requires the sole-User condition. Reopening never revives
 cancelled proofs. Returning to setup also revokes Invitations and clears readiness.
 
@@ -810,3 +813,151 @@ live only in memory. Failed or cancelled preparation, shutdown, restart, or SMTP
 them; there is no delivery retry or outbox. Stopping the scheduler cancels and awaits its sender,
 without waiting for a bounded SMTP call already running or blocking the event loop on executor
 shutdown. The same sole executor lasts for the Scheduler object's lifetime.
+
+## Migration 39 provider sign-in storage
+
+Migration 39 rebuilds `users` so a missing password is stored as SQL NULL, and adds constrained
+`email_verified` with a conservative false default for every existing User. No historical email
+verification is inferred. First provider linking for an unverified local address requires password
+confirmation; ordinary sign-in keeps working. Verified registration, confirmed email change, and
+new verified-provider admission set the marker. Direct email changes clear it; linking and password
+recovery preserve it. See [ADR 0041](adr/0041-verify-local-email-before-provider-auto-link.md). Existing User fields,
+passwords, Plans and assignments, sessions, indexes, the email-retention trigger, and references
+are preserved. It adds User-owned `provider_identities`, uniquely bound by issuer and subject,
+and installation-wide `provider_sign_in_settings`. Every provider starts disabled; missing
+configuration remains unavailable even when administrator enablement is stored. Upgrade does
+not enable provider sign-in; an administrator must choose it with usable configuration.
+
+It also adds anonymous `provider_flows` and `provider_pending_links`, User-owned
+`provider_link_flows` with a composite owning-session reference, and purpose-separated
+`provider_sign_in_attempts`. Bearer proofs persist only as hashes; identity and Invitation context
+is sealed with a purpose-derived Master Key. Flows and pending proofs last at most ten minutes,
+with at most 1,000 live records together. Identity traffic and maintenance remove expired records
+in batches of 250; stopped services and backups may retain them longer. Public OIDC flow storage
+and provider-settings reads/writes wait at most 100 ms; owned method writes retain the ordinary
+five-second wait. Its independent admission budgets allow 20 begins and callbacks per network per 15 minutes,
+10 password confirmations per network per 15 minutes, and 100 begins per installation per hour.
+IPv6 networks use /64, and the front gate admits at most 10,000 live network keys. Denied requests
+add no durable counter. The provider sign-in routes compose these adapters; every provider remains
+disabled until an Installation Administrator enables it.
+
+A callback claims its flow once before contacting the provider. The claimed record stays
+revocable until admission or a pending password proof replaces it; setup and another successful
+sign-in in the same browser cancel it. Pending proofs also carry a purpose-keyed email digest for
+atomic sibling invalidation. The admission transaction rechecks current ownership, credentials,
+provider configuration, policy and Invitation evidence, then commits identity binding, any new
+ordinary User with no own Plan, proof consumption and a fresh seven-day session together.
+Provider sessions retain a hash of their anonymous browser binding for atomic cross-tab replacement;
+that binding is never itself a session token. Explicit owned linking keeps the current session,
+advances the credential revision and ends other sessions and proofs. Password checks, token
+hashing, sealing and provider calls happen before the final write lock. Ordinary password, setup,
+Invitation, and verified-registration session starts also cancel the previous cookie session and
+browser-bound provider work atomically with their replacement session.
+
+Before upgrading, stop the service, back up the complete database/data directory with its matching
+Master Key, and retain the previous image. Startup applies the migration and checks all foreign
+keys atomically. There is no down migration. To roll back, stop the service and restore the
+pre-upgrade data directory, matching Master Key, and previous image together. Never run an old
+binary against the upgraded database or remove migration records. Writes since the backup are
+lost on restore, and previously revoked access may return; review access before reopening ingress.
+
+A first password requires the User's live owning session and unchanged credential revision.
+Replacing an existing password, changing email, and User Deletion still require the current
+password. Setting a first password and unlinking an identity end other browser sessions and
+invalidate pending reset and email-change work; every completed reset ends all sessions and removes
+all of that User's Provider Identities in the same transaction. Calendar Connected Accounts, rules,
+and Integration Tokens stay. Sign in with the recovered password and link trusted providers again.
+Neither emailed nor administrator-issued reset establishes Local Email Verification: a NULL reset
+creator can also result from deleting its issuing administrator. Provider disablement
+and unlinking refuse to leave an active User without a password or an available, enabled provider
+method. Disablement preserves identity bindings. An environment change can still remove provider
+availability: restore its configuration or have an active Installation Administrator issue a
+Password Reset Link. Reset can set a first password without enabling a disabled User.
+
+### Provider sign-in limits and recovery
+
+Usable methods are passwords or linked providers whose current environment configuration and
+administrator enablement both permit sign-in. Provider Identities neither grant calendar access
+nor count as Connected Accounts toward an Allowance. See
+[setup, admission, and linking](self-hosting.md#sign-in-with-google-or-microsoft).
+
+Provider sign-in has these independent rolling admission budgets:
+
+| Boundary | Limit |
+| --- | --- |
+| Begins per client network, including owned linking | 20 per 15 minutes |
+| Callbacks per client network | 20 per 15 minutes |
+| Password-link confirmations per client network | 10 per 15 minutes |
+| Begins across the installation and both providers | 100 per hour |
+| Live flows and pending links together | 1,000 |
+| Live network keys in the memory gate | 10,000 |
+
+A client network is one IPv4 address or an IPv6 /64. New network keys are refused at capacity;
+live allowances are never evicted to make room. Admitted counts persist as purpose-separated
+keyed digests and timestamps, survive restart with the same Master Key, and are not refunded
+after success. Denied admissions write no durable counter. Expired counters are purged in batches
+of 250. Network/global throttles return 429 with `Retry-After`; callbacks redirect to a fixed
+unavailable page without exposing the reason. Password confirmation also uses the existing
+password failure throttle. Configure [trusted proxies](#trusted-proxy-headers) deliberately so
+clients do not all share the proxy's address.
+
+An attacker can exhaust the global 100-begins allowance and temporarily prevent provider-only
+Users from signing in, even from another network. The cap includes existing Users, not just
+newcomers. Wait for the window, use an existing password, or ask an active administrator for a
+Password Reset Link to set a first password. Ordinary password sign-in and reset have separate
+limits; reset token/completion limits still apply. Limits are not distributed denial-of-service
+protection. If no administrator can sign in, restore usable configuration or follow the existing
+stopped-service backup recovery procedure; no offline recovery command is shipped.
+
+Flows, anonymous browser proofs, and pending password proofs last at most ten minutes; a pending
+link cannot extend its original flow's deadline. A provider session lasts seven days. Restart or
+configuration changes may require starting again. Client ID, secret, tenant selector, and callback
+changes invalidate in-flight configuration bindings. Microsoft subjects are pairwise to the
+client ID: replacing it also prevents existing identity bindings from matching. Before replacing
+a client, establish and verify passwords or another usable provider. Sign in with that fallback,
+remove the obsolete Microsoft binding, then link Microsoft under the new client. A secret rotation on the same client does not change that identity key.
+
+Provider HTTP uses certificate verification, no redirects, a 10-second connect/read timeout per
+request, and a 1 MiB cap per response. This is not a ten-second total-flow deadline. Discovery and
+signing keys are cached for one hour with at most 100 keys; an unknown key identifier permits one
+forced key refresh. ID tokens are capped at 16 KiB and provider tokens are discarded after claim
+translation. Fixed provider endpoints and allowed HTTPS key hosts prevent token-controlled fetches.
+Request bodies and callback queries are capped at 8 KiB, states and Invitation tokens at 128 ASCII
+characters, authorization codes at 4,096 ASCII characters, emails at 254 characters, and password
+confirmations at 1,024 characters. First-password setting accepts 12 to 256 characters.
+
+### Provider sign-in HTTP and proxy logs
+
+Provider sign-in uses the installed Google or Microsoft client ID and secret, a Master Key, and a
+trusted `CALENDAR_SYNC_PUBLIC_URL` (HTTPS except loopback development). Register the additional
+exact callbacks `/api/v1/sign-in/google/callback` and `/api/v1/sign-in/microsoft/callback` under
+that origin. Calendar authorization callbacks stay separate. Each provider starts disabled;
+only an Installation Administrator can change its enablement through
+`/api/v1/settings/sign-in-providers`. Missing environment configuration keeps it unavailable.
+The requested sign-in scopes are exactly `openid email profile`. Sign-in never requests calendar
+scopes, `offline_access`, or `User.Read`, and stores no provider access or refresh token. The
+provider's sign-in configuration needs no SMTP for existing Users or invited admission under
+closed policies; Open admission additionally requires matching Identity Email Readiness.
+
+Public availability lists only enabled, configured provider slugs and their provider-owned
+`can_verify_email` capability. Invitation entry offers only capable providers and refuses other
+Invitation-bound starts before creating a flow. Capability means the provider can supply evidence,
+not that every identity has verified email; final admission still checks the actual claims. Public start and password
+confirmation refuse a signed-in browser; explicit linking starts through the owning account's
+route. Mutations require the exact configured Origin. Host-only HttpOnly SameSite=Lax browser
+proof and pending-proof cookies last ten minutes and are Secure on HTTPS. A success sets its
+session cookie only after bounded response reads succeed. Callbacks redirect only to `/overview`,
+`/settings/account`, `/provider-link`, `/sign-in?provider_result=unavailable`, or the fixed
+`/settings/account?provider_result=unavailable` for a currently signed-in owner. Your account
+shows the same generic failure alert. No requested return
+address or provider error is reflected. Provider exchanges and storage run in request workers,
+with password hashing and network calls outside SQLite write locks.
+
+OIDC authorization codes and states in callback queries are the protocol exception to email
+proofs' fragment-only URLs. Authentication responses and pages use `no-store` and `no-referrer`.
+The service removes sign-in queries from Uvicorn access logs and suppresses authentication
+transport debug output. Reverse proxies, ingress access logs, error logs, and request tracing must
+also omit query strings on `/api/v1/sign-in/*`; never record request bodies, cookies, Authorization
+headers, or provider replies. For Nginx use `$uri` instead of `$request_uri` or `$request` in the
+access-log format, and ensure error/debug logging or a tracing agent does not restore the query.
+Apply equivalent path-only logging at each upstream proxy before enabling provider sign-in.

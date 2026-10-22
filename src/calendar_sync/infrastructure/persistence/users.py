@@ -15,6 +15,7 @@ from calendar_sync.application.identity.credentials import CredentialSnapshot
 from calendar_sync.application.identity.errors import EmailTaken, SignInStorageUnavailable
 from calendar_sync.application.identity.ports import (
     Session,
+    SignInBrowser,
     SignInCredentials,
     UserPage,
     UserQuery,
@@ -25,6 +26,7 @@ from calendar_sync.domain.access import Role, User, UserId, UserState, require_a
 from calendar_sync.domain.plans import InvalidPlan, PlanKey
 from calendar_sync.infrastructure.persistence.connections import BUSY_TIMEOUT_SECONDS, transaction
 from calendar_sync.infrastructure.persistence.email_change_records import revoke_email_changes
+from calendar_sync.infrastructure.persistence.provider_flow_records import cancel_browser
 from calendar_sync.infrastructure.security import token_hash
 
 logger = logging.getLogger(__name__)
@@ -63,7 +65,7 @@ class SqliteUserDirectory:
         self._read_timeout = read_timeout
 
     def sign_in_credentials(self, email: str | None) -> SignInCredentials | None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=self._sign_in_timeout) as connection:
             row = connection.execute(
                 f"SELECT {_COLUMNS}, password_hash, credential_revision FROM users "  # noqa: S608
                 "WHERE email IS ?",
@@ -75,7 +77,7 @@ class SqliteUserDirectory:
         return SignInCredentials(
             user,
             CredentialSnapshot(
-                user.id, int(row["credential_revision"]), str(row["password_hash"]), user.email
+                user.id, int(row["credential_revision"]), row["password_hash"], user.email
             ),
         )
 
@@ -137,7 +139,7 @@ class SqliteUserDirectory:
         try:
             with transaction(self._database_path) as connection:
                 connection.execute(
-                    "UPDATE users SET email = ?, "
+                    "UPDATE users SET email = ?, email_verified = 0, "
                     "credential_revision = credential_revision + 1 WHERE id = ?",
                     (email, user_id.value),
                 )
@@ -163,7 +165,7 @@ class SqliteUserDirectory:
             row = connection.execute(
                 "SELECT password_hash FROM users WHERE id = ?", (user_id.value,)
             ).fetchone()
-        return str(row[0]) if row is not None else None
+        return row[0] if row is not None and row[0] is not None else None
 
     def set_password_hash(self, user_id: UserId, password_hash: str) -> None:
         with transaction(self._database_path) as connection:
@@ -250,7 +252,7 @@ class SqliteUserDirectory:
         return _user(row) if row is not None else None
 
 
-def insert_user(connection: sqlite3.Connection, user: User, password_hash: str) -> None:
+def insert_user(connection: sqlite3.Connection, user: User, password_hash: str | None) -> None:
     """Add a User inside the caller's transaction; raises EmailTaken."""
     try:
         connection.execute(
@@ -349,9 +351,19 @@ class SqliteSessions:
         self._sign_in_timeout = sign_in_timeout
 
     def start(
-        self, user_id: UserId, password_hash: str, email: str | None, revision: int
+        self,
+        user_id: UserId,
+        password_hash: str,
+        email: str | None,
+        revision: int,
+        browser: SignInBrowser | None = None,
     ) -> Session | None:
         token = secrets.token_urlsafe(32)
+        digest = token_hash(token)
+        previous = (
+            token_hash(browser.previous_token) if browser and browser.previous_token else None
+        )
+        browser_hash = token_hash(browser.proof) if browser and browser.proof else None
         with _sign_in_transaction(self._database_path, timeout=self._sign_in_timeout) as connection:
             connection.execute("BEGIN IMMEDIATE")
             now = self._clock.now()
@@ -360,21 +372,29 @@ class SqliteSessions:
             # between the check and the insert.
             started = connection.execute(
                 """
-                INSERT INTO user_sessions(token_hash, user_id, created_at, expires_at)
-                SELECT ?, id, ?, ? FROM users
+                INSERT INTO user_sessions(token_hash, user_id, created_at, expires_at, browser_hash)
+                SELECT ?, id, ?, ?, ? FROM users
                 WHERE id = ? AND password_hash = ? AND email IS ?
                     AND credential_revision = ? AND state = 'active'
                 """,
                 (
-                    token_hash(token),
+                    digest,
                     now.isoformat(),
                     expires.isoformat(),
+                    browser_hash,
                     user_id.value,
                     password_hash,
                     email,
                     revision,
                 ),
             ).rowcount
+            if started == 1:
+                if previous:
+                    connection.execute(
+                        "DELETE FROM user_sessions WHERE token_hash = ?", (previous,)
+                    )
+                if browser_hash:
+                    cancel_browser(connection, browser_hash, keep_session_hash=digest)
             connection.execute(
                 "DELETE FROM user_sessions WHERE expires_at <= ?", (now.isoformat(),)
             )
@@ -383,7 +403,7 @@ class SqliteSessions:
     def user_of(self, token: str | None) -> UserId | None:
         if not token:
             return None
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=self._sign_in_timeout) as connection:
             row = connection.execute(
                 """
                 SELECT user_sessions.user_id, user_sessions.expires_at FROM user_sessions

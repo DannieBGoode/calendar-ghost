@@ -200,7 +200,7 @@ def test_identity_email_migration_fresh_upgrade_and_restart(tmp_path: Path, vers
             None,
             0,
         )
-        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 38
+        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 39
 
 
 def test_identity_email_migration_rolls_back_on_fault(tmp_path: Path) -> None:

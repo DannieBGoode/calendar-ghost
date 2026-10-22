@@ -39,6 +39,7 @@ def test_target_cooldown_across_users(tmp_path: Path) -> None:
 
     other = h.changes.current(FIRST.id)
     assert other
+    assert other.password_hash is not None
     other_session = h.sessions.start(
         other.user_id, other.password_hash, other.email, other.revision
     )

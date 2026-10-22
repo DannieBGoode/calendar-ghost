@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Protocol
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from calendar_sync.application.identity.errors import (
     AdminAlreadyConfigured,
@@ -20,6 +20,7 @@ from calendar_sync.interfaces.api.schemas.identity import (
     SetupRequest,
     SetupStatusResponse,
 )
+from calendar_sync.interfaces.api.sign_in_cookies import browser_context
 
 
 class SetupIdentity(Identity, Protocol):
@@ -59,14 +60,19 @@ def setup_status(services: Services) -> SetupStatusResponse:
 
 
 @router.post("/api/v1/setup/admin", response_model=SessionResponse)
-def set_up(payload: SetupRequest, response: Response, services: Services) -> SessionResponse:
+def set_up(
+    payload: SetupRequest, request: Request, response: Response, services: Services
+) -> SessionResponse:
     try:
-        session = services.identity.set_up.execute(payload.email, payload.password)
+        session = services.identity.set_up.execute(
+            payload.email, payload.password, browser_context(request)
+        )
     except (AdminAlreadyConfigured, PasswordPolicyViolation) as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
     except InvalidEmail as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     except IncorrectCredentials as error:
         raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
+    answer = signed_in(services.identity.users.get(session.user_id), services)
     set_session_cookie(response, session.token, services.secure_cookies)
-    return signed_in(services.identity.users.get(session.user_id), services)
+    return answer

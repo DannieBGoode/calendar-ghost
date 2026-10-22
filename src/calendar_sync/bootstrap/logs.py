@@ -1,8 +1,8 @@
 """The service's own log lines: one per record, on standard error, timestamped in UTC.
 
-Only the `calendar_sync` logger is configured, apart from one filter that keeps Watch Notice paths
-out of Uvicorn's access log. Uvicorn keeps its own access and error logging, and other libraries
-keep Python's defaults.
+The `calendar_sync` logger writes application records. A Uvicorn access filter hides Watch Notice
+identifiers and sign-in query strings, and authentication transport debug output is suppressed.
+Uvicorn retains its handlers and other libraries keep Python's defaults.
 """
 
 from __future__ import annotations
@@ -32,12 +32,15 @@ class _UtcFormatter(logging.Formatter):
 class NoticePathFilter(logging.Filter):
     """Keeps registrations out of Uvicorn's access log. A Watch Notice's path names its
     registration, which no log line may (ADR 0036), so the line keeps only the provider's slug:
-    `/api/v1/watch-notices/<slug>/…`, without the registration or a query."""
+    `/api/v1/watch-notices/<slug>/…`, without the registration or a query. Provider sign-in
+    paths retain their route only, never authorization codes or states."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         args = record.args
         if isinstance(args, tuple) and len(args) > 2:
             path = str(args[2])
+            if path.startswith("/api/v1/sign-in/"):
+                record.args = (*args[:2], path.split("?", 1)[0], *args[3:])
             if path.startswith(NOTICE_PATH + "/"):
                 slug = path[len(NOTICE_PATH) + 1 :].split("/", 1)[0].split("?", 1)[0]
                 record.args = (*args[:2], f"{NOTICE_PATH}/{slug}/…", *args[3:])
@@ -60,6 +63,7 @@ def configure_logging(level: str, files: RotatingLogFiles | None = None) -> bool
         handler.setFormatter(_UtcFormatter())
         logger.addHandler(handler)
     _hide_notice_paths()
+    _quiet_auth_transport()
     attached = _write_to(logger, files)
     # Written here only, even when something else configures the root logger.
     logger.propagate = False
@@ -103,3 +107,15 @@ def _handler_for(logger: logging.Logger, files: RotatingLogFiles) -> logging.Han
             error.__class__.__name__,
         )
         return None
+
+
+def _quiet_auth_transport() -> None:
+    """Authentication libraries must never emit token bodies or callback query strings."""
+    roots = ("authlib", "requests", "urllib3")
+    names = set(roots) | {
+        name
+        for name in logging.Logger.manager.loggerDict
+        if name.startswith(tuple(root + "." for root in roots))
+    }
+    for name in names:
+        logging.getLogger(name).setLevel(logging.WARNING)

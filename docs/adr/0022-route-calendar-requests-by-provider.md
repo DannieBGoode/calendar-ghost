@@ -131,3 +131,23 @@ second provider existed.
 - **Adapters report unnamed calendars.** A discovered calendar says whether its provider gave it a
   name of its own; one without is remembered without a name, instead of the core recognizing
   Google's habit of naming it by its identifier.
+
+
+## Amendment: identity descriptors (2026-10-21)
+
+Provider sign-in adds an identity descriptor beside the calendar descriptor. The prior
+one-descriptor wording applies to calendar integration; adding identity ports to that
+Synchronization type would reverse the context dependency direction.
+
+`ProviderSignInDescriptor` in `application/identity/provider_sign_in_ports.py` contains environment
+availability and the optional `ProviderAuthorization` port. `google_sign_in` and
+`microsoft_sign_in`, in their packages' `descriptor.py`, reuse the installed OAuth clients and own
+the provider-specific construction. `bootstrap/provider_sign_in.py` composes them through neutral
+identity ports. The existing calendar descriptor, callbacks, scopes, and import contracts stay
+unchanged. The sign-in callback is derived from the trusted public origin, with separate
+`openid email profile` consent. No neutral layer branches on a provider name.
+
+The identity adapter returns only validated identity claims; provider access and refresh tokens
+are discarded. This descriptor creates no Connected Account and consumes none of its Allowance.
+See [ADR 0040](0040-open-registration-and-email-ownership.md#amendment-provider-sign-in-implementation-2026-10-21)
+for admission, usable methods, and migration 39.

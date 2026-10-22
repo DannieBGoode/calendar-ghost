@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
+import { ProviderSignInOptions } from "@/features/provider-sign-in-options"
 import { api } from "@/lib/api"
 
 /** Sign in in place: the proof stays in component memory and the fragment, never a return URL. */
@@ -33,6 +34,8 @@ export function EmailChangeSignIn({ isCurrent }: { isCurrent: () => boolean }) {
     if (ready && !login.isPending && isCurrent()) login.mutate()
   }
   return (
+    <>
+    <ProviderSignInOptions isCurrent={isCurrent}><p className="field-hint">{t("auth.provider.emailChange")}</p></ProviderSignInOptions>
     <form className="auth-form" onSubmit={submit} aria-busy={login.isPending}>
       <p>{t("auth.emailChange.signIn")}</p>
       <div className="field-stack">
@@ -43,6 +46,6 @@ export function EmailChangeSignIn({ isCurrent }: { isCurrent: () => boolean }) {
       {login.error && <p id="email-change-sign-in-error" className="inline-error" role="alert">{apiErrorMessage(i18n, login.error)}</p>}
       <Button type="submit" size="lg" aria-disabled={!ready || login.isPending}>{t(login.isPending ? "auth.pleaseWait" : "auth.signIn")}</Button>
       <p className="field-hint">{t("auth.emailChange.reopen")}</p>
-    </form>
+    </form></>
   )
 }

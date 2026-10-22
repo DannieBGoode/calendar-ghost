@@ -21,6 +21,7 @@ let container: HTMLDivElement
 let root: Root | null = null
 
 beforeEach(() => {
+  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse({ providers: [] }))))
   container = document.createElement("div")
   document.body.append(container)
 })
@@ -71,7 +72,7 @@ async function submit(container: HTMLElement) {
 }
 
 function sentBody(fetch: ReturnType<typeof vi.fn>): unknown {
-  const init = fetch.mock.calls[0]?.[1] as RequestInit | undefined
+  const init = fetch.mock.calls.find(call => (call[1] as RequestInit | undefined)?.method === "POST")?.[1] as RequestInit | undefined
   return init?.body ? JSON.parse(init.body as string) : undefined
 }
 

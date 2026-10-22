@@ -10,7 +10,7 @@ from calendar_sync.domain.access import UserId
 class CredentialSnapshot:
     user_id: UserId
     revision: int
-    password_hash: str = field(repr=False)
+    password_hash: str | None = field(repr=False)
     email: str | None = field(repr=False)
 
 

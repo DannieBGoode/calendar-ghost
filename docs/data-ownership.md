@@ -24,7 +24,17 @@ rules, or events ([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
   conferencing values are sealed with a key derived from the Installation Master Key. Earlier values
   are retained for the configured history window described in [Deployment](deployment.md).
 - Password hashes, session hashes, and a monotonic credential revision. Plaintext passwords and
-  session tokens are never stored.
+  session tokens are never stored. A provider-only User has SQL NULL instead of a password hash.
+- Provider Identities: the owning User, provider, validated issuer and subject (`sub`), and when
+  linked. The issuer/subject combination belongs to only one User; email changes never move it.
+  It is separate from a Connected Account, grants no calendar access, and consumes no Connected
+  Account Allowance. Provider enablement is stored separately, off by default. The account UI
+  exposes the provider and local binding identifier, not issuer/subject or provider tokens.
+- Short-lived provider flows and pending password proofs: hashed state/browser/token values,
+  expiry, and sealed identity, configuration, and optional Invitation context. Owned link flows
+  also reference their initiating User and session together. Context uses a purpose-derived
+  Master Key; access, refresh, and ID tokens are discarded after claim translation. Admission
+  counters retain timestamps and purpose-separated network digests, never plaintext networks.
 - Invitations and Password Reset Links: who created them, when, and when they expire or were used,
   with a SHA-256 hash of each link's token. Reset proofs also bind to the User's credential revision.
   Administrator links are shown once; self-service links are delivered by email. Plaintext links
@@ -74,6 +84,11 @@ Service log lines contain identifiers, counts, timings, and provider status cate
 contain event titles, descriptions, locations, guests, calendar identifiers, account emails, or
 provider payloads. The operator can turn file logging off and can download or purge the local log
 files from Settings.
+OIDC callbacks necessarily contain authorization codes and state in their queries. The service
+removes sign-in queries from Uvicorn access logs and suppresses authentication transport debug
+payloads. Each reverse proxy and tracing system must also omit authentication query strings,
+bodies, cookies, and authorization headers; application filtering cannot protect upstream logs.
+See [proxy log configuration](deployment.md#provider-sign-in-http-and-proxy-logs).
 
 ## What an Installation Administrator can see
 
@@ -128,6 +143,11 @@ The installation communicates with:
    anyone. With Instant Sync, the installation also tells Google and Microsoft its public address
    so they can report that a watched calendar or mailbox changed; their reports carry no event
    content.
+   Separately, when an administrator enables provider sign-in and someone uses it, the browser
+   visits Google or Microsoft's identity service, and the server exchanges an authorization
+   code and fetches discovery/signing keys from trusted provider endpoints. Only
+   `openid email profile` scopes are requested. Sign-in stores no calendar grant or provider
+   token; calendar consent remains a separate action under Connections.
 2. An SMTP server and a webhook URL only when the operator configures them. With SMTP, each User
    receives their own Incident Notifications at their email, unless they turn them off; the
    configured SMTP recipient and the webhook receive only incidents about the installation itself,
@@ -199,12 +219,26 @@ registration proofs and independent counters. It never selects Open during upgra
 down migration: close public registration, stop the service, and restore the matching pre-upgrade
 backup, key, and image together, losing later writes. Never run an old image against stored Open
 or the upgraded schema. See [migration 38](deployment.md#migration-38-open-registration).
+Migration 39 preserves existing Users and passwords, adds optional passwords, Provider Identities,
+and bounded sign-in flow storage. Local Email Verification starts false for legacy Users; a
+first provider link by email then requires password confirmation. Both providers start disabled. Rollback also requires the
+matching stopped-service pre-upgrade database, Master Key, and previous image; no old binary may
+open the upgraded schema. Restoring loses later writes and can revive identity bindings and
+sessions removed since the backup. See [migration 39](deployment.md#migration-39-provider-sign-in-storage).
 The planned offline recovery tooling and continuous-backup runbook are unshipped. A backup
 can revive sessions and credentials that were revoked after it was taken; recovering the matching
 database alone cannot prove that restored access remains authorized.
 
 ## Deletion and retention
 
+- Removing a Provider Identity deletes its binding without changing any Connected Account or
+  calendar grant. It cannot remove the last usable sign-in method. Administrator disablement
+  retains bindings. User Deletion removes owned identity bindings and link flows with the User.
+  Anonymous flows and pending links last at most ten minutes and are removed by identity traffic
+  and maintenance in batches of 250; the shared live-record cap is 1,000. Expired admission
+  counters are removed in batches of 250. Stopped services, storage faults, and backups can retain
+  records longer. Configuration loss can interrupt provider-only access; see
+  [recovery and admission limits](deployment.md#provider-sign-in-limits-and-recovery).
 - Registration proofs and counters are removed without the scheduler, aiming for removal within
   24 hours while running. Each batch reserves at most 250 proofs and 250 counters independently,
   with fair mail turns between full batches, even without SMTP or a Master Key. Read-only checks
@@ -262,3 +296,10 @@ Migration 34 stores keep marks on each User's rules and grace/admission fields o
 Only the User-scoped unit of work writes them. Plan mail is held in memory only; a newer pending
 notice replaces an older one for the same User, and failed preparation, cancellation, shutdown,
 restart, or SMTP failure can lose it. There is no delivery outbox.
+
+
+Completed password recovery removes every old Provider Identity of the recovered User in the
+same transaction as the new password and session invalidation. Connected Accounts and their
+calendar credentials remain. Sign in with the recovered password and explicitly link trusted
+providers again. Recovery preserves Local Email Verification; it never infers it from a reset
+issuer. See [ADR 0041](adr/0041-verify-local-email-before-provider-auto-link.md).

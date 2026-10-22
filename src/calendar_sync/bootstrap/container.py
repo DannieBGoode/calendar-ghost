@@ -102,6 +102,10 @@ from calendar_sync.bootstrap.operations import (
     _plan_services,
     _scheduled_services,
 )
+from calendar_sync.bootstrap.provider_sign_in import (
+    ProviderSignInServices,
+    compose_provider_sign_in,
+)
 from calendar_sync.bootstrap.registration import RegistrationServices, compose_registration
 from calendar_sync.bootstrap.shared import (
     UserServices,
@@ -172,6 +176,7 @@ class Container:
     secure_cookies: bool
     providers: ProviderDirectory
     """Every calendar provider this release knows, and how Users connect the configured ones."""
+    provider_sign_in: ProviderSignInServices
     identity: IdentityServices
     identity_email: IdentityEmailServices
     registrations: RegistrationServices
@@ -433,8 +438,12 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         adapters.plan_catalog,
         adapters.plan_assignments,
     )
-    identity_email, identity_mail_worker = compose_identity_mail(adapters)
+    provider_sign_in = compose_provider_sign_in(settings, adapters)
+    identity_email, identity_mail_worker = compose_identity_mail(
+        adapters, provider_sign_in.maintenance
+    )
     return Container(
+        provider_sign_in=provider_sign_in,
         identity_email=identity_email,
         registrations=compose_registration(
             adapters.identity_email.registrations,

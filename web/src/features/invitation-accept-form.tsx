@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useId, useState, type SyntheticEvent } from "react"
 
+import { ProviderSignInOptions } from "@/features/provider-sign-in-options"
 import { NewPasswordFields } from "@/components/new-password-fields"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -65,6 +66,7 @@ export function InvitationAcceptForm({ token, isCurrent, onSignedIn, email, onEm
           autoFocus
         />
       </div>
+      <ProviderSignInOptions invitation={{ token, email }} isCurrent={() => isCurrent(token)} />
       <NewPasswordFields
         password={passwords.password}
         confirmation={passwords.confirmation}

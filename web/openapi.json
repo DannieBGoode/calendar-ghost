@@ -301,6 +301,30 @@
         "title": "AuditEntryResponse",
         "type": "object"
       },
+      "AvailableProvidersResponse": {
+        "properties": {
+          "capabilities": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProviderCapabilitiesResponse"
+            },
+            "title": "Capabilities",
+            "type": "object"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers",
+          "capabilities"
+        ],
+        "title": "AvailableProvidersResponse",
+        "type": "object"
+      },
       "CalendarEndpointPayload": {
         "properties": {
           "calendar_id": {
@@ -451,6 +475,29 @@
           "password"
         ],
         "title": "ConfirmEmailChangeRequest",
+        "type": "object"
+      },
+      "ConfirmProviderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 1,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "ConfirmProviderRequest",
         "type": "object"
       },
       "ConnectedAccountResponse": {
@@ -1855,6 +1902,24 @@
         "title": "LinkStatusResponse",
         "type": "object"
       },
+      "LinkedIdentityResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider"
+        ],
+        "title": "LinkedIdentityResponse",
+        "type": "object"
+      },
       "LogUsageResponse": {
         "properties": {
           "bytes": {
@@ -2146,6 +2211,19 @@
           "expires_at"
         ],
         "title": "PendingInvitationResponse",
+        "type": "object"
+      },
+      "PendingProviderResponse": {
+        "properties": {
+          "password_required": {
+            "title": "Password Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "password_required"
+        ],
+        "title": "PendingProviderResponse",
         "type": "object"
       },
       "PersonPlanOverviewResponse": {
@@ -3165,6 +3243,19 @@
         "title": "ProviderCallsResponse",
         "type": "object"
       },
+      "ProviderCapabilitiesResponse": {
+        "properties": {
+          "can_verify_email": {
+            "title": "Can Verify Email",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "can_verify_email"
+        ],
+        "title": "ProviderCapabilitiesResponse",
+        "type": "object"
+      },
       "ProviderConfigurationResponse": {
         "properties": {
           "configured": {
@@ -3238,6 +3329,114 @@
           "cause_anchors"
         ],
         "title": "ProviderResponse",
+        "type": "object"
+      },
+      "ProviderSettingRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "ProviderSettingRequest",
+        "type": "object"
+      },
+      "ProviderSettingResponse": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "callback_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback Uri"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "callback_uri",
+          "provider",
+          "enabled",
+          "available",
+          "reason"
+        ],
+        "title": "ProviderSettingResponse",
+        "type": "object"
+      },
+      "ProviderStartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 254,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "invitation_token": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[\\x21-\\x7e]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invitation Token"
+          }
+        },
+        "title": "ProviderStartRequest",
+        "type": "object"
+      },
+      "ProviderStartResponse": {
+        "properties": {
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_url"
+        ],
+        "title": "ProviderStartResponse",
         "type": "object"
       },
       "RecentChangeResponse": {
@@ -4394,6 +4593,22 @@
         "title": "SessionResponse",
         "type": "object"
       },
+      "SetPasswordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "SetPasswordRequest",
+        "type": "object"
+      },
       "SetupRequest": {
         "properties": {
           "email": {
@@ -4443,6 +4658,27 @@
           "password_only_sign_in"
         ],
         "title": "SetupStatusResponse",
+        "type": "object"
+      },
+      "SignInMethodsResponse": {
+        "properties": {
+          "has_password": {
+            "title": "Has Password",
+            "type": "boolean"
+          },
+          "identities": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedIdentityResponse"
+            },
+            "title": "Identities",
+            "type": "array"
+          }
+        },
+        "required": [
+          "has_password",
+          "identities"
+        ],
+        "title": "SignInMethodsResponse",
         "type": "object"
       },
       "SignInRequest": {
@@ -5819,6 +6055,53 @@
       }
     },
     "/api/v1/account/password": {
+      "post": {
+        "operationId": "password_api_v1_account_password_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Password"
+      },
       "put": {
         "description": "Replace the password; every other session of the User ends.",
         "operationId": "change_password_api_v1_account_password_put",
@@ -5913,6 +6196,155 @@
           }
         },
         "summary": "Own Plan"
+      }
+    },
+    "/api/v1/account/sign-in-methods": {
+      "get": {
+        "operationId": "methods_api_v1_account_sign_in_methods_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInMethodsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Methods"
+      }
+    },
+    "/api/v1/account/sign-in-methods/{identity_id}": {
+      "delete": {
+        "operationId": "unlink_api_v1_account_sign_in_methods__identity_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identity_id",
+            "required": true,
+            "schema": {
+              "title": "Identity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unlink"
+      }
+    },
+    "/api/v1/account/sign-in-methods/{slug}/start": {
+      "post": {
+        "operationId": "start_api_v1_account_sign_in_methods__slug__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start"
       }
     },
     "/api/v1/accounts": {
@@ -8798,6 +9230,114 @@
         "summary": "Sign In"
       }
     },
+    "/api/v1/settings/sign-in-providers": {
+      "get": {
+        "operationId": "settings_api_v1_settings_sign_in_providers_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderSettingResponse"
+                  },
+                  "title": "Response Settings Api V1 Settings Sign In Providers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Settings"
+      }
+    },
+    "/api/v1/settings/sign-in-providers/{slug}": {
+      "put": {
+        "operationId": "enable_api_v1_settings_sign_in_providers__slug__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderSettingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable"
+      }
+    },
     "/api/v1/setup": {
       "get": {
         "operationId": "setup_status_api_v1_setup_get",
@@ -8852,6 +9392,168 @@
           }
         },
         "summary": "Set Up"
+      }
+    },
+    "/api/v1/sign-in/confirm": {
+      "post": {
+        "operationId": "confirm_api_v1_sign_in_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm"
+      }
+    },
+    "/api/v1/sign-in/pending": {
+      "get": {
+        "operationId": "pending_api_v1_sign_in_pending_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingProviderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Pending"
+      }
+    },
+    "/api/v1/sign-in/providers": {
+      "get": {
+        "operationId": "providers_api_v1_sign_in_providers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailableProvidersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Providers"
+      }
+    },
+    "/api/v1/sign-in/{slug}/callback": {
+      "get": {
+        "operationId": "callback_api_v1_sign_in__slug__callback_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Callback"
+      }
+    },
+    "/api/v1/sign-in/{slug}/start": {
+      "post": {
+        "operationId": "start_api_v1_sign_in__slug__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ProviderStartRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start"
       }
     },
     "/api/v1/status": {

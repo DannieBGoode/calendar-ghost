@@ -17,9 +17,12 @@ import { appPathForView, isPlainLeftClick } from "@/lib/navigation"
  * Installation Administrator cannot leave while anyone else remains, so they are sent to the
  * People page to name another one instead.
  */
-export function SelfDeletionItem({ onOpenPeople }: { onOpenPeople: () => void }) {
+export function SelfDeletionItem({ onOpenPeople, hasPassword = true }: { onOpenPeople: () => void; hasPassword?: boolean | null }) {
   // Asked afresh each time it is shown: who else is here and who administers it change elsewhere.
   const deletion = useQuery({ queryKey: ["account-deletion"], queryFn: api.ownAccountDeletion, staleTime: 0 })
+  const { t } = useI18n()
+  if (hasPassword === null) return null
+  if (!hasPassword) return <div className="setting-item"><h3>{t("settings.ownAccount.delete.title")}</h3><p className="field-hint"><a className="text-link" href="#own-password-toggle">{t("settings.signIn.passwordBeforeDelete")}</a></p></div>
   if (deletion.data?.needs_another_administrator) return <NeedsAnotherAdministrator onOpen={onOpenPeople} />
   // Until the answer arrives, or if it cannot, the server still refuses what it must.
   return <SelfDeletion lastUser={deletion.data?.last_user === true} />

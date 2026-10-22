@@ -28,22 +28,19 @@ def revoke_resets(connection: sqlite3.Connection, user_id: UserId, at: str) -> N
 
 
 class SqliteCredentialChanges:
-    def __init__(self, database_path: Path, clock: Clock) -> None:
+    def __init__(self, database_path: Path, clock: Clock, *, read_timeout: float = 5.0) -> None:
         self._database_path = database_path
         self._clock = clock
+        self._read_timeout = read_timeout
 
     def current(self, user_id: UserId) -> CredentialSnapshot | None:
-        with transaction(self._database_path) as connection:
+        with transaction(self._database_path, timeout=self._read_timeout) as connection:
             row = connection.execute(
                 "SELECT credential_revision, password_hash, email FROM users "
                 "WHERE id = ? AND state = 'active'",
                 (user_id.value,),
             ).fetchone()
-        return (
-            CredentialSnapshot(user_id, int(row[0]), str(row[1]), row[2])
-            if row is not None
-            else None
-        )
+        return CredentialSnapshot(user_id, int(row[0]), row[1], row[2]) if row is not None else None
 
     def change_password(self, expected: CredentialSnapshot, hashed: str, keep: str | None) -> bool:
         with transaction(self._database_path) as connection:
@@ -62,7 +59,7 @@ class SqliteCredentialChanges:
             changed = connection.execute(
                 "UPDATE users SET password_hash = ?, credential_revision = credential_revision + 1 "
                 "WHERE id = ? AND credential_revision = ? "
-                "AND password_hash = ? AND email IS ? AND state = 'active'",
+                "AND password_hash IS ? AND email IS ? AND state = 'active'",
                 (hashed, *_expected(expected)),
             ).rowcount
             if changed != 1:
@@ -82,9 +79,10 @@ class SqliteCredentialChanges:
                 if current_request(connection, expected.user_id, self._clock.now()) is not None:
                     raise EmailChangeUnavailable
                 changed = connection.execute(
-                    "UPDATE users SET email = ?, credential_revision = credential_revision + 1 "
+                    "UPDATE users SET email = ?, email_verified = 0, "
+                    "credential_revision = credential_revision + 1 "
                     "WHERE id = ? AND credential_revision = ? "
-                    "AND password_hash = ? AND email IS ? AND state = 'active'",
+                    "AND password_hash IS ? AND email IS ? AND state = 'active'",
                     (email, *_expected(expected)),
                 ).rowcount
                 if changed != 1:
@@ -97,5 +95,5 @@ class SqliteCredentialChanges:
         return True
 
 
-def _expected(expected: CredentialSnapshot) -> tuple[str, int, str, str | None]:
+def _expected(expected: CredentialSnapshot) -> tuple[str, int, str | None, str | None]:
     return expected.user_id.value, expected.revision, expected.password_hash, expected.email

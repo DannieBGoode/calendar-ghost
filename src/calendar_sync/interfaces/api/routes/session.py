@@ -24,6 +24,7 @@ from calendar_sync.interfaces.api.schemas.identity import (
     SignedInUserResponse,
     SignInRequest,
 )
+from calendar_sync.interfaces.api.sign_in_cookies import browser_context
 
 
 class SignInIdentity(Identity, Protocol):
@@ -61,7 +62,9 @@ def sign_in(
 ) -> SessionResponse:
     client = request.client.host if request.client is not None else "unknown"
     try:
-        session = services.identity.sign_in.execute(payload.email, payload.password, client)
+        session = services.identity.sign_in.execute(
+            payload.email, payload.password, client, browser_context(request)
+        )
     except IncorrectCredentials as error:
         raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
     except UserDisabled as error:
@@ -70,8 +73,9 @@ def sign_in(
         throttled = problem_from(status.HTTP_429_TOO_MANY_REQUESTS, error)
         throttled.headers = {"Retry-After": str(error.retry_after)}
         raise throttled from error
+    answer = signed_in(services.identity.users.get(session.user_id), services)
     set_session_cookie(response, session.token, services.secure_cookies)
-    return signed_in(services.identity.users.get(session.user_id), services)
+    return answer
 
 
 @router.get("/api/v1/session", response_model=SessionResponse)

@@ -188,3 +188,43 @@ class RegistrationAdmissionDigests:
             [1, category, values], ensure_ascii=True, separators=(",", ":")
         ).encode()
         return hmac.new(self._key, framed, hashlib.sha256).hexdigest()
+
+
+class ProviderSignInSecrets:
+    """Purpose-separated OIDC derivation and authenticated sealed flow context."""
+
+    def __init__(self, master_key: str) -> None:
+        self._key = HKDF(
+            algorithm=SHA256(),
+            length=32,
+            salt=None,
+            info=b"calendar-sync provider sign-in v1",
+        ).derive(_master_key_bytes(master_key))
+        self._cipher = AESGCM(
+            HKDF(
+                algorithm=SHA256(),
+                length=32,
+                salt=None,
+                info=b"calendar-sync provider sign-in sealed context v1",
+            ).derive(_master_key_bytes(master_key))
+        )
+
+    def digest(self, category: str, *values: str) -> str:
+        framed = json.dumps([category, values], separators=(",", ":")).encode()
+        return hmac.new(self._key, framed, hashlib.sha256).hexdigest()
+
+    def nonce(self, state: str, provider: str) -> str:
+        return self.digest("nonce", provider, state)
+
+    def verifier(self, state: str, provider: str) -> str:
+        return self.digest("pkce", provider, state)
+
+    def seal(self, plaintext: str, context: str) -> bytes:
+        nonce = secrets.token_bytes(12)
+        return nonce + self._cipher.encrypt(nonce, plaintext.encode(), context.encode())
+
+    def open(self, sealed: bytes, context: str) -> str | None:
+        try:
+            return self._cipher.decrypt(sealed[:12], sealed[12:], context.encode()).decode()
+        except (InvalidTag, ValueError):
+            return None

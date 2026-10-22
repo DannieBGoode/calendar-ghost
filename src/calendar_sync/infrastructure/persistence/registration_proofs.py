@@ -155,6 +155,7 @@ class SqliteRegistrationProofs:
                     return None
                 user = User(UserId(self._ids.new()), proof.email, Role.USER, UserState.ACTIVE, now)
                 insert_user(connection, user, password_hash)
+                connection.execute("UPDATE users SET email_verified=1 WHERE id=?", (user.id.value,))
                 connection.execute(
                     "UPDATE registration_proofs SET used_at = ? WHERE email = ? "
                     "AND used_at IS NULL AND revoked_at IS NULL",

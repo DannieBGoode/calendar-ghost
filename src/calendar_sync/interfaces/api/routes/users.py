@@ -98,6 +98,7 @@ from calendar_sync.interfaces.api.schemas.operations import (
     UserOverviewResponse,
     UserPageResponse,
 )
+from calendar_sync.interfaces.api.sign_in_cookies import browser_context
 from calendar_sync.interfaces.api.status_payload import resource_use_response, status_response
 
 
@@ -233,7 +234,13 @@ def accept_invitation(
 ) -> SessionResponse:
     accept = services.administration.accept_invitation
     try:
-        session = accept.execute(payload.token, payload.email, payload.password, _client(request))
+        session = accept.execute(
+            payload.token,
+            payload.email,
+            payload.password,
+            _client(request),
+            browser_context(request),
+        )
     except LinkAttemptsThrottled as error:
         raise _throttled(error) from error
     except LinkUnusable as error:
@@ -249,8 +256,9 @@ def accept_invitation(
     except IncorrectCredentials as error:
         # Joined, but the password was reset before the session started: sign in instead.
         raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
+    answer = signed_in(services.identity.users.get(session.user_id), services)
     set_session_cookie(response, session.token, services.secure_cookies)
-    return signed_in(services.identity.users.get(session.user_id), services)
+    return answer
 
 
 @router.get("/api/v1/users", response_model=UserPageResponse)

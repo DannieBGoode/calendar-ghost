@@ -22,6 +22,7 @@ from calendar_sync.application.identity.ports import (
     PasswordHasher,
     Session,
     Sessions,
+    SignInBrowser,
     SignInCredentials,
     SignInThrottle,
     UserDirectory,
@@ -50,7 +51,7 @@ class SetUpInstallation:
     ids: IdGenerator
     clock: Clock
 
-    def execute(self, email: str, password: str) -> Session:
+    def execute(self, email: str, password: str, browser: SignInBrowser | None = None) -> Session:
         now = self.clock.now()
         user = User(
             UserId(self.ids.new()),
@@ -62,7 +63,7 @@ class SetUpInstallation:
         hashed = self.passwords.hash(require_password(password))
         if not self.users.add_first(user, hashed):
             raise AdminAlreadyConfigured("Calendar Ghost is already set up; sign in instead")
-        session = start_session(self.sessions, user.id, hashed, user.email, 0)
+        session = start_session(self.sessions, user.id, hashed, user.email, 0, browser)
         self.users.record_sign_in(user.id, now)
         return session
 
@@ -82,7 +83,9 @@ class SignIn:
     def __post_init__(self) -> None:
         self._decoy = self.passwords.hash(secrets.token_urlsafe(16))
 
-    def execute(self, email: str | None, password: str, client: str) -> Session:
+    def execute(
+        self, email: str | None, password: str, client: str, browser: SignInBrowser | None = None
+    ) -> Session:
         address = _normal_email(email)
         keys = (f"email:{address or ''}", f"client:{client}")
         wait = self.throttle.wait(keys)
@@ -100,7 +103,12 @@ class SignIn:
         self.throttle.succeeded(keys)
         assert facts is not None
         session = start_session(
-            self.sessions, user.id, hashed, facts.credential.email, facts.credential.revision
+            self.sessions,
+            user.id,
+            hashed,
+            facts.credential.email,
+            facts.credential.revision,
+            browser,
         )
         self.users.record_sign_in(user.id, self.clock.now())
         return session
@@ -113,14 +121,23 @@ class SignIn:
 
 
 def start_session(
-    sessions: Sessions, user_id: UserId, password_hash: str, email: str | None, revision: int
+    sessions: Sessions,
+    user_id: UserId,
+    password_hash: str,
+    email: str | None,
+    revision: int,
+    browser: SignInBrowser | None = None,
 ) -> Session:
     """A session for the User whose password was just checked against `password_hash`.
 
     Checking a password is slow, so an email or password change, reset, or disabling can land in
     between; the session starts only if none did, atomically with its start.
     """
-    session = sessions.start(user_id, password_hash, email, revision)
+    session = (
+        sessions.start(user_id, password_hash, email, revision, browser)
+        if browser is not None
+        else sessions.start(user_id, password_hash, email, revision)
+    )
     if session is None:
         raise IncorrectCredentials(
             "the credentials changed or the User was disabled; sign in again"
@@ -210,5 +227,10 @@ def _current(credentials: CredentialChanges, user_id: UserId) -> CredentialSnaps
 
 
 def _confirm(expected: CredentialSnapshot, passwords: PasswordHasher, password: str | None) -> None:
-    if password is None or not passwords.verify(password, expected.password_hash):
+    if (
+        password is None
+        or len(password) > 1024
+        or expected.password_hash is None
+        or not passwords.verify(password, expected.password_hash)
+    ):
         raise IncorrectPassword("that is not your current password")

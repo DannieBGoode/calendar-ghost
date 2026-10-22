@@ -1,3 +1,4 @@
+import { SignInProvidersSection } from "./settings-sign-in-providers"
 import { IdentityEmailSection } from "./settings-identity-email"
 import { useQuery } from "@tanstack/react-query"
 import { CheckCircle2, ShieldAlert } from "lucide-react"
@@ -200,6 +201,7 @@ function AdministrationTab() {
     <>
       <RegistrationSection commands={registration} />
       <IdentityEmailSection />
+      <SignInProvidersSection />
       <StorageSection />
     </>
   )

@@ -36,6 +36,7 @@ from calendar_sync.interfaces.api.schemas.identity import (
     SignUpAcceptedResponse,
     SignUpRequest,
 )
+from calendar_sync.interfaces.api.sign_in_cookies import browser_context
 
 
 class RegistrationAvailability(Protocol):
@@ -124,7 +125,7 @@ def complete_registration(
 ) -> SessionResponse:
     try:
         session = services.registrations.complete.execute(
-            payload.token, payload.password, _client(request)
+            payload.token, payload.password, _client(request), browser_context(request)
         )
         try:
             user = services.registrations.answers.get(session.user_id)

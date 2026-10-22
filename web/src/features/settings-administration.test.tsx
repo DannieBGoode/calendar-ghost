@@ -55,6 +55,9 @@ let calls: Call[] = []
 
 function serve({ role = "installation_administrator", registration, answers = {} }: Scenario) {
   const defaults: Record<string, Response> = {
+    "GET /api/v1/account/sign-in-methods": jsonResponse({ has_password: true, identities: [] }),
+    "GET /api/v1/sign-in/providers": jsonResponse({ providers: [] }),
+    "GET /api/v1/settings/sign-in-providers": jsonResponse([]),
     "GET /api/v1/session": jsonResponse(session(role)),
     "GET /api/v1/identity-email": jsonResponse({ configured: false, unavailable_reason: "smtp_missing", test_state: "idle", tested_at: null }),
     "GET /api/v1/providers": jsonResponse([]),
@@ -263,11 +266,15 @@ describe("Settings for someone who is not an administrator", () => {
 })
 
 
-it("confirms Only me cancels public and Invitation-bound pending sign-ups", async () => {
-  await renderSettings(testI18n(), { registration: { policy: "open", only_me_available: true, open_available: true, open_unavailable_reason: null }, answers: { "PUT /api/v1/registration": jsonResponse({ policy: "only_me", only_me_available: true, open_available: true, open_unavailable_reason: null }) } })
+it.each(["open", "invitation_only"] as const)("confirms Only me from %s and explains the live Invitation exception", async policy => {
+  await renderSettings(testI18n(), { registration: { policy, only_me_available: true, open_available: true, open_unavailable_reason: null }, answers: { "PUT /api/v1/registration": jsonResponse({ policy: "only_me", only_me_available: true, open_available: true, open_unavailable_reason: null }) } })
   await click(container.querySelector<HTMLInputElement>("input[value=only_me]")!)
   expect(sent("PUT", "/api/v1/registration")).toBeUndefined()
   expect(container.textContent).toContain("including sign-ups linked to invitations")
+  expect(container.textContent).toContain("Revoke unwanted Invitations in People before switching")
+  expect(container.textContent).toContain("matching provider-verified email")
   await click([...container.querySelectorAll("button")].find((button) => button.textContent === "Switch to Only me")!)
   expect(sent("PUT", "/api/v1/registration")?.body).toEqual({ policy: "only_me" })
+  expect(container.textContent).not.toContain("Only you can use this Calendar Ghost now")
+  expect(container.textContent).not.toContain("Nobody else can join")
 })

@@ -22,6 +22,7 @@ from calendar_sync.application.identity.ports import (
     PlanListing,
     PlansSetting,
     Session,
+    SignInBrowser,
     SignInCredentials,
     UserPage,
     UserQuery,
@@ -206,7 +207,12 @@ class MemorySessions:
     started: int = 0
 
     def start(
-        self, user_id: UserId, password_hash: str, email: str | None, revision: int
+        self,
+        user_id: UserId,
+        password_hash: str,
+        email: str | None,
+        revision: int,
+        browser: SignInBrowser | None = None,
     ) -> Session | None:
         user = self.users.get(user_id)
         if (
@@ -217,6 +223,8 @@ class MemorySessions:
             or self.users.revisions[user_id] != revision
         ):
             return None
+        if browser is not None:
+            self.end(browser.previous_token)
         self.started += 1
         token = f"session-{self.started}"
         self.sessions[token] = user_id
@@ -226,6 +234,7 @@ class MemorySessions:
         """A session of `user_id`, as signing in with their current password gives."""
         facts = self.users.sign_in_credentials(self.users.users[user_id].email)
         assert facts is not None
+        assert facts.credential.password_hash is not None
         session = self.start(
             user_id,
             facts.credential.password_hash,
