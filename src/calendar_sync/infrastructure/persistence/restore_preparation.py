@@ -104,17 +104,6 @@ def prepare_restored_database(
 
 def _decision(connection: sqlite3.Connection, administrator_id: str) -> RestoreDecision:
     row = connection.execute("SELECT * FROM users WHERE id=?", (administrator_id,)).fetchone()
-    administrator = (
-        None
-        if row is None
-        else User(
-            UserId(row["id"]),
-            row["email"],
-            Role(row["role"]),
-            UserState(row["state"]),
-            datetime.fromisoformat(row["created_at"]),
-        )
-    )
     count = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     settings = connection.execute(
         "SELECT registration_policy FROM installation_settings"
@@ -122,7 +111,22 @@ def _decision(connection: sqlite3.Connection, administrator_id: str) -> RestoreD
     if settings is None:
         raise RestoreFailure("schema_incompatible")
     try:
-        return decide_restoration(RegistrationPolicy(settings[0]), count, administrator)
+        administrator = (
+            None
+            if row is None
+            else User(
+                UserId(row["id"]),
+                row["email"],
+                Role(row["role"]),
+                UserState(row["state"]),
+                datetime.fromisoformat(row["created_at"]),
+            )
+        )
+        policy = RegistrationPolicy(settings[0])
+    except (ValueError, TypeError, IndexError):
+        raise RestoreFailure("schema_incompatible") from None
+    try:
+        return decide_restoration(policy, count, administrator)
     except DomainValidationError:
         raise RestoreFailure("administrator_invalid") from None
 

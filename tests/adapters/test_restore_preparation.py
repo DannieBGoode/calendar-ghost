@@ -695,3 +695,46 @@ def test_prepare_old_token_and_proof_lookups_fail(
     assert resets.owner("synthetic-proof", NOW) is None
     assert not emails.check(USER, "synthetic-proof")
     assert registrations.check("synthetic-proof", "synthetic") is None
+
+
+@pytest.mark.parametrize("field", ["created_at", "role", "state", "registration_policy"])
+def test_prepare_refuses_malformed_persisted_fields_without_exposing_values(
+    candidate: tuple[Path, CredentialCipher, Path], field: str
+) -> None:
+    path, cipher, backup = candidate
+    marker = "synthetic-invalid-persisted-value"
+    statements = {
+        "created_at": "UPDATE users SET created_at=? WHERE id='user-1'",
+        "role": "UPDATE users SET role=? WHERE id='user-1'",
+        "state": "UPDATE users SET state=? WHERE id='user-1'",
+        "registration_policy": "UPDATE installation_settings SET registration_policy=?",
+    }
+    # A malformed restored schema can retain its ledger while losing a field constraint.
+    # Remove just that constraint to exercise conversion after normal SQLite inspection passes.
+    checks = {
+        "role": "CHECK (role IN ('installation_administrator', 'user'))",
+        "state": "CHECK (state IN ('active', 'disabled'))",
+        "registration_policy": (
+            "CHECK (registration_policy IN ('only_me', 'invitation_only', 'open'))"
+        ),
+    }
+    if field in checks:
+        with transaction(path) as connection:
+            connection.execute("PRAGMA writable_schema=ON")
+            connection.execute(
+                "UPDATE sqlite_master SET sql=replace(sql, ?, '') WHERE type='table' "
+                "AND name IN ('users','installation_settings')",
+                (checks[field],),
+            )
+            connection.execute("PRAGMA writable_schema=OFF")
+    with transaction(path) as connection:
+        connection.execute(statements[field], (marker,))
+    store = SqliteRestoreStore(path, cipher)
+    store.inspect()
+    before = path.read_bytes()
+    with pytest.raises(RestoreFailure, match=r"^schema_incompatible$") as failure:
+        store.prepare(backup, "user-1", "hash", NOW)
+    assert marker not in str(failure.value)
+    assert failure.value.__suppress_context__
+    assert not backup.exists()
+    assert path.read_bytes() == before
