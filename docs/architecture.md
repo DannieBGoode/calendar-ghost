@@ -655,3 +655,13 @@ and pending credential proofs. Password-confirmed email change and User Deletion
 provider-only User to set a password first. See
 [operation and recovery](deployment.md#provider-sign-in-limits-and-recovery) and
 [migration 39](deployment.md#migration-39-provider-sign-in-storage).
+
+### Offline restoration composition
+
+`bootstrap/restore.py` composes `application/operations/restoration.py` with the narrow
+`RestoreStore` port, `SqliteRestoreStore`, credential encryption, password hashing, and a clock.
+`interfaces/restore.py` owns terminal parsing and hidden password confirmation. This separate
+process never starts the normal container, API lifespan, network adapters, or workers. The store
+opens SQLite only through `connections.py`. Its explicit stopped-service preparation crosses
+Users through this dedicated port, without adding an `InstallationUnitOfWork` receiver.
+See [the local operator commands](development.md#offline-restoration-command).

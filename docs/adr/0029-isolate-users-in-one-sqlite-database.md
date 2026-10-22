@@ -63,3 +63,14 @@ registration's own User whose Source Calendar the watch covers. Instant Sync's w
 dispatch run beside the scheduler and, like it, receive the installation-wide unit of work, so the
 isolation test's list of its receivers names `application/operations/instant_sync.py` beside the
 scheduled pass, the Operator Overview, and migrations.
+
+## Amendment: stopped-service restoration (2026-10-22)
+
+The offline `OfflineRestore` Operations service uses a dedicated `RestoreStore` port to inspect
+and conservatively prepare a restored database across Users. It receives no installation-wide
+unit of work and exposes no general repository access. This terminal-only composition runs with
+all application and backup processes stopped, requires explicit acknowledgement, and starts no
+API, provider, mail, scheduler, or Instant Sync worker. Preparation invalidates restored authority
+and disconnects accounts while preserving mappings and rules; it enables only the selected
+existing Installation Administrator with a fresh hidden-input password. Inspection discloses only
+safe counts. This narrow operator port does not expand any online cross-User boundary.
