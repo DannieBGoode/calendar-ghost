@@ -135,6 +135,7 @@ def test_cleanup_backlog_gives_both_mail_lanes_a_turn(tmp_path: Path) -> None:
     from unittest.mock import Mock
 
     order: list[str] = []
+    cleanup_started, cleanup_release = threading.Event(), threading.Event()
 
     class SenderWithOrder(Sender):
         def send_test(self, recipient: str) -> None:
@@ -146,6 +147,9 @@ def test_cleanup_backlog_gives_both_mail_lanes_a_turn(tmp_path: Path) -> None:
     def purge(before: datetime, limit: int) -> int:
         assert limit == 500
         order.append("purge")
+        if len(order) == 1:
+            cleanup_started.set()
+            assert cleanup_release.wait(5), "test did not release first cleanup batch"
         return 500 if order.count("purge") < 3 else 0
 
     async def run() -> None:
@@ -165,12 +169,16 @@ def test_cleanup_backlog_gives_both_mail_lanes_a_turn(tmp_path: Path) -> None:
             reset_admission=admission,
         )
         task = asyncio.create_task(worker.run_forever())
-        await checkpoint(lambda: worker.running)
-        assert worker.submit(tests.admit(FIRST.id, "current", NOW))
-        assert worker.submit_reset(ResetEmailRequest("private@example.test", "current"))
-        await checkpoint(lambda: order.count("purge") == 3)
-        assert order == ["purge", "test", "purge", "reset", "purge"]
-        await stop(worker, task)
+        try:
+            await checkpoint(cleanup_started.is_set)
+            assert worker.submit(tests.admit(FIRST.id, "current", NOW))
+            assert worker.submit_reset(ResetEmailRequest("private@example.test", "current"))
+            cleanup_release.set()
+            await checkpoint(lambda: order.count("purge") == 3)
+            assert order == ["purge", "test", "purge", "reset", "purge"]
+        finally:
+            cleanup_release.set()
+            await stop(worker, task)
 
     asyncio.run(run())
 
@@ -439,7 +447,8 @@ class BarrierSender(Sender):
 async def checkpoint(predicate: Callable[[], bool]) -> None:
     async with asyncio.timeout(5):
         while not predicate():
-            await asyncio.sleep(0)
+            # Let executor threads finish between checks without a busy ready loop.
+            await asyncio.sleep(0.001)
 
 
 def worker_services(

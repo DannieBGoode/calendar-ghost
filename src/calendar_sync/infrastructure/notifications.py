@@ -77,9 +77,9 @@ def _installation_summary(incident: InstallationIncident) -> str:
 
 
 class OwnerNotifier:
-    """Emails one User about their own Incidents, unless they turned it off (ADR 0030).
+    """Emails one User about their Incidents and Plan notices unless turned off (ADRs 0030, 0039).
 
-    The Web UI keeps every Incident whether or not the email arrives.
+    Activity keeps Incidents; Your plan and held-rule views retain Plan state without mail.
     """
 
     def __init__(

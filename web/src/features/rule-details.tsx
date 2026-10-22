@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { ArrowLeft, ArrowRight, RefreshCw, ShieldAlert } from "lucide-react"
 import { useEffect, useRef, type RefObject } from "react"
 
+import { PlanHoldNote } from "@/components/plan-hold"
 import { PageSkeleton } from "@/components/page-skeleton"
 import {
   LiveAnnouncement,
@@ -245,11 +246,13 @@ function RuleDetailsPage({
         <div className="rule-actions">
           <RuleStatusBadge
             state={displayState}
+            stopCause={detail.stop_cause}
             stopped={detail.state === "degraded" || unauthorized !== undefined}
             working={work?.kind}
             refused={refusal !== null}
           />
           <RuleNextAction
+            stopCause={detail.stop_cause}
             ruleId={detail.id}
             state={displayState}
             reauthorize={unauthorized}
@@ -258,6 +261,8 @@ function RuleDetailsPage({
             onViewChange={onViewChange}
           />
           <RuleCommandMenu
+            ruleId={detail.id}
+            stopCause={detail.stop_cause}
             state={displayState}
             unauthorized={unauthorized !== undefined}
             pending={pending}
@@ -372,22 +377,9 @@ function RuleNotes({
   destinationName: string
   now: number
 }) {
-  const i18n = useI18n()
-  const stopped = displayState === "degraded" && !unauthorized
   return (
     <>
-      {unauthorized && displayState !== "removing" && (
-        <div className="rule-recovery-note">
-          <ShieldAlert aria-hidden="true" />
-          <p>{i18n.t("rules.list.stoppedDisconnected", { accounts: unauthorized.email })}</p>
-        </div>
-      )}
-      {stopped && (
-        <div className="rule-recovery-note">
-          <ShieldAlert aria-hidden="true" />
-          <p>{recoveryExplanation(i18n, detail.last_sync, now)}</p>
-        </div>
-      )}
+      <RuleRecoveryNotes detail={detail} displayState={displayState} unauthorized={unauthorized} now={now} />
       {displayState === "dry_run_validated" && (
         <PreviewReadyNote
           id="rule-preview-ready"
@@ -402,7 +394,33 @@ function RuleNotes({
       ) : (
         <RuleFeedbackNote feedback={feedback} />
       )}
+    </>
+  )
+}
 
+/** Holds take precedence over account and failed-run recovery, including policy-preview reminders. */
+function RuleRecoveryNotes({ detail, displayState, unauthorized, now }: {
+  detail: RuleDetail
+  displayState: string
+  unauthorized: ConnectedAccount | undefined
+  now: number
+}) {
+  const i18n = useI18n()
+  if (displayState === "removing") return null
+  if (detail.stop_cause === "plan_hold") return <PlanHoldNote />
+  return (
+    <>
+      {unauthorized ? (
+        <div className="rule-recovery-note">
+          <ShieldAlert aria-hidden="true" />
+          <p>{i18n.t("rules.list.stoppedDisconnected", { accounts: unauthorized.email })}</p>
+        </div>
+      ) : displayState === "degraded" && (
+        <div className="rule-recovery-note">
+          <ShieldAlert aria-hidden="true" />
+          <p>{recoveryExplanation(i18n, detail.last_sync, now)}</p>
+        </div>
+      )}
       {detail.reprojection_required && PREVIEWABLE_STATES.includes(displayState) && (
         <div className="rule-recovery-note">
           <ShieldAlert aria-hidden="true" />

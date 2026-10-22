@@ -19,6 +19,15 @@ const busy = { privacy_policy: "busy_only", sync_all_day_events: true, ...respon
 const details = { privacy_policy: "copy_details", sync_all_day_events: true, ...responses } as const
 
 describe("policy change consequences", () => {
+  it("test_policy_edit_ends_automatic_plan_release", () => {
+    const lines = policyChangeConsequences(i18n, { state: "degraded", stopCause: "plan_hold", current: busy, next: details, mappingCount: 3, destination: "Work" })
+    expect(lines[0]).toBe("The plan hold ends. This rule will no longer resume by itself. Preview it, then start it within your plan's rule limit.")
+    const ordinary = policyChangeConsequences(i18n, { state: "degraded", stopCause: null, current: busy, next: details, mappingCount: 3, destination: "Work" })
+    expect(ordinary[0]).toBe(i18n.t("ruleDetails.change.state.degraded"))
+    const paused = policyChangeConsequences(i18n, { state: "paused", stopCause: null, current: busy, next: details, mappingCount: 3, destination: "Work" })
+    expect(paused[0]).toBe(i18n.t("ruleDetails.change.state.paused"))
+  })
+
   it("detects changes", () => {
     expect(policyChanged(busy, busy)).toBe(false)
     expect(policyChanged(busy, details)).toBe(true)

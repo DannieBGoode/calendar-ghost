@@ -169,6 +169,12 @@ describe("own plan hints", () => {
     expect(hints).toEqual(NO_HINTS)
   })
 
+  it("warns about losing a place while held rules wait even within the limit", async () => {
+    await render(jsonResponse({ ...atEveryLimit, rules_counted: 1, held_rules: 3, over_rule_limit: false }))
+    expect(hints.warning).toBe(true)
+    expect(hints.rules).toBe("Your plan lets 1 rule sync at once.")
+  })
+
   it("gives no hint and no warning for an empty answer", async () => {
     await render(jsonResponse({}))
     expect(hints).toEqual(NO_HINTS)

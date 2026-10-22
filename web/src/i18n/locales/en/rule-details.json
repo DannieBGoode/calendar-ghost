@@ -118,7 +118,9 @@
     "paused": "Paused",
     "degraded": "Stopped",
     "disabled": "Removal incomplete",
-    "removing": "Removing"
+    "removing": "Removing",
+    "heldYourPlan": "Held by your plan",
+    "heldTheirPlan": "Held by their plan"
   },
   "policy": {
     "title": "What {destination} shows",
@@ -137,7 +139,8 @@
       "enabled": "Synchronization pauses now. Preview the rule, then enable it again.",
       "paused": "The rule stays paused. Preview it before enabling it again.",
       "degraded": "The rule stays stopped until recovery. Its recovery preview also validates the new policy.",
-      "draft": "The rule returns to draft. Preview it before enabling it."
+      "draft": "The rule returns to draft. Preview it before enabling it.",
+      "held": "The plan hold ends. This rule will no longer resume by itself. Preview it, then start it within your plan's rule limit."
     },
     "exposeExisting": {
       "one": "{count} existing projection in {destination} will show event titles, descriptions, and locations after the next run, to anyone who can see {destination}.",
@@ -388,5 +391,9 @@
     "pause": "Pause rule",
     "pauseDescription": "Stop writing to {destination}. Existing events stay; resuming needs a new preview.",
     "moreActions": "More actions for {source} to {destination}"
+  },
+  "hold": {
+    "resumes": "Resumes by itself when your plan has room.",
+    "pendingRelease": "Resumes at the next scheduled check."
   }
 }

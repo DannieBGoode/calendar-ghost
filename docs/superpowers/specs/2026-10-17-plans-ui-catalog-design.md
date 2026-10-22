@@ -169,9 +169,10 @@ save. Nobody loses anything they already have."
   - Where the field is too narrow for its options on one line, as on a phone, they stack as a list,
     each a full-width row; wider, an option that wraps fills its line.
   - A limit lower than the people on the Plan use warns under it, in Attention Ochre with an icon,
-    counted from `use` and naming nobody: "1 person on Pro has more active rules than this. Their
-    rules keep syncing, but they can't start another." While Plans are off its second sentence
-    starts "Once plans are on, ...".
+    counted from `use` and naming nobody: "1 person on Pro has more rules counting toward their
+    plan than this. Running rules beyond the limit keep syncing during a seven-day grace, then are
+    held until their plan has room. Replacement drafts beyond the limit give up their reserved
+    places instead." While Plans are off its second sentence starts "Once plans are on, ...".
 - **Sync speed,** "How soon changes reach the other calendars.", as six radio cards: "Instant",
   "Changes sync soon after the calendar provider reports them, with a check every 5 minutes as a
   backup.", then "Every 5 minutes", "Calendars are checked for changes every 5 minutes.", and so on
@@ -206,8 +207,9 @@ At `/people/plans/<key>/people`, which Assign people in the row menu opens.
 - Whoever is checked stays checked while a search hides them, and the dry run still asks about
   them, so the note below still names them.
 - When a checked person would be over, a note says what that means: "alex@example.test will have
-  more than Free allows. Their 3 active rules keep syncing, but they can't start another until only
-  1 is active."
+  more than Free allows. Running rules beyond the limit keep syncing during a seven-day grace,
+  then are held until their plan has room. Replacement drafts beyond the limit give up their
+  reserved places instead."
 - **Have Free now,** with "Show in Everyone": each person with what they are over ("2 calendar
   accounts, 1 allowed") or "Within every limit", and Change plan.
 - **Footer:** "Give Free to 1 person" (primary), Cancel, and "1 selected". The result is a toast,

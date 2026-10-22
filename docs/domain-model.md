@@ -144,4 +144,6 @@ Degraded (Plan Hold) -- release, unauthorized --> Degraded (Lapsed Authorization
 replacement drafts with a reserved place determine excess; held rules do not. Expiry holds only
 counted excess rules and clears reserved excess places. `plan_kept` is saved independently of a
 rule's other fields. A replacement that inherits a place inherits order and keep mark too.
-Production composition disables settlement in PR 2; PR 3 owns activation and visible recovery.
+Production settlement starts grace, applies holds at expiry, and releases into free places before
+listing due rules. Your plan exposes the whole-set keep choice; saving can swap held and counted
+rules immediately, while the scheduled pass never swaps.

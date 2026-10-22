@@ -231,7 +231,7 @@ The **Overview** leads with one plain-language health state and at most one next
 | Stopped | A rule is suspended, such as when a Google or Microsoft account's authorization expired | Reauthorize the account or review the rule |
 | Needs a look | Rules keep running, but events were blocked or a problem kept happening | See the blocked events or the rule |
 | Waiting for Google or Microsoft | The provider is limiting or failing requests; the rule retries by itself | Wait; check the provider's status page if it lasts more than a day |
-| Paused | Every rule that synced before is paused | Start a rule again when you want |
+| Paused | No rule is running after an earlier successful sync; rules may be paused or held by your plan | Start a paused rule, or open Your plan for held rules; held rules resume automatically when room returns |
 | Setup | Nothing is synchronizing yet | Follow the three Getting started steps |
 | Healthy | Every running rule is up to date | Nothing |
 
@@ -471,15 +471,16 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_SMTP_PORT` | No | SMTP port; defaults to `587` |
 | `CALENDAR_SYNC_SMTP_USERNAME` | No | Optional SMTP authentication username |
 | `CALENDAR_SYNC_SMTP_PASSWORD` | No | Optional SMTP authentication password |
-| `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Email notification sender; with the host, each person receives their own incidents by email. Identity email requires a bare address, such as `ghost@example.com`, without a display name |
+| `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Email notification sender; with the host, each person receives their own incidents and private Plan grace and hold notices by email. Identity email requires a bare address, such as `ghost@example.com`, without a display name |
 | `CALENDAR_SYNC_SMTP_RECIPIENT` | No | Operator who receives incidents about the installation itself, such as a stalled scheduler |
 | `CALENDAR_SYNC_SMTP_STARTTLS` | No | Enable SMTP STARTTLS; defaults to `true` |
 | `CALENDAR_SYNC_PUBLIC_URL` | No | Address people open Calendar Ghost at, such as `https://calendar.example.com`: an `http` or `https` address at the root of its host, with no path. Incident email then links to each person's next step. Unset sends email without a link. An `https` address that Google and Microsoft reach also turns on [Instant Sync](docs/instant-sync.md) |
 
-**Email notifications** under **Settings → Your account** controls your optional incident email.
+**Email notifications** under **Settings → Your account** controls optional incident email and
+private Plan grace and hold notices. Identity and security email is independent of this preference.
 
-Notification delivery is best-effort. A delivery failure never prevents the incident from being
-recorded locally or stops later synchronization attempts.
+Notification delivery is best-effort. Incidents remain in Activity; Your plan and held-rule views
+show Plan state even if a notice is lost. A delivery failure never stops later synchronization attempts.
 
 Provider sign-in reuses these client IDs and secrets, with only `openid email profile` scopes.
 Its callbacks derive from `CALENDAR_SYNC_PUBLIC_URL`, which must be an HTTPS root origin (HTTP

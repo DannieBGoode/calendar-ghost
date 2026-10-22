@@ -135,13 +135,15 @@ second slice runs each rule once per window of its Plan's interval
   in Plans never stops synchronization, sign-in, or the rules API. Your plan (`ShowOwnPlan`) fails
   its own request instead of showing a basis it could not read; the Web UI then shows no limit
   hints, and the server still checks.
-- **Lowering a limit stops nothing until Plan Hold activation.** Rules beyond a lower rule limit
-  keep syncing, but no rule can start until fewer count. Existing Connected Accounts keep their
-  Reauthorization, and existing Integration Tokens keep working, because a token that stops on its own breaks a monitor
+- **Lowering the rule limit starts grace before holding excess.** The next successful scheduled
+  settlement starts a seven-day grace. Running rules beyond the limit keep syncing until expiry,
+  when excess running or lapse-stopped rules are held until their Allowance permits release;
+  excess replacement drafts give up their reserved places (ADR 0039). New Starts remain
+  limit-checked throughout.
+  Production activation ships together with visible grace/hold state, status, keep choices, and
+  recovery controls. Existing Connected Accounts keep their Reauthorization, and existing
+  Integration Tokens keep working, because a token that stops on its own breaks a monitor
   ([ADR 0024](0024-integration-tokens-installation-status-and-mcp.md)). Only new ones are refused.
-  The Plan Hold engine now exists (ADR 0039), but production composition keeps it disabled
-  until PR 3 ships visible grace and hold state, status, and the keep form together. Until then no
-  production grace starts and no Plan notice is sent.
 - **A changed account address at the limit.** When a provider reports another address for an
   account, such as a renamed Microsoft or Google Workspace account, the new address is a new
   Connected Account. At the limit, the documented recovery keeps every rule: get one free account

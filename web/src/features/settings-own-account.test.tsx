@@ -346,13 +346,13 @@ describe("OwnAccountSection", () => {
     expect(toggle.checked).toBe(!notify)
     expect(emailNotifications().querySelector("label")?.textContent).toBe("Email notifications")
     expect(emailNotifications().textContent).toContain(
-      "When one of your rules needs attention, Calendar Ghost can also email you. Activity always lists every incident.",
+      "Calendar Ghost can email you about incidents and your plan's grace periods or held rules. Activity keeps every incident; Your plan and held-rule views keep the plan state. Sign-in and security emails are separate.",
     )
     await click(toggle)
     expect(sent("PUT", "/api/v1/account/notifications")).toEqual({ notify_by_email: notify })
     expect(toggle.checked).toBe(notify)
     expect(status()).toBe(
-      notify ? "Email notifications are on." : "Email notifications are off. Incidents still appear in Activity.",
+      notify ? "Email notifications are on." : "Email notifications are off. Activity keeps every incident; Your plan and held-rule views keep the plan state. Sign-in and security emails are separate.",
     )
   })
 
@@ -360,7 +360,7 @@ describe("OwnAccountSection", () => {
     await renderSection(testI18n(), { sendsEmail: false })
     expect(container.querySelector("#own-email-notifications")).toBeNull()
     expect(emailNotifications().textContent).toContain(
-      "Your administrator can set up email for this Calendar Ghost. Until then, incidents appear in Activity.",
+      "Your administrator can set up email for this Calendar Ghost. Activity keeps every incident; Your plan and held-rule views keep the plan state.",
     )
     expect(emailNotifications().querySelector("a")).toBeNull()
   })
@@ -369,7 +369,7 @@ describe("OwnAccountSection", () => {
     await renderSection(testI18n(), { sendsEmail: false, signedIn: administrator })
     expect(container.querySelector("#own-email-notifications")).toBeNull()
     expect(emailNotifications().textContent).toContain(
-      "To send email notifications, add SMTP settings to .env and restart Calendar Ghost. Until then, incidents appear in Activity.",
+      "To send email notifications, add SMTP settings to .env and restart Calendar Ghost. Activity keeps every incident; Your plan and held-rule views keep the plan state.",
     )
     const help = emailNotifications().querySelector("a")
     expect(help?.textContent).toBe("How to set up email (opens in a new tab)")

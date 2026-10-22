@@ -249,7 +249,8 @@ and reserved-place losses separately. It hides a grace that no longer applies or
 deadline after a further lowering or admission, preserves a valid stored deadline even after
 expiry, and never starts or clears a grace. Rule payloads include nullable `stop_cause`; detail
 payloads also include `held_rules` so preflight and refused Starts explain held capacity alike.
-These read contracts do not activate Plan settlement: production still composes `plan_holds=None`.
+These read contracts remain side-effect-free. Production settlement is composed separately as
+`ScheduledPlanHolds`, before listing due rules.
 
 `GET /api/v1/account/plan` exposes `rules_counted`, `held_rules`, nullable `grace` (`holds_at`,
 `rule_limit`, predicted `held` and `reserved` losses), and ranked `rules` choices (`rule_id`,
@@ -473,11 +474,13 @@ write only through their User's unit of work. Operations' `ScheduledPlanHolds` r
 standings, reads Allowances in chunks of 500 Users, and rotates through at most 100 changed Users
 per pass, including failed or busy attempts. A failed bulk Allowance read changes nobody. The scheduled
 step follows interrupted-lapse recovery and precedes listing due rules, so released rules can run
-in the same pass. PR 3a ships the keep-choice HTTP route and readers for Your plan, rules,
-status, Dashboard, and MCP. Production composition still passes `plan_holds=None`: activation,
-visible grace and held-rule controls, the keep form, recovery actions, and email explanations
-belong to PR 3b (ADR 0039). Lowering a limit still stops nothing; no production grace or Plan
-notice starts.
+in the same pass. Production composition supplies `ScheduledPlanHolds` using the same Allowances,
+User services, clock, and process-shared locks as keep choice (ADR 0039). Your plan shows grace,
+predicted holds and reserved-place give-ups, and the inline whole-set keep form. Held-rule views
+explain automatic release and offer that choice. The visible controls and activation ship together.
+Status and MCP expose `stop_cause` and `counts.held`: a held rule is `degraded` without a Stopped
+problem. Monitors read `stop_cause` or `needs_attention`. Raw status incident/block totals and
+Activity retain held-owned records; Dashboard excludes them from attention counts.
 
 Settlement and keep choice share a per-User `SettleLocks` lock, discover eligible rule identifiers,
 and try their write locks without waiting, in identifier order. Contention releases acquired
@@ -496,7 +499,8 @@ latest pending notice per User replaces stale pending notices, with no second ba
 the first finishes. Sender cancellation is awaited without waiting for an already-running bounded
 SMTP call or blocking the event loop on executor shutdown. Failed or cancelled preparation,
 shutdown, restart, and SMTP failure can lose notices; delivery has no durable outbox or retry.
-Production composition currently cannot generate Plan notices.
+Your plan and held-rule views retain Plan state when notices are lost or coalesced. Identity and
+security mail is independent of Email notifications.
 
 ## Identity email test boundary
 

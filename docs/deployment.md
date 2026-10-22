@@ -250,7 +250,9 @@ assigned it and when (`plan_assigned_by`, `plan_assigner_id`, `plan_assigned_at`
 replaced under its User's rule limit. Nothing is backfilled: Plans start off and limit nobody, and
 a User with no Plan of their own has the Default Plan once one exists. The database refuses to
 delete a Plan that a User or the default still names. Once an administrator turns Plans on, a
-lowered rule limit refuses new Starts and stops nothing. Rolling back works with the same
+lowered rule limit refuses new Starts; the activated Plan Hold engine gives existing excess a
+seven-day grace before holding it (ADR 0039). Existing accounts and tokens keep working.
+Rolling back past migration 33 works with the same
 database: earlier releases ignore the table and the columns, and limit nobody. After upgrading
 again, Plans are as the administrator left them.
 
@@ -258,12 +260,15 @@ again, Plans are as the administrator left them.
 
 Migration 34 is additive: `sync_rules.plan_kept` defaults to 0; `users.plan_holds_at`,
 `plan_grace_limit`, and `plan_grace_admissions` are nullable; and `users.plan_admissions` defaults
-to 0. There is no new table and no existing rule becomes held on upgrade (ADR 0039). This PR 2
-build explicitly disables settlement in production composition. Lowering a rule limit continues
-to refuse new Starts and stops nothing; no grace or Plan notice starts. PR 3 will activate the
-engine together with visible grace/hold state, status, Dashboard, MCP, and the keep form.
+to 0. There is no new table and no existing rule becomes held just by migration (ADR 0039).
+Production settlement is now active alongside visible grace, held-rule status, and keep controls.
+With Plans on, the next successful pass starts a seven-day grace for each ordinary active User
+whose counted rules exceed their Allowance. Expiry holds only excess rules and makes reserved
+excess drafts give up their places; mappings and projections remain. Plans off and administrators
+stay exempt. Settlement is bounded to 100 changed Users per pass, including busy/failed attempts.
+Back up the stopped service's data directory before upgrading, and keep its matching image.
 
-A database from a future activated release may contain hold code 2 in
+An activated database may contain hold code 2 in
 `sync_rules.awaiting_reauthorization`. Code from before migration 34 ignores the new columns,
 reads 2 as Lapsed Authorization, and still counts it at Start. Older raw `plan_use` display counts
 may omit it because they select exact code 1. Every old save replaces 2 with 0 or 1.
@@ -272,7 +277,7 @@ stopped. Restoring an account or a passing access check can recover them under t
 otherwise preview and Start within the limit. On re-upgrade, code 1 may automatically resume
 without a new limit check; if that creates excess, an activated engine starts a new seven-day grace.
 
-Rolling back to this PR 2 build behaves differently: it recognizes code 2 as Plan Hold and
+Rolling back to the inert PR 2 or PR 3a build behaves differently: it recognizes code 2 as Plan Hold and
 Reauthorization never releases it, but its production scheduler does not run releases. Upgrade to
 an active release, or pause the rule to clear its hold, then preview and Start within the limit.
 Preview alone preserves a hold. Back up the data directory before changing releases.
@@ -798,11 +803,14 @@ after upgrading, rule incidents reach the first User by email once they add an e
 configured. Delivery is deduplicated while an incident remains open and failures never stop
 synchronization or local incident recording.
 
-## Plan notice delivery when activated
+## Plan notice delivery
 
 The engine's Plan notices reuse each User's **Email notifications** preference, email address,
-active state, and SMTP configuration. PR 2 production composition sends none; PR 3 must add the
-visible Plan fallback before activation. Notices disclose counts and UTC deadlines only, with an
+active state, and SMTP configuration. Your plan and held-rule views retain the Plan state even
+when delivery fails. Identity and security mail is independent of this preference. Grace notices
+predict counted-rule holds and reserved-place give-ups separately; actual held notices count only
+rules newly held by a scheduled pass. Release and User-requested swaps send no email.
+Notices disclose counts and UTC deadlines only, with an
 optional link to Your plan at the configured public address. They never reach the operator's
 SMTP recipient or webhook, and create neither an Incident nor an Audit Entry.
 

@@ -857,6 +857,13 @@ Activity. PR 3 supplies the HTTP keep route/form, visible grace/hold state and r
 status, Dashboard, MCP, and the Plan notice explanation/fallback, and only then wires production
 activation. This is a composition gate, with no new feature flag.
 
+Delivery record, 2026-10-22: PR 3a supplied the keep route and hold-aware readers while inert.
+PR 3b supplies visible grace, the inline keep form, held-rule actions, capacity-loss warnings,
+notification explanations, and production `ScheduledPlanHolds` composition together. Exact
+seven-day grace, excess-only holds, preserved mappings/projections, release-before-listing,
+Plans-off/administrator exemptions, and authorization-aware release have composition regressions.
+The monitor contract allows `degraded` without a Stopped problem; raw status totals stay unchanged.
+
 ## 13. Accepted limits and risks
 
 These are known and accepted, to keep the design simple:

@@ -233,7 +233,7 @@ export function OverviewRules({ rules, endpoints, now, onViewChange, onOpenRule 
       <ul className="overview-rules">
         {shown.map((rule) => {
           const { source, destination, unauthorized } = endpoints(rule)
-          const stopped = rule.state === "degraded" || unauthorized.length > 0
+          const stopped = rule.stop_cause !== "plan_hold" && (rule.state === "degraded" || unauthorized.length > 0)
           const removing = removingIds.has(rule.id)
           const work = ruleWork({ pending: undefined, running: rule.running, removing })
           const content = (
@@ -265,6 +265,7 @@ export function OverviewRules({ rules, endpoints, now, onViewChange, onOpenRule 
                 <span className="overview-rule-link">{content}</span>
               </a>
               <RuleStatusBadge
+                stopCause={rule.stop_cause}
                 state={removing ? "removing" : rule.state}
                 stopped={stopped}
                 working={work?.kind}

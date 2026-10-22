@@ -299,8 +299,10 @@ To keep one person from using up what everyone shares, open **People → Plans**
    of the window says what changed, with **Undo**.
 
 Administrators are never limited, and while Plans are off, which is the default, nobody is. A
-lower limit stops nothing: rules beyond it keep syncing, and accounts and tokens keep working, but
-nobody can start a rule, connect a new calendar account, or issue a token past it. Someone whose
+lower rule limit gives rules counting beyond it a seven-day grace. After grace, excess running
+or lapse-stopped rules are held until the Plan has room; excess replacement drafts give up their
+reserved places. Existing accounts and tokens keep working; nobody can start a rule, connect a
+new calendar account, or issue a token past its limit. Someone whose
 Plan limits anything may also run **Sync now**, **Reconcile now**, and **Preview** 12 times in any
 hour together, the same on every such Plan, and is then told how many minutes to wait; the No
 limits Plan counts none of these runs. The tab counts who is over a limit, and **Everyone** shows
@@ -666,8 +668,8 @@ Both `/api/v1/status` and `/mcp` answer the same verdict. Read `needs_attention`
 `degraded`, with `stop_cause: plan_hold`, and has no Stopped problem. `counts.held` counts held
 rules separately from running and stopped rules. They retain their projections and release
 without a preview when their Allowance permits, provided the scheduler works. Your plan explains
-the limit and recovery choices in an activated release. These readers are prepared in PR 3a;
-production activation remains pending as described under [Plan Hold delivery boundary](#plan-hold-delivery-boundary).
+the stored grace deadline, held rules, and recovery choices. A grace is no status problem, and
+mixed running and held rules can have a healthy verdict. See [Plan Hold delivery boundary](#plan-hold-delivery-boundary).
 Status incident and block totals keep held-owned records, as Activity does; Dashboard counts omit
 them. Each status means:
 
@@ -769,14 +771,26 @@ conservative.
 
 ## Plan Hold delivery boundary
 
-The Plan Hold engine remains disabled while PR 3a prepares the status, Dashboard, and MCP
-readers. Lowering a limit still refuses new Starts and stops nothing. Production activation
-remains pending until visible grace and hold state, the form for choosing which rules keep
-syncing, and recovery controls ship together in PR 3.
-Until then no production grace or Plan notice is generated. **Email notifications** under
-Settings, Your account continues to control optional incident email. See the
-[migration 34 rollback notes](deployment.md#migration-34-plan-hold-engine) before opening a database
-written by a future activated release with older code.
+Production Plan settlement and its visible controls ship together. When Plans are on, running
+rules beyond the limit keep syncing during their seven-day grace. In **Settings → Your account → Your plan**,
+**Choose which rules sync** opens an inline checklist. Save the complete choice, or choose none
+to prefer the oldest rules. At expiry only the excess is held. A replacement draft may instead
+give up its reserved place and need a normal limit-checked Start.
+
+Held rules keep mappings, events, and incremental positions. They release without a new preview
+at the next scheduled check when room returns. If an account is unauthorized, the released rule
+becomes stopped for Lapsed Authorization until Reauthorization. Saving keep choices can swap which rules run immediately, without
+email. The scheduled pass only fills free places. A preview preserves a hold. Pausing, changing
+policy, or disconnecting can give up a place, so a later Start may be refused; the UI warns before
+these actions when capacity is scarce. A further lowering restarts grace. Plans off or granting
+the administrator role releases holds at the next successful settlement; Disabled Users keep them.
+
+**Email notifications** covers incidents and Plan grace/held-rule notices. Activity keeps
+incidents; Your plan and held-rule views retain Plan state. Mail can be lost on restart, shutdown,
+failed pass preparation, or SMTP failure, and a newer pending notice can replace an older one.
+There is no durable outbox or delivery retry. Identity and security mail is independent of this
+preference. See the [migration 34 rollback notes](deployment.md#migration-34-plan-hold-engine)
+before running an older image with an activated database.
 
 ## Test identity email
 

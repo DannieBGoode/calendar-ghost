@@ -708,8 +708,8 @@ describe("SettingsPage", () => {
     )
   })
 
-  it("warns before a disconnect that the plan may not let its rules start again, while more rules count than it allows", async () => {
-    await renderSettings(testI18n(), { ownPlan: jsonResponse(atEveryLimit) })
+  it.each([atEveryLimit, { ...atEveryLimit, rules_counted: 1, held_rules: 2, over_rule_limit: false }])("warns before a disconnect when excess or held rules may prevent restarting", async (plan) => {
+    await renderSettings(testI18n(), { ownPlan: jsonResponse(plan) })
     await click(container.querySelector<HTMLButtonElement>("#account-acct-a [aria-haspopup='menu']")!)
     const disconnect = [...container.querySelectorAll<HTMLButtonElement>("[role='menuitem']")].find(
       (item) => item.querySelector(".overflow-menu-label")?.textContent === "Disconnect account",

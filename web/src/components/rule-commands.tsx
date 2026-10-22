@@ -1,12 +1,13 @@
 import { CheckCircle2, CircleAlert, CircleDot, CirclePause, LoaderCircle, ShieldAlert } from "lucide-react"
 
+import { PlanHoldAction, PlanHoldBadge } from "@/components/plan-hold"
 import { OverflowMenu, type OverflowMenuItem } from "@/components/overflow-menu"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { YourPlanLink } from "@/components/your-plan-link"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
-import type { PreviewSummary } from "@/lib/api"
+import type { PreviewSummary, RuleSummary } from "@/lib/api"
 import { accountSearch, appPathForRulePreview, connectionsPath, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
 import { ruleStateLabel } from "@/lib/rule-change"
 import { previewReadyLabel } from "@/lib/rule-run"
@@ -24,11 +25,15 @@ const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
  */
 export function RuleStatusBadge({
   state,
+  stopCause,
+  thirdPerson,
   stopped,
   working,
   refused,
 }: {
   state: string
+  stopCause: RuleSummary["stop_cause"]
+  thirdPerson?: boolean
   stopped: boolean
   working?: RuleWorkKind | undefined
   refused?: boolean
@@ -41,6 +46,9 @@ export function RuleStatusBadge({
         {working ? workLabel(i18n, working) : ruleStateLabel(i18n, state)}
       </Badge>
     )
+  }
+  if (stopCause === "plan_hold") {
+    return <PlanHoldBadge thirdPerson={thirdPerson} />
   }
   if (stopped || state === "disabled") {
     return (
@@ -73,6 +81,7 @@ function restingLabel(i18n: I18n, state: string, refused: boolean): string {
 export function RuleNextAction({
   ruleId,
   state,
+  stopCause,
   reauthorize,
   describedBy,
   onPreview,
@@ -80,6 +89,7 @@ export function RuleNextAction({
 }: {
   ruleId: string
   state: string
+  stopCause: RuleSummary["stop_cause"]
   /** An account of the rule to reauthorize first; its Settings row is the next step. */
   reauthorize: { id: string } | undefined
   describedBy?: string | undefined
@@ -89,6 +99,7 @@ export function RuleNextAction({
 }) {
   const { t } = useI18n()
   if (state === "disabled" || state === "removing") return null
+  if (stopCause === "plan_hold") return <PlanHoldAction />
   if (reauthorize) {
     const search = accountSearch(reauthorize.id)
     return (
@@ -144,7 +155,9 @@ export function RuleNextAction({
 }
 
 export function RuleCommandMenu({
+  ruleId,
   state,
+  stopCause,
   unauthorized,
   pending,
   source,
@@ -152,7 +165,9 @@ export function RuleCommandMenu({
   reserveSpace = false,
   onRun,
 }: {
+  ruleId: string
   state: string
+  stopCause: RuleSummary["stop_cause"]
   /** Whether an account of the rule needs reauthorization, so running it now would fail. */
   unauthorized: boolean
   pending: RuleCommand | undefined
@@ -165,10 +180,10 @@ export function RuleCommandMenu({
   const i18n = useI18n()
   const { t } = i18n
   // Read before any return, as the rules of hooks require.
-  const mayNotRestart = usePlanWarning() && countsTowardPlan(state, unauthorized)
+  const mayNotRestart = usePlanWarning()
   const busy = pending !== undefined
   const items: OverflowMenuItem[] = []
-  if (state === "enabled" && !unauthorized) {
+  if (canRunNow(state, unauthorized, stopCause)) {
     items.push(
       {
         id: "sync",
@@ -186,6 +201,15 @@ export function RuleCommandMenu({
       },
     )
   }
+  if (stopCause === "plan_hold" && state !== "removing") {
+    items.push({
+      id: "preview",
+      label: t("ruleDetails.commands.preview"),
+      href: appPathForRulePreview(ruleId),
+      disabled: busy,
+      onSelect: () => undefined,
+    })
+  }
   if (state === "enabled" || state === "degraded") {
     items.push({
       id: "pause",
@@ -199,17 +223,14 @@ export function RuleCommandMenu({
   return <OverflowMenu label={t("ruleDetails.commands.moreActions", { source, destination })} items={items} />
 }
 
-/**
- * Whether the rule counts toward its User's plan, as the Web UI can tell: enabled, or stopped
- * only until an account of it is reauthorized.
- */
-function countsTowardPlan(state: string, unauthorized: boolean): boolean {
-  return state === "enabled" || (state === "degraded" && unauthorized)
+/** Only enabled rules with authorized accounts can run now. */
+function canRunNow(state: string, unauthorized: boolean, stopCause: RuleSummary["stop_cause"]): boolean {
+  return state === "enabled" && !unauthorized && stopCause !== "plan_hold"
 }
 
 /**
- * What Pause does; and, while more rules count than the plan allows, that the plan may not let
- * the rule start again, since a paused rule gives up its place (decision 4).
+ * What Pause does, and why excess or held rules can prevent a later Start. This also applies
+ * when pausing a held rule, which ends its automatic release without freeing a place.
  */
 function pauseDescription({ t }: I18n, destination: string, mayNotRestart: boolean): string {
   const description = t("ruleDetails.commands.pauseDescription", { destination })

@@ -51,13 +51,13 @@
     },
     "notifications": {
       "title": "Email notifications",
-      "body": "When one of your rules needs attention, Calendar Ghost can also email you. Activity always lists every incident.",
+      "body": "Calendar Ghost can email you about incidents and your plan's grace periods or held rules. Activity keeps every incident; Your plan and held-rule views keep the plan state. Sign-in and security emails are separate.",
       "label": "Email notifications",
-      "unavailable": "Your administrator can set up email for this Calendar Ghost. Until then, incidents appear in Activity.",
-      "unavailableAdministrator": "To send email notifications, add SMTP settings to .env and restart Calendar Ghost. Until then, incidents appear in Activity.",
+      "unavailable": "Your administrator can set up email for this Calendar Ghost. Activity keeps every incident; Your plan and held-rule views keep the plan state.",
+      "unavailableAdministrator": "To send email notifications, add SMTP settings to .env and restart Calendar Ghost. Activity keeps every incident; Your plan and held-rule views keep the plan state.",
       "setUpEmail": "How to set up email",
       "on": "Email notifications are on.",
-      "off": "Email notifications are off. Incidents still appear in Activity."
+      "off": "Email notifications are off. Activity keeps every incident; Your plan and held-rule views keep the plan state. Sign-in and security emails are separate."
     },
     "instantSync": {
       "title": "Instant sync",
@@ -99,7 +99,7 @@
     "loadError": "Your plan could not load.",
     "setByAdministrator": "Set by your administrator",
     "default": "The default plan",
-    "rulesHint": "Running rules, and rules waiting for you to reauthorize an account. Paused rules and drafts don't count.",
+    "rulesHint": "Running rules, rules waiting for reauthorization, and replacement drafts with a reserved place count. Other drafts, paused rules, and held rules don't.",
     "accountsHint": "Every account you connected counts, disconnected ones too.",
     "tokensHint": "Revoked tokens don't count.",
     "speedHint": "How soon changes reach your other calendars.",
@@ -110,8 +110,8 @@
     },
     "note": {
       "rules": {
-        "one": "You have {count} active rule and your plan allows {allowed}. It keeps syncing, but you can't start another until fewer are active.",
-        "other": "You have {count} active rules and your plan allows {allowed}. They keep syncing, but you can't start another until fewer are active."
+        "one": "{count} rule counts toward your plan, which allows {allowed}. Running rules beyond the limit keep syncing during a seven-day grace, then are held until your plan has room. Replacement drafts beyond the limit give up their reserved places instead.",
+        "other": "{count} rules count toward your plan, which allows {allowed}. Running rules beyond the limit keep syncing during a seven-day grace, then are held until your plan has room. Replacement drafts beyond the limit give up their reserved places instead."
       },
       "accounts": {
         "one": "You have {count} calendar account and your plan allows {allowed}. It keeps syncing, but you can't connect another until you remove it in <link>Connections</link>.",
@@ -126,7 +126,49 @@
         "other": "You have {count} integration tokens and your plan includes none. They keep working, but you can't issue another."
       }
     },
-    "close": "To change your plan, ask your administrator."
+    "close": "To change your plan, ask your administrator.",
+    "held": {
+      "one": "{count} rule is held by your plan.",
+      "other": "{count} rules are held by your plan."
+    },
+    "releasing": "These rules resume at the next scheduled check.",
+    "grace": {
+      "future": {
+        "one": "On {deadline}, {count} rule will be held. Your plan allows {limit}.",
+        "other": "On {deadline}, {count} rules will be held. Your plan allows {limit}."
+      },
+      "expired": {
+        "one": "At the next scheduled check, {count} rule will be held. Your plan allows {limit}.",
+        "other": "At the next scheduled check, {count} rules will be held. Your plan allows {limit}."
+      },
+      "deadline": "Your grace period ends on {deadline}.",
+      "nextCheck": "Your grace period ends at the next scheduled check.",
+      "reserved": {
+        "one": "{count} replacement draft will give up its reserved place.",
+        "other": "{count} replacement drafts will give up their reserved places."
+      }
+    },
+    "keep": {
+      "open": "Choose which rules sync",
+      "hint": "Saved choices come first, then the oldest rules. Saving can switch holds. Held rules keep their projections. Choose none to clear preferences for future free places and grace periods. This does not switch rules already syncing.",
+      "capacity": "{count} selected, {maximum} maximum",
+      "unlimited": "No limit",
+      "active": "Active rule",
+      "reserved": "Reserved place",
+      "held": "Held by your plan",
+      "kept": "Saved choice",
+      "accounts": "From {source} to {destination}",
+      "direction": "{source} → {destination}",
+      "save": "Save choices",
+      "saving": "Saving…",
+      "saved": "Your choices were saved.",
+      "loading": "Loading rule names…",
+      "loadError": "Rule names could not load. Try again before choosing rules.",
+      "stale": "The available rules changed. Review the updated choices before saving again.",
+      "review": "Review updated choices",
+      "refreshFailed": "Some status views could not refresh. Refresh status to try again.",
+      "refresh": "Refresh status"
+    }
   },
   "registration": {
     "title": "Who can join",

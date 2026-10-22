@@ -5167,12 +5167,6 @@ a.recent-change-rule:focus-visible {
   font-weight: 600;
 }
 
-.overview-rule-name > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .overview-rule-name > svg {
   width: 1rem;
   height: 1rem;

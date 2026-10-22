@@ -26,10 +26,11 @@ function usePlanHints(): OwnPlan | undefined {
 /**
  * Whether a note should say that a privacy edit, a Pause, or a Disconnect may keep a rule from
  * starting again: only Rule Replacement keeps a rule's place under the rule limit, and the User
- * has more rules counted than their Plan allows (ADR 0038).
+ * has excess counted rules or held rules waiting to resume (ADR 0038, ADR 0039).
  */
 export function usePlanWarning(): boolean {
-  return usePlanHints()?.over_rule_limit === true
+  const plan = usePlanHints()
+  return plan?.over_rule_limit === true || (plan?.held_rules ?? 0) > 0
 }
 
 /**
@@ -73,4 +74,11 @@ export function useRuleLimitNote(): string | undefined {
   const { t } = useI18n()
   const limit = usePlanHints()?.limits?.rules
   return typeof limit === "number" ? t("rules.list.planLimit", { count: limit }) : undefined
+}
+
+/** The keep chooser only applies to a confirmed finite Plan; unknown reads link to Your plan Retry. */
+export function usePlanHoldStep(): "choose" | "retry" | null {
+  const plan = usePlanHints()
+  if (!plan?.basis) return "retry"
+  return plan.basis === "plan" && typeof plan.limits?.rules === "number" ? "choose" : null
 }

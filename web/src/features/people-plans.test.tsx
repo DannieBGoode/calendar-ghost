@@ -838,7 +838,7 @@ describe("The catalog", () => {
     expect(cell("family", "speed").querySelector("svg[aria-hidden='true']")).not.toBeNull()
     expect(cell("family", "rules").getAttribute("data-label")).toBe("Active rules")
     expect(catalog.querySelector(".plans-catalog-note")?.textContent).toBe(
-      "People counts include administrators, who are never limited. Paused rules and drafts are not active.",
+      "People counts include administrators, who are never limited. Replacement drafts with a reserved place count as active; other drafts and paused rules do not.",
     )
   })
 
@@ -1407,7 +1407,7 @@ describe("Editing a plan", () => {
     type(field("plan-edit-family-rules"), "2")
     await settle()
     expect(element("plan-edit-family-rules-warning").textContent).toBe(
-      "1 person on Family has more active rules than this. Their rules keep syncing, but they can't start another.",
+      "1 person on Family has more rules counting toward their plan than this. Running rules beyond the limit keep syncing during a seven-day grace, then are held until their plan has room. Replacement drafts beyond the limit give up their reserved places instead.",
     )
     type(field("plan-edit-family-name"), "Family Large")
     await settle()
@@ -1524,7 +1524,7 @@ describe("Editing a plan", () => {
     type(field("plan-edit-family-rules"), "2")
     await settle()
     expect(element("plan-edit-family-rules-warning").textContent).toBe(
-      "1 person on Family has more active rules than this. Once plans are on, their rules keep syncing, but they can't start another.",
+      "1 person on Family has more rules counting toward their plan than this. Once plans are on, running rules beyond the limit keep syncing during a seven-day grace, then are held until their plan has room. Replacement drafts beyond the limit give up their reserved places instead.",
     )
   })
 })

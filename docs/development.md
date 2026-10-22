@@ -111,6 +111,35 @@ Google accounts, and `sam@work.example` is a Microsoft account), keeping the scr
 recognizable while making each calendar's story clear. Rules between Personal or Family and Work
 cross providers. Robin's Personal account is Google's and their Work account is Microsoft's.
 
+### Plan Hold preview
+
+Layer an isolated synthetic fixture on the healthy scenario:
+
+```sh
+.venv/bin/python scripts/dev_preview.py --scenario healthy --plan-holds grace
+```
+
+`--plan-holds` accepts `grace`, `held`, `mixed`, or `reserved`. Sign in as ordinary User
+`robin@example.test` with `previewpreview` to inspect Your plan, choose which rules sync,
+and follow held-rule recovery links. Robin has a one-rule Plan and two eligible rules:
+
+| Fixture | Plan state |
+| --- | --- |
+| `grace` | Two active rules, a future grace, and one predicted hold |
+| `held` | Both rules held, with a successful history so Overview is paused |
+| `mixed` | One active rule and one held rule at the limit |
+| `reserved` | One active rule and one replacement draft, with a future reserved-place give-up |
+
+Sam remains an exempt administrator. The all-held fixture represents the moment before a pass
+releases one free place. The preview starts no scheduler, so that place stays open until an
+explicit keep-choice save. It makes no provider writes or SMTP calls and reads no credentials or
+environment settings for these fixtures. Omitting the flag keeps healthy preview data unchanged.
+Inspect 1440px and 390px, light, Twilight, Midnight, `?locale=pseudo` through Vite, and 200% text.
+Check keyboard access through the chooser, Preview, and recovery links. Keep scratch screenshots
+under `.context/`. Selected synthetic review images are committed in the
+[Plan Hold review gallery](assets/reviews/plan-hold/README.md) for PR review. Never use personal
+calendar exports.
+
 ### Registration preview
 
 Run the same isolated preview with a synthetic registration fixture:

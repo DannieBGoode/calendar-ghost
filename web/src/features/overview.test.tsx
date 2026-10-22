@@ -240,19 +240,20 @@ async function settle(times = 6) {
 
 async function renderOverview(i18n: I18n, scenario: Scenario) {
   mockFetch(scenario)
+  const onViewChange = vi.fn()
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   act(() => {
     root?.render(
       <StaticI18nProvider i18n={i18n}>
         <QueryClientProvider client={queryClient}>
-          <OverviewView onViewChange={() => undefined} onOpenRule={() => undefined} />
+          <OverviewView onViewChange={onViewChange} onOpenRule={() => undefined} />
         </QueryClientProvider>
       </StaticI18nProvider>,
     )
   })
   await settle()
-  return { container }
+  return { container, onViewChange }
 }
 
 /** One rule counts and the plan lets one sync, so no other rule may start. */
@@ -274,6 +275,59 @@ const atRuleLimit: OwnPlan = {
 }
 
 describe("OverviewView", () => {
+  it.each(["degraded", "paused", "draft", "dry_run_validated"] as const)("keeps Review rules available before any sync when the rule is %s", async (state) => {
+    const held = state === "degraded"
+    const { onViewChange } = await renderOverview(testI18n(), {
+      dashboard: {
+        ...attentionDashboard,
+        status: "setup",
+        needs_attention: false,
+        problems: [],
+        enabled_rules: 0,
+        running_rules: 0,
+        held_rules: held ? 1 : 0,
+        open_incidents: 0,
+        last_synced_at: null,
+      },
+      rules: [{ ...rule, state, stop_cause: held ? "plan_hold" : null, last_sync: null }],
+      recentChanges: [],
+      ownPlan: { ...atRuleLimit, rules_counted: 0, held_rules: held ? 1 : 0 },
+    })
+
+    const setup = container.querySelector(".setup-card")!
+    expect(setup.querySelector(".step-progress")?.textContent).toBe("Step 3 of 3")
+    expect(setup.querySelectorAll(".step-row.done")).toHaveLength(2)
+    const currentSteps = setup.querySelectorAll("[aria-current='step']")
+    expect(currentSteps).toHaveLength(1)
+    expect(currentSteps[0]?.querySelector("h3")?.textContent).toBe("Preview and start syncing")
+    const review = currentSteps[0]?.querySelector<HTMLAnchorElement>("a")
+    expect(review?.textContent).toContain("Review rules")
+    expect(review?.getAttribute("href")).toBe("/rules")
+    act(() => review?.click())
+    expect(onViewChange).toHaveBeenCalledExactlyOnceWith("rules", { createRule: false })
+    expect(setup.textContent).not.toContain("Step 0 of 3")
+  })
+
+  it.each(["plans_off", "administrator", "unlimited"] as const)("omits the held hero keep step with %s", async (basis) => {
+    await renderOverview(testI18n(), { dashboard: { ...attentionDashboard, status: "paused", problems: [], open_incidents: 0, enabled_rules: 0, running_rules: 0, held_rules: 1 }, rules: [{ ...rule, state: "degraded", stop_cause: "plan_hold" }], recentChanges: [], ownPlan: { ...atRuleLimit, basis: basis === "unlimited" ? "plan" : basis, limits: basis === "unlimited" ? { ...atRuleLimit.limits!, rules: null } : null, held_rules: 1 } })
+    expect(container.querySelector(".health-hero")?.textContent).toContain("They resume at the next scheduled check.")
+    expect(container.querySelector(".health-hero a")).toBeNull()
+  })
+
+  it("retains a link to Your plan Retry in the held hero on a failed Plan read", async () => {
+    await renderOverview(testI18n(), { dashboard: { ...attentionDashboard, status: "paused", problems: [], open_incidents: 0, enabled_rules: 0, running_rules: 0, held_rules: 1 }, rules: [{ ...rule, state: "degraded", stop_cause: "plan_hold" }], recentChanges: [], ownPlan: "unreadable" })
+    expect(container.querySelector(".health-hero a")?.textContent).toContain("See your plan")
+    expect(container.querySelector(".health-hero a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+  })
+
+  it("shows held rules and one keep step in the paused hero", async () => {
+    await renderOverview(testI18n(), { dashboard: { ...attentionDashboard, problems: [], open_incidents: 0, status: "paused", enabled_rules: 0, running_rules: 0, held_rules: 1 }, rules: [{ ...rule, state: "degraded", stop_cause: "plan_hold" }], recentChanges: [], ownPlan: { ...atRuleLimit, held_rules: 1 } })
+    expect(container.querySelector(".health-hero")?.textContent).toContain("Your rules are held by your plan")
+    expect(container.querySelector(".health-hero a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+    expect(container.querySelector(".overview-rules")?.textContent).toContain("Held by your plan")
+    expect(container.querySelector(".setup-card")).toBeNull()
+  })
+
   it("puts what an open Incident says in the rule's problem sentence", async () => {
     const { container } = await renderOverview(testI18n(), {
       dashboard: attentionDashboard,

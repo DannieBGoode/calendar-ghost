@@ -38,8 +38,8 @@ behavior, fix the mismatch in the same change, and add an ADR when the decision 
 - Pausing preserves mappings and projections. Resuming a paused or degraded rule begins with
   validation and reconciliation, except that a rule stopped only by Lapsed Authorization resumes on
   its own once its accounts are authorized again (ADR 0027), and a Plan Hold releases without a
-  preview when its Allowance permits (ADR 0039). The Plan Hold engine is dormant in production
-  until PR 3 wires it with visible status and recovery controls.
+  preview when its Allowance permits (ADR 0039). Production settlement runs before due-rule listing,
+  with visible grace, keep choices, and held-rule recovery in the same release.
 - Event content never reaches logs, incidents, or notifications. SQLite keeps only what Activity
   needs: each Audit Entry's source event title, time, recurrence, and cancellation (ADR 0014), and
   Source Observations and Source Change values (ADR 0017). Titles are plain text; descriptions,

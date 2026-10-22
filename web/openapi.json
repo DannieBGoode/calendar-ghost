@@ -8317,7 +8317,7 @@
         "summary": "Remove Plan"
       },
       "put": {
-        "description": "Rename a Plan or change its limits; its key stays. New limits apply at once to new\nrules, accounts, and tokens, and stop nothing that exists.",
+        "description": "Rename a Plan or change its limits; its key stays. New limits apply at once to new\nrules, accounts, and tokens. Excess rules get a seven-day grace before a Plan Hold;\nexisting accounts and tokens keep working.",
         "operationId": "change_plan_api_v1_plans__plan_key__put",
         "parameters": [
           {

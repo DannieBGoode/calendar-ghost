@@ -93,7 +93,8 @@ class DefinePlan:
 @dataclass(slots=True)
 class ChangePlan:
     """Change a Plan's name and limits, keeping its key. New limits apply at once to new rules,
-    accounts, and tokens, and stop nothing a User already has."""
+    accounts, and tokens. Scheduled settlement gives excess rules seven days before a Plan Hold;
+    existing accounts and tokens keep working."""
 
     users: UserDirectory
     catalog: PlanCatalog

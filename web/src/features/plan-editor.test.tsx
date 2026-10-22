@@ -238,7 +238,7 @@ describe("PlanEditor", () => {
     [
       "rules",
       "Maximum active rules",
-      "Running rules count, and rules waiting for an account to be reauthorized. Paused rules and drafts don't.",
+      "Running rules, rules waiting for reauthorization, and replacement drafts with a reserved place count. Other drafts, paused rules, and held rules don't.",
       { choices: ["No limit", "Up to"], unit: "rules" },
     ],
     [
@@ -646,8 +646,8 @@ describe("PlanEditor", () => {
   })
 
   it.each([
-    ["rules", "2", "1 person on Family has more active rules than this. Their rules keep syncing, but they can't start another."],
-    ["rules", "1", "3 people on Family have more active rules than this. Their rules keep syncing, but they can't start another."],
+    ["rules", "2", "1 person on Family has more rules counting toward their plan than this. Running rules beyond the limit keep syncing during a seven-day grace, then are held until their plan has room. Replacement drafts beyond the limit give up their reserved places instead."],
+    ["rules", "1", "3 people on Family have more rules counting toward their plan than this. Running rules beyond the limit keep syncing during a seven-day grace, then are held until their plan has room. Replacement drafts beyond the limit give up their reserved places instead."],
     ["accounts", "1", "2 people on Family have more calendar accounts than this. They keep them, but can't connect another."],
     ["tokens", "None", "2 people on Family have more integration tokens than this. They keep them, but can't issue another."],
     ["tokens", "1", "1 person on Family has more integration tokens than this. They keep them, but can't issue another."],
@@ -676,7 +676,7 @@ describe("PlanEditor", () => {
     expect(element("plan-edit-family-rules-warning").textContent).toBe("")
     type(field("plan-edit-family-rules"), "1")
     expect(element("plan-edit-family-rules-warning").textContent).toBe(
-      "3 people on Family have more active rules than this. Their rules keep syncing, but they can't start another.",
+      "3 people on Family have more rules counting toward their plan than this. Running rules beyond the limit keep syncing during a seven-day grace, then are held until their plan has room. Replacement drafts beyond the limit give up their reserved places instead.",
     )
   })
 
@@ -685,7 +685,7 @@ describe("PlanEditor", () => {
     click(option("plan-edit-family-rules", "Up to"))
     type(field("plan-edit-family-rules"), "8")
     expect(element("plan-edit-family-rules-warning").textContent).toBe(
-      "1 person on Family has more active rules than this. Their rules keep syncing, but they can't start another.",
+      "1 person on Family has more rules counting toward their plan than this. Running rules beyond the limit keep syncing during a seven-day grace, then are held until their plan has room. Replacement drafts beyond the limit give up their reserved places instead.",
     )
   })
 
@@ -697,7 +697,7 @@ describe("PlanEditor", () => {
     )
     type(field("plan-edit-family-rules"), "1")
     expect(element("plan-edit-family-rules-warning").textContent).toBe(
-      "3 people on Family have more active rules than this. Once plans are on, their rules keep syncing, but they can't start another.",
+      "3 people on Family have more rules counting toward their plan than this. Once plans are on, running rules beyond the limit keep syncing during a seven-day grace, then are held until their plan has room. Replacement drafts beyond the limit give up their reserved places instead.",
     )
     click(option("plan-edit-family-tokens", "None"))
     expect(element("plan-edit-family-tokens-warning").textContent).toBe(

@@ -63,8 +63,8 @@ Homepage that show one tile per service.
   after held-owner exclusion, so a full page of held incidents cannot hide an older active
   problem. Account-owned incidents remain eligible. The status API and MCP retain raw incident
   and block totals and the original incident list; Activity remains unchanged. MCP adds no tool or scope and directs the User to Your plan.
-  These readers are prepared in PR 3a; production activation remains pending until the visible
-  grace and hold state, keep form, and recovery controls ship together (ADR 0039).
+  The readers shipped in PR 3a; PR 3b activates production settlement together with visible
+  grace and hold state, the keep form, and recovery controls (ADR 0039).
 - **The scheduler reports its own heartbeat.** `SchedulerHeartbeat` in `application/operations/ports.py`
   exposes when the current pass started, if one is running, when the last pass completed without
   raising, and which rules that pass listed. A completed pass is published before the running one is
@@ -158,9 +158,9 @@ Homepage that show one tile per service.
 
 ## Amendment: Plan Hold requires a scheduler (2026-10-20)
 
-A held rule needs a working scheduler to release when its Allowance permits (ADR 0039). PR 3 will
-therefore include held rules when deciding whether a scheduler is required and can be stalled,
-exclude holds from Stopped problems, and expose the hold cause and held count in status, Dashboard,
-and MCP. A grace itself is no status problem. This is the decision for PR 3, not runtime status
-support in PR 2: the engine remains disabled in production composition until the visible status,
-held-rule views, keep form, and correct recovery actions ship together.
+A held rule needs a working scheduler to release when its Allowance permits (ADR 0039). Status
+therefore includes held rules when deciding whether a scheduler is required and can be stalled,
+excludes holds from Stopped problems, and exposes the hold cause and held count in status,
+Dashboard, and MCP. A grace itself is no status problem. PR 2 was inert; PR 3a supplied these
+readers. PR 3b activates production settlement with visible status, held-rule views, the keep form,
+and correct recovery actions together.

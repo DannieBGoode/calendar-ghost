@@ -8,7 +8,10 @@ import { api, type OwnPlan } from "@/lib/api"
 import { connectionsPath, isPlainLeftClick } from "@/lib/navigation"
 import { ownPlanCard } from "@/lib/plan-usage"
 import { ownPlanShown } from "@/lib/plans"
+import { useNow } from "@/lib/use-now"
 import { useOwnPlan } from "@/lib/use-own-plan"
+
+import { KeptRulesForm } from "./settings-kept-rules"
 
 /** Where links beside each limit land: `yourPlanPath()` names this anchor. */
 const ANCHOR = "your-plan"
@@ -29,9 +32,9 @@ function revealOnArrival(section: HTMLElement | null) {
 /**
  * Which Plan limits the signed-in User, then one row per limit with a meter and how much of it they
  * use, and how to change it. An administrator reads that no plan limits them. Hidden while Plans
- * are off and for an administrator under Only Me, where Plans have no effect. A failed load shows
- * its own error; an administrator sees it only once the Registration Policy loads and is not Only
- * Me. The server still checks every limit.
+ * are off and for an administrator under Only Me, unless held rules still await release. Explicit
+ * recovery arrivals show a failed load's Retry even under Only Me or unknown Registration Policy.
+ * The server still checks every limit.
  */
 export function OwnPlanSection({ administrator, onOpenConnections }: { administrator: boolean; onOpenConnections: () => void }) {
   const { t } = useI18n()
@@ -47,6 +50,7 @@ export function OwnPlanSection({ administrator, onOpenConnections }: { administr
           {plan && <OwnPlanIntro plan={plan} />}
         </div>
       </div>
+      {plan && <PlanHoldStatus plan={plan} />}
       {plan && <OwnPlanCard plan={plan} onOpenConnections={onOpenConnections} />}
       {failed && (
         <div className="inline-error integration-load-error" role="alert">
@@ -63,17 +67,19 @@ export function OwnPlanSection({ administrator, onOpenConnections }: { administr
 /**
  * The User's Plan as Your plan shows it: whether the section shows, whether its read failed for
  * someone it limits, and the Plan once read. Only administrators may read the Registration
- * Policy, and under Only Me the only User administers, so a failed read stays hidden from them.
+ * Policy. An explicit recovery arrival shows a failed read even under Only Me or unknown policy;
+ * successful exempt reads still follow normal visibility.
  */
 function useShownOwnPlan(administrator: boolean) {
   const ownPlan = useOwnPlan()
   const registration = useQuery({ queryKey: ["registration"], queryFn: api.registration, enabled: administrator })
   const policy = registration.data?.policy
-  const failed = ownPlan.isError && (!administrator || (policy !== undefined && policy !== "only_me"))
+  const recoveryArrival = window.location.hash === `#${ANCHOR}`
+  const failed = ownPlan.isError && (recoveryArrival || ownPlanShown(ownPlan.data, policy) || !administrator || (policy !== undefined && policy !== "only_me"))
   return {
     shown: failed || ownPlanShown(ownPlan.data, policy),
     failed,
-    plan: failed ? undefined : ownPlan.data,
+    plan: ownPlan.data,
     retry: () => void ownPlan.refetch(),
   }
 }
@@ -81,7 +87,7 @@ function useShownOwnPlan(administrator: boolean) {
 /** What Your plan shows, or why no plan limits an administrator. */
 function OwnPlanIntro({ plan }: { plan: OwnPlan }) {
   const { t } = useI18n()
-  return <p>{t(plan.basis === "plan" && plan.plan ? "settings.ownPlan.intro" : "settings.ownPlan.administrator")}</p>
+  return <p>{t(plan.basis === "administrator" ? "settings.ownPlan.administrator" : "settings.ownPlan.intro")}</p>
 }
 
 /**
@@ -117,7 +123,33 @@ function OwnPlanCard({ plan, onOpenConnections }: { plan: OwnPlan; onOpenConnect
           </a>
         )}
       />
+      {typeof plan.limits?.rules === "number" && plan.rules.length > 0 && <KeptRulesForm plan={plan} />}
       <p className="own-plan-close">{i18n.t("settings.ownPlan.close")}</p>
     </div>
   )
+}
+
+/** Holds are separate from Active rules, including while an unlimited Allowance awaits settlement. */
+function PlanHoldStatus({ plan }: { plan: OwnPlan }) {
+  const i18n = useI18n()
+  const { t } = i18n
+  const releasing = plan.basis !== "plan" || plan.limits?.rules === null
+  return (
+    <div className="grid gap-2 text-sm">
+      {plan.held_rules > 0 && <p>{t("settings.ownPlan.held", { count: plan.held_rules })} {releasing && t("settings.ownPlan.releasing")}</p>}
+      {plan.grace && <PlanGrace grace={plan.grace} />}
+    </div>
+  )
+}
+
+function PlanGrace({ grace }: { grace: NonNullable<OwnPlan["grace"]> }) {
+  const i18n = useI18n()
+  const { t } = i18n
+  const now = useNow()
+  const expired = Date.parse(grace.holds_at) <= now
+  const deadline = i18n.format.dateTime(grace.holds_at)
+  return <div className="rounded-md border border-[var(--warning-border)] bg-[var(--warning-surface)] p-3" role="status">
+    <p>{grace.held > 0 ? t(expired ? "settings.ownPlan.grace.expired" : "settings.ownPlan.grace.future", { count: grace.held, limit: i18n.format.number(grace.rule_limit), deadline }) : t(expired ? "settings.ownPlan.grace.nextCheck" : "settings.ownPlan.grace.deadline", { deadline })}</p>
+    {grace.reserved > 0 && <p>{t("settings.ownPlan.grace.reserved", { count: grace.reserved })}</p>}
+  </div>
 }

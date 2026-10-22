@@ -222,8 +222,12 @@ The Activity screen names the reason it could not load audit entries and inciden
 
 ## A rule is degraded
 
-Open **Activity**. The rule's incident says what stopped it and offers the next step. The rule keeps
-its mappings and last successful incremental positions, and writes nothing while degraded.
+A rule [held by your plan](#held-by-your-plan) is degraded without a new Incident. It resumes
+automatically when its Plan has room; Preview does not release its hold.
+
+For other degraded rules, open **Activity**. The rule's incident says what stopped it and offers
+the next step. The rule keeps its mappings and last successful incremental positions, and writes
+nothing while degraded.
 
 - **Authorization for Google Calendar expired** or **Access to Google Calendar was denied**: Google
   stopped accepting a connected account (Lapsed Authorization). The incident names the account, and
@@ -250,9 +254,10 @@ its mappings and last successful incremental positions, and writes nothing while
   longer exists (ADR 0022's router could not find it). Re-create the rule, choosing calendars from
   accounts that still exist.
 
-To recover the rule, open it, choose **Preview to restart**, inspect the preview, and choose **Start
-syncing**. Its next run repairs drift before advancing either cursor. The next successful scheduled
-run, within five minutes, resolves the incident; **Sync Now** and **Reconcile Now** do not.
+To recover a rule stopped by one of these failures, open it, choose **Preview to restart**, inspect
+the preview, and choose **Start syncing**. Its next run repairs drift before advancing either cursor.
+The next successful scheduled run, within five minutes, resolves the incident; **Sync Now** and
+**Reconcile Now** do not.
 
 ## Problems only an administrator can fix
 
@@ -685,8 +690,11 @@ The Google adapter must discard the expired cursor, perform a safe initial-windo
 ## Email notifications are unavailable or never arrive
 
 **Email notifications** under **Settings → Your account** appears only when the installation
-sends email. Until then that page says who can set email up, and every incident still appears in
-**Activity**.
+sends email. Until then that page says who can set email up. **Activity** keeps every incident;
+**Your plan** and held-rule views retain Plan state. These are also the fallback when a notice
+is lost during failed pass preparation, cancellation, shutdown, restart, or SMTP failure. A newer
+pending Plan notice can replace an older one for the same User; there is no outbox or retry.
+Identity and security mail is independent of this preference.
 
 - **The installation does not send email.** An administrator sets `CALENDAR_SYNC_SMTP_HOST` and
   `CALENDAR_SYNC_SMTP_SENDER`, plus credentials if the server needs them, in `.env` and restarts.
@@ -705,27 +713,31 @@ already reach its rule limit. Under **Settings → Your account → Your plan**,
 shows how many rules count and how many your Plan allows, as "1 of 1" with **Limit reached**, and
 beside **Create sync rule** on Rules a note says how many your Plan lets sync at once.
 
-- Rules that count are enabled rules and rules stopped only because an account's access lapsed.
-  Draft, previewed, and paused rules do not count, and creating or previewing a rule is never
-  limited.
+- Rules that count are enabled rules, rules stopped only because an account's access lapsed,
+  and replacement drafts keeping a reserved place. Other drafts, previewed and paused rules,
+  and held rules do not count. Creating or previewing a rule is never limited.
 - Pause or remove a rule you no longer need, then start this one.
 - A rule stopped by any other error, or paused by a change to its policy, gave up its place. Its
   restart is checked like any Start, so it may be refused while other rules fill your Plan. When
-  more rules count than your Plan allows, Calendar Ghost warns "Your plan may not let this rule
-  start again." before such a change.
+  more rules count than your Plan allows or other rules are held, Calendar Ghost warns
+  "Your plan may not let this rule start again." before a policy edit, Pause, or Disconnect.
 - **Replace calendars…** on a rule that counts (enabled, or stopped only because an account's
   access lapsed) gives the new draft that rule's place, so the new rule can start whatever the
   limit. Replacing a paused rule, or one stopped by any other error, keeps no place.
 - A rule that stopped because an account's access lapsed already counts, so it resumes after
   Reauthorization whatever the limit.
-- A lower limit stops nothing: rules beyond it keep syncing, but no rule can start until fewer
-  count. Ask your administrator for a larger Plan; administrators are never limited.
+- After a lower limit, running rules beyond it keep syncing during a seven-day grace. At expiry,
+  excess running or lapse-stopped rules are held until the Plan has room; excess replacement
+  drafts give up their reserved places instead. New Starts still need room throughout the grace. Ask your administrator
+  for a larger Plan; administrators are never limited. Your plan shows the grace deadline and
+  lets you choose which rules keep syncing.
 
 An API client receives `409` with the code `plan_limit_reached` and the reason `rules`, or
 `rules_with_held` when the User also has rules on Plan Hold. Both carry `limit` and `count` for
 the same limit. Rule details expose `can_start`, `rule_limit`, and `held_rules` for the matching
 preflight explanation; Start checks the Allowance again and refuses if it cannot be read.
-Production Plan settlement remains inactive until its visible controls ship together.
+Held rules can take a free place at the next scheduled check; saving keep choices applies swaps
+immediately. See [Held by your plan](#held-by-your-plan).
 
 ## Issue token is unavailable: your plan's token limit
 
@@ -744,9 +756,10 @@ are never limited. An API client receives `409` with the code `plan_limit_reache
 ## Someone has more than their plan allows
 
 This is for administrators. After you lower a limit, or give someone a smaller Plan, some people
-can have more than their Plan allows. Nothing stops for them: their rules keep syncing, and their
-calendar accounts and Integration Tokens keep working. But they cannot start another rule, connect
-another calendar account, or issue another token until they are within the limit. Before you save
+can have more than their Plan allows. Rules counting beyond the limit get a seven-day grace.
+At expiry, excess running or lapse-stopped rules are held until there is room; excess replacement
+drafts give up their reserved places instead. Existing calendar accounts and Integration Tokens keep working. New Starts,
+connections, and token issues still require room within their corresponding limit. Before you save
 a lower limit, the Plan form says how many people it would leave with more: "1 person on Free has
 more calendar accounts than this. They keep them, but can't connect another."
 
@@ -796,14 +809,38 @@ To fix it, do one of these:
 
 An API client receives `409` with the code `plan_in_use`, `plan_is_default`, or `plan_name_taken`.
 
-## A rule held by a future Plan Hold release stays stopped after rollback
+## Held by your plan
 
-This PR 2 build recognizes Plan Hold but its production scheduler does not release it. Restoring
-account access never releases a hold here. If a future activated release wrote code 2, upgrade to
-an active release, or pause the rule to clear its hold, then preview and Start within your Plan's
-limit. Preview alone keeps a hold. See [migration 34](deployment.md#migration-34-plan-hold-engine)
-for the different behavior of releases from before this migration. Normal production operation
-of PR 2 creates no holds or Plan notices.
+A neutral **Held by your plan** label means the rule is beyond its Plan's rule limit after a
+seven-day grace, or your saved choice gave its place to another rule. Existing projections,
+mappings, and incremental positions remain. It is not a failure and creates no Incident or Audit
+Entry. Sync now and Reconcile now are unavailable while held; Preview is allowed and preserves
+the hold.
+
+Open **Choose which rules sync** on the rule or under **Settings → Your account → Your plan**.
+Save the complete set of preferred rules, up to your current limit. Choose none to prefer the
+oldest rules. A save can swap a kept held rule with an active rule immediately, without email.
+The scheduled pass never swaps: if a competing Start filled a place before automatic release,
+save the choice again. When a place is free, the next scheduled check releases the best-ranked
+held rule without a new preview. Release checks both accounts; if either needs Reauthorization,
+the released rule waits for it instead. Reauthorization alone never releases a hold.
+
+Pausing a held rule clears its hold, gives up no place, and needs a preview before a normal Start.
+A policy change, disconnection, or intervention failure also ends the hold and can leave recovery
+Start without room. The UI warns before capacity-losing actions. Plans off or administrator status
+releases holds on the next successful settlement. Disabled Users retain holds and clear grace.
+No scheduler means no automatic release: check Installation Status for `stalled` and restore the
+scheduler. Monitors read `stop_cause` or `needs_attention`; a held rule can be `degraded` without a
+Stopped problem. Status incident/block totals and Activity retain held-owned records even though
+Dashboard attention counts omit them.
+
+## A rule held by an activated release stays stopped after rollback
+
+The older inert PR 2 and PR 3a builds recognize Plan Hold but their production scheduler does not
+release it. Restoring account access never releases a hold on those builds. Upgrade to an active
+release, or pause the rule to clear its hold, then preview and Start within your Plan's limit.
+Preview alone keeps a hold. See [migration 34](deployment.md#migration-34-plan-hold-engine) for
+the different behavior and re-upgrade risks of releases from before this migration.
 
 ## Getting more help
 
