@@ -241,6 +241,16 @@ reads the Allowance and the User's counts for Your plan, and a read that fails t
 nobody when an Allowance read fails, because assuming no limit would release holds. Other readers
 fall back to no limits, so a fault in Plans never stops synchronization, sign-in, or the rules API.
 
+Your plan reads eligible rule standings, stored grace, and the admission counter in one User
+unit of work without writing. It reports counted rules separately from `held_rules`, and its
+`rules` choices retain keep, creation, and identifier rank. The focused pure `grace_view` in
+`application/operations/own_plan_holds.py` uses the current Allowance to predict counted holds
+and reserved-place losses separately. It hides a grace that no longer applies or needs a fresh
+deadline after a further lowering or admission, preserves a valid stored deadline even after
+expiry, and never starts or clears a grace. Rule payloads include nullable `stop_cause`; detail
+payloads also include `held_rules` so preflight and refused Starts explain held capacity alike.
+These read contracts do not activate Plan settlement: production still composes `plan_holds=None`.
+
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
 `application/operations/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral
 results to HTTP payloads and never opens the database itself. The rule that sorts Audit Entries

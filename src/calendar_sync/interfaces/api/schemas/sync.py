@@ -15,6 +15,7 @@ from calendar_sync.interfaces.api.schemas.shared import (
     EffectiveCadenceValue,
     PrivacyPolicy,
     ProjectionChoice,
+    RuleStopCauseValue,
     TentativeChoice,
     UnansweredChoice,
     WorkKind,
@@ -56,6 +57,7 @@ class RuleResponse(ApiResponse):
     unanswered_invitations: UnansweredChoice
     sync_birthdays: bool
     state: str
+    stop_cause: RuleStopCauseValue | None
     reprojection_required: bool
 
 
@@ -198,6 +200,7 @@ class RuleDetailResponse(RuleResponse):
     """Whether the rule may start now under its User's rule limit; Start checks again."""
     rule_limit: int | None
     """The rule limit that applies to the User; null when none does."""
+    held_rules: int
     keeps_place: bool
     """A Rule Replacement draft that keeps the previous rule's place under its User's rule limit,
     so starting it adds no rule to the count (ADR 0038)."""

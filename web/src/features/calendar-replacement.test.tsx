@@ -44,6 +44,7 @@ function detail(sourceCalendar: string, destinationCalendar: string): RuleDetail
     sync_birthdays: false,
     state: "enabled",
     reprojection_required: false,
+    stop_cause: null,
     effective_cadence: "instant",
     poll_every_minutes: 5,
     initial_lookback_days: 30,
@@ -53,6 +54,7 @@ function detail(sourceCalendar: string, destinationCalendar: string): RuleDetail
     latest_preview: null,
     running: null,
     can_start: true,
+    held_rules: 0,
     rule_limit: null,
     keeps_place: false,
   }

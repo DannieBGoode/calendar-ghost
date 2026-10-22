@@ -38,6 +38,7 @@ const previewedRule: RuleDetail = {
   sync_birthdays: false,
   state: "dry_run_validated",
   reprojection_required: false,
+  stop_cause: null,
   effective_cadence: "instant",
   poll_every_minutes: 5,
   initial_lookback_days: 30,
@@ -47,6 +48,7 @@ const previewedRule: RuleDetail = {
   latest_preview: null,
   running: null,
   can_start: true,
+  held_rules: 0,
   rule_limit: null,
   keeps_place: false,
 }
@@ -352,6 +354,20 @@ describe("RulePreviewView", () => {
     expect(note?.textContent).toBe("Your plan lets 3 rules sync. Pause or remove one to start this rule. See your plan")
     expect(note?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
 
+    act(() => start.click())
+    await settle()
+    expect(calls).not.toContain("POST /api/v1/rules/rule-1/enable")
+  })
+
+  it("points to choosing rules in Your plan when held rules compete for capacity", async () => {
+    mockFetch({ status: 200, body: preview }, { ...previewedRule, can_start: false, rule_limit: 1, held_rules: 2 })
+    await renderPreview(testI18n())
+
+    const start = button("Start syncing to Work")
+    expect(start.getAttribute("aria-disabled")).toBe("true")
+    const note = container.querySelector("#rule-preview-start-note")
+    expect(note?.textContent).toBe("Your plan lets 1 rule sync. Choose which rules sync in Your plan. See your plan")
+    expect(note?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
     act(() => start.click())
     await settle()
     expect(calls).not.toContain("POST /api/v1/rules/rule-1/enable")

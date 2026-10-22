@@ -37,6 +37,9 @@ const family: OwnPlan = {
   may_connect_account: true,
   may_issue_token: true,
   over_rule_limit: false,
+  held_rules: 0,
+  grace: null,
+  rules: [],
 }
 
 const plansOff: OwnPlan = {
@@ -64,22 +67,29 @@ describe("ownPlanShown", () => {
 })
 
 describe("startRefusal", () => {
+  it.each([1, 3])("matches the server refusal with held rules and a limit of %s", (limit) => {
+    const refusal = startRefusal(i18n, { can_start: false, rule_limit: limit, held_rules: 2 })
+    expect(refusal).toBe(
+      `Your plan lets ${limit} ${limit === 1 ? "rule" : "rules"} sync. Choose which rules sync in Your plan.`,
+    )
+    expect(previewedStartRefusal(i18n, { ...family, held_rules: 2, rules_counted: limit, limits: { ...FAMILY_LIMITS, rules: limit } }, { state: "dry_run_validated", keeps_place: false })).toBe(refusal)
+  })
   it("says nothing when the rule may start", () => {
-    expect(startRefusal(i18n, { can_start: true, rule_limit: 3 })).toBeNull()
-    expect(startRefusal(i18n, { can_start: true, rule_limit: null })).toBeNull()
+    expect(startRefusal(i18n, { can_start: true, rule_limit: 3, held_rules: 0 })).toBeNull()
+    expect(startRefusal(i18n, { can_start: true, rule_limit: null, held_rules: 0 })).toBeNull()
   })
 
   it("gives the rule limit's message, in the plural its limit needs", () => {
-    expect(startRefusal(i18n, { can_start: false, rule_limit: 1 })).toBe(
+    expect(startRefusal(i18n, { can_start: false, rule_limit: 1, held_rules: 0 })).toBe(
       "Your plan lets 1 rule sync. Pause or remove it to start this rule.",
     )
-    expect(startRefusal(i18n, { can_start: false, rule_limit: 3 })).toBe(
+    expect(startRefusal(i18n, { can_start: false, rule_limit: 3, held_rules: 0 })).toBe(
       "Your plan lets 3 rules sync. Pause or remove one to start this rule.",
     )
   })
 
   it("falls back to the general limit message without a limit", () => {
-    expect(startRefusal(i18n, { can_start: false, rule_limit: null })).toBe(
+    expect(startRefusal(i18n, { can_start: false, rule_limit: null, held_rules: 0 })).toBe(
       "Your plan's limit is reached. Settings, Your account, Your plan shows what it allows.",
     )
   })

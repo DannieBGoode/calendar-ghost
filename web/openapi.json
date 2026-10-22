@@ -2075,6 +2075,34 @@
         "title": "OwnAccountDeletionResponse",
         "type": "object"
       },
+      "OwnPlanGraceResponse": {
+        "properties": {
+          "held": {
+            "title": "Held",
+            "type": "integer"
+          },
+          "holds_at": {
+            "title": "Holds At",
+            "type": "string"
+          },
+          "reserved": {
+            "title": "Reserved",
+            "type": "integer"
+          },
+          "rule_limit": {
+            "title": "Rule Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "holds_at",
+          "rule_limit",
+          "held",
+          "reserved"
+        ],
+        "title": "OwnPlanGraceResponse",
+        "type": "object"
+      },
       "OwnPlanResponse": {
         "description": "What the signed-in User's Plan allows and how much of it they have, for Your plan.",
         "properties": {
@@ -2089,6 +2117,20 @@
           },
           "connected_accounts": {
             "title": "Connected Accounts",
+            "type": "integer"
+          },
+          "grace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OwnPlanGraceResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "held_rules": {
+            "title": "Held Rules",
             "type": "integer"
           },
           "instant": {
@@ -2135,6 +2177,13 @@
             "title": "Poll Every Minutes",
             "type": "integer"
           },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleStandingResponse"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
           "rules_counted": {
             "title": "Rules Counted",
             "type": "integer"
@@ -2145,6 +2194,9 @@
           "plan",
           "limits",
           "rules_counted",
+          "held_rules",
+          "grace",
+          "rules",
           "connected_accounts",
           "integration_tokens",
           "instant",
@@ -3966,6 +4018,10 @@
             "title": "Effective Cadence",
             "type": "string"
           },
+          "held_rules": {
+            "title": "Held Rules",
+            "type": "integer"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -4056,6 +4112,21 @@
             "title": "State",
             "type": "string"
           },
+          "stop_cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lapsed_authorization",
+                  "plan_hold"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Cause"
+          },
           "sync_all_day_events": {
             "title": "Sync All Day Events",
             "type": "boolean"
@@ -4092,6 +4163,7 @@
           "unanswered_invitations",
           "sync_birthdays",
           "state",
+          "stop_cause",
           "reprojection_required",
           "effective_cadence",
           "poll_every_minutes",
@@ -4103,6 +4175,7 @@
           "running",
           "can_start",
           "rule_limit",
+          "held_rules",
           "keeps_place"
         ],
         "title": "RuleDetailResponse",
@@ -4204,6 +4277,21 @@
             "title": "State",
             "type": "string"
           },
+          "stop_cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lapsed_authorization",
+                  "plan_hold"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Cause"
+          },
           "sync_all_day_events": {
             "title": "Sync All Day Events",
             "type": "boolean"
@@ -4240,9 +4328,38 @@
           "unanswered_invitations",
           "sync_birthdays",
           "state",
+          "stop_cause",
           "reprojection_required"
         ],
         "title": "RuleResponse",
+        "type": "object"
+      },
+      "RuleStandingResponse": {
+        "properties": {
+          "kept": {
+            "title": "Kept",
+            "type": "boolean"
+          },
+          "place": {
+            "enum": [
+              "counted",
+              "reserved",
+              "held"
+            ],
+            "title": "Place",
+            "type": "string"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "place",
+          "kept"
+        ],
+        "title": "RuleStandingResponse",
         "type": "object"
       },
       "RuleSummaryResponse": {
@@ -4324,6 +4441,21 @@
             "title": "State",
             "type": "string"
           },
+          "stop_cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lapsed_authorization",
+                  "plan_hold"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Cause"
+          },
           "sync_all_day_events": {
             "title": "Sync All Day Events",
             "type": "boolean"
@@ -4360,6 +4492,7 @@
           "unanswered_invitations",
           "sync_birthdays",
           "state",
+          "stop_cause",
           "reprojection_required",
           "effective_cadence",
           "poll_every_minutes",

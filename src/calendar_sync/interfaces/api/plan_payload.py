@@ -39,11 +39,13 @@ from calendar_sync.interfaces.api.schemas.identity import (
 from calendar_sync.interfaces.api.schemas.operations import (
     LimitUseResponse,
     OverLimitResponse,
+    OwnPlanGraceResponse,
     OwnPlanResponse,
     PersonPlanOverviewResponse,
     PersonPlanUseResponse,
     PlanAssignmentsResponse,
     PlanMoveResponse,
+    RuleStandingResponse,
 )
 
 
@@ -153,6 +155,19 @@ def own_plan_response(own: OwnPlan) -> OwnPlanResponse:
         plan=_applied(allowance),
         limits=plan_limits_response(allowance.limits) if limited else None,
         rules_counted=own.rules_counted,
+        held_rules=own.held_rules,
+        grace=OwnPlanGraceResponse(
+            holds_at=own.grace.holds_at.isoformat(),
+            rule_limit=own.grace.rule_limit,
+            held=own.grace.held,
+            reserved=own.grace.reserved,
+        )
+        if own.grace is not None
+        else None,
+        rules=[
+            RuleStandingResponse(rule_id=each.rule_id.value, place=each.place.value, kept=each.kept)
+            for each in own.rules
+        ],
         connected_accounts=own.connected_accounts,
         integration_tokens=own.integration_tokens,
         instant=cadence.instant,

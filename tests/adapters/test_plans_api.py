@@ -3,7 +3,7 @@ and assigns Plans and turns them on, and every User reads their own Plan (ADR 00
 
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +15,7 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRuleId, SyncRuleState
+from calendar_sync.domain.plan_hold import PlanGrace
 from calendar_sync.domain.plans import NewPlan, Plan
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.plans import SqlitePlans
@@ -378,6 +379,9 @@ def test_turning_plans_on_with_no_default_makes_a_no_limits_plan_that_limits_nob
         "plan": {"key": "no-limits", "name": "Everyone", "on_default": True},
         "limits": NO_LIMITS_BODY["limits"],
         "rules_counted": 0,
+        "held_rules": 0,
+        "grace": None,
+        "rules": [],
         "connected_accounts": 0,
         "integration_tokens": 0,
     }
@@ -1054,6 +1058,11 @@ def test_your_plan_while_plans_are_off_for_an_administrator_and_for_a_limited_me
         "basis": "plans_off",
         **UNLIMITED,
         "rules_counted": 2,
+        "held_rules": 0,
+        "grace": None,
+        "rules": [
+            {"rule_id": f"rule-{number}", "place": "counted", "kept": False} for number in (1, 2)
+        ],
         "connected_accounts": 2,
         "integration_tokens": 0,
     }
@@ -1061,6 +1070,9 @@ def test_your_plan_while_plans_are_off_for_an_administrator_and_for_a_limited_me
         "basis": "administrator",
         **UNLIMITED,
         "rules_counted": 0,
+        "held_rules": 0,
+        "grace": None,
+        "rules": [],
         "connected_accounts": 0,
         "integration_tokens": 0,
     }
@@ -1069,6 +1081,9 @@ def test_your_plan_while_plans_are_off_for_an_administrator_and_for_a_limited_me
         "plan": {"key": "free", "name": "Free", "on_default": True},
         "limits": FREE_BODY["limits"],
         "rules_counted": 2,
+        "held_rules": 0,
+        "grace": None,
+        "rules": while_off["rules"],
         "connected_accounts": 2,
         "integration_tokens": 0,
         "instant": False,
@@ -1159,6 +1174,97 @@ def _held_member_rules(installation: Installation) -> None:
         uow.rules.save(second.hold())
         uow.rules.keep([rule().id])
         uow.commit()
+
+
+def test_own_plan_exposes_owned_ranked_choices_and_grace_without_writing(
+    installation: Installation,
+) -> None:
+    _held_member_rules(installation)
+    installation.define(FREE_BODY)
+    installation.turn_on("free")
+    deadline = NOW + timedelta(days=7)
+    with sqlite_units(installation.database, user=installation.member)() as uow:
+        # The draft is eligible only because it reserves a place. Held rules consume none.
+        previewed = uow.rules.get(SyncRuleId("rule-3"))
+        assert previewed is not None
+        uow.rules.save(replace(previewed, keeps_place=True))
+        uow.rules.keep([SyncRuleId("rule-3")])
+        uow.plan_grace.save(PlanGrace(deadline, 1, 0))
+        uow.commit()
+    installation.as_member()
+    before = _choice_state(installation)
+
+    answer = installation.client.get("/api/v1/account/plan")
+
+    assert answer.status_code == 200, answer.text
+    own = answer.json()
+    assert (own["rules_counted"], own["held_rules"]) == (2, 1)
+    assert own["grace"] == {
+        "holds_at": deadline.isoformat(),
+        "rule_limit": 1,
+        "held": 1,
+        "reserved": 0,
+    }
+    assert own["rules"] == [
+        {"rule_id": "rule-3", "place": "reserved", "kept": True},
+        {"rule_id": "rule-1", "place": "counted", "kept": False},
+        {"rule_id": "rule-2", "place": "held", "kept": False},
+    ]
+    assert _choice_state(installation) == before
+    installation.as_admin()
+    assert installation.client.get("/api/v1/account/plan").json()["rules"] == []
+
+
+def test_start_refusal_explains_held_rules_and_rule_payloads(
+    installation: Installation,
+) -> None:
+    _held_member_rules(installation)
+    installation.define(FREE_BODY)
+    installation.turn_on("free")
+    installation.as_member()
+    before = _choice_state(installation)
+    client = installation.client
+
+    details = client.get("/api/v1/rules/rule-3").json()
+    refused = client.post("/api/v1/rules/rule-3/enable")
+    listed = client.get("/api/v1/rules").json()
+    held = client.get("/api/v1/rules/rule-2").json()
+
+    assert (details["can_start"], details["rule_limit"], details["held_rules"]) == (False, 1, 1)
+    assert _problem(refused) == (
+        409,
+        "plan_limit_reached",
+        {"reason": "rules_with_held", "limit": 1, "count": 1},
+    )
+    assert [each["stop_cause"] for each in listed] == [None, "plan_hold", None]
+    assert held["stop_cause"] == "plan_hold"
+    assert _choice_state(installation) == before
+    # Lifecycle responses use the same inherited nullable stop cause.
+    assert client.post("/api/v1/rules/rule-2/pause").json()["stop_cause"] is None
+
+
+def test_own_plan_failure_never_invents_an_allowance(
+    installation: Installation, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _held_member_rules(installation)
+    installation.define(FREE_BODY)
+    installation.turn_on("free")
+    installation.as_member()
+    before = _choice_state(installation)
+
+    def unavailable(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(SqlitePlans, "of", unavailable)
+    # The ordinary rule read keeps its fail-open hints; neither Your plan nor Start may do so.
+    details = installation.client.get("/api/v1/rules/rule-3").json()
+    assert (details["can_start"], details["rule_limit"], details["held_rules"]) == (True, None, 0)
+    assert installation.client.get("/api/v1/rules").status_code == 200
+    with pytest.raises(RuntimeError, match="database is locked"):
+        installation.client.get("/api/v1/account/plan")
+    with pytest.raises(RuntimeError, match="database is locked"):
+        installation.client.post("/api/v1/rules/rule-3/enable")
+    assert _choice_state(installation) == before
 
 
 def test_keep_rules_requires_the_owning_session(installation: Installation) -> None:

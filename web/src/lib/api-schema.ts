@@ -2126,6 +2126,17 @@ export interface components {
             /** Needs Another Administrator */
             needs_another_administrator: boolean;
         };
+        /** OwnPlanGraceResponse */
+        OwnPlanGraceResponse: {
+            /** Held */
+            held: number;
+            /** Holds At */
+            holds_at: string;
+            /** Reserved */
+            reserved: number;
+            /** Rule Limit */
+            rule_limit: number;
+        };
         /**
          * OwnPlanResponse
          * @description What the signed-in User's Plan allows and how much of it they have, for Your plan.
@@ -2138,6 +2149,9 @@ export interface components {
             basis: "plans_off" | "administrator" | "plan";
             /** Connected Accounts */
             connected_accounts: number;
+            grace: components["schemas"]["OwnPlanGraceResponse"] | null;
+            /** Held Rules */
+            held_rules: number;
             /** Instant */
             instant: boolean;
             /** Integration Tokens */
@@ -2152,6 +2166,8 @@ export interface components {
             plan: components["schemas"]["AppliedPlanResponse"] | null;
             /** Poll Every Minutes */
             poll_every_minutes: number;
+            /** Rules */
+            rules: components["schemas"]["RuleStandingResponse"][];
             /** Rules Counted */
             rules_counted: number;
         };
@@ -2761,6 +2777,8 @@ export interface components {
              * @enum {string}
              */
             effective_cadence: "instant" | "not_watchable" | "waiting_for_provider" | "off_by_user" | "not_in_plan" | "no_public_address" | "not_reaching";
+            /** Held Rules */
+            held_rules: number;
             /** Id */
             id: string;
             /** Initial Lookback Days */
@@ -2787,6 +2805,8 @@ export interface components {
             source: components["schemas"]["NamedCalendarEndpointResponse"];
             /** State */
             state: string;
+            /** Stop Cause */
+            stop_cause: ("lapsed_authorization" | "plan_hold") | null;
             /** Sync All Day Events */
             sync_all_day_events: boolean;
             /** Sync Birthdays */
@@ -2842,6 +2862,8 @@ export interface components {
             source: components["schemas"]["CalendarEndpointPayload"];
             /** State */
             state: string;
+            /** Stop Cause */
+            stop_cause: ("lapsed_authorization" | "plan_hold") | null;
             /** Sync All Day Events */
             sync_all_day_events: boolean;
             /** Sync Birthdays */
@@ -2856,6 +2878,18 @@ export interface components {
              * @enum {string}
              */
             unanswered_invitations: "wait" | "as_tentative";
+        };
+        /** RuleStandingResponse */
+        RuleStandingResponse: {
+            /** Kept */
+            kept: boolean;
+            /**
+             * Place
+             * @enum {string}
+             */
+            place: "counted" | "reserved" | "held";
+            /** Rule Id */
+            rule_id: string;
         };
         /** RuleSummaryResponse */
         RuleSummaryResponse: {
@@ -2884,6 +2918,8 @@ export interface components {
             source: components["schemas"]["NamedCalendarEndpointResponse"];
             /** State */
             state: string;
+            /** Stop Cause */
+            stop_cause: ("lapsed_authorization" | "plan_hold") | null;
             /** Sync All Day Events */
             sync_all_day_events: boolean;
             /** Sync Birthdays */

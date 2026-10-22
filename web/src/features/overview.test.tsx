@@ -53,6 +53,7 @@ const rule: RuleSummary = {
   sync_birthdays: false,
   state: "enabled",
   reprojection_required: false,
+  stop_cause: null,
   effective_cadence: "instant",
   poll_every_minutes: 5,
   last_sync: {
@@ -260,6 +261,9 @@ const atRuleLimit: OwnPlan = {
   plan: { key: "free", name: "Free", on_default: true },
   limits: { rules: 1, connected_accounts: 2, integration_tokens: 0, sync_interval: "5_minutes" },
   rules_counted: 1,
+  held_rules: 0,
+  grace: null,
+  rules: [],
   connected_accounts: 2,
   integration_tokens: 0,
   instant: false,

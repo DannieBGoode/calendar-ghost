@@ -116,6 +116,7 @@ from calendar_sync.domain.plans import (
     InvalidAssignmentReason,
     InvalidPlan,
     InvalidPlanReason,
+    LimitedResource,
     PlanInUse,
     PlanIsDefault,
     PlanLimitReached,
@@ -300,7 +301,10 @@ def _registration_params(error: Exception) -> dict[str, ParamValue]:
 def _plan_params(error: Exception) -> dict[str, ParamValue]:
     """What a Plan's refusal names; `count` beside a number picks a plural message's form."""
     if isinstance(error, PlanLimitReached):
-        return {"reason": error.resource.value, "limit": error.limit, "count": error.limit}
+        reason = error.resource.value
+        if error.resource is LimitedResource.RULES and error.held_rules > 0:
+            reason = "rules_with_held"
+        return {"reason": reason, "limit": error.limit, "count": error.limit}
     if isinstance(error, TooManyKeptRules):
         return {"limit": error.limit, "count": error.limit}
     if isinstance(error, PlanInUse):

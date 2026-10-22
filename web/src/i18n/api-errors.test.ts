@@ -95,6 +95,12 @@ describe("apiErrorMessage", () => {
     )
   })
 
+  it.each([1, 3])("explains held capacity with count-based plurals at a limit of %s", (limit) => {
+    expect(apiErrorMessage(i18n, coded("plan_limit_reached", { reason: "rules_with_held", limit, count: limit }))).toBe(
+      `Your plan lets ${limit} ${limit === 1 ? "rule" : "rules"} sync. Choose which rules sync in Your plan.`,
+    )
+  })
+
   it("says in minutes when someone who started many runs may run again", () => {
     const throttled = (minutes: number) => coded("manual_runs_throttled", { retry_after: minutes * 60, count: minutes })
     expect(apiErrorMessage(i18n, throttled(2))).toBe("You started many runs in a short time. Try again in 2 minutes.")

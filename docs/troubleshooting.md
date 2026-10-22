@@ -721,7 +721,11 @@ beside **Create sync rule** on Rules a note says how many your Plan lets sync at
 - A lower limit stops nothing: rules beyond it keep syncing, but no rule can start until fewer
   count. Ask your administrator for a larger Plan; administrators are never limited.
 
-An API client receives `409` with the code `plan_limit_reached` and the reason `rules`.
+An API client receives `409` with the code `plan_limit_reached` and the reason `rules`, or
+`rules_with_held` when the User also has rules on Plan Hold. Both carry `limit` and `count` for
+the same limit. Rule details expose `can_start`, `rule_limit`, and `held_rules` for the matching
+preflight explanation; Start checks the Allowance again and refuses if it cannot be read.
+Production Plan settlement remains inactive until its visible controls ship together.
 
 ## Issue token is unavailable: your plan's token limit
 

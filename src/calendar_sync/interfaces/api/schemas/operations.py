@@ -27,6 +27,7 @@ from calendar_sync.interfaces.api.schemas.shared import (
     LimitedResourceValue,
     ProblemKindValue,
     RecordedTimeResponse,
+    RulePlaceValue,
     RuleStopCauseValue,
     RunReasonValue,
     SourceComparisonValue,
@@ -332,6 +333,19 @@ class PersonPlanOverviewResponse(ApiResponse):
     """How much of the Plan they have they use, whoever they are; null when they have no Plan."""
 
 
+class OwnPlanGraceResponse(ApiResponse):
+    holds_at: str
+    rule_limit: int
+    held: int
+    reserved: int
+
+
+class RuleStandingResponse(ApiResponse):
+    rule_id: str
+    place: RulePlaceValue
+    kept: bool
+
+
 class OwnPlanResponse(ApiResponse):
     """What the signed-in User's Plan allows and how much of it they have, for Your plan."""
 
@@ -341,6 +355,9 @@ class OwnPlanResponse(ApiResponse):
     limits: PlanLimitsResponse | None
     """What their Plan allows; null unless the basis is "plan", since then nothing limits them."""
     rules_counted: int
+    held_rules: int
+    grace: OwnPlanGraceResponse | None
+    rules: list[RuleStandingResponse]
     connected_accounts: int
     """Every calendar account, Disconnected Accounts included."""
     integration_tokens: int
@@ -352,7 +369,7 @@ class OwnPlanResponse(ApiResponse):
     may_connect_account: bool
     may_issue_token: bool
     over_rule_limit: bool
-    """More rules count than the rule limit: nothing stops, but no other rule can start."""
+    """More rules count than the current rule limit."""
 
 
 class PlanAssignmentsRequest(BaseModel):

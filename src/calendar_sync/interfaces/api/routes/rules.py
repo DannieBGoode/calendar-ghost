@@ -350,6 +350,7 @@ def rule_details(rule_id: str, services: Services) -> RuleDetailResponse:
         running=_work_response(details.running),
         can_start=details.can_start,
         rule_limit=details.rule_limit,
+        held_rules=details.held_rules,
         keeps_place=details.rule.keeps_place,
     )
 
@@ -479,6 +480,7 @@ def _rule_response(rule: SyncRule) -> RuleResponse:
         unanswered_invitations=rule.transformation.unanswered.value,
         sync_birthdays=rule.transformation.birthdays is BirthdayPolicy.INCLUDE,
         state=rule.state.value,
+        stop_cause=rule.stop_cause.value if rule.stop_cause is not None else None,
         reprojection_required=rule.reprojection_required,
     )
 
