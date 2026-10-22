@@ -33,5 +33,6 @@ jobs:
       - run: pnpm test
       - run: pnpm run build
       - run: pnpm run audit:dist
+      - run: pnpm run test:worker
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run e2e

@@ -177,6 +177,7 @@ pnpm run dev          # http://localhost:4321
 pnpm run check        # astro check
 pnpm test             # unit tests
 pnpm run build && pnpm run audit:dist
+pnpm run test:worker  # real local Workers runtime and Markdown negotiation; no browser needed
 pnpm run e2e          # Playwright; run `pnpm exec playwright install chromium` once
 pnpm run og-image     # regenerate public/og.png from a running `pnpm run preview`
 ```
@@ -187,6 +188,41 @@ pages under `/docs`, imports screenshots from `docs/assets/`, and checks its com
 `README.md`. In the Workers Builds settings, set the build watch paths to `site/**`, `docs/**`, and
 `README.md`, so a documentation change also redeploys the site (the `Site` workflow uses the same
 paths).
+
+### Public website discovery and Markdown
+
+The site's Worker adds RFC 8288 `Link` headers on the homepage and published guides, pointing to
+the self-hosting guide, its monitor and agent instructions, and each page's Markdown alternative.
+The site publishes documentation only: API and MCP endpoints belong to each installation. Do not
+advertise OAuth issuers, agent registration, or API endpoints on the public site unless it actually
+offers them.
+
+`pnpm run build` converts the built pages' main content to Markdown with Turndown, keeping copy,
+commands, tables, and resolved documentation links together with the HTML. It removes navigation,
+controls, and decorative content. Markdown is built at `/index.md` and `/docs/<slug>/index.md`;
+`public/_headers` sets their media type for direct asset requests. The build audit requires these
+files. The Worker also serves them at the original page address when `Accept` explicitly prefers
+`text/markdown`, respecting quality values and zero-quality exclusions. Other requests keep HTML,
+and both representations carry `Vary: Accept`. Only published pages participate; errors and
+analytics keep their existing behavior. No conversion service, AI binding, or Cloudflare zone
+toggle is needed. The public site's `robots.txt` and static response headers declare
+`Content-Signal: search=yes, ai-input=yes, ai-train=no`: search and agent use are welcome,
+while model training is declined. These preferences do not enforce access restrictions and do
+not apply to self-hosted installations.
+
+Astro preview serves the built files but does not run the Worker. To verify response headers and
+negotiation, build the site and run `pnpm exec wrangler dev --local --port 8787` from `site/`, then:
+
+```sh
+curl -I http://localhost:8787/
+curl -i -H 'Accept: text/markdown' http://localhost:8787/
+curl -i -H 'Accept: text/markdown' http://localhost:8787/docs/self-hosting/
+curl -I -H 'Accept: text/markdown;q=0, text/html' http://localhost:8787/
+```
+
+The first and last responses are HTML; the middle two are `text/markdown; charset=utf-8`.
+Discovery headers and Markdown ship with the usual Workers Builds deployment. Reverting the
+change and redeploying restores the previous static-page behavior without data migration.
 
 ## Adding a language
 

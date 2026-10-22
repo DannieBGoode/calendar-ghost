@@ -5,12 +5,13 @@
   "packageManager": "pnpm@12.9.1",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && node scripts/build-markdown.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "test": "vitest run",
     "audit:dist": "node scripts/audit-dist.mjs",
     "e2e": "playwright test",
+    "test:worker": "playwright test --config playwright.worker.config.ts",
     "og-image": "node scripts/og-image.mjs",
     "deploy": "wrangler deploy"
   },
@@ -33,6 +34,8 @@
     "@types/react-dom": "19.2.5",
     "happy-dom": "20.14.5",
     "sharp": "0.35.5",
+    "turndown": "7.2.4",
+    "turndown-plugin-gfm": "1.0.2",
     "typescript": "6.0.3",
     "vitest": "4.1.11",
     "wrangler": "4.147.0"
