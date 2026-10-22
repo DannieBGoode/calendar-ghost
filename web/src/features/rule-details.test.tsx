@@ -266,6 +266,45 @@ function choose(selector: string, value: string) {
 }
 
 describe("RuleDetailsView", () => {
+  it.each(["plans_off", "administrator", "unlimited"])("shows pending release without a keep step with %s", async (basis) => {
+    await renderDetails(testI18n(), { ...enabledRule, state: "degraded", stop_cause: "plan_hold" }, null, jsonResponse({ ...overTheLimit, basis: basis === "unlimited" ? "plan" : basis, limits: basis === "unlimited" ? { ...overTheLimit.limits, rules: null } : null, held_rules: 1 }))
+    expect(container.textContent).toContain("Resumes at the next scheduled check.")
+    expect(container.querySelector('a[href="/settings/account#your-plan"]')).toBeNull()
+    expect(container.textContent).not.toContain("Preview to restart")
+  })
+
+  it("offers Your plan Retry when its read fails without replacing the hold by recovery", async () => {
+    await renderDetails(testI18n(), { ...enabledRule, state: "degraded", stop_cause: "plan_hold" }, null, jsonResponse({}, 500))
+    expect(container.querySelector('a[href="/settings/account#your-plan"]')?.textContent).toBe("See your plan")
+    expect(container.textContent).toContain("Held by your plan")
+    expect(container.textContent).not.toContain("Preview to restart")
+  })
+
+  it("warns before a policy edit while held rules wait within the limit", async () => {
+    await renderDetails(testI18n(), enabledRule, null, jsonResponse({ ...overTheLimit, rules_counted: 1, held_rules: 1, over_rule_limit: false }))
+    click(container.querySelector('[aria-controls="policy-form"]'))
+    expect(container.querySelector("#policy-form")?.textContent).toContain("Your plan may not let this rule start again.")
+  })
+
+  it("shows the hold and ordinary Preview and Pause without recovery commands", async () => {
+    await renderDetails(testI18n(), { ...enabledRule, state: "degraded", stop_cause: "plan_hold" }, null, jsonResponse(overTheLimit))
+    expect(container.textContent).toContain("Held by your plan")
+    expect(container.textContent).toContain("Resumes by itself when your plan has room.")
+    expect([...container.querySelectorAll("a")].filter((a) => a.textContent === "Choose which rules sync")).toHaveLength(1)
+    expect(container.textContent).not.toContain("Preview to restart")
+    click(container.querySelector("button[aria-haspopup=menu]"))
+    expect(container.querySelector("[role=menu]")?.textContent).toContain("Preview")
+    expect(container.querySelector("[role=menu]")?.textContent).toContain("Pause rule")
+    expect(container.querySelector("[role=menu]")?.textContent).not.toMatch(/Sync now|Reconcile now/)
+  })
+
+  it("test_policy_edit_ends_automatic_plan_release", async () => {
+    await renderDetails(testI18n(), { ...enabledRule, state: "degraded", stop_cause: "plan_hold" })
+    click([...container.querySelectorAll("button")].find((button) => button.textContent === "Change policy") ?? null)
+    choose("#edit-privacy-policy", "copy_details")
+    expect(container.textContent).toContain("The plan hold ends. This rule will no longer resume by itself. Preview it, then start it within your plan's rule limit.")
+  })
+
   it("renders the rule's facts, runs, and commands in English", async () => {
     await renderDetails(testI18n(), enabledRule)
 

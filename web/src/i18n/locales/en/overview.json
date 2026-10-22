@@ -137,7 +137,12 @@
       }
     },
     "problemFirstSeen": "{summary} First seen {relative}.",
-    "problemLastSync": "{summary} Last sync {relative}."
+    "problemLastSync": "{summary} Last sync {relative}.",
+    "held": {
+      "title": "Your rules are held by your plan",
+      "detail": "They resume by themselves when your plan has room.",
+      "pendingRelease": "They resume at the next scheduled check."
+    }
   },
   "accountSummary": {
     "connectedOnly": { "one": "{count} account connected", "other": "{count} accounts connected" },

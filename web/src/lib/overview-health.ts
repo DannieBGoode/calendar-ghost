@@ -4,7 +4,7 @@ import { activitySearch } from "@/lib/activity-location"
 import { causeOf, causeText, isAdministratorCause, retryTiming, type Cause } from "@/lib/causes"
 import { providerWords } from "@/lib/providers"
 import type { Dashboard, InstallationHealth, RunningWork, ServerProblem } from "@/lib/api"
-import type { AppView, SettingsTab } from "@/lib/navigation"
+import { yourPlanPath, type AppView, type SettingsTab } from "@/lib/navigation"
 
 /**
  * The Overview's health, most urgent first:
@@ -17,7 +17,7 @@ import type { AppView, SettingsTab } from "@/lib/navigation"
  */
 export type OverviewTone = "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy"
 
-export type HealthAction = { label: string; view: AppView; ruleId?: string; search?: string; settingsTab?: SettingsTab }
+export type HealthAction = { label: string; view: AppView; ruleId?: string; search?: string; settingsTab?: SettingsTab; href?: string }
 
 /** A problem the hero lists under the main one, in a few words. */
 type OtherProblem = { tone: OverviewTone; summary: string; action: HealthAction | null }
@@ -132,6 +132,7 @@ export type OverviewContext = {
   ruleName?: (ruleId: string) => string | null
   administrator?: boolean
   pollEveryMinutes?: number | undefined
+  planHoldStep?: "choose" | "retry" | null
 }
 
 function reauthorizeInSettings(i18n: I18n): HealthAction {
@@ -438,7 +439,7 @@ function genericAttentionHealth(i18n: I18n, tone: OverviewTone, facts: HealthFac
 }
 
 /** No problem: no rule yet, every rule paused or never started, or everything healthy. */
-function quietHealth(i18n: I18n, dashboard: Dashboard, tone: OverviewTone, facts: HealthFacts): OverviewHealth {
+function quietHealth(i18n: I18n, dashboard: Dashboard, tone: OverviewTone, { facts, planHoldStep }: { facts: HealthFacts; planHoldStep: OverviewContext["planHoldStep"] }): OverviewHealth {
   const { t } = i18n
   const review = reviewRulesAction(i18n)
   if (dashboard.sync_rules === 0) {
@@ -448,6 +449,11 @@ function quietHealth(i18n: I18n, dashboard: Dashboard, tone: OverviewTone, facts
   }
   if (dashboard.enabled_rules > 0) {
     return onlyHealth(tone, t("overview.health.healthy.title"), facts.checks, { facts: facts.running })
+  }
+  if (dashboard.held_rules > 0) {
+    return onlyHealth(tone, t("overview.health.held.title"), t(planHoldStep === null ? "overview.health.held.pendingRelease" : "overview.health.held.detail"), {
+      action: planHoldStep === null ? null : { label: t(planHoldStep === "retry" ? "common.plan.seeYourPlan" : "settings.ownPlan.keep.open"), view: "settings", href: yourPlanPath() },
+    })
   }
   // A rule that has synced before was paused on purpose; one that never has is still being set up.
   if (facts.lastSync) {
@@ -468,7 +474,7 @@ export function overviewHealth(
   i18n: I18n,
   dashboard: Dashboard,
   now: number = Date.now(),
-  { ruleName = () => null, administrator = false, pollEveryMinutes = 5 }: OverviewContext = {},
+  { ruleName = () => null, administrator = false, pollEveryMinutes = 5, planHoldStep }: OverviewContext = {},
 ): OverviewHealth {
   const reader: Reader = { administrator }
   const tone = TONE_OF[dashboard.status]
@@ -488,5 +494,5 @@ export function overviewHealth(
       others: rest.map(({ tone: otherTone, summary, action }) => ({ tone: otherTone, summary, action })),
     }
   }
-  return genericAttentionHealth(i18n, tone, facts) ?? quietHealth(i18n, dashboard, tone, facts)
+  return genericAttentionHealth(i18n, tone, facts) ?? quietHealth(i18n, dashboard, tone, { facts, planHoldStep })
 }

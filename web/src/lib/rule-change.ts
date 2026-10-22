@@ -1,6 +1,6 @@
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
-import type { ProjectionHandling, RemovalResult, RulePolicyPayload, RunOutcome } from "@/lib/api"
+import type { ProjectionHandling, RemovalResult, RulePolicyPayload, RuleSummary, RunOutcome } from "@/lib/api"
 import { responseConsequences } from "@/lib/invitation-responses"
 import { BUSY_TITLE } from "@/lib/privacy-policy"
 import { providerWords } from "@/lib/providers"
@@ -46,19 +46,21 @@ export function policyChangeConsequences(
   i18n: I18n,
   {
     state,
+    stopCause,
     current,
     next,
     mappingCount,
     destination,
   }: {
     state: string
+    stopCause?: RuleSummary["stop_cause"]
     current: RulePolicyPayload
     next: RulePolicyPayload
     mappingCount: number
     destination: string
   },
 ): string[] {
-  const lines = [stateConsequence(i18n, state)]
+  const lines = [stopCause === "plan_hold" ? i18n.t("ruleDetails.change.state.held") : stateConsequence(i18n, state)]
   if (current.privacy_policy === "busy_only" && next.privacy_policy === "copy_details") {
     lines.push(
       mappingCount > 0

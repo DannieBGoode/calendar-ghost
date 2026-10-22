@@ -116,8 +116,8 @@
       "other": "Your plan lets {count} rules sync. Pause or remove one to start this rule."
     },
     "plan_limit_reached_rules_with_held": {
-      "one": "Your plan lets {count} rule sync. Choose which rules sync in Your plan.",
-      "other": "Your plan lets {count} rules sync. Choose which rules sync in Your plan."
+      "one": "Your plan lets {count} rule sync. Pause or remove a rule that counts, or ask your administrator for a larger plan, to start this rule.",
+      "other": "Your plan lets {count} rules sync. Pause or remove a rule that counts, or ask your administrator for a larger plan, to start this rule."
     },
     "too_many_kept_rules": {
       "one": "Your plan lets you keep {count} rule. Choose at most {count} rule and save again.",

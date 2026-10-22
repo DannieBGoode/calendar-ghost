@@ -27,7 +27,7 @@ import { overviewHealth } from "@/lib/overview-health"
 import { isAdministrator } from "@/lib/people"
 import { workRefreshInterval } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
-import { useAccountLimitReason } from "@/lib/use-own-plan"
+import { useAccountLimitReason, usePlanHoldStep } from "@/lib/use-own-plan"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 import { cn } from "@/lib/utils"
 
@@ -62,6 +62,7 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   const { t } = i18n
   const now = useNow()
   const { dashboard, rules, providers, endpoints, administrator, pollEveryMinutes } = useOverviewData()
+  const planHoldStep = usePlanHoldStep()
 
   if (dashboard.isPending || rules.isPending || providers.isPending) return <PageSkeleton label={t("overview.loading")} />
   if (dashboard.error || rules.error || providers.error) return <LoadFailure title={t("overview.loadFailure")} />
@@ -71,6 +72,7 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
     ruleName: (ruleId) => ruleNames.get(ruleId) ?? null,
     administrator,
     pollEveryMinutes,
+    planHoldStep,
   })
 
   return (
@@ -102,7 +104,7 @@ function OnboardingSteps({
   const { t } = useI18n()
   // Only an authorized account lets the next step work; a disconnected one must be renewed first.
   const reauthorize = dashboard.connected_accounts === 0 && dashboard.disconnected_accounts > 0
-  const done = [dashboard.connected_accounts > 0, dashboard.sync_rules > 0, dashboard.enabled_rules > 0]
+  const done = [dashboard.connected_accounts > 0, dashboard.sync_rules > 0, dashboard.enabled_rules + dashboard.held_rules > 0]
   const current = done.indexOf(false)
   const rulesLink = (label: string, createRule: boolean) => (
     <Button asChild>

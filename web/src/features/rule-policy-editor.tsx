@@ -160,6 +160,7 @@ function PolicyConsequences({
       <ul>
         {policyChangeConsequences(i18n, {
           state: detail.state,
+          stopCause: detail.stop_cause,
           current,
           next,
           mappingCount: detail.mapping_count,

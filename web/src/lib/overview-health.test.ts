@@ -40,6 +40,21 @@ const problem = (
 ): ServerProblem => ({ kind, rule_id, summary, since, message: null, cause: null, last_tried_at: null, provider: "google" })
 
 describe("overviewHealth", () => {
+  it("names all-held rules without changing the server's paused verdict", () => {
+    const health = overviewHealth(i18n, { ...healthy, status: "paused", enabled_rules: 0, running_rules: 0, held_rules: 3 }, now)
+    expect(health.tone).toBe("paused")
+    expect(health.headline).toBe("Your rules are held by your plan")
+    expect(health.detail).toBe("They resume by themselves when your plan has room.")
+    expect(health.action?.label).toBe("Choose which rules sync")
+    expect(health.action?.href).toBe("/settings/account#your-plan")
+  })
+
+  it("keeps the server verdict with enabled and held rules", () => {
+    const health = overviewHealth(i18n, { ...healthy, held_rules: 1 }, now)
+    expect(health.tone).toBe("healthy")
+    expect(health.headline).toBe("Synchronization is healthy")
+  })
+
   it("reports the last successful sync when everything is quiet", () => {
     const health = overviewHealth(i18n, healthy, now)
     expect(health.tone).toBe("healthy")

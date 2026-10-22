@@ -152,7 +152,7 @@ function RuleItem({
       <div className="user-overview-rule-head">
         <div className="user-overview-item-title">
           <RuleName i18n={i18n} rule={rule} own={options.own} />
-          <RuleStatusBadge state={rule.state} stopped={rule.problem?.kind === "stopped"} />
+          <RuleStatusBadge stopCause={rule.stop_cause} thirdPerson={!options.own} state={rule.state} stopped={rule.problem?.kind === "stopped"} />
         </div>
         <p className="user-overview-muted">{lastSync(i18n, rule.last_succeeded_at, options.now)}</p>
       </div>

@@ -9,7 +9,7 @@ import { RulePreviewView } from "./rule-preview"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { ConnectedAccount, RuleDetail, RulePreview } from "@/lib/api"
+import type { ConnectedAccount, OwnPlan, RuleDetail, RulePreview } from "@/lib/api"
 import type { OpenRule } from "@/lib/navigation"
 import { RULE_CHANGE_QUERIES } from "@/lib/use-rule-commands"
 
@@ -137,13 +137,14 @@ let container: HTMLDivElement
 let root: Root | null = null
 let calls: string[] = []
 
-function mockFetch(previewAnswer: Answer, rule: RuleDetail = previewedRule) {
+function mockFetch(previewAnswer: Answer, rule: RuleDetail = previewedRule, ownPlan: Answer = { status: 200, body: {} }) {
   calls = []
   vi.stubGlobal(
     "fetch",
     vi.fn((input: string | URL, init?: RequestInit) => {
       const path = String(input).split("?")[0] ?? ""
       calls.push(`${init?.method ?? "GET"} ${path}`)
+      if (path === "/api/v1/account/plan") return Promise.resolve(jsonResponse(ownPlan))
       if (path === "/api/v1/accounts") return Promise.resolve(jsonResponse({ status: 200, body: [account] }))
       if (path.endsWith("/calendars")) return Promise.resolve(jsonResponse({ status: 200, body: [] }))
       if (path === "/api/v1/rules/rule-1/preview") return Promise.resolve(jsonResponse(previewAnswer))
@@ -201,6 +202,69 @@ afterEach(() => {
 })
 
 describe("RulePreviewView", () => {
+  it.each(["plans_off", "administrator", "unlimited"] as const)("shows pending release without a Plan link in held previews with %s", async (basis) => {
+    mockFetch({ status: 200, body: preview }, { ...previewedRule, state: "degraded", stop_cause: "plan_hold" }, { status: 200, body: { basis: basis === "unlimited" ? "plan" : basis, limits: basis === "unlimited" ? { rules: null } : null } })
+    await renderPreview(testI18n())
+    expect(container.querySelector("footer")?.textContent).toContain("Resumes at the next scheduled check.")
+    expect(container.querySelector('footer a[href="/settings/account#your-plan"]')).toBeNull()
+    expect(container.querySelector("footer")?.textContent).not.toContain("Start syncing")
+  })
+
+  it("offers the chooser for a finite Plan and Your plan Retry after a failed read", async () => {
+    const held = { ...previewedRule, state: "degraded", stop_cause: "plan_hold" as const }
+    const plan: Partial<OwnPlan> = { basis: "plan", limits: { rules: 1, connected_accounts: 2, integration_tokens: 0, sync_interval: "5_minutes" }, held_rules: 1 }
+    mockFetch({ status: 200, body: preview }, held, { status: 200, body: plan })
+    await renderPreview(testI18n())
+    expect(container.querySelector('footer a[href="/settings/account#your-plan"]')?.textContent).toBe("Choose which rules sync")
+    act(() => root?.unmount())
+    mockFetch({ status: 200, body: preview }, held, { status: 500, body: { detail: "Plan unavailable" } })
+    await renderPreview(testI18n())
+    expect(container.querySelector('footer a[href="/settings/account#your-plan"]')?.textContent).toBe("See your plan")
+  })
+
+  it("lets an ordinary rule Start in a free place while other rules are held", async () => {
+    mockFetch({ status: 200, body: preview }, { ...previewedRule, can_start: true, rule_limit: 1, held_rules: 2 })
+    await renderPreview(testI18n())
+    expect(button("Start syncing to Work").getAttribute("aria-disabled")).toBeNull()
+    expect(container.querySelector("#rule-preview-start-note")).toBeNull()
+  })
+
+  it.each(["rule_not_executable", "plan_limit_reached"])("gives a newly read hold precedence over a stale Start refusal (%s)", async (code) => {
+    mockFetch({ status: 200, body: preview })
+    const answer = vi.mocked(fetch).getMockImplementation()
+    let held = false
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const url = input instanceof Request ? input.url : input.toString()
+      if (url.endsWith("/enable")) {
+        held = true
+        return Promise.resolve(jsonResponse({ status: 409, body: { detail: "Cannot start", code, params: { reason: "rules_with_held", limit: 1, count: 1 } } }))
+      }
+      if (held && url === "/api/v1/rules/rule-1") {
+        return Promise.resolve(jsonResponse({ status: 200, body: { ...previewedRule, state: "degraded", stop_cause: "plan_hold", can_start: false, held_rules: 2, rule_limit: 1 } }))
+      }
+      return answer?.(input, init) ?? Promise.reject(new Error("no answer"))
+    })
+    await renderPreview(testI18n())
+    act(() => button("Start syncing to Work").click())
+    await settle()
+    const footer = container.querySelector("footer")!
+    expect(footer.textContent).toContain("Held by your plan")
+    expect(footer.textContent).not.toMatch(/Start syncing|Pause or remove|changed since|Preview again/)
+    expect(container.textContent).toContain("Dentist")
+  })
+
+  it("retains held preview results and replaces Start and its capacity refusal with the hold", async () => {
+    mockFetch({ status: 200, body: preview }, { ...previewedRule, state: "degraded", stop_cause: "plan_hold", can_start: false, held_rules: 2, rule_limit: 1 })
+    await renderPreview(testI18n())
+    expect(container.textContent).toContain("Dentist")
+    const footer = container.querySelector("footer")!
+    expect(footer.textContent).toContain("Held by your plan")
+    expect(footer.textContent).toContain("Resumes by itself when your plan has room.")
+    expect(footer.querySelector('a[href="/settings/account#your-plan"]')).not.toBeNull()
+    expect(footer.textContent).not.toMatch(/Start syncing|Pause or remove|changed since/)
+    expect(calls.filter((call) => call.endsWith("/enable"))).toEqual([])
+  })
+
   it("shows each source event beside what the destination will hold", async () => {
     mockFetch({ status: 200, body: preview })
     await renderPreview(testI18n())
@@ -359,14 +423,15 @@ describe("RulePreviewView", () => {
     expect(calls).not.toContain("POST /api/v1/rules/rule-1/enable")
   })
 
-  it("points to choosing rules in Your plan when held rules compete for capacity", async () => {
+  it("explains real capacity steps without suggesting this ordinary previewed rule can be chosen", async () => {
     mockFetch({ status: 200, body: preview }, { ...previewedRule, can_start: false, rule_limit: 1, held_rules: 2 })
     await renderPreview(testI18n())
 
     const start = button("Start syncing to Work")
     expect(start.getAttribute("aria-disabled")).toBe("true")
     const note = container.querySelector("#rule-preview-start-note")
-    expect(note?.textContent).toBe("Your plan lets 1 rule sync. Choose which rules sync in Your plan. See your plan")
+    expect(note?.textContent).toBe("Your plan lets 1 rule sync. Pause or remove a rule that counts, or ask your administrator for a larger plan, to start this rule. See your plan")
+    expect(note?.textContent).not.toContain("Choose which rules sync")
     expect(note?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
     act(() => start.click())
     await settle()

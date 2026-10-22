@@ -268,6 +268,15 @@ function menuLabels() {
 }
 
 describe("A person's page", () => {
+  it("shows their held rule neutrally with no problem or private keep-choice link", async () => {
+    const held = { ...robin, status: { ...robin.status, status: "paused" as const, needs_attention: false, problems: [], counts: { ...robin.status.counts, running: 0, held: 1, blocked_events: 0 }, rules: robin.status.rules.map((rule) => ({ ...rule, state: "degraded", stop_cause: "plan_hold" as const, problem: null })) } }
+    await renderPerson(testI18n(), "user-robin", { "GET /api/v1/users/user-robin/overview": jsonResponse(held) })
+    expect(container.querySelector(".user-overview-list")?.textContent).toContain("Held by their plan")
+    expect(container.querySelector(".user-overview-list")?.textContent).not.toMatch(/Stopped|Held by your plan|Preview to restart/)
+    expect(container.querySelector(".user-overview-list")?.textContent).toContain("Calendar 1")
+    expect(container.querySelector('a[href="/settings/account#your-plan"]')).toBeNull()
+  })
+
   it("shows who they are and exactly what the Operator Overview shows about them", async () => {
     await renderPerson(testI18n())
 

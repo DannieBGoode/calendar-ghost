@@ -274,6 +274,25 @@ const atRuleLimit: OwnPlan = {
 }
 
 describe("OverviewView", () => {
+  it.each(["plans_off", "administrator", "unlimited"] as const)("omits the held hero keep step with %s", async (basis) => {
+    await renderOverview(testI18n(), { dashboard: { ...attentionDashboard, status: "paused", problems: [], open_incidents: 0, enabled_rules: 0, running_rules: 0, held_rules: 1 }, rules: [{ ...rule, state: "degraded", stop_cause: "plan_hold" }], recentChanges: [], ownPlan: { ...atRuleLimit, basis: basis === "unlimited" ? "plan" : basis, limits: basis === "unlimited" ? { ...atRuleLimit.limits!, rules: null } : null, held_rules: 1 } })
+    expect(container.querySelector(".health-hero")?.textContent).toContain("They resume at the next scheduled check.")
+    expect(container.querySelector(".health-hero a")).toBeNull()
+  })
+
+  it("retains a link to Your plan Retry in the held hero on a failed Plan read", async () => {
+    await renderOverview(testI18n(), { dashboard: { ...attentionDashboard, status: "paused", problems: [], open_incidents: 0, enabled_rules: 0, running_rules: 0, held_rules: 1 }, rules: [{ ...rule, state: "degraded", stop_cause: "plan_hold" }], recentChanges: [], ownPlan: "unreadable" })
+    expect(container.querySelector(".health-hero a")?.textContent).toContain("See your plan")
+    expect(container.querySelector(".health-hero a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+  })
+
+  it("shows held rules and one keep step in the paused hero", async () => {
+    await renderOverview(testI18n(), { dashboard: { ...attentionDashboard, problems: [], open_incidents: 0, status: "paused", enabled_rules: 0, running_rules: 0, held_rules: 1 }, rules: [{ ...rule, state: "degraded", stop_cause: "plan_hold" }], recentChanges: [], ownPlan: { ...atRuleLimit, held_rules: 1 } })
+    expect(container.querySelector(".health-hero")?.textContent).toContain("Your rules are held by your plan")
+    expect(container.querySelector(".health-hero a")?.getAttribute("href")).toBe("/settings/account#your-plan")
+    expect(container.querySelector(".overview-rules")?.textContent).toContain("Held by your plan")
+  })
+
   it("puts what an open Incident says in the rule's problem sentence", async () => {
     const { container } = await renderOverview(testI18n(), {
       dashboard: attentionDashboard,

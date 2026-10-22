@@ -10,7 +10,8 @@ describe("Directional Sync Rule recovery presentation", () => {
   it("shows account avatars and stops every rule that uses an account to reauthorize", () => {
     expect(ruleEndpointSource).toContain("avatarUrl={account?.avatar_url}")
     expect(rulesSource).toContain("<RuleEndpoint")
-    expect(rulesSource).toContain('rule.state === "degraded" || unauthorized.length > 0')
+    expect(rulesSource).toContain('rule.stop_cause !== "plan_hold"')
+    expect(commandsSource).toContain('if (stopCause === "plan_hold") return <PlanHoldAction />')
     expect(rulesSource).toContain("rules.list.stoppedDisconnected")
     expect(commandsSource).toContain("ruleDetails.commands.reauthorize")
     const { t } = testI18n()

@@ -26,6 +26,7 @@ const GHOST_EXPRESSIONS: Record<OverviewTone, GhostExpression> = {
 const CALLOUT_POSITIONS = ["beside", "above", "below", "above-left"] as const
 
 function healthActionPath(action: HealthAction): string {
+  if (action.href) return action.href
   if (action.ruleId) return appPathForRule(action.ruleId)
   const tab = action.settingsTab ? { settingsTab: action.settingsTab } : {}
   return `${appPathForLocation({ view: action.view, ruleId: null, ...tab })}${action.search ?? ""}`
@@ -51,7 +52,7 @@ export function HealthHero({
   const { t } = i18n
   const callouts = overviewHeroCallouts(i18n, health.tone)
   const followAction = (action: HealthAction) => (event: React.MouseEvent) => {
-    if (!isPlainLeftClick(event)) return
+    if (!isPlainLeftClick(event) || action.href) return
     event.preventDefault()
     if (action.ruleId) onOpenRule(action.ruleId)
     else onViewChange(action.view, healthActionOptions(action))

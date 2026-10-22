@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, LoaderCircle } from "lucide-react"
 import { useEffect, useRef } from "react"
 
+import { PlanHoldAction, PlanHoldNote } from "@/components/plan-hold"
 import { Button } from "@/components/ui/button"
 import { YourPlanLink } from "@/components/your-plan-link"
 import { OutcomeSigns } from "@/features/rule-preview-table"
@@ -84,7 +85,8 @@ export function PreviewFooter({
       onOpenRule(detail.id, { notice: enabledMessage(i18n, names.destination) })
     },
   })
-  const failure = startFailure(enable.error)
+  const held = detail.stop_cause === "plan_hold"
+  const failure = held ? null : startFailure(enable.error)
   // Another tab or a scheduled run moved the rule on; its details are refetched below.
   const changed = failure === "changed"
   // What the plan says before Start; once a Start was refused, the summary already says it.
@@ -105,8 +107,14 @@ export function PreviewFooter({
         >
           <ArrowLeft aria-hidden="true" /> {i18n.t("rulePreview.page.back")}
         </a>
-        <StartSummary run={run} destination={names.destination} outcome={failure} error={enable.error} />
-        {changed ? (
+        <StartSummary run={run} destination={names.destination} outcome={failure} error={enable.error} held={held} />
+        {held ? (
+          <div className="rule-preview-start">
+            <strong>{i18n.t("ruleDetails.state.heldYourPlan")}</strong>
+            <PlanHoldNote />
+            <PlanHoldAction />
+          </div>
+        ) : changed ? (
           // Start would only fail again, so a fresh preview takes its place as the one action.
           <RefreshInstead
             onRefresh={() => {
@@ -139,11 +147,13 @@ function StartSummary({
   destination,
   outcome,
   error,
+  held,
 }: {
   run: PreviewRun | undefined
   destination: string
   outcome: StartFailure | null
   error: Error | null
+  held: boolean
 }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -168,7 +178,7 @@ function StartSummary({
         <span className="sr-only">{t("rulePreview.counts.label", { destination })}</span>
         <OutcomeSigns parts={outcomeParts(i18n, outcomeCounts(run.items, newSeries(run.items)))} />
       </p>
-      <p className="rule-preview-consequence">{t("rulePreview.page.pauseAnyTime")}</p>
+      {!held && <p className="rule-preview-consequence">{t("rulePreview.page.pauseAnyTime")}</p>}
     </div>
   )
 }

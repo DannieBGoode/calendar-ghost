@@ -403,6 +403,51 @@ function pauseDescription(menuLabel: string) {
 }
 
 describe("RulesView", () => {
+  it("preserves modified clicks on the hold's next step", async () => {
+    const onViewChange = vi.fn()
+    await renderRulesList(testI18n(), { rows: [ruleSummary("held", { state: "degraded", stop_cause: "plan_hold" })], ownPlan: jsonResponse(overTheLimit), onViewChange })
+    const link = container.querySelector('a[href="/settings/account#your-plan"]')!
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true })
+    act(() => { link.dispatchEvent(event) })
+    expect(event.defaultPrevented).toBe(false)
+    expect(onViewChange).not.toHaveBeenCalled()
+  })
+
+  it("warns before pausing a counted rule when held rules wait within the limit", async () => {
+    await renderRulesList(testI18n(), { ownPlan: jsonResponse({ ...overTheLimit, rules_counted: 1, held_rules: 2, over_rule_limit: false }) })
+    expect(pauseDescription("More actions for Work A to Work B1")).toContain("Your plan may not let this rule start again.")
+  })
+
+  it.each([false, true])("shows a neutral hold before account recovery (lapsed: %s)", async (lapsed) => {
+    const held = ruleSummary("held", { state: "degraded", stop_cause: "plan_hold" })
+    await renderRulesList(testI18n(), { rows: [held], accounts: [accountA, { ...accountB, authorization_lapsed_at: lapsed ? justNow : null }], ownPlan: jsonResponse({ ...overTheLimit, over_rule_limit: false, rules_counted: 1, held_rules: 1 }) })
+    expect(container.textContent).toContain("Held by your plan")
+    expect([...container.querySelectorAll("span")].find((span) => span.textContent.trim() === "Held by your plan")?.classList.contains("bg-muted")).toBe(true)
+    expect(container.textContent).toContain("Resumes by itself when your plan has room.")
+    const next = [...container.querySelectorAll("a")].filter((a) => a.textContent === "Choose which rules sync")
+    expect(next).toHaveLength(1)
+    expect(next[0]?.getAttribute("href")).toBe("/settings/account#your-plan")
+    expect(container.textContent).not.toMatch(/Preview to restart|Synchronization stopped|Reauthorize account/)
+    click(container.querySelector("button[aria-haspopup=menu]")!)
+    const menu = container.querySelector("[role=menu]")!
+    expect(menu.textContent).toContain("Preview")
+    expect(menu.textContent).toContain("Pause rule")
+    expect(menu.textContent).not.toMatch(/Sync now|Reconcile now/)
+  })
+
+  it.each(["plans_off", "administrator", "unlimited"])("omits the keep step pending release with %s", async (basis) => {
+    await renderRulesList(testI18n(), { rows: [ruleSummary("held", { state: "degraded", stop_cause: "plan_hold" })], ownPlan: jsonResponse({ ...overTheLimit, basis: basis === "unlimited" ? "plan" : basis, limits: basis === "unlimited" ? { ...overTheLimit.limits, rules: null } : null, held_rules: 1 }) })
+    expect(container.textContent).toContain("Resumes at the next scheduled check.")
+    expect(container.textContent).not.toContain("Choose which rules sync")
+    expect(container.querySelector('a[href="/settings/account#your-plan"]')).toBeNull()
+  })
+
+  it("keeps a link to Your plan Retry when the Plan read fails", async () => {
+    await renderRulesList(testI18n(), { rows: [ruleSummary("held", { state: "degraded", stop_cause: "plan_hold" })], ownPlan: planUnreadable })
+    expect(container.querySelector('a[href="/settings/account#your-plan"]')?.textContent).toBe("See your plan")
+    expect(container.textContent).not.toContain("Preview to restart")
+  })
+
   it("shows each rule row's run, status, and next step", async () => {
     await renderRulesList(testI18n())
     const text = container.textContent
@@ -486,6 +531,7 @@ describe("RulesView", () => {
     const lapsed = { ...accountB, authorization_lapsed_at: justNow }
     const stopped = ruleSummary("stopped", {
       state: "degraded",
+      stop_cause: "lapsed_authorization",
       last_sync: { ...lastSync, succeeded: false, failure_kind: "authentication", failure_provider: "google" },
     })
     await renderRulesList(testI18n(), { rows: [stopped], accounts: [accountA, lapsed], ownPlan: jsonResponse(overTheLimit) })

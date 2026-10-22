@@ -4,6 +4,7 @@ import { useRef, useState, type RefObject } from "react"
 
 import { GhostMark } from "@/components/ghost-mark"
 import { LoadFailure } from "@/components/load-failure"
+import { PlanHoldNote } from "@/components/plan-hold"
 import { PageSkeleton } from "@/components/page-skeleton"
 import {
   LiveAnnouncement,
@@ -289,7 +290,7 @@ type RuleRowProps = {
 function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange, onOpenRule, onPreview }: RuleRowProps) {
   const { t } = useI18n()
   const { source, destination, unauthorized } = endpoints
-  const stopped = rule.state === "degraded" || unauthorized.length > 0
+  const stopped = rule.stop_cause !== "plan_hold" && (rule.state === "degraded" || unauthorized.length > 0)
   const work = ruleWork({
     pending: commands.pending[rule.id],
     pendingSince: commands.pendingSince[rule.id],
@@ -317,8 +318,9 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
       <div className="rule-main">
         <RuleSummaryLine rule={rule} endpoints={endpoints} headingId={headingId} now={now} />
         <div className="rule-actions">
-          <RuleStatusBadge state={state} stopped={stopped} working={work?.kind} refused={refusal !== null} />
+          <RuleStatusBadge stopCause={rule.stop_cause} state={state} stopped={stopped} working={work?.kind} refused={refusal !== null} />
           <RuleNextAction
+            stopCause={rule.stop_cause}
             ruleId={rule.id}
             state={state}
             reauthorize={unauthorized[0]}
@@ -340,6 +342,8 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
             </a>
           </Button>
           <RuleCommandMenu
+            ruleId={rule.id}
+            stopCause={rule.stop_cause}
             state={state}
             unauthorized={unauthorized.length > 0}
             pending={pending}
@@ -433,7 +437,8 @@ function RuleNotes({
   const { source, destination, unauthorized } = endpoints
   return (
     <>
-      {rule.reprojection_required && ["draft", "paused", "degraded"].includes(rule.state) && (
+      {rule.stop_cause === "plan_hold" && state !== "removing" && <PlanHoldNote />}
+      {rule.stop_cause !== "plan_hold" && rule.reprojection_required && ["draft", "paused", "degraded"].includes(rule.state) && (
         <p className="rule-note">{t("rules.list.reprojectionRequired")}</p>
       )}
       {stopped && (
