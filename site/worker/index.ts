@@ -1,11 +1,11 @@
-// The landing page is static files (wrangler.jsonc). This Worker runs only for the analytics paths
-// (`run_worker_first`): it serves Umami Cloud's tracker and forwards the tracker's events, so the
+// The landing page is static files (wrangler.jsonc). This Worker adds discovery headers and
+// negotiates built Markdown for published pages. It also serves Umami's analytics paths, so the
 // browser talks to calendarghost.com alone (src/lib/analytics.ts). This is Umami's own proxy
 // recipe: https://docs.umami.is/docs/bypass-ad-blockers
 import { COLLECT_PATH, TRACKER_PATH } from "../src/lib/analytics"
+import { pageResponse } from "./pages"
+import { UMAMI_COLLECT, UMAMI_TRACKER } from "./umami"
 
-export const UMAMI_TRACKER = "https://cloud.umami.is/script.js"
-export const UMAMI_COLLECT = "https://gateway.umami.is/api/send"
 /** What Umami reads from the tracker's request: the website, the page's host, the session cache,
  * and the browser and device (from the user agent). */
 const FORWARDED_HEADERS = ["content-type", "user-agent", "x-umami-website-id", "x-umami-hostname", "x-umami-cache"]
@@ -19,7 +19,7 @@ export default {
     const { pathname } = new URL(request.url)
     if (pathname === TRACKER_PATH && request.method === "GET") return tracker()
     if (pathname === COLLECT_PATH && request.method === "POST") return collect(request)
-    return env.ASSETS.fetch(request)
+    return pageResponse(request, env)
   },
 }
 

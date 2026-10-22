@@ -2,14 +2,14 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "calendar-ghost-site",
   "compatibility_date": "2026-10-01",
-  // Static files, plus a Worker that runs only for the analytics paths: it serves Umami's tracker
-  // and forwards its events from this origin (worker/index.ts, src/lib/analytics.ts).
+  // The Worker adds discovery headers and Markdown negotiation to pages, and serves Umami's
+  // tracker and events from this origin. Other assets bypass it.
   "main": "worker/index.ts",
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "404-page",
-    "run_worker_first": ["/lantern/*"]
+    "run_worker_first": ["/", "/docs/*", "/lantern/*"]
   },
   "routes": [{ "pattern": "calendarghost.com", "custom_domain": true }]
 }

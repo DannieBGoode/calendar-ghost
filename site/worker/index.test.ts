@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ANALYTICS_PREFIX, COLLECT_PATH, TRACKER_PATH } from "../src/lib/analytics"
-import worker, { UMAMI_COLLECT, UMAMI_TRACKER, type Env } from "./index"
+import worker, { type Env } from "./index"
+import { UMAMI_COLLECT, UMAMI_TRACKER } from "./umami"
 
 const ORIGIN = "https://calendarghost.com"
 // The indirection through `here` keeps Vite's static `new URL(url, import.meta.url)` asset
@@ -84,9 +85,9 @@ describe("the site Worker", () => {
     expect(upstream).not.toHaveBeenCalled()
   })
 
-  it("runs first for exactly the analytics paths (wrangler.jsonc)", () => {
+  it("runs first for pages and analytics paths (wrangler.jsonc)", () => {
     const config = readFileSync(new URL("../wrangler.jsonc", here), "utf8")
-    expect(config).toContain(`"run_worker_first": ["${ANALYTICS_PREFIX}/*"]`)
+    expect(config).toContain(`"run_worker_first": ["/", "/docs/*", "${ANALYTICS_PREFIX}/*"]`)
     expect(config).toContain(`"main": "worker/index.ts"`)
   })
 })

@@ -12,6 +12,7 @@ function files(directory) {
 }
 
 const problems = []
+if (!existsSync(join(DIST, "index.md"))) problems.push("index.md: homepage Markdown not built")
 for (const file of files(DIST)) {
   if (!/\.(html|css)$/.test(file)) continue
   const text = readFileSync(file, "utf8")
@@ -31,6 +32,7 @@ const sitemap = readFileSync(join(DIST, "sitemap-0.xml"), "utf8")
 if (DOC_SLUGS.length === 0) problems.push("src/docs/pages.ts: no documentation pages found")
 for (const slug of DOC_SLUGS) {
   if (!existsSync(join(DIST, "docs", slug, "index.html"))) problems.push(`docs/${slug}: not built`)
+  if (!existsSync(join(DIST, "docs", slug, "index.md"))) problems.push(`docs/${slug}: Markdown not built`)
   if (!sitemap.includes(`https://${HOST}/docs/${slug}/`)) problems.push(`docs/${slug}: missing from the sitemap`)
 }
 
@@ -39,5 +41,5 @@ if (problems.length > 0) {
   process.exit(1)
 }
 console.log(
-  "dist audit: no third-party requests; every page has a title, description, and canonical URL; every documentation page is built and in the sitemap",
+  "dist audit: no third-party requests; every page has a title, description, and canonical URL; every documentation page is built and in the sitemap; page Markdown is built",
 )
