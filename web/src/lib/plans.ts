@@ -13,13 +13,16 @@ import type {
 
 /**
  * Whether Your plan shows: only when a Plan limits the User, or for an administrator while other
- * people can join. It stays hidden while Plans are off, and under Only Me, where the only person
+ * people can join. Grace and pending held-rule releases keep it reachable until settlement.
+ * Without either, it stays hidden while Plans are off and under Only Me, where the only person
  * administers. Only an administrator can read the Registration Policy, so `policy` is undefined
  * for everyone else and while it loads.
  */
 export function ownPlanShown(plan: OwnPlan | undefined, policy: Registration["policy"] | undefined): boolean {
-  if (plan?.basis === "plan") return true
-  if (plan?.basis === "administrator") return policy !== undefined && policy !== "only_me"
+  if (!plan) return false
+  if (plan.held_rules > 0 || plan.grace) return true
+  if (plan.basis === "plan") return true
+  if (plan.basis === "administrator") return policy !== undefined && policy !== "only_me"
   return false
 }
 
