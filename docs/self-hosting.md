@@ -440,7 +440,7 @@ and ends sessions; calendar connections and rules stay. Sign in with the new pas
 the providers you trust again in Your account. Recovery preserves the local email verification
 state; it does not turn an unverified local address into a verified one. If nobody can administer,
 restore configuration or follow
-[backup recovery](data-ownership.md#backups-and-recovery); no offline reset command is shipped.
+[offline backup recovery](hosted-backups.md#restore-order), with both processes stopped.
 Microsoft's `sub` is specific to the client ID, so replacing that ID loses the match to existing
 bindings. Establish and verify a usable password or another provider before replacing the client.
 Sign in with that fallback, remove the obsolete Microsoft binding, then link Microsoft under the
@@ -725,8 +725,10 @@ docker compose up -d --build
 ```
 
 Do not run `docker compose down -v` as an upgrade step: removing the named volume removes the local
-database, mappings, and connected-account state. The full backup and restore procedure is in
-[Data ownership and privacy](data-ownership.md#backups-and-recovery).
+database, mappings, and connected-account state. Before restarting a restored database, follow
+[offline inspection and conservative preparation](hosted-backups.md#restore-order). Keep ingress
+closed until access review, owner reauthorization and reconciliation finish. The optional
+[hosted backup runbook](hosted-backups.md) adds continuous replication and independent exports.
 
 Migration 38 adds verified Open registration while preserving the selected policy, Plans setting,
 and Default Plan. It never turns Open on during upgrade. Stop the service and back up the complete
@@ -836,7 +838,8 @@ restart, shutdown, or SMTP failure can lose a message; there is no automatic ret
 outbox. Attackers can exhaust a person's email allowance or the installation's global allowance;
 ask another administrator for a link or wait for the window. If no administrator can sign in,
 use the existing [backup recovery procedure](data-ownership.md#backups-and-recovery). Offline
-recovery tooling remains planned. See [exact allowances and retention](deployment.md#password-recovery).
+recovery uses [offline inspection and preparation](hosted-backups.md#restore-order).
+See [exact allowances and retention](deployment.md#password-recovery).
 The full memory gate can also delay administrator-link completion from a new network until
 capacity becomes available.
 

@@ -40,7 +40,8 @@ with the synthetic SMTP capture and a disposable SQLite database; the request ke
 address until the signed-in owner completes the link with their current password. Open registration
 also requires a matching successful administrator email test and explicit Open selection.
 Verified-registration passwords accept 12 to 1,024 characters. Provider-only Users can set a first
-password of 12 to 256 characters. Offline recovery tooling remains planned. See
+password of 12 to 256 characters. The installed offline operator entry is documented below;
+[the hosted backup drill](hosted-backups.md#reproduce-and-qualify) uses only synthetic data. See
 [registration boundaries](architecture.md#verified-registration-boundary) and
 [provider sign-in](architecture.md#provider-sign-in-boundary).
 
