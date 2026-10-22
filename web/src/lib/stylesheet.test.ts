@@ -63,6 +63,24 @@ describe("Cards", () => {
   })
 })
 
+// Regression: ISSUE-001 - provider tiles clipped by endpoint wrapper
+// Found by /qa on 2026-10-22
+// Report: .context/plan-hold-3b/recheck/qa/qa-report-local-2026-10-22.md
+describe("Overview rule endpoints", () => {
+  it.each([390, 1440])("leaves the provider tile visible while truncating calendar text at %ipx", (width) => {
+    computed(
+      '<div class="overview-rule-name"><span class="overview-rule-endpoint"><span class="account-mark account-mark-compact"><svg class="account-provider-mark"></svg></span><span>A long calendar name</span></span></div>',
+      width,
+    )
+    const endpoint = document.querySelector(".overview-rule-endpoint")!
+    expect(getComputedStyle(endpoint).overflow).not.toBe("hidden")
+    const label = getComputedStyle(endpoint.lastElementChild!)
+    expect(label.overflow).toBe("hidden")
+    expect(label.textOverflow).toBe("ellipsis")
+    expect(label.whiteSpace).toBe("nowrap")
+  })
+})
+
 describe("Data tables", () => {
   it.each([".plan-name", ".plan-holders", ".person-email"])(
     "show %s as ink without an underline at rest, and underline it on hover and keyboard focus",
