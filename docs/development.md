@@ -135,8 +135,10 @@ releases one free place. The preview starts no scheduler, so that place stays op
 explicit keep-choice save. It makes no provider writes or SMTP calls and reads no credentials or
 environment settings for these fixtures. Omitting the flag keeps healthy preview data unchanged.
 Inspect 1440px and 390px, light, Twilight, Midnight, `?locale=pseudo` through Vite, and 200% text.
-Check keyboard access through the chooser, Preview, and recovery links. Synthetic screenshots
-belong under `.context/`, never personal calendar exports.
+Check keyboard access through the chooser, Preview, and recovery links. Keep scratch screenshots
+under `.context/`. Selected synthetic review images are committed in the
+[Plan Hold review gallery](assets/reviews/plan-hold/README.md) for PR review. Never use personal
+calendar exports.
 
 ### Registration preview
 

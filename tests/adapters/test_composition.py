@@ -241,12 +241,14 @@ def test_production_release_is_authorization_aware_and_exempts_off_and_admin(
     tmp_path: Path, exemption: str
 ) -> None:
     from dataclasses import replace
+    from datetime import timedelta
 
     from calendar_sync.domain.access import Role
     from calendar_sync.domain.model import SyncRuleId
+    from calendar_sync.domain.plan_hold import PlanGrace
     from calendar_sync.infrastructure.persistence.connections import transaction
     from tests.fake_calendar import FakeCalendars, FixedClock
-    from tests.helpers import endpoint, rule
+    from tests.helpers import NOW, endpoint, rule
     from tests.plans import FREE
     from tests.users import sqlite_units
 
@@ -280,6 +282,8 @@ def test_production_release_is_authorization_aware_and_exempts_off_and_admin(
         assert first.awaiting_reauthorization
         assert held is not None
         assert held.held_by_plan
+        uow.plan_grace.save(PlanGrace(NOW + timedelta(days=7), 1, 0))
+        uow.commit()
     if exemption == "off":
         container.plans.set_plans_setting.execute(admin, False, FREE.key)
     else:

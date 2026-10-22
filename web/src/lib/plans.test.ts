@@ -70,7 +70,7 @@ describe("startRefusal", () => {
   it.each([1, 3])("matches the server refusal with held rules and a limit of %s", (limit) => {
     const refusal = startRefusal(i18n, { can_start: false, rule_limit: limit, held_rules: 2 })
     expect(refusal).toBe(
-      `Your plan lets ${limit} ${limit === 1 ? "rule" : "rules"} sync. Pause or remove a rule that counts, or ask your administrator for a larger plan, to start this rule.`,
+      `Your plan lets ${limit} ${limit === 1 ? "rule" : "rules"} sync. Pause or remove a rule that counts, or ask your administrator for a larger plan, to start this rule. Held rules may take free places at the next scheduled check.`,
     )
     expect(previewedStartRefusal(i18n, { ...family, held_rules: 2, rules_counted: limit, limits: { ...FAMILY_LIMITS, rules: limit } }, { state: "dry_run_validated", keeps_place: false })).toBe(refusal)
   })

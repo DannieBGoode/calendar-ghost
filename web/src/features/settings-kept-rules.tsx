@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
-import { ApiError, type OwnPlan, type RuleSummary } from "@/lib/api"
+import { ApiError, type ConnectedAccount, type OwnPlan, type RuleSummary } from "@/lib/api"
 import { useKeptRules } from "@/lib/use-kept-rules"
 
 /** One progressively disclosed step, keeping the editor in the Plan card. */
@@ -36,15 +36,16 @@ function useKeepEditor(initial: OwnPlan) {
   const [feedback, setFeedback] = useState({ saved: false, error: "", review: false })
   const pending = commands.pending
   const limit = plan.limits?.rules
-  const rows = namedRules(plan, commands.names.data)
+  const rows = namedRules(plan, commands.names.data, commands.accounts.data)
   const complete = rows.length === plan.rules.length
   const namesFailed = commands.names.isError || !complete
   const maximum = typeof limit === "number" ? limit : Infinity
   const atMaximum = selected.length >= maximum
   const overMaximum = selected.length > maximum
   const selectedSet = new Set(selected)
+  const needsReview = choicesNeedReview(feedback.review, plan, selected)
   const reviewAvailable = complete && !commands.plan.isError
-  const blocked = pending || feedback.review || namesFailed || overMaximum || commands.plan.isError
+  const blocked = pending || needsReview || namesFailed || overMaximum || commands.plan.isError
   function toggle(id: string, checked: boolean) {
     if (pending || (checked && atMaximum)) return
     setSelected((current) => checked ? [...current, id] : current.filter((item) => item !== id))
@@ -68,12 +69,12 @@ function useKeepEditor(initial: OwnPlan) {
     setSelected((current) => current.filter((id) => eligible.has(id)))
     setFeedback((current) => ({ ...current, review: false, error: "" }))
   }
-  return { i18n, commands, selected, selectedSet, feedback, pending, limit, rows, complete, blocked, atMaximum, namesFailed, reviewAvailable, save, toggle, review }
+  return { i18n, commands, selected, selectedSet, feedback, needsReview, pending, limit, rows, complete, blocked, atMaximum, namesFailed, reviewAvailable, save, toggle, review }
 }
 
 function KeepEditor({ plan, onCancel }: { plan: OwnPlan; onCancel: () => void }) {
   const editor = useKeepEditor(plan)
-  const { i18n, commands, selected, selectedSet, feedback, pending, limit, rows, complete, blocked, atMaximum, namesFailed, reviewAvailable, save, toggle, review } = editor
+  const { i18n, commands, selected, selectedSet, feedback, needsReview, pending, limit, rows, complete, blocked, atMaximum, namesFailed, reviewAvailable, save, toggle, review } = editor
   const { t } = i18n
   const heading = useRef<HTMLLegendElement>(null)
   useEffect(() => { heading.current?.focus() }, [])
@@ -84,10 +85,10 @@ function KeepEditor({ plan, onCancel }: { plan: OwnPlan; onCancel: () => void })
         <p id="kept-rules-hint" className="text-sm text-muted-foreground">{t("settings.ownPlan.keep.hint")}</p>
         <p id="kept-rules-capacity" className="text-sm">{t("settings.ownPlan.keep.capacity", { count: selected.length, maximum: typeof limit === "number" ? i18n.format.number(limit) : t("settings.ownPlan.keep.unlimited") })}</p>
         {namesFailed && <NamesFailure loading={commands.names.isPending} retry={() => void commands.names.refetch()} />}
-        {complete && rows.map(({ standing, rule }) => <KeepRow key={standing.rule_id} standing={standing} rule={rule} checked={selectedSet.has(standing.rule_id)} pending={pending} atMaximum={atMaximum} onChange={(checked) => toggle(standing.rule_id, checked)} />)}
+        {complete && rows.map(({ standing, rule, accounts }) => <KeepRow accounts={accounts} key={standing.rule_id} standing={standing} rule={rule} checked={selectedSet.has(standing.rule_id)} pending={pending} atMaximum={atMaximum} onChange={(checked) => toggle(standing.rule_id, checked)} />)}
       </fieldset>
       {feedback.error && <p className="inline-error" role="alert">{feedback.error}</p>}
-      {feedback.review && <ReviewChoices pending={pending} complete={reviewAvailable} onReview={review} />}
+      {needsReview && <ReviewChoices pending={pending} complete={reviewAvailable} onReview={review} />}
       <p role="status" aria-live="polite" className="text-sm">{feedback.saved ? t("settings.ownPlan.keep.saved") : ""}</p>
       {commands.refreshFailed && <div className="inline-error" role="alert"><span>{t("settings.ownPlan.keep.refreshFailed")}</span><Button type="button" variant="outline" aria-disabled={pending} onClick={() => { if (!pending) void commands.refresh() }}>{t("settings.ownPlan.keep.refresh")}</Button></div>}
       <div className="flex flex-wrap gap-2">
@@ -104,8 +105,8 @@ function NamesFailure({ loading, retry }: { loading: boolean; retry: () => void 
   return <div className="inline-error" role="alert"><span>{t("settings.ownPlan.keep.loadError")}</span><Button type="button" variant="outline" onClick={retry}>{t("common.loadFailure.retry")}</Button></div>
 }
 
-type RowProps = { standing: OwnPlan["rules"][number]; rule: RuleSummary; checked: boolean; pending: boolean; atMaximum: boolean; onChange: (checked: boolean) => void }
-function KeepRow({ standing, rule, checked, pending, atMaximum, onChange }: RowProps) {
+type RowProps = { accounts: readonly [string, string]; standing: OwnPlan["rules"][number]; rule: RuleSummary; checked: boolean; pending: boolean; atMaximum: boolean; onChange: (checked: boolean) => void }
+function KeepRow({ accounts, standing, rule, checked, pending, atMaximum, onChange }: RowProps) {
   const { t } = useI18n()
   const status = { counted: t("settings.ownPlan.keep.active"), reserved: t("settings.ownPlan.keep.reserved"), held: t("settings.ownPlan.keep.held") }
   const id = `keep-rule-${standing.rule_id}`
@@ -114,6 +115,7 @@ function KeepRow({ standing, rule, checked, pending, atMaximum, onChange }: RowP
       <Checkbox id={id} checked={checked} pending={pending || (!checked && atMaximum)} onCheckedChange={onChange} aria-describedby="kept-rules-capacity" />
       <span className="min-w-0 flex-1 text-sm">
         <span className="block break-words font-medium">{t("settings.ownPlan.keep.direction", { source: rule.source.calendar_name ?? rule.source.calendar_id, destination: rule.destination.calendar_name ?? rule.destination.calendar_id })}</span>
+        <span className="block break-words text-muted-foreground">{t("settings.ownPlan.keep.accounts", { source: accounts[0], destination: accounts[1] })}</span>
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
           <span>{status[standing.place]}</span>
           {standing.kept && <span className="inline-flex min-w-0 items-center gap-1 break-words text-xs"><Check aria-hidden="true" className="size-3.5 shrink-0" /><span>{t("settings.ownPlan.keep.kept")}</span></span>}
@@ -130,10 +132,20 @@ function ReviewChoices({ pending, complete, onReview }: { pending: boolean; comp
 }
 
 /** Labels come only from signed-in summaries; standings alone decide eligibility and placement. */
-function namedRules(plan: OwnPlan, summaries: RuleSummary[] | undefined) {
+function namedRules(plan: OwnPlan, summaries: RuleSummary[] | undefined, accounts: ConnectedAccount[] | undefined) {
   const names = new Map(summaries?.map((rule) => [rule.id, rule]))
   return plan.rules.flatMap((standing) => {
     const rule = names.get(standing.rule_id)
-    return rule ? [{ standing, rule }] : []
+    return rule ? [{ standing, rule, accounts: [accountIdentity(rule.source, accounts), accountIdentity(rule.destination, accounts)] as const }] : []
   })
+}
+
+function accountIdentity(endpoint: RuleSummary["source"], accounts: ConnectedAccount[] | undefined) {
+  const account = accounts?.find((item) => item.id === endpoint.connected_account_id)
+  return account ? `${account.display_name} · ${account.email}` : endpoint.connected_account_id
+}
+
+function choicesNeedReview(refused: boolean, plan: OwnPlan, selected: string[]) {
+  const eligible = new Set(plan.rules.map((rule) => rule.rule_id))
+  return refused || selected.some((id) => !eligible.has(id))
 }

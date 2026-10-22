@@ -222,8 +222,12 @@ The Activity screen names the reason it could not load audit entries and inciden
 
 ## A rule is degraded
 
-Open **Activity**. The rule's incident says what stopped it and offers the next step. The rule keeps
-its mappings and last successful incremental positions, and writes nothing while degraded.
+A rule [held by your plan](#held-by-your-plan) is degraded without a new Incident. It resumes
+automatically when its Plan has room; Preview does not release its hold.
+
+For other degraded rules, open **Activity**. The rule's incident says what stopped it and offers
+the next step. The rule keeps its mappings and last successful incremental positions, and writes
+nothing while degraded.
 
 - **Authorization for Google Calendar expired** or **Access to Google Calendar was denied**: Google
   stopped accepting a connected account (Lapsed Authorization). The incident names the account, and
@@ -250,9 +254,10 @@ its mappings and last successful incremental positions, and writes nothing while
   longer exists (ADR 0022's router could not find it). Re-create the rule, choosing calendars from
   accounts that still exist.
 
-To recover the rule, open it, choose **Preview to restart**, inspect the preview, and choose **Start
-syncing**. Its next run repairs drift before advancing either cursor. The next successful scheduled
-run, within five minutes, resolves the incident; **Sync Now** and **Reconcile Now** do not.
+To recover a rule stopped by one of these failures, open it, choose **Preview to restart**, inspect
+the preview, and choose **Start syncing**. Its next run repairs drift before advancing either cursor.
+The next successful scheduled run, within five minutes, resolves the incident; **Sync Now** and
+**Reconcile Now** do not.
 
 ## Problems only an administrator can fix
 

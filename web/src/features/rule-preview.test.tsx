@@ -430,7 +430,7 @@ describe("RulePreviewView", () => {
     const start = button("Start syncing to Work")
     expect(start.getAttribute("aria-disabled")).toBe("true")
     const note = container.querySelector("#rule-preview-start-note")
-    expect(note?.textContent).toBe("Your plan lets 1 rule sync. Pause or remove a rule that counts, or ask your administrator for a larger plan, to start this rule. See your plan")
+    expect(note?.textContent).toBe("Your plan lets 1 rule sync. Pause or remove a rule that counts, or ask your administrator for a larger plan, to start this rule. Held rules may take free places at the next scheduled check. See your plan")
     expect(note?.textContent).not.toContain("Choose which rules sync")
     expect(note?.querySelector("a")?.getAttribute("href")).toBe("/settings/account#your-plan")
     act(() => start.click())

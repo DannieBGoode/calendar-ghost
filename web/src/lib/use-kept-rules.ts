@@ -11,6 +11,7 @@ const CHOICE_QUERIES = [OWN_PLAN_QUERY, ["rules"], ["rule"], ["dashboard"], ["pe
 export function useKeptRules() {
   const client = useQueryClient()
   const plan = useOwnPlan()
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   const names = useQuery({ queryKey: ["rules"], queryFn: api.rules })
   const [refreshFailed, setRefreshFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -26,5 +27,5 @@ export function useKeptRules() {
     }
   }
   const save = useMutation({ mutationFn: (ruleIds: string[]) => api.chooseKeptRules(ruleIds), retry: false, onSuccess: refresh })
-  return { plan, names, save, refresh, refreshFailed, pending: save.isPending || refreshing }
+  return { plan, names, accounts, save, refresh, refreshFailed, pending: save.isPending || refreshing }
 }

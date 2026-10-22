@@ -150,13 +150,14 @@
     },
     "keep": {
       "open": "Choose which rules sync",
-      "hint": "Saved choices come first, then the oldest rules. Saving can switch which rules are held. Held rules keep their existing projections. Choose none to use the oldest rules.",
+      "hint": "Saved choices come first, then the oldest rules. Saving can switch holds. Held rules keep their projections. Choose none to clear preferences for future free places and grace periods. This does not switch rules already syncing.",
       "capacity": "{count} selected, {maximum} maximum",
       "unlimited": "No limit",
       "active": "Active rule",
       "reserved": "Reserved place",
       "held": "Held by your plan",
       "kept": "Saved choice",
+      "accounts": "From {source} to {destination}",
       "direction": "{source} → {destination}",
       "save": "Save choices",
       "saving": "Saving…",
@@ -165,7 +166,7 @@
       "loadError": "Rule names could not load. Try again before choosing rules.",
       "stale": "The available rules changed. Review the updated choices before saving again.",
       "review": "Review updated choices",
-      "refreshFailed": "The latest state could not load. Refresh before saving again.",
+      "refreshFailed": "Some status views could not refresh. Refresh status to try again.",
       "refresh": "Refresh status"
     }
   },

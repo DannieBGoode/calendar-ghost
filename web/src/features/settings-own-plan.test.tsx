@@ -487,7 +487,8 @@ describe("OwnPlanSection", () => {
   it("keeps a mounted chooser and its save focus after a successful write and failed Plan refresh", async () => {
     const initial: OwnPlan = { ...family, rules: [{ rule_id: "a", place: "counted", kept: true }] }
     const answers = await renderSection(testI18n(), { ownPlan: jsonResponse(initial) })
-    answers["GET /api/v1/rules"] = jsonResponse([{ id: "a", source: { calendar_name: "Personal" }, destination: { calendar_name: "Work" } }])
+    answers["GET /api/v1/accounts"] = jsonResponse([])
+    answers["GET /api/v1/rules"] = jsonResponse([{ id: "a", source: { calendar_id: "personal", connected_account_id: "personal-account", calendar_name: "Personal" }, destination: { calendar_id: "work", connected_account_id: "work-account", calendar_name: "Work" } }])
     await click(button("Choose which rules sync"))
     answers["PUT /api/v1/account/plan/kept-rules"] = jsonResponse(null, 204)
     answers["GET /api/v1/account/plan"] = jsonResponse(UNREADABLE, 500)

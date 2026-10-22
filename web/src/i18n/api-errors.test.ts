@@ -97,7 +97,7 @@ describe("apiErrorMessage", () => {
 
   it.each([1, 3])("explains held capacity with count-based plurals at a limit of %s", (limit) => {
     expect(apiErrorMessage(i18n, coded("plan_limit_reached", { reason: "rules_with_held", limit, count: limit }))).toBe(
-      `Your plan lets ${limit} ${limit === 1 ? "rule" : "rules"} sync. Pause or remove a rule that counts, or ask your administrator for a larger plan, to start this rule.`,
+      `Your plan lets ${limit} ${limit === 1 ? "rule" : "rules"} sync. Pause or remove a rule that counts, or ask your administrator for a larger plan, to start this rule. Held rules may take free places at the next scheduled check.`,
     )
   })
 
