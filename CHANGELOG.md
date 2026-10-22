@@ -6,12 +6,15 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
-- Plan Hold reader support is prepared for PR 3a: status and MCP add `counts.held` and each
+- Plan Hold readers expose held state: status and MCP add `counts.held` and each
   rule's `stop_cause`; Dashboard adds `held_rules`. A `degraded` held rule has no Stopped problem:
   monitors must read `stop_cause` or `needs_attention` instead of `state` alone. Dashboard counts
   omit held-owned incidents and blocks, while status totals and Activity keep them. Held rules
-  still need a working scheduler. Production activation remains pending until the visible grace,
-  hold and recovery controls ship together; lowering a limit still stops nothing in this build.
+  still need a working scheduler. Your plan adds `held_rules`, stored `grace`, and ranked `rules`
+  choices. The session-only `PUT /api/v1/account/plan/kept-rules` saves the complete `rule_ids`
+  choice atomically. Production still composes `plan_holds=None`; activation remains pending
+  until the visible grace, hold and recovery controls, keep form, and email explanations ship
+  together. Lowering a limit still stops nothing; no production grace or Plan notice starts.
 - **Forgot password?** on sign-in lets people request a private, single-use recovery link when
   secure identity email is configured. Emailed links last one hour; administrator-issued links
   keep their seven-day lifetime. Reset ends existing sessions and asks for a fresh sign-in.
@@ -24,9 +27,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   per hour. Migration 35 stores readiness and admission counts; returning to setup clears
   readiness. Registration still offers Only me or Invitation only.
 - The Plan Hold engine and private Plan notice delivery are implemented, with production
-  activation explicitly disabled until PR 3 supplies visible grace and hold state, status,
-  Dashboard, MCP, and the keep form together (ADR 0039). Lowering a limit still stops nothing;
-  no production grace or Plan notice starts in this build.
+  activation explicitly disabled until PR 3b supplies visible grace and held-rule controls,
+  recovery actions, the keep form, and email explanations together (ADR 0039). Lowering a limit
+  still stops nothing; no production grace or Plan notice starts in this build.
 - Migration 34 adds rule keep marks and User grace/admission columns with nullable or zero
   defaults. Older code ignores those columns, reads a future hold's stop code 2 as an
   authorization lapse, and still counts it at Start; older raw display counts may omit it.

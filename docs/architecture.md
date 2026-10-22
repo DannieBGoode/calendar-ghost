@@ -251,6 +251,15 @@ expiry, and never starts or clears a grace. Rule payloads include nullable `stop
 payloads also include `held_rules` so preflight and refused Starts explain held capacity alike.
 These read contracts do not activate Plan settlement: production still composes `plan_holds=None`.
 
+`GET /api/v1/account/plan` exposes `rules_counted`, `held_rules`, nullable `grace` (`holds_at`,
+`rule_limit`, predicted `held` and `reserved` losses), and ranked `rules` choices (`rule_id`,
+`place`, `kept`). The session-only `PUT /api/v1/account/plan/kept-rules` accepts the complete
+chosen set in `rule_ids` and replaces all keep marks atomically, returning 204 on success.
+Unknown, foreign, or ineligible rule identifiers receive the same generic 404 `rule_not_found`;
+too many choices receive 409 `too_many_kept_rules`, and contention receives 409
+`plan_settlement_busy` with nothing saved. Integration Tokens authorize neither route. OpenAPI
+remains the exhaustive request and response reference.
+
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
 `application/operations/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral
 results to HTTP payloads and never opens the database itself. The rule that sorts Audit Entries
@@ -464,8 +473,11 @@ write only through their User's unit of work. Operations' `ScheduledPlanHolds` r
 standings, reads Allowances in chunks of 500 Users, and rotates through at most 100 changed Users
 per pass, including failed or busy attempts. A failed bulk Allowance read changes nobody. The scheduled
 step follows interrupted-lapse recovery and precedes listing due rules, so released rules can run
-in the same pass. Production composition passes `plan_holds=None` in PR 2: activation, status,
-Dashboard, MCP, held-rule visuals, and the keep form belong to PR 3 (ADR 0039).
+in the same pass. PR 3a ships the keep-choice HTTP route and readers for Your plan, rules,
+status, Dashboard, and MCP. Production composition still passes `plan_holds=None`: activation,
+visible grace and held-rule controls, the keep form, recovery actions, and email explanations
+belong to PR 3b (ADR 0039). Lowering a limit still stops nothing; no production grace or Plan
+notice starts.
 
 Settlement and keep choice share a per-User `SettleLocks` lock, discover eligible rule identifiers,
 and try their write locks without waiting, in identifier order. Contention releases acquired
