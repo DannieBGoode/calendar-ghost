@@ -661,15 +661,23 @@ for the address you opened it at. An app whose connector settings accept only an
 an OAuth sign-in, cannot send a token directly; connect it through this bridge if it can run local
 MCP servers.
 
-Both `/api/v1/status` and `/mcp` answer the same verdict. Each status means:
+Both `/api/v1/status` and `/mcp` answer the same verdict. Read `needs_attention` or each rule's
+`stop_cause`, rather than infer failure from `state` alone: a rule on Plan Hold remains
+`degraded`, with `stop_cause: plan_hold`, and has no Stopped problem. `counts.held` counts held
+rules separately from running and stopped rules. They retain their projections and release
+without a preview when their Allowance permits, provided the scheduler works. Your plan explains
+the limit and recovery choices in an activated release. These readers are prepared in PR 3a;
+production activation remains pending as described under [Plan Hold delivery boundary](#plan-hold-delivery-boundary).
+Status incident and block totals keep held-owned records, as Activity does; Dashboard counts omit
+them. Each status means:
 
 | Status | What it means | What to do |
 | --- | --- | --- |
-| `stalled` | Rules are enabled, but the scheduler is not running passes | Restart the service |
+| `stalled` | Enabled or held rules need a scheduler, but it is not running passes | Restart the service |
 | `stopped` | A rule is suspended, usually because a calendar account lost access | Reauthorize the account in Settings |
 | `review` | An incident, blocked events, or a rule not synced in over a day needs a look | Open Activity or the named rule |
 | `waiting` | A calendar provider is limiting or failing requests | Nothing yet; it retries by itself |
-| `paused` | Rules exist and have synced before, but none is enabled | Nothing, unless you meant to resume one |
+| `paused` | Rules have synced before, but all are paused or held | Nothing, unless you meant to resume one |
 | `setup` | No account or rule yet, or none has synced | Finish connecting an account and creating a rule |
 | `healthy` | Every enabled rule is running and up to date | Nothing |
 
@@ -761,9 +769,10 @@ conservative.
 
 ## Plan Hold delivery boundary
 
-The Plan Hold engine is present but disabled in this PR 2 build. Lowering a limit still refuses
-new Starts and stops nothing. Production activation, visible grace and hold state, status,
-Dashboard, MCP, and the form for choosing which rules keep syncing arrive together in PR 3.
+The Plan Hold engine remains disabled while PR 3a prepares the status, Dashboard, and MCP
+readers. Lowering a limit still refuses new Starts and stops nothing. Production activation
+remains pending until visible grace and hold state, the form for choosing which rules keep
+syncing, and recovery controls ship together in PR 3.
 Until then no production grace or Plan notice is generated. **Email notifications** under
 Settings, Your account continues to control optional incident email. See the
 [migration 34 rollback notes](deployment.md#migration-34-plan-hold-engine) before opening a database

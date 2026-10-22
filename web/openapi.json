@@ -669,6 +669,10 @@
             "title": "Enabled Rules",
             "type": "integer"
           },
+          "held_rules": {
+            "title": "Held Rules",
+            "type": "integer"
+          },
           "lapsed_accounts": {
             "title": "Lapsed Accounts",
             "type": "integer"
@@ -746,6 +750,7 @@
           "sync_rules",
           "enabled_rules",
           "running_rules",
+          "held_rules",
           "stopped_rules",
           "open_incidents",
           "last_synced_at",
@@ -4924,6 +4929,10 @@
             "title": "Disconnected Accounts",
             "type": "integer"
           },
+          "held": {
+            "title": "Held",
+            "type": "integer"
+          },
           "lapsed_accounts": {
             "title": "Lapsed Accounts",
             "type": "integer"
@@ -4958,6 +4967,7 @@
           "running",
           "stopped",
           "paused",
+          "held",
           "overdue",
           "open_incidents",
           "blocked_events",
@@ -5176,12 +5186,28 @@
           "state": {
             "title": "State",
             "type": "string"
+          },
+          "stop_cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lapsed_authorization",
+                  "plan_hold"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Cause"
           }
         },
         "required": [
           "id",
           "name",
           "state",
+          "stop_cause",
           "source",
           "destination",
           "projection",

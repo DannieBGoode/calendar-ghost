@@ -1690,6 +1690,8 @@ export interface components {
             disconnected_accounts: number;
             /** Enabled Rules */
             enabled_rules: number;
+            /** Held Rules */
+            held_rules: number;
             /** Lapsed Accounts */
             lapsed_accounts: number;
             /** Last Synced At */
@@ -3075,6 +3077,8 @@ export interface components {
             blocked_events: number;
             /** Disconnected Accounts */
             disconnected_accounts: number;
+            /** Held */
+            held: number;
             /** Lapsed Accounts */
             lapsed_accounts: number;
             /** Open Incidents */
@@ -3149,6 +3153,8 @@ export interface components {
             source: components["schemas"]["StatusCalendarResponse"];
             /** State */
             state: string;
+            /** Stop Cause */
+            stop_cause: ("lapsed_authorization" | "plan_hold") | null;
         };
         /** StorageResponse */
         StorageResponse: {

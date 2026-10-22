@@ -27,6 +27,7 @@ from calendar_sync.interfaces.api.schemas.shared import (
     LimitedResourceValue,
     ProblemKindValue,
     RecordedTimeResponse,
+    RuleStopCauseValue,
     RunReasonValue,
     SourceComparisonValue,
     StatusVerdictValue,
@@ -62,6 +63,8 @@ class DashboardResponse(ApiResponse):
     """Enabled rules, running or stopped."""
     running_rules: int
     """Enabled rules that have not stopped, as the status API's `counts.running`."""
+    held_rules: int
+    """Rules on Plan Hold, which release automatically when their Allowance permits."""
     stopped_rules: int
     """Rules that do not synchronize until someone acts, as the status API's `counts.stopped`."""
     open_incidents: int
@@ -196,6 +199,7 @@ class StatusCountsResponse(ApiResponse):
     stopped: int
     """Rules that do not synchronize until someone acts: each has a `stopped` problem."""
     paused: int
+    held: int
     overdue: int
     open_incidents: int
     blocked_events: int
@@ -216,6 +220,7 @@ class StatusRuleResponse(ApiResponse):
     id: str
     name: str
     state: str
+    stop_cause: RuleStopCauseValue | None
     source: StatusCalendarResponse
     destination: StatusCalendarResponse
     projection: str

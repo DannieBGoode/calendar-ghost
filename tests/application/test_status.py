@@ -618,3 +618,98 @@ def test_the_dashboard_names_the_blocked_rule_only_when_every_block_is_its_own()
         "a",
     )
     assert (two_rules.blocked_entry_id, two_rules.blocked_rule_id) == (9, None)
+
+
+def _held(rule_id: str = "rule-1") -> SyncRuleSummary:
+    return _summary(_rule(rule_id).hold())
+
+
+def test_held_rule_has_no_stopped_or_reauthorization_problem() -> None:
+    status = _assess([_held()], _overview(accounts=LAPSED))
+    assert status.problems == ()
+    assert status.rules[0].problem is None
+    assert (status.counts.running, status.counts.stopped, status.counts.held) == (0, 0, 1)
+
+
+def test_held_rule_covers_its_incidents_and_blocks_without_hiding_activity() -> None:
+    incidents = (_incident("rule-1", "permanent"), _incident("rule-2", "temporary"))
+    overview = replace(
+        _overview(open_incidents=2, blocks=(OpenBlock(42, "rule-1"),)),
+        held_open_incidents=1,
+    )
+    status = _assess([_held(), _summary(_rule("rule-2"))], overview, incidents)
+    assert [(p.kind, p.rule_id) for p in status.problems] == [(ProblemKind.WAITING, "rule-2")]
+    assert status.open_incidents == incidents
+    assert status.overview is overview
+    assert status.rules[0].problem is None
+
+
+def test_lapsed_account_with_only_held_rules_still_needs_attention() -> None:
+    incident = replace(_incident(None, "authentication"), account_id="work-account")
+    status = _assess([_held()], _overview(accounts=LAPSED, open_incidents=1), (incident,))
+    assert status.health is StatusVerdict.REVIEW
+    assert [(p.kind, p.rule_id) for p in status.problems] == [(ProblemKind.REVIEW, None)]
+    assert status.rules[0].problem is None
+
+
+@pytest.mark.parametrize(
+    "scheduler",
+    [None, SchedulerProgress(NOW - timedelta(minutes=16), None, None)],
+)
+def test_held_rules_need_a_working_scheduler(scheduler: SchedulerProgress | None) -> None:
+    status = _assess([_held()], scheduler=scheduler)
+    assert status.health is StatusVerdict.STALLED
+    assert [p.kind for p in status.problems] == [ProblemKind.STALLED]
+
+
+def test_running_and_held_rules_can_be_healthy() -> None:
+    status = _assess([_held(), _summary(_rule("rule-2"))])
+    assert status.health is StatusVerdict.HEALTHY
+    assert status.problems == ()
+    assert (status.counts.rules, status.counts.running, status.counts.held) == (2, 1, 1)
+    assert Dashboard.of(status).enabled_rules == 1
+
+
+def test_only_held_rules_are_paused_after_a_successful_run() -> None:
+    status = _assess([_held()])
+    assert status.health is StatusVerdict.PAUSED
+    assert status.problems == ()
+    assert status.counts.paused == 0
+
+
+def test_only_held_rules_without_a_prior_run_are_setup() -> None:
+    status = _assess([replace(_held(), last_sync=None)], _overview(last_synced_at=None))
+    assert status.health is StatusVerdict.SETUP
+    assert status.problems == ()
+
+
+def test_dashboard_filters_held_incidents_but_status_keeps_raw_counts() -> None:
+    blocks = (OpenBlock(43, "rule-1"), OpenBlock(42, "rule-2"), OpenBlock(41, "rule-2"))
+    overview = replace(_overview(open_incidents=4, blocks=blocks), held_open_incidents=3)
+    incidents = (_incident("rule-1", "permanent"), _incident("rule-2", "conflict"))
+    status = _assess([_held(), _summary(_rule("rule-2"))], overview, incidents)
+    dashboard = Dashboard.of(status)
+    assert dashboard.open_incidents == 1
+    assert (dashboard.blocked_events, dashboard.blocked_entry_id, dashboard.blocked_rule_id) == (
+        2,
+        42,
+        "rule-2",
+    )
+    assert [(p.kind, p.rule_id, p.summary) for p in status.problems] == [
+        (ProblemKind.BLOCKED, "rule-2", "2 events couldn't be synced")
+    ]
+    assert status.overview.open_incidents == 4
+    assert status.overview.open_blocks == blocks
+    assert status.open_incidents == incidents
+
+
+def test_another_stopped_rule_can_cover_a_held_rules_lapsed_account() -> None:
+    incident = replace(_incident(None, "authentication"), account_id="work-account")
+    status = _assess(
+        [_held(), _summary(_rule("rule-2", SyncRuleState.DEGRADED))],
+        _overview(accounts=LAPSED, open_incidents=1),
+        (incident,),
+    )
+    assert [(p.kind, p.rule_id) for p in status.problems] == [(ProblemKind.STOPPED, "rule-2")]
+    assert status.rules[0].problem is None
+    assert (status.counts.held, status.counts.stopped) == (1, 1)

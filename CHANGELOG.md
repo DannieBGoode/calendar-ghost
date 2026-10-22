@@ -6,6 +6,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- Plan Hold reader support is prepared for PR 3a: status and MCP add `counts.held` and each
+  rule's `stop_cause`; Dashboard adds `held_rules`. A `degraded` held rule has no Stopped problem:
+  monitors must read `stop_cause` or `needs_attention` instead of `state` alone. Dashboard counts
+  omit held-owned incidents and blocks, while status totals and Activity keep them. Held rules
+  still need a working scheduler. Production activation remains pending until the visible grace,
+  hold and recovery controls ship together; lowering a limit still stops nothing in this build.
 - **Forgot password?** on sign-in lets people request a private, single-use recovery link when
   secure identity email is configured. Emailed links last one hour; administrator-issued links
   keep their seven-day lifetime. Reset ends existing sessions and asks for a fresh sign-in.

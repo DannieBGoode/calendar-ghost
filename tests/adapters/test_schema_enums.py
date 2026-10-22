@@ -20,6 +20,7 @@ from calendar_sync.domain.incidents import IncidentCategory, IncidentResolution,
 from calendar_sync.domain.model import (
     ProjectionContent,
     ProjectionHandling,
+    RuleStopCause,
     TentativeEventPolicy,
     UnansweredInvitationPolicy,
 )
@@ -42,6 +43,7 @@ MIRRORS: dict[str, type[StrEnum]] = {
     "ProblemKindValue": ProblemKind,
     "ProjectionChoice": ProjectionHandling,
     "RunReasonValue": RunReason,
+    "RuleStopCauseValue": RuleStopCause,
     "SourceComparisonValue": ComparisonKind,
     "StatusVerdictValue": StatusVerdict,
     "SyncIntervalValue": SyncInterval,

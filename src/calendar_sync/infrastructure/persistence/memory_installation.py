@@ -9,6 +9,7 @@ from types import TracebackType
 from typing import Self
 
 from calendar_sync.application.operations.ports import (
+    INCIDENTS_READ,
     AccountStanding,
     CauseSighting,
     InboxBusy,
@@ -306,6 +307,7 @@ def _status_records(database: MemoryDatabase, user: UserId) -> StatusRecords:
         for (_, kind), outcome in state.outcomes.items()
         if kind is RunKind.SYNC and outcome.last_succeeded_at is not None
     ]
+    held = {rule.id.value for rule in state.rules.values() if rule.stopped_by_plan_hold}
     return StatusRecords(
         # Rules in the order they were created, then by identifier, as SQLite lists them.
         rules=tuple(
@@ -321,11 +323,13 @@ def _status_records(database: MemoryDatabase, user: UserId) -> StatusRecords:
             connected_accounts=sum(s is ConnectedAccountState.CONNECTED for s in standings),
             disconnected_accounts=sum(s is ConnectedAccountState.DISCONNECTED for s in standings),
             open_incidents=len(incidents),
+            held_open_incidents=sum(incident.rule_id in held for incident in incidents),
             last_synced_at=max(succeeded) if succeeded else None,
             open_blocks=_open_blocks(state),
             accounts=accounts,
         ),
-        incidents=tuple(incidents),
+        incidents=tuple(incidents[:INCIDENTS_READ]),
+        assessment_incidents=tuple(i for i in incidents if i.rule_id not in held)[:INCIDENTS_READ],
     )
 
 

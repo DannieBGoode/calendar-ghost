@@ -493,3 +493,23 @@ def test_a_problem_from_an_incident_carries_its_message(tmp_path: Path) -> None:
     assert status["problems"][0]["message"] == message
     assert status["rules"][0]["problem"]["message"] == message
     assert dashboard["problems"][0]["message"] == message
+
+
+def test_status_reports_plan_hold_separately_from_stopped(tmp_path: Path) -> None:
+    container, adapters = _installation(tmp_path)
+    owner = administrator(adapters)
+    for account in ("personal-account", "work-account"):
+        add_account(tmp_path / "test.db", account, owner)
+    with adapters.unit_of_work(owner)() as uow:
+        uow.rules.add(rule().hold())
+        uow.commit()
+    with TestClient(create_app(container)) as client:
+        _signed_in(client)
+        status = client.get("/api/v1/status").json()
+        dashboard = client.get("/api/v1/dashboard").json()
+    assert status["counts"]["held"] == dashboard["held_rules"] == 1
+    assert status["counts"]["stopped"] == dashboard["stopped_rules"] == 0
+    assert status["rules"][0]["stop_cause"] == "plan_hold"
+    assert status["rules"][0]["problem"] is None
+    assert status["status"] == "stalled"
+    assert dashboard["enabled_rules"] == 0

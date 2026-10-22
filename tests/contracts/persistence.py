@@ -1766,6 +1766,60 @@ class PersistenceContract:
         assert theirs.last_synced_at is None
         assert records[OTHER_USER].rules == ()
 
+    def test_status_records_count_all_held_owned_incidents_before_paging(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE.hold())
+            uow.rules.add(OTHER_RULE)
+            uow.commit()
+        incidents = harness.incidents(USER)
+        for number in range(150):
+            owner = RULE.id if number % 2 == 0 else OTHER_RULE.id
+            assert incidents.open(_rule_incident(owner, key=f"mixed:{number}"), NOW)
+        _lapse(harness, ACCOUNT, USER)
+        assert incidents.open(_rule_incident(RULE.id, key="resolved:held"), NOW)
+        incidents.resolve("resolved:held", NOW, IncidentResolution.SYNC_SUCCEEDED)
+        assert harness.incidents(OTHER_USER).open(_rule_incident(RULE.id, key="foreign:held"), NOW)
+        with harness.installation() as installation:
+            records = installation.status_records([USER, OTHER_USER])
+        assert records[USER].overview.open_incidents == 151
+        assert records[USER].overview.held_open_incidents == 75
+        assert records[OTHER_USER].overview.open_incidents == 1
+        assert records[OTHER_USER].overview.held_open_incidents == 0
+        assert len(records[USER].assessment_incidents) == 76
+        assert all(i.rule_id != RULE.id.value for i in records[USER].assessment_incidents)
+        assert any(i.rule_id is None for i in records[USER].assessment_incidents)
+        assert [i.rule_id for i in records[OTHER_USER].assessment_incidents] == [RULE.id.value]
+
+    def test_assessment_incidents_are_capped_after_held_owner_exclusion(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE.hold())
+            uow.rules.add(OTHER_RULE)
+            uow.commit()
+        incidents = harness.incidents(USER)
+        for number in range(101):
+            assert incidents.open(_rule_incident(RULE.id, key=f"held:{number}"), NOW + 2 * HOUR)
+        assert incidents.open(_rule_incident(OTHER_RULE.id, key="older:active"), NOW)
+        _lapse(harness, ACCOUNT, USER)
+        with harness.installation() as installation:
+            records = installation.status_records([USER])[USER]
+        assert len(records.incidents) == 100
+        assert len(records.assessment_incidents) == 2
+        assert {i.rule_id for i in records.assessment_incidents} == {OTHER_RULE.id.value, None}
+        assert records.overview.open_incidents == 103
+        assert records.overview.held_open_incidents == 101
+        for number in range(101):
+            assert incidents.open(
+                _rule_incident(OTHER_RULE.id, key=f"active:{number}"), NOW + number * MINUTE
+            )
+        with harness.installation() as installation:
+            page = installation.status_records([USER])[USER].assessment_incidents
+        assert len(page) == 100
+        assert [i.updated_at for i in page] == [NOW + n * MINUTE for n in range(100, 0, -1)]
+
     def test_status_records_hold_each_users_open_incidents_most_recently_updated_first(
         self, harness: PersistenceHarness
     ) -> None:

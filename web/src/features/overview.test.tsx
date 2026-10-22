@@ -153,6 +153,7 @@ const attentionDashboard: Dashboard = {
   enabled_rules: 1,
   running_rules: 1,
   stopped_rules: 0,
+  held_rules: 0,
   open_incidents: 1,
   last_synced_at: justNow(),
   blocked_events: 0,
